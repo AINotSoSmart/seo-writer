@@ -251,11 +251,10 @@ export default function CreatePage() {
 
       <div className="lg:sticky lg:top-20">
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="px-4">
             <div className="space-y-4">
               <Accordion type="single" collapsible defaultValue="settings">
                 <AccordionItem value="settings">
-                  <AccordionTrigger>General Settings</AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-4 pt-4">
                       <AspectRatioToggle value={aspectRatio} onChange={setAspectRatio} />

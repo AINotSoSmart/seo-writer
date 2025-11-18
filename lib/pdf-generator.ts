@@ -1,5 +1,7 @@
 import { jsPDF } from "jspdf"
 
+type PaperSize = "letter" | "kdp_8_5x11" | "kdp_8x10" | "a4"
+
 interface PDFOptions {
   title?: string
   subtitle?: string
@@ -8,32 +10,47 @@ interface PDFOptions {
   addBlankPages?: boolean
   addPageNumbers?: boolean
   borderWidth?: number
+  paperSize?: PaperSize
+  bleedMm?: number
 }
 
-// Standardized page size for coloring books
-const PAGE_WIDTH = 215.9 // Letter width in mm (8.5")
-const PAGE_HEIGHT = 279.4 // Letter height in mm (11")
+function getDimensions(paperSize: PaperSize = "letter", bleedMm: number = 0) {
+  let width = 215.9
+  let height = 279.4
+  if (paperSize === "kdp_8x10") {
+    width = 203.2
+    height = 254
+  } else if (paperSize === "kdp_8_5x11") {
+    width = 215.9
+    height = 279.4
+  } else if (paperSize === "a4") {
+    width = 210
+    height = 297
+  }
+  return { width: width + bleedMm * 2, height: height + bleedMm * 2 }
+}
 
 export async function generatePDF(imageUrls: string[], options: PDFOptions = {}): Promise<Blob> {
   console.log("generatePDF called with options:", options)
   console.log("Number of images:", imageUrls.length)
 
-  const { title, subtitle, author, coverImage, addBlankPages = false, addPageNumbers = true, borderWidth = 0 } = options
+  const { title, subtitle, author, coverImage, addBlankPages = false, addPageNumbers = true, borderWidth = 0, paperSize = "letter", bleedMm = 0 } = options
 
   // Log the cover image URL to debug
   console.log("Cover image URL passed to PDF generator:", coverImage)
 
   // Create a new PDF document
-  console.log("Creating PDF document with standard letter size")
+  console.log("Creating PDF document with selected size")
+  const dims = getDimensions(paperSize, bleedMm)
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
-    format: "letter", // Standardized to letter size
+    format: [dims.width, dims.height],
   })
 
   // Set page dimensions
-  const pageWidth = PAGE_WIDTH
-  const pageHeight = PAGE_HEIGHT
+  const pageWidth = dims.width
+  const pageHeight = dims.height
   console.log("Page dimensions:", { width: pageWidth, height: pageHeight })
 
   // Set margins

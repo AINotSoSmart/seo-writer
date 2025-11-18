@@ -34,63 +34,62 @@ export async function GET(request: Request) {
 
     // If prompt and aspectRatio are provided, store images in database
     if (prompt && aspectRatio && falImages.length > 0) {
-      // Upload images to Supabase Storage and get public URLs
-        const storedImages = await Promise.all(
-          falImages.map(async (imageUrl, index) => {
-            try {
-              // Fetch the image from FAL
-              const response = await fetch(imageUrl)
-              if (!response.ok) {
-                console.error(`Failed to fetch image from FAL: ${response.statusText}`)
-                return imageUrl // Return original URL on error
-              }
-
-              const blob = await response.blob()
-
-              // Generate a unique filename - using 'private' as the folder name to match your policy
-              const filename = `private/${user.id}-${Date.now()}-${index}-${prompt.slice(0, 20).replace(/[^a-z0-9]/gi, "_")}.png`
-
-              console.log("Uploading to path:", filename)
-
-              // Upload to Supabase Storage
-              const { data, error } = await supabase.storage.from("coloring-pages").upload(filename, blob, {
-                contentType: "image/png",
-                upsert: true, // Use upsert to overwrite if file exists
-              })
-
-              if (error) {
-                console.error("Storage upload error:", error)
-                return imageUrl // Return original URL on error
-              }
-
-              // Get a public URL
-              const { data: publicUrlData } = supabase.storage.from("coloring-pages").getPublicUrl(filename)
-              console.log("Image uploaded to Supabase Storage:", publicUrlData.publicUrl)
-
-              return publicUrlData.publicUrl
-            } catch (error) {
-              console.error("Error uploading to storage:", error)
-              return imageUrl // Fall back to original FAL URL if storage fails
+      const storedRecords = await Promise.all(
+        falImages.map(async (imageUrl, index) => {
+          try {
+            const response = await fetch(imageUrl)
+            if (!response.ok) {
+              console.error(`Failed to fetch image from FAL: ${response.statusText}`)
+              return { id: null, url: imageUrl }
             }
-          }),
-        )
 
-        // Store images in database with URLs (either Supabase Storage or FAL)
-        for (const imageUrl of storedImages) {
-          await supabase.from("images").insert({
-            user_id: user.id,
-            prompt,
-            image_url: imageUrl,
-            aspect_ratio: aspectRatio,
-            model: "flux-1/schnell",
-          })
-        }
-        const deduction = await creditService.deductCredits(user.id, numImages, "Text-to-image generation")
-        if (!deduction.success) {
-          return NextResponse.json({ error: deduction.error || "Failed to deduct credits" }, { status: 400 })
-        }
-        return NextResponse.json({ images: storedImages, newBalance: deduction.newBalance })
+            const blob = await response.blob()
+
+            const filename = `private/${user.id}-${Date.now()}-${index}-${prompt.slice(0, 20).replace(/[^a-z0-9]/gi, "_")}.png`
+
+            const { error: uploadError } = await supabase.storage.from("coloring-pages").upload(filename, blob, {
+              contentType: "image/png",
+              upsert: true,
+            })
+
+            if (uploadError) {
+              console.error("Storage upload error:", uploadError)
+              return { id: null, url: imageUrl }
+            }
+
+            const { data: publicUrlData } = supabase.storage.from("coloring-pages").getPublicUrl(filename)
+
+            const { data: inserted, error: insertError } = await supabase
+              .from("images")
+              .insert({
+                user_id: user.id,
+                prompt,
+                image_url: publicUrlData.publicUrl,
+                aspect_ratio: aspectRatio,
+                model: "flux-1/schnell",
+              })
+              .select("id,image_url")
+              .single()
+
+            if (insertError || !inserted) {
+              console.error("DB insert error:", insertError)
+              return { id: null, url: publicUrlData.publicUrl }
+            }
+
+            return { id: inserted.id, url: inserted.image_url }
+          } catch (error) {
+            console.error("Error processing image:", error)
+            return { id: null, url: imageUrl }
+          }
+        }),
+      )
+
+      const deduction = await creditService.deductCredits(user.id, numImages, "Text-to-image generation")
+      if (!deduction.success) {
+        return NextResponse.json({ error: deduction.error || "Failed to deduct credits" }, { status: 400 })
       }
+      return NextResponse.json({ images: storedRecords, newBalance: deduction.newBalance })
+    }
 
     // If we couldn't store in Supabase Storage, return the original FAL.ai URLs
     return NextResponse.json({ images: falImages })

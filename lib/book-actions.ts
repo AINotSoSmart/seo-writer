@@ -13,6 +13,8 @@ interface SaveBookParams {
     addBlankPages: boolean
     addPageNumbers: boolean
     borderWidth: number
+    paperSize?: "letter" | "kdp_8_5x11" | "kdp_8x10" | "a4"
+    bleedMm?: number
   }
 }
 

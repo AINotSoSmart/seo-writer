@@ -21,18 +21,7 @@ import { Slider } from "@/components/ui/slider"
 import { CoverGenerator } from "@/components/book-builder/cover-generator"
 
 // Import specific icons from lucide-react
-import {
-  Loader2,
-  Save,
-  Copy,
-  MoveHorizontal,
-  Trash2,
-  ImageIcon,
-  Type,
-  Layout,
-  CheckCircle2,
-  Sparkles,
-} from "lucide-react"
+import { Loader2, Save, Copy, MoveHorizontal, Trash2, ImageIcon, Type, Layout, Sparkles } from "lucide-react"
 
 // Import DnD kit components
 import {
@@ -111,7 +100,6 @@ export function BookBuilderModal({
   const [activeTab, setActiveTab] = useState("preview")
   const [orderedImages, setOrderedImages] = useState<any[]>([])
   const [shareUrl, setShareUrl] = useState<string | null>(null)
-  const [isProfessionalCover, setIsProfessionalCover] = useState(false)
   const [coverId, setCoverId] = useState<string | null>(null)
 
   // Set up DnD sensors
@@ -126,15 +114,8 @@ export function BookBuilderModal({
   useEffect(() => {
     if (selectedImages && selectedImages.length > 0) {
       setOrderedImages([...selectedImages])
-
-      // Set the first image as the cover image if none is selected
-      if (!coverImage && selectedImages.length > 0) {
-        setCoverImage(
-          selectedImages[0].source === "gemini" ? selectedImages[0].coloring_page_url : selectedImages[0].image_url,
-        )
-      }
     }
-  }, [selectedImages, coverImage])
+  }, [selectedImages])
 
   // Handle drag end event
   const handleDragEnd = (event: DragEndEvent) => {
@@ -154,16 +135,7 @@ export function BookBuilderModal({
     setOrderedImages(orderedImages.filter((img) => img.id !== imageId))
   }
 
-  const handleSelectCoverImage = (imageUrl: string) => {
-    setCoverImage(imageUrl)
-    setIsProfessionalCover(false)
-  }
-
-  const handleProfessionalCoverGenerated = (coverUrl: string, coverId: string) => {
-    setCoverImage(coverUrl)
-    setCoverId(coverId)
-    setIsProfessionalCover(true)
-  }
+  
 
   const handleSaveBook = async () => {
     if (orderedImages.length === 0) {
@@ -189,8 +161,6 @@ export function BookBuilderModal({
         addBlankPages,
         addPageNumbers,
         borderWidth,
-        paperSize: "letter", // Standardized to letter size
-        pageLayout: "single", // Standardized to single page layout
       }
 
       // Save the book to the database with options and cover image
@@ -312,22 +282,7 @@ export function BookBuilderModal({
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="absolute bottom-2 right-2 h-7 opacity-90 shadow-md"
-                          onClick={() =>
-                            handleSelectCoverImage(
-                              image.source === "gemini" ? image.coloring_page_url : image.image_url,
-                            )
-                          }
-                        >
-                          {coverImage === (image.source === "gemini" ? image.coloring_page_url : image.image_url) &&
-                          !isProfessionalCover ? (
-                            <CheckCircle2 className="h-3 w-3 mr-1 text-green-500" />
-                          ) : null}
-                          Cover
-                        </Button>
+                        
                       </div>
                     ))}
                   </div>

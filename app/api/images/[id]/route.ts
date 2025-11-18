@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { deleteFileFromStorage } from "@/lib/supabase/storage-utils"
+import { createClient } from "@/utils/supabase/server"
+import { deleteFileFromStorage } from "@/lib/storage-utils"
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -46,7 +46,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     console.log(`Image found:`, { id: image.id, url: image.image_url })
 
     // Storage deletion
-    let storageResult = { success: false }
+    let storageResult: { success: boolean; error?: unknown } = { success: false }
 
     if (image.image_url) {
       storageResult = await deleteFileFromStorage(supabase, image.image_url)
