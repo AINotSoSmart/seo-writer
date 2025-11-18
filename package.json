@@ -6,9 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start",
-    "postbuild": "node ./scripts/setup-qstash-schedules.mjs",
-    "qstash:setup": "node ./scripts/setup-qstash-schedules.mjs"
+    "start": "next start"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.917.0",
