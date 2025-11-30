@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "trigger": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "trigger.dev@latest",
+        "mcp"
+      ]
+    }
+  }
+}

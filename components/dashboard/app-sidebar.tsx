@@ -93,25 +93,21 @@ export function AppSidebar({
   const navItems = React.useMemo(() => [
     {
       title: "Dashboard",
-      url: "/dashboard",
+      url: "/blog-writer",
       icon: SquareTerminal,
       isActive: true,
     },
       {
-        title: "Generate Coloring Pages",
-        url: "/create",
+        title: "Articles",
+        url: "/articles",
         icon: SparklesIcon,
       },
       {
-        title: "Create Books",
-        url: "/gallery",
+        title: "Settings",
+        url: "/settings",
         icon: FolderOpen,
       },
-    {
-      title: "My Coloring Books",
-      url: "/books",
-      icon: ImageIcon,
-    },
+
   ], [])
 
   return (

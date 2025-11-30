@@ -1,51 +1,53 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { tasks } from "@trigger.dev/sdk/v3"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
-import { queueImageGeneration } from "@/utils/fal/generate"
-import type { GenerateImageParams } from "@/types"
-import { creditService } from "@/lib/credits"
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    // Get the current user from Supabase
-    const supabase = await createClient()
+    const { keyword, voiceId, brandId, title } = await req.json()
+    if (!keyword || !voiceId) {
+      return NextResponse.json({ error: "Missing keyword or voiceId" }, { status: 400 })
+    }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
+    const supabase = createAdminClient()
+    const supabaseServer = await createClient()
+    const { data: userData } = await supabaseServer.auth.getUser()
+    const userId = userData?.user?.id
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { balance } = await creditService.getUserCredits(user.id)
+    // We might want to store brandId in articles table later, for now just passing to task
+    const { data: article, error } = await supabase
+      .from("articles")
+      .insert({ user_id: userId, keyword, voice_id: voiceId, status: "queued" })
+      .select()
+      .single()
 
-    // Parse request body
-    const params: GenerateImageParams = await request.json()
-
-    if (balance < params.numImages) {
-      return NextResponse.json({ error: "Not enough credits" }, { status: 400 })
+    if (error || !article) {
+      return NextResponse.json({ error: "Failed to create article" }, { status: 500 })
     }
 
-    // Explicitly use FLUX-1 SCHNELL model
-    const modelToUse = "flux-1/schnell"
-
-    // Queue image generation
-    const requestId = await queueImageGeneration({
-      prompt: params.prompt,
-      aspectRatio: params.aspectRatio,
-      numImages: params.numImages,
-    })
-
-    // Return the request ID for polling
-    return NextResponse.json({
-      requestId,
-      model: modelToUse,
-      prompt: params.prompt,
-      aspectRatio: params.aspectRatio,
-      numImages: params.numImages,
-    })
-  } catch (error: any) {
-    console.error("Error queueing image generation:", error)
-    return NextResponse.json({ error: error.message || "Something went wrong" }, { status: 500 })
+    try {
+      const handle = await tasks.trigger("generate-blog-post", {
+        articleId: article.id,
+        keyword,
+        voiceId,
+        brandId, // Pass brandId
+        title, // Pass selected title
+      })
+      return NextResponse.json({ jobId: handle.id, articleId: article.id })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      await supabase
+        .from("articles")
+        .update({ status: "failed", error_message: msg, failed_at_phase: "trigger" })
+        .eq("id", article.id)
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

@@ -9,6 +9,41 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      brand_details: {
+        Row: {
+          id: string
+          user_id: string
+          website_url: string
+          brand_data: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          website_url: string
+          brand_data?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          website_url?: string
+          brand_data?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_details_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       credits: {
         Row: {
           id: number
@@ -230,6 +265,87 @@ export interface Database {
         }
         Relationships: []
       }
+      brand_voices: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          style_dna: Json
+          source_url: string | null
+          is_default: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          style_dna: Json
+          source_url?: string | null
+          is_default?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          style_dna?: Json
+          source_url?: string | null
+          is_default?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      articles: {
+        Row: {
+          id: string
+          user_id: string
+          voice_id: string | null
+          keyword: string
+          status: string
+          competitor_data: Json | null
+          outline: Json | null
+          current_step_index: number
+          raw_content: string
+          final_html: string | null
+          error_message: string | null
+          failed_at_phase: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          voice_id?: string | null
+          keyword: string
+          status?: string
+          competitor_data?: Json | null
+          outline?: Json | null
+          current_step_index?: number
+          raw_content?: string
+          final_html?: string | null
+          error_message?: string | null
+          failed_at_phase?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          voice_id?: string | null
+          keyword?: string
+          status?: string
+          competitor_data?: Json | null
+          outline?: Json | null
+          current_step_index?: number
+          raw_content?: string
+          final_html?: string | null
+          error_message?: string | null
+          failed_at_phase?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       images: {
         Row: {
           created_at: string
@@ -402,6 +518,8 @@ export interface Database {
           created_at: string
           updated_at: string
           has_completed_onboarding: boolean
+          default_brand_id: string | null
+          default_voice_id: string | null
         }
         Insert: {
           id?: string
@@ -409,6 +527,8 @@ export interface Database {
           created_at?: string
           updated_at?: string
           has_completed_onboarding?: boolean
+          default_brand_id?: string | null
+          default_voice_id?: string | null
         }
         Update: {
           id?: string
@@ -416,6 +536,8 @@ export interface Database {
           created_at?: string
           updated_at?: string
           has_completed_onboarding?: boolean
+          default_brand_id?: string | null
+          default_voice_id?: string | null
         }
         Relationships: [
           {
