@@ -1,0 +1,33 @@
+name: Deploy to Trigger.dev
+
+on:
+  push:
+    branches:
+      - main 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # 1. AUTHENTICATION (Must be the Personal Access Token, NOT the Secret Key)
+      TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+      
+      # 2. PROJECT REFERENCE (From your Vercel Env/GitHub Secret)
+      TRIGGER_PROJECT_ID: ${{ secrets.TRIGGER_PROJECT_ID }} 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Deploy to Trigger.dev
+        # UPDATED: Used @latest as per your screenshot (v4.0.0+)
+        # We pass --project-ref to force the ID from your environment variables
+        run: npx trigger.dev@latest deploy --project-ref $TRIGGER_PROJECT_ID
