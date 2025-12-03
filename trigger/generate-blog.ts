@@ -155,27 +155,41 @@ ${currentSection.instruction_note}
 `
 
 const generatePolishEditorPrompt = (draft: string, styleDNA: any) => `
-You are a Senior Editor at a top-tier publication. 
-Your goal is to polish a draft without removing its soul.
+You are a Ruthless Direct-Response Copyeditor. 
+Your goal is to maximize **Readability** and **Emotional Impact**.
+You hate "Walls of Text" and "AI Clichés".
 
 ### 1. THE DRAFT TO EDIT
 ${draft}
+
+### 2. STRICT FORMATTING RULES (The Law)
+1. **DESTROY WALLS OF TEXT:** If a paragraph has more than 3 sentences, BREAK IT. 
+2. **ONE IDEA PER LINE:** Use single-sentence paragraphs frequently to create rhythm.
+3. **SCANNABILITY:** Ensure key takeaways are **bolded**.
+4. **NO "GLUE" WORDS:** Remove fluff transitions like "In conclusion," "Furthermore," "It is important to note." Just say what you mean.
+
+### 3. BANNED "AI" PHRASES (Instant Deletion)
+If you see these patterns or anything from this vibe, rewrite the sentence immediately:
+- ❌ "That's where [X] comes in..."
+- ❌ "Whether you are [X] or [Y]..."
+- ❌ "In this digital landscape..."
+- ❌ "Unlock / Unleash / Elevate..."
+- ❌ "It sounds counterintuitive, but..."
+- ❌ "Let's dive in..."
+- ❌ "Magic happens..." / "Game-changer..."
 
 ### 2. THE VOICE (Do NOT Violate)
 The author's unique style DNA is:
 - Tone: ${styleDNA.tone}
 - Sentence Structure: ${styleDNA.sentence_structure?.avg_length || "varied"}
 - **CRITICAL:** Do NOT make it sound generic or "AI-generated". Preserve the unique flair, idioms, and formatting quirks.
+### 4. TONE CHECK
+- **Voice:** ${styleDNA.tone}
+- **Perspective:** ${styleDNA.narrative_rules?.includes("I") ? "Use 'I' / 'We' (Personal Experience)." : "Direct and Authoritative."}
+- **Vibe:** Write like a human talking to a friend. Be punchy. Be specific.
 
-### 3. YOUR EDITING TASKS
-1. **Flow Check:** The draft was written section-by-section. Smooth out any jerky transitions between H2 headers.
-2. **Repetition Audit:** Remove repetitive phrases (e.g., "In this digital landscape", "Furthermore").
-3. **Fact Check:** Ensure the internal logic holds up.
-4. **Formatting:** Ensure the final text is in clean, standard Markdown.
-   - Do NOT wrap the result in \`\`\`markdown code blocks. Return raw Markdown string.
-
-### 4. OUTPUT
-Return ONLY the raw Markdown.
+### 5. OUTPUT
+Return the polished content in **Raw Markdown**. Do NOT use code blocks.
 `
 
 export const generateBlogPost = task({
