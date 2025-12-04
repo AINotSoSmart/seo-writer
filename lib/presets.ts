@@ -8,16 +8,6 @@ export const STYLE_PRESETS: Record<string, StyleDNA> = {
       complexity: "simple",
       use_of_questions: true,
     },
-    formatting: {
-      use_bullet_points: "frequent",
-      header_style: "clickbaity",
-      bold_key_phrases: true,
-    },
-    vocabulary: {
-      level: "Grade 8",
-      jargon_usage: "minimal",
-      forbidden_words: ["delve", "tapestry", "landscape", "moreover", "furthermore"],
-    },
     narrative_rules: [
       "Start with a strong hook or controversial statement",
       "Use one-line paragraphs for emphasis",
@@ -31,16 +21,6 @@ export const STYLE_PRESETS: Record<string, StyleDNA> = {
       avg_length: "long",
       complexity: "academic",
       use_of_questions: false,
-    },
-    formatting: {
-      use_bullet_points: "rare",
-      header_style: "declarative",
-      bold_key_phrases: false,
-    },
-    vocabulary: {
-      level: "Grade 12",
-      jargon_usage: "explained",
-      forbidden_words: ["literally", "basically", "stuff", "things", "amazing"],
     },
     narrative_rules: [
       "Provide historical context where relevant",
@@ -56,16 +36,6 @@ export const STYLE_PRESETS: Record<string, StyleDNA> = {
       complexity: "simple",
       use_of_questions: true,
     },
-    formatting: {
-      use_bullet_points: "frequent",
-      header_style: "question-based",
-      bold_key_phrases: true,
-    },
-    vocabulary: {
-      level: "Grade 8",
-      jargon_usage: "minimal",
-      forbidden_words: ["complicated", "difficult", "impossible", "expert-only"],
-    },
     narrative_rules: [
       "Address the reader as 'you'",
       "Break down complex steps into simple actions",
@@ -79,16 +49,6 @@ export const STYLE_PRESETS: Record<string, StyleDNA> = {
       avg_length: "medium",
       complexity: "technical",
       use_of_questions: false,
-    },
-    formatting: {
-      use_bullet_points: "rare",
-      header_style: "declarative",
-      bold_key_phrases: true,
-    },
-    vocabulary: {
-      level: "Grade 12",
-      jargon_usage: "heavy",
-      forbidden_words: ["I think", "maybe", "probably", "sort of"],
     },
     narrative_rules: [
       "Lead with the most important news first (BLUF)",

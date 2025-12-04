@@ -7,16 +7,6 @@ export const StyleDNASchema = z.object({
     complexity: z.enum(["simple", "academic", "technical"]),
     use_of_questions: z.boolean(),
   }),
-  formatting: z.object({
-    use_bullet_points: z.enum(["frequent", "rare", "never"]),
-    header_style: z.enum(["declarative", "clickbaity", "question-based"]),
-    bold_key_phrases: z.boolean(),
-  }),
-  vocabulary: z.object({
-    level: z.enum(["Grade 8", "Grade 12", "PhD"]),
-    jargon_usage: z.enum(["heavy", "minimal", "explained"]),
-    forbidden_words: z.array(z.string()).max(50),
-  }),
   narrative_rules: z.array(z.string()).max(50),
 })
 

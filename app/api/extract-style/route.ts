@@ -45,6 +45,11 @@ export async function POST(req: NextRequest) {
     const prompt = `
       Analyze the following text and extract its writing style into a JSON object.
       
+      IMPORTANT: Pay special attention to the Author's Perspective (POV).
+      - Does the author use "I", "We", or third-person?
+      - How do they refer to themselves vs. their product/brand?
+      - Include these specific perspective rules in the "narrative_rules" array.
+      
       Text Sample:
       "${content.slice(0, 15000).replace(/"/g, '\\"')}"
 
@@ -55,16 +60,6 @@ export async function POST(req: NextRequest) {
           "avg_length": "short" | "medium" | "long" | "varied",
           "complexity": "simple" | "academic" | "technical",
           "use_of_questions": boolean
-        },
-        "formatting": {
-          "use_bullet_points": "frequent" | "rare" | "never",
-          "header_style": "declarative" | "clickbaity" | "question-based",
-          "bold_key_phrases": boolean
-        },
-        "vocabulary": {
-          "level": "Grade 8" | "Grade 12" | "PhD",
-          "jargon_usage": "heavy" | "minimal" | "explained",
-          "forbidden_words": ["word1", "word2"]
         },
         "narrative_rules": ["rule1", "rule2"]
       }
