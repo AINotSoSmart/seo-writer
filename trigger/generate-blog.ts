@@ -7,6 +7,9 @@ import { ArticleOutlineSchema } from "@/lib/schemas/outline"
 import { StyleDNASchema } from "@/lib/schemas/style"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { marked } from "marked"
+import { generateImage } from "@/lib/fal"
+import { putR2Object } from "@/lib/r2"
+import { randomUUID } from "crypto"
 
 
 // Clients will be initialized inside the task
@@ -450,9 +453,127 @@ export const generateBlogPost = task({
       // However, keeping it for now as a cache for the public blog view.
       const finalHtml = await marked.parse(finalMarkdown)
 
+      // --- PHASE 6: SEO META GENERATION ---
+      // 1. Generate Slug (Deterministic)
+      const slugify = (text: string) => {
+        return text
+          .toString()
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, '-')     // Replace spaces with -
+          .replace(/[^\w\-]+/g, '') // Remove all non-word chars
+          .replace(/\-\-+/g, '-')   // Replace multiple - with single -
+      }
+      const slug = slugify(outline.title || keyword)
+
+      // 2. Generate Meta Description (AI)
+      const seoSystemPrompt = `You are an expert SEO Specialist.
+      Your task is to generate a compelling, natural, Meta Description for a blog post based on given inout outline and keyword.
+      INPUT:
+      Title: ${outline.title}
+      Keyword: ${keyword}
+
+      REQUIREMENTS:
+      - Under 160 characters.
+      - Compelling, click-worthy, and includes the target keyword naturally.
+      - Direct and to the point.
+      - No emojis, No special characters i.e. :,;* or No hashtags.
+
+      OUTPUT SCHEMA (JSON):
+      {
+        "meta_description": string
+      }
+      `
+
+      const seoConfig = { responseMimeType: "application/json" }
+      const seoContents = [{ role: "user", parts: [{ text: seoSystemPrompt }] }]
+
+      let meta_description = ""
+      try {
+        const seoResponse = await genAI.models.generateContent({
+          model: "gemini-2.0-flash",
+          config: seoConfig,
+          contents: seoContents
+        })
+        const seoText = seoResponse.text || ""
+        const seoData = JSON.parse(seoText)
+        meta_description = seoData.meta_description
+      } catch (e) {
+        console.error("SEO Generation failed, using fallback", e)
+        // Fallback if AI fails
+        meta_description = `Read our guide on ${outline.title}. Learn about ${keyword} and more.`
+      }
+
+      // --- PHASE 7: FEATURED IMAGE GENERATION ---
+      let featured_image_url = null
+      try {
+        const imageStyle = brandDetails?.image_style || "stock"
+        
+        // 1. Generate Image Prompt
+        const imagePromptSystem = `You are an expert AI Art Director.
+        Your task is to generate a detailed, creative prompt for an AI image generator (like Midjourney or Flux) to create a featured image for a blog post.
+        
+        INPUT:
+        Title: ${outline.title}
+        Outline Summary: ${outline.sections.map(s => s.heading).join(", ")}
+        Style: ${imageStyle}
+        
+        REQUIREMENTS:
+        - The image should be relevant to the topic but abstract enough to be a background or hero image.
+        - PRIORITIZE LESS TEXT on the image itself (or no text).
+        - Make it visually appealing and suitable for a blog header.
+        - If style is 'stock', go for high-quality realistic photography or clean vector art.
+        - If style is 'indo', use vibrant colors and cultural elements if applicable, or specific artistic style associated with the brand.
+        - Output ONLY the prompt string. No JSON.
+        `
+        
+        const imagePromptConfig = { responseMimeType: "text/plain" }
+        const imagePromptContents = [{ role: "user", parts: [{ text: imagePromptSystem }] }]
+        
+        const imagePromptResponse = await genAI.models.generateContent({
+          model: "gemini-2.0-flash",
+          config: imagePromptConfig,
+          contents: imagePromptContents
+        })
+        const imagePrompt = imagePromptResponse.text || `A professional featured image for a blog post about ${keyword}`
+        
+        // 2. Generate Image using Fal.ai
+        const imageResult = await generateImage(imagePrompt) as any
+        const imageUrl = imageResult?.images?.[0]?.url
+        
+        // 3. Upload to R2
+        if (imageUrl) {
+           const imageResponse = await fetch(imageUrl)
+           const imageBuffer = await imageResponse.arrayBuffer()
+           const imageKey = `featured-images/${articleId}/${randomUUID()}.png`
+           
+           // Upload to R2
+           await putR2Object(imageKey, Buffer.from(imageBuffer), "image/png")
+           
+           // Construct Public URL
+           const publicDomain = process.env.R2_PUBLIC_DOMAIN
+           if (publicDomain) {
+             featured_image_url = `${publicDomain}/${imageKey}`
+           } else {
+             featured_image_url = `https://${process.env.R2_BUCKET_NAME}.r2.cloudflarestorage.com/${imageKey}`
+           }
+        }
+        
+      } catch (e) {
+        console.error("Image Generation failed", e)
+        // Non-blocking, just continue
+      }
+
       await supabase
         .from("articles")
-        .update({ raw_content: finalMarkdown, final_html: finalHtml, status: "completed" })
+        .update({ 
+          raw_content: finalMarkdown, 
+          final_html: finalHtml, 
+          status: "completed",
+          meta_description,
+          slug,
+          featured_image_url
+        })
         .eq("id", articleId)
 
       return { success: true, articleId }

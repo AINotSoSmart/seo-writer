@@ -113,6 +113,7 @@ export default function BrandOnboarding({ onComplete, onCancel }: BrandOnboardin
               core_features: [],
               pricing: [],
               how_it_works: [],
+              image_style: "stock",
             })}
           >
             Start Manual Entry
@@ -260,6 +261,27 @@ export default function BrandOnboarding({ onComplete, onCancel }: BrandOnboardin
             value={brandData.how_it_works?.join('\n') || ''}
             onChange={e => updateArray('how_it_works', e.target.value)}
           />
+        </div>
+
+        {/* 10. Image Style */}
+        <div className="space-y-4">
+          <h3 className="font-semibold text-lg border-b pb-2">10. Featured Image Style</h3>
+          <div>
+            <label className="block text-sm font-medium mb-1">Style Preference</label>
+            <p className="text-xs text-gray-500 mb-2">Select the style for AI-generated featured images.</p>
+            <select 
+              className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={brandData.image_style || "stock"}
+              onChange={e => updateField('image_style', e.target.value)}
+            >
+              <option value="stock">Stock Photography (Professional, Realistic)</option>
+              <option value="illustration">Modern Illustration (Flat, Vector)</option>
+              <option value="indo">Indo (Vibrant, Cultural Elements)</option>
+              <option value="minimalist">Minimalist (Clean, Abstract)</option>
+              <option value="cyberpunk">Cyberpunk (Neon, Tech)</option>
+              <option value="watercolor">Watercolor (Artistic, Soft)</option>
+            </select>
+          </div>
         </div>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}

@@ -18,6 +18,7 @@ export const BrandDetailsSchema = z.object({
   core_features: z.array(z.string()),
   pricing: z.array(z.string()),
   how_it_works: z.array(z.string()),
+  image_style: z.string().optional().default("stock"),
 })
 
 export type BrandDetails = z.infer<typeof BrandDetailsSchema>

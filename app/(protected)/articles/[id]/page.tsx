@@ -5,7 +5,6 @@ import { createClient } from "@/utils/supabase/client"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import dynamic from "next/dynamic"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Save, Calendar, User, FileText, Image as ImageIcon, Link as LinkIcon, Activity, ArrowLeft, Loader2, Menu, Info, LayoutTemplate, PenTool, Share2, MoreVertical, CheckCircle2, AlertCircle, Clock, Download, Copy, Check } from "lucide-react"
 import { OutputData } from "@editorjs/editorjs"
@@ -24,12 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+
 
 const Editor = dynamic(() => import("@/components/editor"), { ssr: false })
 
@@ -44,6 +38,9 @@ type Article = {
     created_at: string
     outline: any
     competitor_data: any
+    meta_description?: string | null
+    slug?: string | null
+    featured_image_url?: string | null
 }
 
 export default function ArticleDetailPage() {
@@ -356,6 +353,20 @@ export default function ArticleDetailPage() {
                         </div>
 
                         <div className="space-y-1">
+                            <p className="text-xs text-gray-500">Meta Description</p>
+                            <p className="text-sm font-medium text-gray-900 leading-snug">
+                                {article.meta_description || "Not generated yet"}
+                            </p>
+                        </div>
+
+                        <div className="space-y-1">
+                            <p className="text-xs text-gray-500">URL Slug</p>
+                            <p className="text-sm font-medium text-gray-900 leading-snug font-mono break-all">
+                                {article.slug || "Not generated yet"}
+                            </p>
+                        </div>
+
+                        <div className="space-y-1">
                             <p className="text-xs text-gray-500">Created At</p>
                             <div className="flex items-center gap-1.5 text-sm text-gray-700">
                                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -502,6 +513,39 @@ export default function ArticleDetailPage() {
 
                                     {article.status === 'completed' ? (
                                         <div className="prose prose-slate prose-lg max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl">
+                                            {/* Featured Image Display */}
+                                            {article.featured_image_url && (
+                                                <div className="mb-8 relative rounded-xl overflow-hidden group border border-gray-100 shadow-sm">
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img 
+                                                      src={article.featured_image_url} 
+                                                      alt="Featured" 
+                                                      className="w-full max-h-[400px] object-cover"
+                                                    />
+                                                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button 
+                                                            size="sm" 
+                                                            variant="secondary"
+                                                            className="h-8 px-3 text-xs backdrop-blur-md bg-white/90 hover:bg-white"
+                                                            onClick={() => window.open(article.featured_image_url || '', '_blank')}
+                                                        >
+                                                            <LinkIcon className="w-3 h-3 mr-1.5" /> Open
+                                                        </Button>
+                                                        <Button 
+                                                            size="sm" 
+                                                            variant="secondary"
+                                                            className="h-8 px-3 text-xs backdrop-blur-md bg-white/90 hover:bg-white"
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(article.featured_image_url || "")
+                                                                toast.success("Image URL copied")
+                                                            }}
+                                                        >
+                                                            <Copy className="w-3 h-3 mr-1.5" /> Copy URL
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <Editor
                                                 markdown={article.raw_content || ""}
                                                 readOnly={false}
