@@ -7,7 +7,7 @@ import { useParams } from "next/navigation"
 import dynamic from "next/dynamic"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
-import { Save, Calendar, User, FileText, Image as ImageIcon, Link as LinkIcon, Activity, ArrowLeft, Loader2, Menu, Info, LayoutTemplate, PenTool, Share2, MoreVertical, CheckCircle2, AlertCircle, Clock } from "lucide-react"
+import { Save, Calendar, User, FileText, Image as ImageIcon, Link as LinkIcon, Activity, ArrowLeft, Loader2, Menu, Info, LayoutTemplate, PenTool, Share2, MoreVertical, CheckCircle2, AlertCircle, Clock, Download, Copy, Check } from "lucide-react"
 import { OutputData } from "@editorjs/editorjs"
 import { toast } from "sonner"
 import { editorJsToMarkdown } from "@/lib/editorjs-to-markdown"
@@ -59,6 +59,7 @@ export default function ArticleDetailPage() {
     const [lastSaved, setLastSaved] = useState<Date | null>(null)
     const [activeTab, setActiveTab] = useState<string>("editor")
     const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+    const [isCopied, setIsCopied] = useState(false)
 
     useEffect(() => {
         if (!id) return
@@ -107,6 +108,62 @@ export default function ArticleDetailPage() {
     const handleEditorChange = useCallback((data: OutputData) => {
         setEditorData(data)
     }, [])
+
+    const getMarkdownContent = useCallback(() => {
+        if (editorData) {
+            return editorJsToMarkdown(editorData)
+        }
+        if (article?.raw_content) {
+            const content = article.raw_content.trim()
+            if (content.startsWith("{") && content.endsWith("}")) {
+                try {
+                    const data = JSON.parse(content)
+                    if (data.blocks) {
+                        return editorJsToMarkdown(data)
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+            return article.raw_content
+        }
+        return ""
+    }, [editorData, article?.raw_content])
+
+    const handleCopy = async () => {
+        const markdown = getMarkdownContent()
+        if (!markdown) {
+            toast.error("No content to copy")
+            return
+        }
+
+        try {
+            await navigator.clipboard.writeText(markdown)
+            setIsCopied(true)
+            toast.success("Copied to clipboard")
+            setTimeout(() => setIsCopied(false), 2000)
+        } catch (err) {
+            toast.error("Failed to copy")
+        }
+    }
+
+    const handleExport = () => {
+        const markdown = getMarkdownContent()
+        if (!markdown) {
+            toast.error("No content to export")
+            return
+        }
+
+        const blob = new Blob([markdown], { type: "text/markdown" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `${article?.keyword?.replace(/\s+/g, '-') || "article"}.md`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+    }
 
     const handleSave = async () => {
         if (!article) return
@@ -349,6 +406,27 @@ export default function ArticleDetailPage() {
                         )}
                     </div>
 
+                    <div className="flex items-center gap-1 mr-2 border-r pr-2 border-gray-200">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleCopy}
+                            className="h-8 w-8 text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+                            title="Copy as Markdown"
+                        >
+                            {isCopied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleExport}
+                            className="h-8 w-8 text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+                            title="Export as Markdown"
+                        >
+                            <Download className="w-4 h-4" />
+                        </Button>
+                    </div>
+
                     <Button
                         onClick={handleSave}
                         disabled={isSaving || article.status !== 'completed'}
@@ -411,7 +489,7 @@ export default function ArticleDetailPage() {
                         {/* Scrollable Content Area */}
                         <div className="flex-1 overflow-y-auto scrollbar-hide">
                             <TabsContent value="editor" className="m-0 min-h-full p-4 pt-0 max-w-4xl mx-auto focus-visible:ring-0 outline-none">
-                                <div className="bg-white rounded-xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] border border-gray-100 min-h-[calc(100vh-10rem)] p-4 sm:p-8 transition-all">
+                                <div className=" min-h-[calc(100vh-10rem)]">
                                     {article.error_message && (
                                         <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100 mb-8 flex items-start gap-3">
                                             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
