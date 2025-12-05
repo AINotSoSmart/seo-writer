@@ -6,6 +6,7 @@ import { getUserBrandStatus } from "@/actions/brand"
 import { getUserDefaults } from "@/actions/preferences"
 import { STYLE_PRESETS } from "@/lib/presets"
 import BrandOnboarding from "./BrandOnboarding"
+import { BlogWriterIsland } from "@/components/blog-writer-island"
 import { Plus, Check, Building2 } from "lucide-react"
 
 type BrandVoice = { id: string; name: string }
@@ -283,79 +284,34 @@ export default function BlogWriterPage() {
   }
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-2xl space-y-6 text-center">
-        <h1 className="text-3xl font-bold">Agentic Blog Writer</h1>
-        <p className="text-gray-500">
-          {step === "input"
-            ? "Type a keyword. We use your saved brand and voice from Settings."
-            : "Select the best title for your article."}
-        </p>
+    <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-12">
+      <BlogWriterIsland
+        keyword={keyword}
+        onKeywordChange={setKeyword}
+        onSubmit={generateTitles}
+        isGenerating={generatingTitles}
+        titles={titles}
+        selectedTitle={selectedTitle}
+        onSelectTitle={setSelectedTitle}
+        onGenerateArticle={startGeneration}
+        isLoading={loading}
+        onBack={() => {
+          setStep("input")
+          setTitles([])
+          setSelectedTitle("")
+        }}
+        disabled={!brandId || !selectedVoiceId}
+      />
 
-        {step === "input" && (
-          <div className="bg-white rounded-xl shadow p-3 border flex items-center gap-2">
-            <input
-              value={keyword}
-              onChange={e => setKeyword(e.target.value)}
-              placeholder="Enter main keyword (e.g. 'AI marketing trends')"
-              className="flex-1 border rounded-md p-2"
-              onKeyDown={e => e.key === "Enter" && generateTitles()}
-            />
-            <button
-              onClick={generateTitles}
-              disabled={generatingTitles || !selectedVoiceId || !brandId || !keyword}
-              className="bg-blue-600 text-white px-4 py-3 rounded-md disabled:opacity-50 font-medium hover:bg-blue-700 transition-colors min-w-[120px]"
-            >
-              {generatingTitles ? "Thinking..." : "Next"}
-            </button>
-          </div>
-        )}
-
-        {step === "selection" && (
-          <div className="space-y-4 text-left">
-            <div className="grid gap-3">
-              {titles.map((t, i) => (
-                <div
-                  key={i}
-                  onClick={() => setSelectedTitle(t)}
-                  className={`p-4 rounded-lg border cursor-pointer transition-all ${selectedTitle === t
-                      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
-                      : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                    }`}
-                >
-                  <h3 className="font-medium text-gray-900">{t}</h3>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3 pt-4">
-              <button
-                onClick={() => {
-                  setStep("input")
-                  setTitles([])
-                  setSelectedTitle("")
-                }}
-                className="px-4 py-2 text-gray-600 hover:text-gray-900"
-              >
-                Back
-              </button>
-              <button
-                onClick={startGeneration}
-                disabled={loading || !selectedTitle}
-                className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-md disabled:opacity-50 font-medium hover:bg-blue-700 transition-colors"
-              >
-                {loading ? "Generating Article..." : "Generate Article"}
-              </button>
-            </div>
-          </div>
-        )}
-        {!brandId || !selectedVoiceId ? null : null}
-        {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-100">
+      {/* Error display */}
+      {error && (
+        <div className="mt-6 max-w-md w-full">
+          <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800">
             {error}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
+
