@@ -1,6 +1,6 @@
 "use client"
 import { useState } from "react"
-import { saveBrandAction } from "@/actions/brand"
+import { saveBrandAction, updateBrandAction } from "@/actions/brand"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { Loader2, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -10,13 +10,16 @@ import { Textarea } from "@/components/ui/textarea"
 interface BrandOnboardingProps {
   onComplete: (brandId: string) => void
   onCancel: () => void
+  initialData?: BrandDetails
+  initialUrl?: string
+  brandId?: string
 }
 
-export default function BrandOnboarding({ onComplete, onCancel }: BrandOnboardingProps) {
-  const [url, setUrl] = useState("")
+export default function BrandOnboarding({ onComplete, onCancel, initialData, initialUrl, brandId }: BrandOnboardingProps) {
+  const [url, setUrl] = useState(initialUrl || "")
   const [analyzing, setAnalyzing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [brandData, setBrandData] = useState<BrandDetails | null>(null)
+  const [brandData, setBrandData] = useState<BrandDetails | null>(initialData || null)
   const [error, setError] = useState("")
 
   const handleAnalyze = async () => {
@@ -44,11 +47,21 @@ export default function BrandOnboarding({ onComplete, onCancel }: BrandOnboardin
     setSaving(true)
     setError("")
     try {
-      const res = await saveBrandAction(url, brandData)
-      if (!res.success || !res.brandId) {
-        throw new Error(res.error || "Failed to save brand")
+      if (brandId) {
+        // Update existing
+        const res = await updateBrandAction(brandId, brandData)
+        if (!res.success) {
+           throw new Error(res.error || "Failed to update brand")
+        }
+        onComplete(brandId)
+      } else {
+        // Create new
+        const res = await saveBrandAction(url, brandData)
+        if (!res.success || !res.brandId) {
+          throw new Error(res.error || "Failed to save brand")
+        }
+        onComplete(res.brandId)
       }
-      onComplete(res.brandId)
     } catch (e: any) {
       setError(e.message || "Failed to save brand details")
     } finally {
@@ -288,7 +301,7 @@ export default function BrandOnboarding({ onComplete, onCancel }: BrandOnboardin
 
         <div className="flex justify-end pt-4">
           <Button onClick={handleSave} disabled={saving} className="px-8">
-            {saving ? "Saving..." : "Save & Continue"}
+            {saving ? "Saving..." : brandId ? "Update Brand" : "Save & Continue"}
           </Button>
         </div>
       </div>

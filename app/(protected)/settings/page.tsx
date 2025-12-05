@@ -5,15 +5,16 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { getUserBrands, getUserBrandStatus, deleteBrandAction } from "@/actions/brand"
 import { getUserDefaults, setDefaultBrand, setDefaultVoice } from "@/actions/preferences"
 import { createClient } from "@/utils/supabase/client"
-import { Check, Globe, PenTool, Trash2, Plus } from "lucide-react"
+import { Check, Globe, PenTool, Trash2, Plus, Edit } from "lucide-react"
 import BrandOnboarding from "@/app/(protected)/blog-writer/BrandOnboarding"
 import { STYLE_PRESETS } from "@/lib/presets"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { BrandDetails } from "@/lib/schemas/brand"
 
-type BrandInfo = { id: string; website_url: string; created_at: string }
-type VoiceInfo = { id: string; name: string }
+type BrandInfo = { id: string; website_url: string; created_at: string; brand_data: BrandDetails }
+type VoiceInfo = { id: string; name: string; style_dna: any }
 
 export default function SettingsPage() {
   const supabase = createClient()
@@ -27,6 +28,8 @@ export default function SettingsPage() {
   const [brandLimit, setBrandLimit] = useState(0)
   const [brandCount, setBrandCount] = useState(0)
   const [isCreatingBrand, setIsCreatingBrand] = useState(false)
+  const [editingBrand, setEditingBrand] = useState<BrandInfo | null>(null)
+  const [editingVoice, setEditingVoice] = useState<VoiceInfo | null>(null)
 
   const [activeVoiceTab, setActiveVoiceTab] = useState<"existing" | "new">("existing")
   const [creationMethod, setCreationMethod] = useState<"preset" | "mimic">("preset")
@@ -44,7 +47,7 @@ export default function SettingsPage() {
         const [status, defaults, voiceList] = await Promise.all([
           getUserBrandStatus(),
           getUserDefaults(),
-          supabase.from("brand_voices").select("id,name").order("created_at", { ascending: false }),
+          supabase.from("brand_voices").select("*").order("created_at", { ascending: false }),
         ])
         // @ts-ignore
         setBrands(status.brands)
@@ -113,18 +116,41 @@ export default function SettingsPage() {
       }
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("User not authenticated")
-      const { data, error } = await supabase
-        .from("brand_voices")
-        .insert({ name: customStyleName, style_dna: parsed, user_id: user.id, is_default: false })
-        .select()
-        .single()
-      if (error) throw error
-      setVoices(prev => [data as any, ...prev])
-      setDefaultVoiceId((data as any).id)
+
+      if (editingVoice) {
+        // Update existing
+        const { data, error } = await supabase
+          .from("brand_voices")
+          .update({ name: customStyleName, style_dna: parsed })
+          .eq("id", editingVoice.id)
+          .select()
+          .single()
+        
+        if (error) throw error
+        
+        setVoices(prev => prev.map(v => v.id === editingVoice.id ? (data as any) : v))
+        setEditingVoice(null)
+      } else {
+        // Create new
+        const { data, error } = await supabase
+          .from("brand_voices")
+          .insert({ name: customStyleName, style_dna: parsed, user_id: user.id, is_default: false })
+          .select()
+          .single()
+        
+        if (error) throw error
+        setVoices(prev => [data as any, ...prev])
+        setDefaultVoiceId((data as any).id)
+      }
+
       setActiveVoiceTab("existing")
       setCustomStyleName("")
       setMimicUrl("")
+      setCustomStyleJson(JSON.stringify(STYLE_PRESETS["linkedin-influencer"], null, 2))
       setCreationMethod("preset")
+    } catch (e: any) {
+        console.error(e)
+        alert(e.message || "Failed to save voice")
     } finally {
       setSavingStyle(false)
     }
@@ -134,19 +160,30 @@ export default function SettingsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-gray-500">{brandCount} / {brandLimit} brands used</div>
-        <Button onClick={() => setIsCreatingBrand(true)} disabled={brandCount >= brandLimit} size="sm" className="shrink-0">
-          <Plus className="w-4 h-4" /> Add Brand
-        </Button>
+        {!editingBrand && !isCreatingBrand && (
+            <Button onClick={() => setIsCreatingBrand(true)} disabled={brandCount >= brandLimit} size="sm" className="shrink-0">
+            <Plus className="w-4 h-4" /> Add Brand
+            </Button>
+        )}
       </div>
 
-      {isCreatingBrand ? (
+      {isCreatingBrand || editingBrand ? (
         <BrandOnboarding
+          initialData={editingBrand?.brand_data}
+          initialUrl={editingBrand?.website_url}
+          brandId={editingBrand?.id}
           onComplete={async (id) => {
             setIsCreatingBrand(false)
+            setEditingBrand(null)
             await refreshBrands()
-            setDefaultBrandId(id)
+            if (!editingBrand) {
+                setDefaultBrandId(id)
+            }
           }}
-          onCancel={() => setIsCreatingBrand(false)}
+          onCancel={() => {
+              setIsCreatingBrand(false)
+              setEditingBrand(null)
+          }}
         />
       ) : (
         <div className="grid sm:grid-cols-2 gap-3">
@@ -166,20 +203,25 @@ export default function SettingsPage() {
               >
                 <span className="truncate pr-4">{b.website_url}</span>
               </button>
-              {defaultBrandId === b.id && <Check className="w-4 h-4" />}
-              <Button variant="ghost" size="icon" className="ml-2 shrink-0" onClick={async () => {
-                setSaving(true)
-                try {
-                  const res = await deleteBrandAction(b.id)
-                  if (res.success) {
-                    await refreshBrands()
-                  }
-                } finally {
-                  setSaving(false)
-                }
-              }}>
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </Button>
+              <div className="flex items-center gap-1">
+                {defaultBrandId === b.id && <Check className="w-4 h-4 mr-2" />}
+                <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setEditingBrand(b)}>
+                    <Edit className="w-4 h-4 text-gray-600" />
+                </Button>
+                <Button variant="ghost" size="icon" className="shrink-0" onClick={async () => {
+                    setSaving(true)
+                    try {
+                    const res = await deleteBrandAction(b.id)
+                    if (res.success) {
+                        await refreshBrands()
+                    }
+                    } finally {
+                    setSaving(false)
+                    }
+                }}>
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                </Button>
+              </div>
             </div>
           ))}
           {brands.length === 0 && (
@@ -192,10 +234,18 @@ export default function SettingsPage() {
 
   const VoiceTab = (
     <div className="space-y-6">
-      <Tabs defaultValue={activeVoiceTab} onValueChange={(v) => setActiveVoiceTab(v as any)} className="w-full">
+      <Tabs value={activeVoiceTab} onValueChange={(v) => {
+          setActiveVoiceTab(v as any)
+          if (v === "existing") {
+              setEditingVoice(null)
+              setCustomStyleName("")
+              setCustomStyleJson(JSON.stringify(STYLE_PRESETS["linkedin-influencer"], null, 2))
+              setCreationMethod("preset")
+          }
+      }} className="w-full">
         <TabsList>
           <TabsTrigger value="existing">Select Voice</TabsTrigger>
-          <TabsTrigger value="new">Create New Voice</TabsTrigger>
+          <TabsTrigger value="new">{editingVoice ? "Edit Voice" : "Create New Voice"}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="existing">
@@ -216,20 +266,30 @@ export default function SettingsPage() {
                 >
                   <span className="truncate pr-4">{v.name}</span>
                 </button>
-                {defaultVoiceId === v.id && <Check className="w-4 h-4" />}
-                <Button variant="ghost" size="icon" className="ml-2 shrink-0" onClick={async () => {
-                  setSaving(true)
-                  try {
-                    await supabase.from("brand_voices").delete().eq("id", v.id)
-                    const { data } = await supabase.from("brand_voices").select("id,name").order("created_at", { ascending: false })
-                    setVoices((data || []) as any)
-                    if (defaultVoiceId === v.id) setDefaultVoiceId(null)
-                  } finally {
-                    setSaving(false)
-                  }
-                }}>
-                  <Trash2 className="w-4 h-4 text-red-600" />
-                </Button>
+                <div className="flex items-center gap-1">
+                    {defaultVoiceId === v.id && <Check className="w-4 h-4 mr-2" />}
+                    <Button variant="ghost" size="icon" className="shrink-0" onClick={() => {
+                        setEditingVoice(v)
+                        setCustomStyleName(v.name)
+                        setCustomStyleJson(JSON.stringify(v.style_dna, null, 2))
+                        setActiveVoiceTab("new")
+                    }}>
+                        <Edit className="w-4 h-4 text-gray-600" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="shrink-0" onClick={async () => {
+                    setSaving(true)
+                    try {
+                        await supabase.from("brand_voices").delete().eq("id", v.id)
+                        const { data } = await supabase.from("brand_voices").select("*").order("created_at", { ascending: false })
+                        setVoices((data || []) as any)
+                        if (defaultVoiceId === v.id) setDefaultVoiceId(null)
+                    } finally {
+                        setSaving(false)
+                    }
+                    }}>
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                    </Button>
+                </div>
               </div>
             ))}
             {voices.length === 0 && (
@@ -239,32 +299,46 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="new" className="space-y-6">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Choose a Preset</label>
-            <select value={presetKey} onChange={e => setPresetKey(e.target.value)} className="w-full border rounded-md p-2">
-              {Object.keys(STYLE_PRESETS).map(key => (
-                <option key={key} value={key}>{key.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Enter URL to Mimic</label>
-            <div className="flex gap-2 flex-wrap">
-              <Input value={mimicUrl} onChange={e => setMimicUrl(e.target.value)} placeholder="https://example.com/blog/post-to-mimic" className="flex-1 min-w-[240px]" />
-              <Button onClick={analyzeUrl} disabled={isAnalyzing || !mimicUrl}>{isAnalyzing ? "Analyzing..." : "Analyze"}</Button>
+          {!editingVoice && (
+             <div className="space-y-2">
+                <label className="block text-sm font-medium">Choose a Preset</label>
+                <select value={presetKey} onChange={e => setPresetKey(e.target.value)} className="w-full border rounded-md p-2">
+                {Object.keys(STYLE_PRESETS).map(key => (
+                    <option key={key} value={key}>{key.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>
+                ))}
+                </select>
             </div>
-          </div>
+          )}
+
+          {!editingVoice && (
+             <div className="space-y-2">
+                <label className="block text-sm font-medium">Enter URL to Mimic</label>
+                <div className="flex gap-2 flex-wrap">
+                <Input value={mimicUrl} onChange={e => setMimicUrl(e.target.value)} placeholder="https://example.com/blog/post-to-mimic" className="flex-1 min-w-[240px]" />
+                <Button onClick={analyzeUrl} disabled={isAnalyzing || !mimicUrl}>{isAnalyzing ? "Analyzing..." : "Analyze"}</Button>
+                </div>
+            </div>
+          )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium">New Voice Name</label>
+            <label className="block text-sm font-medium">{editingVoice ? "Voice Name" : "New Voice Name"}</label>
             <Input value={customStyleName} onChange={e => setCustomStyleName(e.target.value)} />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium">Style DNA (JSON)</label>
             <Textarea value={customStyleJson} onChange={e => setCustomStyleJson(e.target.value)} className="h-64 font-mono text-sm" />
           </div>
-          <Button onClick={saveNewStyle} disabled={savingStyle} className="w-full sm:w-auto">{savingStyle ? "Saving..." : "Save Voice"}</Button>
+          <div className="flex gap-2">
+            {editingVoice && (
+                <Button variant="outline" onClick={() => {
+                    setEditingVoice(null)
+                    setActiveVoiceTab("existing")
+                }}>Cancel</Button>
+            )}
+            <Button onClick={saveNewStyle} disabled={savingStyle} className="w-full sm:w-auto">
+                {savingStyle ? "Saving..." : editingVoice ? "Update Voice" : "Save Voice"}
+            </Button>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
