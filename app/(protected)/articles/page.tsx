@@ -5,7 +5,19 @@ import { createClient } from "@/utils/supabase/client"
 import Link from "next/link"
 import { format } from "date-fns"
 import { GlobalCard } from "@/components/ui/global-card"
-import { FileText, Eye, FilePenLine, Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { FileText, FilePenLine, Plus, Loader2, ExternalLink, Send } from "lucide-react"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type ArticleRow = {
   id: string
@@ -14,28 +26,53 @@ type ArticleRow = {
   created_at: string
   current_step_index: number | null
   final_html: string | null
+  wordpress_post_url: string | null
+  published_at: string | null
+}
+
+type WordPressConnection = {
+  id: string
+  site_name: string | null
+  site_url: string
+  is_default: boolean
 }
 
 export default function ArticlesPage() {
   const supabase = useMemo(() => createClient(), [])
   const [articles, setArticles] = useState<ArticleRow[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+  const [connections, setConnections] = useState<WordPressConnection[]>([])
+  const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
+  const [pendingPublishId, setPendingPublishId] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
-    const loadArticles = async () => {
-      const { data } = await supabase
+
+    const loadData = async () => {
+      // Load articles
+      const { data: articlesData } = await supabase
         .from("articles")
-        .select("id,keyword,status,created_at,current_step_index,final_html")
+        .select("id,keyword,status,created_at,current_step_index,final_html,wordpress_post_url,published_at")
         .order("created_at", { ascending: false })
 
-      if (mounted && data) {
-        setArticles(data as ArticleRow[])
-        setLoading(false)
+      if (mounted && articlesData) {
+        setArticles(articlesData as ArticleRow[])
       }
+
+      // Load WordPress connections
+      const { data: connectionsData } = await supabase
+        .from("wordpress_connections")
+        .select("id,site_name,site_url,is_default")
+        .order("is_default", { ascending: false })
+
+      if (mounted && connectionsData) {
+        setConnections(connectionsData as WordPressConnection[])
+      }
+
+      setLoading(false)
     }
 
-    loadArticles()
+    loadData()
 
     // Subscribe to all changes in articles table
     const channel = supabase
@@ -62,6 +99,62 @@ export default function ArticlesPage() {
       supabase.removeChannel(channel)
     }
   }, [supabase])
+
+  const handlePublish = async (articleId: string) => {
+    const defaultConnection = connections.find(c => c.is_default) || connections[0]
+
+    if (!defaultConnection) {
+      toast.error("No WordPress site connected", {
+        action: {
+          label: "Connect",
+          onClick: () => window.location.href = "/integrations"
+        }
+      })
+      return
+    }
+
+    setPublishingIds(prev => new Set(prev).add(articleId))
+
+    try {
+      const response = await fetch("/api/wordpress/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articleId,
+          connectionId: defaultConnection.id,
+          publishStatus: "draft"
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to publish")
+      }
+
+      toast.success("Published as draft!", {
+        action: {
+          label: "View",
+          onClick: () => window.open(result.postUrl, "_blank")
+        }
+      })
+
+      // Update local state
+      setArticles(prev => prev.map(a =>
+        a.id === articleId
+          ? { ...a, wordpress_post_url: result.postUrl, published_at: new Date().toISOString() }
+          : a
+      ))
+    } catch (error: any) {
+      toast.error(error.message || "Failed to publish")
+    } finally {
+      setPublishingIds(prev => {
+        const next = new Set(prev)
+        next.delete(articleId)
+        return next
+      })
+    }
+  }
 
   if (loading) {
     return (
@@ -119,7 +212,7 @@ export default function ArticlesPage() {
             </div>
           ) : (
             <table className="w-full text-sm text-left border-collapse">
-              <thead className="bg-stone-100 dark:bg-stone-800/95 text-black dark:text-white  border-b border-stone-100 dark:border-stone-800">
+              <thead className="bg-stone-100 dark:bg-stone-800/95 text-black dark:text-white border-b border-stone-100 dark:border-stone-800">
                 <tr>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Keyword</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Status</th>
@@ -167,15 +260,47 @@ export default function ArticlesPage() {
                        transition-colors
                        border-l border-stone-100 dark:border-stone-800
                     ">
-                      {article.status === 'completed' && article.final_html && (
-                        <Link
-                          href={`/articles/${article.id}`}
-                          className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-900 dark:hover:text-white font-medium transition-colors"
-                        >
-                          Edit
-                          <FilePenLine className="w-3 h-3" />
-                        </Link>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {article.status === 'completed' && article.final_html && (
+                          <>
+                            {/* Published Badge or Publish Button */}
+                            {article.wordpress_post_url ? (
+                              <a
+                                href={article.wordpress_post_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-medium hover:underline"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                Published
+                              </a>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={publishingIds.has(article.id) || connections.length === 0}
+                                onClick={() => setPendingPublishId(article.id)}
+                                className="h-7 px-2 text-xs gap-1"
+                              >
+                                {publishingIds.has(article.id) ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Send className="w-3 h-3" />
+                                )}
+                                {connections.length === 0 ? "No WP" : "Publish"}
+                              </Button>
+                            )}
+
+                            <Link
+                              href={`/articles/${article.id}`}
+                              className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-900 dark:hover:text-white font-medium transition-colors"
+                            >
+                              Edit
+                              <FilePenLine className="w-3 h-3" />
+                            </Link>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -184,6 +309,32 @@ export default function ArticlesPage() {
           )}
         </div>
       </GlobalCard>
+
+      {/* Publish Confirmation Dialog */}
+      <AlertDialog open={!!pendingPublishId} onOpenChange={(open) => !open && setPendingPublishId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Publish to WordPress?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will create a <strong>draft</strong> post on your WordPress site.
+              You can review and publish it from WordPress dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingPublishId) {
+                  handlePublish(pendingPublishId)
+                  setPendingPublishId(null)
+                }
+              }}
+            >
+              Publish as Draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -191,20 +342,20 @@ export default function ArticlesPage() {
 function StatusBadge({ status }: { status: string }) {
   if (status === 'completed') {
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-green-700 dark:text-green-400 border border-green-150 dark:border-green-900/50">
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/50">
         Completed
       </span>
     )
   }
   if (status === 'failed') {
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-red-700 dark:text-red-400 border border-red-100 dark:border-red-900/50">
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50">
         Failed
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-amber-700 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50 animate-pulse">
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 animate-pulse">
       {status === 'queued' ? 'Queued' : 'Processing...'}
     </span>
   )
