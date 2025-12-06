@@ -252,7 +252,7 @@ export const robotsConfig = {
     allow: '/',
     disallow: [
       '/api/',
-      '/dashboard/',
+      '/blog-writer/',
       '/account/',
       '/admin/',
     ],

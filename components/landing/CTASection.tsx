@@ -21,7 +21,7 @@ export function CTASection() {
             </p>
 
             {/* The Primary Call to Action Button */}
-        <Link href="/dashboard">
+        <Link href="/blog-writer">
               <Button
                 className="text-md py-6 group relative bg-[#ff6f00] hover:bg-[#ff6f00]/90 text-white rounded-md overflow-hidden cursor-pointer pr-12"
               >

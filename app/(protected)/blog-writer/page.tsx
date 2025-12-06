@@ -7,7 +7,6 @@ import { getUserDefaults } from "@/actions/preferences"
 import { STYLE_PRESETS } from "@/lib/presets"
 import BrandOnboarding from "./BrandOnboarding"
 import { BlogWriterIsland } from "@/components/blog-writer-island"
-import { Plus, Check, Building2 } from "lucide-react"
 
 type BrandVoice = { id: string; name: string }
 type BrandInfo = { id: string; website_url: string; created_at: string }

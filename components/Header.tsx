@@ -169,7 +169,7 @@ function Header() {
 
         {/* CTA Button */}
         <div className="flex items-center gap-3">
-          <Link href="/dashboard">
+          <Link href="/blog-writer">
             <Button
               className="text-sm py-5 group relative bg-[#ff6f00] text-white rounded-md overflow-hidden cursor-pointer pr-10"
             >
@@ -209,7 +209,7 @@ function Header() {
               </a>
             ))}
             <div className="flex flex-col gap-2 mt-4 w-full items-center">
-              <Link href="/dashboard">
+              <Link href="/blog-writer">
                 <Button
                   className="text-md py-6 group relative bg-[#ff6f00] text-white rounded-md overflow-hidden cursor-pointer pr-12"
                 >

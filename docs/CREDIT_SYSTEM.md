@@ -162,7 +162,7 @@ function makeApiCallWithCreditUpdate<T>(
 The header shows real-time credit balance:
 
 ```typescript
-// components/dashboard/header-user.tsx
+// components/blog-writer/header-user.tsx
 export function HeaderUser({ user, initialCreditBalance }: HeaderUserProps) {
   const { balance: creditBalance } = useCreditManager(user.id)
   

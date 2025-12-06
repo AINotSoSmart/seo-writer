@@ -341,7 +341,7 @@ export const robotsConfig = {
     allow: '/',
     disallow: [
       '/api/',
-      '/dashboard/',
+      '/blog-writer/',
       '/account/',
       '/settings/',
       '/admin/',
@@ -355,7 +355,7 @@ export const sitemapConfig = {
   siteUrl: defaultSEO.siteUrl,
   generateRobotsTxt: true,
   exclude: [
-    '/dashboard/*',
+    '/blog-writer/*',
     '/account/*',
     '/reports/*',
     '/settings/*',

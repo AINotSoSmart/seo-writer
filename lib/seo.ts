@@ -503,7 +503,7 @@ export const commonPageMetadata = {
   dashboard: () => generateMetadata({
     title: 'Dashboard',
     description: 'Access your dashboard to train ai model and create ai images',
-    canonical: '/dashboard',
+    canonical: '/blog-writer',
     noindex: true,
     nofollow: true,
   }),

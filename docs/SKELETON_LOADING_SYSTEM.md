@@ -176,7 +176,7 @@ Update the path detection logic in `components/loading-provider.tsx`:
 const getSkeletonForPath = (pathname: string) => {
   if (pathname.includes('/analytics')) return 'list';
   if (pathname.includes('/profile')) return 'simple';
-  if (pathname.includes('/dashboard')) return 'default';
+  if (pathname.includes('/blog-writer')) return 'default';
   // Add your custom mappings
   return 'default';
 };

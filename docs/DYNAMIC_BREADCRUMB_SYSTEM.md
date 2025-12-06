@@ -24,7 +24,7 @@ app/
 
 ## Component Details
 
-### Dynamic Breadcrumb Component (`components/dashboard/dynamic-breadcrumb.tsx`)
+### Dynamic Breadcrumb Component (`components/blog-writer/dynamic-breadcrumb.tsx`)
 
 #### Core Features
 
@@ -94,7 +94,7 @@ export function DynamicBreadcrumb() {
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link href="/dashboard" className="flex items-center gap-1">
+            <Link href="/blog-writer" className="flex items-center gap-1">
               <Home className="h-4 w-4" />
               Home
             </Link>
@@ -136,7 +136,7 @@ export function DynamicBreadcrumb() {
 The dynamic breadcrumb replaces the static breadcrumb in the protected layout:
 
 ```typescript
-import { DynamicBreadcrumb } from '@/components/dashboard/dynamic-breadcrumb';
+import { DynamicBreadcrumb } from '@/dashboarddynamic-breadcrumb';
 
 // In the layout component
 <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
@@ -151,7 +151,7 @@ import { DynamicBreadcrumb } from '@/components/dashboard/dynamic-breadcrumb';
 
 | Current URL | Generated Breadcrumb |
 |-------------|---------------------|
-| `/dashboard` | Home |
+| `/blog-writer` | Home |
 | `/demo-tool` | Home > Demo Tool |
 | `/settings` | Home > Settings |
 | `/reports` | Home > Reports |
@@ -160,7 +160,7 @@ import { DynamicBreadcrumb } from '@/components/dashboard/dynamic-breadcrumb';
 
 ### Navigation Behavior
 
-- **Home Icon**: Always links to `/dashboard`
+- **Home Icon**: Always links to `/blog-writer`
 - **Intermediate Segments**: Clickable links to parent routes
 - **Current Page**: Non-clickable, styled as current page
 - **Real-time Updates**: Breadcrumb updates automatically on route changes
@@ -269,7 +269,7 @@ export function DynamicBreadcrumb() {
   const pathname = usePathname();
   
   // Hide breadcrumb on specific pages
-  const hiddenPaths = ['/dashboard', '/login', '/signup'];
+  const hiddenPaths = ['/blog-writer', '/login', '/signup'];
   if (hiddenPaths.includes(pathname)) {
     return null;
   }
@@ -335,7 +335,7 @@ const getDisplayName = (segment: string): string => {
 The component automatically filters out Next.js route groups (folders wrapped in parentheses):
 
 ```typescript
-// Route: /dashboard/(admin)/users
+// Route: /blog-writer/(admin)/users
 // Breadcrumb: Home > Dashboard > Users
 // The (admin) group is automatically filtered out
 
@@ -440,7 +440,7 @@ interface DynamicBreadcrumbProps {
 
 ```typescript
 export function DynamicBreadcrumb({ 
-  homeHref = '/dashboard',
+  homeHref = '/blog-writer',
   maxSegments = 5,
   showHome = true,
   customDisplayNames = {}

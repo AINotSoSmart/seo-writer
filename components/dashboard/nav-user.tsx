@@ -94,7 +94,7 @@ export function NavUser({
              <DropdownMenuGroup>
            <DropdownMenuItem className="cursor-pointer">
             <Home className="mr-2 h-4 w-4" />
-            <Link href="/dashboard">Dashboard</Link>
+            <Link href="/blog-writer">Dashboard</Link>
           </DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer">
             <BadgeCheck className="mr-2 h-4 w-4" />

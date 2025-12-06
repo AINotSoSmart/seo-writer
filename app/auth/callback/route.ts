@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const type = (searchParams.get('type') || 'email').toLowerCase()
-  const next = searchParams.get('next') ?? '/dashboard'
+  const next = searchParams.get('next') ?? '/blog-writer'
 
   if (code) {
     try {

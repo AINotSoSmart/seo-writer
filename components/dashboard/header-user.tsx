@@ -88,7 +88,7 @@ export function HeaderUser({ user, initialCreditBalance }: HeaderUserProps) {
        
         <DropdownMenuGroup>
            <DropdownMenuItem>
-            <Link href="/dashboard" className="flex items-center">
+            <Link href="/blog-writer" className="flex items-center">
               <Home className="mr-2 h-4 w-4" />
               Dashboard
             </Link>

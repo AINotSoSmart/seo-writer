@@ -1,24 +1,8 @@
 "use client"
 
 import React, { useRef, useEffect, useState } from "react"
-import { AnimatePresence, motion, useWillChange } from "motion/react"
-import { ArrowRight, Check, Loader2, ArrowLeft, Search } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-// Refined spring animation configs - tighter, less bouncy
-const springConfig = { stiffness: 350, damping: 25 }
-const springConfigSoft = { stiffness: 250, damping: 20 }
-
-// State-based size configurations
-type IslandState = "idle" | "focus" | "typing" | "generating" | "selection"
-
-const SIZE_CONFIGS: Record<IslandState, { width: number; height: number; borderRadius: number }> = {
-    idle: { width: 260, height: 52, borderRadius: 26 },
-    focus: { width: 480, height: 60, borderRadius: 30 },
-    typing: { width: 480, height: 68, borderRadius: 34 },
-    generating: { width: 300, height: 72, borderRadius: 36 },
-    selection: { width: 600, height: 420, borderRadius: 24 },
-}
+import { motion, AnimatePresence } from "motion/react"
+import { ChevronUp, Check, Loader2, Sparkles, Search, ArrowRight, ArrowLeft } from "lucide-react"
 
 interface BlogWriterIslandProps {
     keyword: string
@@ -48,32 +32,17 @@ export function BlogWriterIsland({
     disabled = false,
 }: BlogWriterIslandProps) {
     const inputRef = useRef<HTMLInputElement>(null)
-    const willChange = useWillChange()
     const [isFocused, setIsFocused] = useState(false)
+    const [isDark, setIsDark] = useState(false) // Simple dark mode detection for now
 
-    // Determine current state
-    const getState = (): IslandState => {
-        if (titles.length > 0) return "selection"
-        if (isGenerating) return "generating"
-        if (keyword.length > 0 && isFocused) return "typing"
-        if (isFocused) return "focus"
-        return "idle"
-    }
-
-    const state = getState()
-    const config = SIZE_CONFIGS[state]
-
-    // Auto-focus input when transitioning to focus state
+    // Check system preference
     useEffect(() => {
-        if ((state === "focus" || state === "typing") && inputRef.current) {
-            inputRef.current.focus()
+        if (typeof window !== 'undefined') {
+            setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
         }
-    }, [state])
+    }, [])
 
-    // Handle clicking idle state - set focused to trigger state change
-    const handleIdleClick = () => {
-        setIsFocused(true)
-    }
+    const hasTitles = titles.length > 0
 
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault()
@@ -87,226 +56,186 @@ export function BlogWriterIsland({
             e.preventDefault()
             handleSubmit()
         }
-        if (e.key === "Escape") {
-            inputRef.current?.blur()
-            setIsFocused(false)
-        }
     }
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 font-sans">
-            {/* Header - Clean & Minimal */}
-            <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="text-center mb-10"
-            >
-                <h1 className="text-3xl font-semibold text-slate-900 dark:text-white mb-2 tracking-tight">
-                    Blog Writer
-                </h1>
-                <p className="text-slate-500 dark:text-slate-400 text-base">
-                    {state === "selection"
-                        ? "Select the best title"
-                        : "What do you want to write about?"}
-                </p>
-            </motion.div>
-
-            {/* Dynamic Island Container */}
+        <div className="flex w-full items-center justify-center font-sans">
+            {/* Outer Muted Wrapper (The Border/Padding Layer) */}
             <motion.div
                 layout
-                className={cn(
-                    "relative overflow-hidden z-20",
-                    "bg-white dark:bg-zinc-900",
-                    "border border-slate-200 dark:border-zinc-800",
-                    "shadow-xl shadow-slate-200/50 dark:shadow-black/50",
-                    state === "idle" && "cursor-pointer hover:scale-[1.02] transition-transform duration-200"
-                )}
-                style={{ willChange }}
-                animate={{
-                    width: state === "selection" ? Math.min(config.width, typeof window !== "undefined" ? window.innerWidth - 32 : 640) : config.width,
-                    height: state === "selection" ? "auto" : config.height,
-                    borderRadius: config.borderRadius,
-                }}
-                transition={{
-                    type: "spring",
-                    ...springConfig,
-                }}
-                onClick={state === "idle" ? handleIdleClick : undefined}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className={`
+                    relative p-1 overflow-hidden w-full transition-all duration-300
+                    shadow-[0_0_0_1px_rgba(0,0,0,0.08),0px_1px_2px_rgba(0,0,0,0.04)]
+                    ${hasTitles ? 'max-w-2xl rounded-[20px]' : 'max-w-[420px] rounded-[16px]'}
+                    ${isDark ? 'bg-stone-800' : 'bg-stone-100'}
+                `}
             >
-                {/* Inner content area */}
-                <div className="relative z-10 h-full">
+
+                {/* Top Notch Decoration */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-6 z-20 flex justify-center pointer-events-none">
+                    <div className={`w-8 h-4 rounded-b-lg border-b border-x ${isDark ? 'bg-stone-800 border-stone-700' : 'bg-stone-100 border-stone-200/50'} flex items-center justify-center`}>
+                        <ChevronUp className={`w-3 h-3 ${isDark ? 'text-stone-500' : 'text-stone-400'}`} />
+                    </div>
+                </div>
+
+                {/* Inner White Card */}
+                <div className={`
+                   relative border overflow-hidden transition-all
+                   ${hasTitles ? 'rounded-[16px]' : 'rounded-[12px]'}
+                   ${isDark ? 'bg-stone-900 border-stone-700' : 'bg-white border-stone-200'}
+                `}>
                     <AnimatePresence mode="wait">
-                        {/* Idle State */}
-                        {state === "idle" && (
-                            <motion.div
-                                key="idle"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="flex items-center justify-center h-full gap-2.5"
-                            >
-                                <Search className="w-4 h-4 text-slate-400" />
-                                <span className="text-slate-600 dark:text-slate-300 font-medium text-sm">Start writing...</span>
-                            </motion.div>
-                        )}
-
-                        {/* Focus/Typing State */}
-                        {(state === "focus" || state === "typing") && (
-                            <motion.form
-                                key="input"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                onSubmit={handleSubmit}
-                                className="flex items-center h-full px-1.5 gap-2"
-                            >
-                                <div className="flex-1 relative pl-4">
-                                    <input
-                                        ref={inputRef}
-                                        type="text"
-                                        value={keyword}
-                                        onChange={(e) => onKeywordChange(e.target.value)}
-                                        onFocus={() => setIsFocused(true)}
-                                        onBlur={() => setIsFocused(false)}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder="Enter topic..."
-                                        className={cn(
-                                            "w-full bg-transparent",
-                                            "text-slate-900 dark:text-white placeholder:text-slate-400",
-                                            "text-lg font-medium",
-                                            "focus:outline-none",
-                                            "py-2"
-                                        )}
-                                        autoFocus
-                                        disabled={disabled}
-                                    />
-                                </div>
-
-                                <motion.button
-                                    type="submit"
-                                    disabled={!keyword.trim() || disabled}
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    className={cn(
-                                        "flex items-center justify-center w-10 h-10 rounded-full",
-                                        "bg-slate-900 dark:bg-white",
-                                        "text-white dark:text-black",
-                                        "disabled:opacity-30 disabled:cursor-not-allowed",
-                                        "transition-all duration-200"
-                                    )}
-                                >
-                                    <ArrowRight className="w-5 h-5" />
-                                </motion.button>
-                            </motion.form>
-                        )}
-
-                        {/* Generating State */}
-                        {state === "generating" && (
+                        {/* STATE 1: GENERATING LOADING */}
+                        {isGenerating ? (
                             <motion.div
                                 key="generating"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="flex items-center justify-center h-full gap-3"
+                                className="p-8 text-center py-12 flex flex-col items-center justify-center min-h-[180px]"
                             >
-                                <Loader2 className="w-5 h-5 text-slate-900 dark:text-white animate-spin" />
-                                <span className="text-slate-900 dark:text-white font-medium">Thinking...</span>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-4 ${isDark ? 'bg-stone-800' : 'bg-stone-50'}`}>
+                                    <Loader2 className={`w-5 h-5 animate-spin ${isDark ? 'text-stone-400' : 'text-stone-600'}`} />
+                                </div>
+                                <h3 className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-stone-900'}`}>Crafting titles...</h3>
+                                <p className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Analyzing SEO trends for "{keyword}"</p>
                             </motion.div>
-                        )}
-
-                        {/* Selection State */}
-                        {state === "selection" && (
+                        ) : hasTitles ? (
+                            /* STATE 2: TITLE SELECTION */
                             <motion.div
                                 key="selection"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="p-6 flex flex-col h-full"
+                                className="p-6"
                             >
-                                {/* Title options */}
-                                <div className="space-y-2 mb-6 flex-1 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
-                                    {titles.map((title, index) => (
-                                        <motion.button
-                                            key={index}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: index * 0.05 }}
+                                <div className="flex items-center justify-between mb-4 px-1">
+                                    <h3 className={`font-medium ${isDark ? 'text-white' : 'text-stone-900'}`}>Select a title</h3>
+                                    <button onClick={onBack} className={`text-xs hover:underline cursor-pointer ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Start over</button>
+                                </div>
+
+                                <div className="space-y-2 mb-6 max-h-[400px] overflow-y-auto pr-1">
+                                    {titles.map((title, i) => (
+                                        <button
+                                            key={i}
                                             onClick={() => onSelectTitle(title)}
-                                            className={cn(
-                                                "w-full text-left p-4 rounded-xl transition-all duration-200",
-                                                "border",
-                                                selectedTitle === title
-                                                    ? "bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-black shadow-md"
-                                                    : "bg-white dark:bg-zinc-800 border-slate-100 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-zinc-600"
-                                            )}
+                                            className={`
+                                                w-full text-left p-4 rounded-lg border transition-all duration-200
+                                                group flex items-start gap-3 relative cursor-pointer
+                                                ${selectedTitle === title
+                                                    ? (isDark ? 'bg-stone-800 border-stone-600 ring-1 ring-stone-600' : 'bg-stone-50 border-stone-300 ring-1 ring-stone-300')
+                                                    : (isDark ? 'border-stone-800 hover:bg-stone-800/50' : 'border-stone-100 hover:bg-stone-50 hover:border-stone-200')
+                                                }
+                                            `}
                                         >
-                                            <div className="flex items-start gap-3">
-                                                <span className={cn(
-                                                    "text-sm font-mono mt-0.5 opacity-60",
-                                                    selectedTitle === title ? "text-white dark:text-black" : "text-slate-400"
-                                                )}>
-                                                    {String(index + 1).padStart(2, '0')}
-                                                </span>
-                                                <span className="font-medium leading-relaxed">{title}</span>
+                                            <div className={`
+                                                w-5 h-5 rounded-full border flex items-center justify-center mt-0.5 flex-shrink-0 transition-colors
+                                                ${selectedTitle === title
+                                                    ? (isDark ? 'bg-stone-700 border-stone-600 text-white' : 'bg-stone-900 border-stone-900 text-white')
+                                                    : (isDark ? 'border-stone-700 text-transparent' : 'border-stone-200 text-transparent')
+                                                }
+                                            `}>
+                                                <Check className="w-3 h-3" />
                                             </div>
-                                        </motion.button>
+                                            <span className={`text-sm leading-relaxed ${isDark ? 'text-stone-200' : 'text-stone-700'}`}>{title}</span>
+                                        </button>
                                     ))}
                                 </div>
 
-                                {/* Action buttons */}
-                                <div className="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                                    <button
-                                        onClick={onBack}
-                                        className="px-4 py-2.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white text-sm font-medium transition-colors"
-                                    >
-                                        Back
-                                    </button>
-
+                                <div className="flex items-center gap-3 pt-2 border-t border-stone-100 dark:border-stone-800">
                                     <button
                                         onClick={onGenerateArticle}
                                         disabled={!selectedTitle || isLoading}
-                                        className={cn(
-                                            "flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl",
-                                            "bg-slate-900 dark:bg-white",
-                                            "text-white dark:text-black font-semibold",
-                                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                                            "transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
-                                        )}
+                                        className={`
+                                        flex h-10 w-full items-center justify-center gap-2 overflow-hidden rounded-md px-4 text-sm font-semibold text-white transition-all
+                                        disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98] cursor-pointer
+                                        bg-gradient-to-b from-stone-800 to-stone-950
+                                        hover:from-stone-700 hover:to-stone-900
+                                        dark:from-stone-200 dark:to-stone-400 dark:text-stone-900 dark:hover:from-white dark:hover:to-stone-200
+                                        shadow-[0_0_1px_1px_rgba(255,255,255,0.08)_inset,0_1px_1.5px_0_rgba(0,0,0,0.32)]
+                                      `}
                                     >
                                         {isLoading ? (
                                             <>
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                Writing...
+                                                <Loader2 className="size-4 animate-spin" />
+                                                <span>Writing...</span>
                                             </>
                                         ) : (
-                                            "Generate Article"
+                                            <>
+                                                <Sparkles className="size-4" />
+                                                <span>Generate Article</span>
+                                            </>
                                         )}
                                     </button>
                                 </div>
                             </motion.div>
+                        ) : (
+                            /* STATE 3: INPUT FORM */
+                            <form onSubmit={handleSubmit} className="p-4">
+                                {/* Header Section */}
+                                <div className="mb-4 space-y-2">
+                                    <label
+                                        htmlFor="keyword"
+                                        className={`block text-sm font-medium mb-1 pl-1 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}
+                                    >
+                                        Create new post
+                                    </label>
+
+                                    <div className="relative group">
+                                        <input
+                                            ref={inputRef}
+                                            id="keyword"
+                                            type="text"
+                                            placeholder="e.g. Future of AI Marketing"
+                                            value={keyword}
+                                            onChange={(e) => onKeywordChange(e.target.value)}
+                                            onFocus={() => setIsFocused(true)}
+                                            onBlur={() => setIsFocused(false)}
+                                            onKeyDown={handleKeyDown}
+                                            autoFocus
+                                            required
+                                            disabled={disabled}
+                                            className={`
+                                        w-full px-3 py-2.5 border rounded-md shadow-sm outline-none transition-all
+                                        placeholder:text-stone-400 text-sm
+                                        ${isDark
+                                                    ? 'bg-stone-950 border-stone-800 text-white focus:border-stone-600 focus:ring-1 focus:ring-stone-600'
+                                                    : 'bg-white border-stone-200 text-stone-900 focus:border-stone-400 focus:ring-1 focus:ring-stone-400'
+                                                }
+                                      `}
+                                        />
+                                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                            <Search className={`size-4 ${isDark ? 'text-stone-600' : 'text-stone-400'}`} />
+                                        </div>
+                                    </div>
+
+                                    <p className={`text-xs tracking-tight pl-1 ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                        Keyphrase or topic to generate titles.
+                                    </p>
+                                </div>
+
+                                {/* Premium Button */}
+                                <button
+                                    type="submit"
+                                    disabled={!keyword.trim() || disabled}
+                                    className={`
+                                    flex h-9 w-full items-center justify-center overflow-hidden rounded-md px-3 text-xs font-semibold text-white transition-all
+                                    disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98] cursor-pointer
+                                    bg-gradient-to-b from-stone-800 to-stone-950
+                                    hover:from-stone-700 hover:to-stone-900
+                                    dark:from-stone-200 dark:to-stone-400 dark:text-stone-900 dark:hover:from-white dark:hover:to-stone-200
+                                    shadow-[0_0_1px_1px_rgba(255,255,255,0.08)_inset,0_1px_1.5px_0_rgba(0,0,0,0.32)]
+                                    ${isDark ? 'border border-stone-700' : ''}
+                                  `}
+                                >
+                                    <span>Generate Titles</span>
+                                </button>
+                            </form>
                         )}
                     </AnimatePresence>
                 </div>
             </motion.div>
-
-            {/* Minimal Keyboard hint */}
-            {(state === "focus" || state === "typing") && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="mt-6 flex items-center gap-2 text-xs text-slate-400"
-                >
-                    <span>Press</span>
-                    <kbd className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 font-mono text-[10px]">Enter</kbd>
-                    <span>to continue</span>
-                </motion.div>
-            )}
         </div>
     )
 }

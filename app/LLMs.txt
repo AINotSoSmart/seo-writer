@@ -46,7 +46,7 @@ Unrealshot is an innovative platform that transforms your selfies into stunning,
 
 ## Additional Resources
 - [Blog](https://www.unrealshot.com/blog): A resource for tips, updates, and insights related to Unrealshot and photography.
-- [Start Your Photoshoot](https://www.unrealshot.com/dashboard): A call to action for users to begin their photoshoot experience.
+- [Start Your Photoshoot](https://www.unrealshot.com/blog-writer): A call to action for users to begin their photoshoot experience.
 
 ## Company Information
 - [About](https://www.unrealshot.com/about): Information about the company behind Unrealshot, its mission, and vision.

@@ -39,7 +39,7 @@ export async function signInWithMagicLink(
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/dashboard`,
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/blog-writer`,
       },
     })
 
@@ -77,7 +77,7 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/dashboard`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/blog-writer`,
     },
   })
 
@@ -110,7 +110,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect('/blog-writer')
 }
 
 export async function signup(formData: FormData) {
@@ -128,5 +128,5 @@ export async function signup(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect('/blog-writer')
 }

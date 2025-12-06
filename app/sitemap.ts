@@ -88,7 +88,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }))
 
-  // Note: Protected pages like /dashboard, /account are intentionally excluded
+  // Note: Protected pages like /blog-writer, /account are intentionally excluded
 
   return [...staticPages, ...additionalPages, ...blogPages]
 }

@@ -33,15 +33,15 @@ export async function signOut() {
 
 ### Components Updated
 
-1. **NavUser Component** (`components/dashboard/nav-user.tsx`)
+1. **NavUser Component** (`components/blog-writer/nav-user.tsx`)
    - Added functional sign-out to the sidebar user menu
    - Styled with red text to indicate destructive action
 
-2. **HeaderUser Component** (`components/dashboard/header-user.tsx`)
+2. **HeaderUser Component** (`components/blog-writer/header-user.tsx`)
    - Added functional sign-out to the header user menu
    - Consistent styling with sidebar implementation
 
-3. **AppSidebar Component** (`components/dashboard/app-sidebar.tsx`)
+3. **AppSidebar Component** (`components/blog-writer/app-sidebar.tsx`)
    - Updated to accept real user data as props
    - Displays actual user information instead of hardcoded data
 

@@ -1,26 +1,26 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
   images: {
     unoptimized: true,
-    domains: [
-      "blog.unrealshot.com",
-      "localhost",
-      "astria.ai",
-      "api.astria.ai",
-      "sdbooth2-production.s3.amazonaws.com",
-      "xdka2sdembhhqc3o.public.blob.vercel-storage.com",
-      "norpsr0wtvuo7qpe.public.blob.vercel-storage.com",
-      "replicate.delivery",
-      "replicate.com",
-      "fal.ai",
-      "fal.media",
-      "v3.fal.media",
+    remotePatterns: [
+      { protocol: "https", hostname: "blog.unrealshot.com" },
+      { protocol: "http", hostname: "localhost" },
+      { protocol: "https", hostname: "astria.ai" },
+      { protocol: "https", hostname: "api.astria.ai" },
+      { protocol: "https", hostname: "sdbooth2-production.s3.amazonaws.com" },
+      { protocol: "https", hostname: "xdka2sdembhhqc3o.public.blob.vercel-storage.com" },
+      { protocol: "https", hostname: "norpsr0wtvuo7qpe.public.blob.vercel-storage.com" },
+      { protocol: "https", hostname: "replicate.delivery" },
+      { protocol: "https", hostname: "replicate.com" },
+      { protocol: "https", hostname: "fal.ai" },
+      { protocol: "https", hostname: "fal.media" },
+      { protocol: "https", hostname: "v3.fal.media" },
+      { protocol: "https", hostname: "agenwrite.r2.cloudflarestorage.com" },
+      { protocol: "https", hostname: "cloudflarestorage.com" },
+      { protocol: "https", hostname: "r2.cloudflarestorage.com" },
     ],
   },
   async headers() {
