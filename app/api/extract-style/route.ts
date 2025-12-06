@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { StyleDNASchema } from "@/lib/schemas/style"
+import { jsonrepair } from "jsonrepair"
 
 export async function POST(req: NextRequest) {
   try {
@@ -77,8 +78,12 @@ export async function POST(req: NextRequest) {
     try {
       parsed = JSON.parse(cleanJson)
     } catch (e) {
-      console.error("JSON Parse Error", text)
-      throw new Error("Failed to parse Gemini response")
+      try {
+        parsed = JSON.parse(jsonrepair(cleanJson))
+      } catch (e2) {
+        console.error("JSON Parse Error", text)
+        throw new Error("Failed to parse Gemini response")
+      }
     }
 
     // Validate against schema to ensure type safety

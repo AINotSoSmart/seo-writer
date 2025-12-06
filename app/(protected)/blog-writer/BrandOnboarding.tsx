@@ -2,7 +2,7 @@
 import { useState } from "react"
 import { saveBrandAction, updateBrandAction } from "@/actions/brand"
 import { BrandDetails } from "@/lib/schemas/brand"
-import { Loader2, ArrowLeft } from "lucide-react"
+import { Loader2, ArrowLeft, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -51,7 +51,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
         // Update existing
         const res = await updateBrandAction(brandId, brandData)
         if (!res.success) {
-           throw new Error(res.error || "Failed to update brand")
+          throw new Error(res.error || "Failed to update brand")
         }
         onComplete(brandId)
       } else {
@@ -73,7 +73,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
   const updateField = (path: string, value: any) => {
     if (!brandData) return
     const newData = { ...brandData }
-    
+
     if (path.includes('.')) {
       const [parent, child] = path.split('.')
       // @ts-ignore
@@ -93,28 +93,31 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
 
   if (!brandData) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6 p-6 bg-white rounded-xl border shadow-sm">
-        <Button variant="outline" size="sm" onClick={onCancel} className="mb-4">
-          <ArrowLeft className="w-4 h-4" /> Back to Brands
+      <div className="w-full mx-auto space-y-6 p-4 sm:p-6 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 shadow-sm">
+        <Button variant="ghost" size="sm" onClick={onCancel} className="mb-2 -ml-2 text-stone-500 hover:text-stone-900 dark:hover:text-white">
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </Button>
         <div className="space-y-2 text-center">
-          <h2 className="text-2xl font-bold">Let's understand your brand</h2>
-          <p className="text-gray-500">Enter your website URL to automatically extract your brand identity.</p>
+          <h2 className="text-xl font-bold text-stone-900 dark:text-white">Let&apos;s understand your brand</h2>
+          <p className="text-sm text-stone-500">Enter your website URL to automatically extract your brand identity.</p>
         </div>
-        
-        <div className="flex gap-2 flex-wrap">
+
+        <div className="flex flex-col sm:flex-row gap-2">
           <Input
             type="url"
             placeholder="https://example.com"
-            className="flex-1 min-w-[240px]"
+            className="flex-1 w-full"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
           />
-          <Button onClick={handleAnalyze} disabled={analyzing || !url}>
-            {analyzing ? "Analyzing..." : "Analyze Brand"}
+          <Button onClick={handleAnalyze} disabled={analyzing || !url} className="w-full sm:w-auto bg-stone-900 dark:bg-white text-white dark:text-stone-900">
+            {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analyze Brand"}
           </Button>
-          <Button variant="outline"
+        </div>
+        <div className="text-center">
+          <button
+            className="text-xs text-stone-500 hover:text-stone-900 dark:hover:text-stone-300 underline underline-offset-4 cursor-pointer"
             onClick={() => setBrandData({
               product_name: "",
               product_identity: { literally: "", emotionally: "", not: "" },
@@ -129,55 +132,63 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
               image_style: "stock",
             })}
           >
-            Start Manual Entry
-          </Button>
+            Or enter details manually
+          </button>
         </div>
-        
-        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+
+        {error && <p className="text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/10 p-2 rounded-md border border-red-100 dark:border-red-900/20">{error}</p>}
       </div>
     )
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Review Brand Details</h2>
-        <Button variant="outline" size="sm" onClick={() => setBrandData(null)}>
-          Analyze different URL
+    <div className="w-full mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-stone-900 dark:text-white">Review Brand Details</h2>
+          <p className="text-sm text-stone-500">Verify extracted information before saving</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setBrandData(null)} className="w-full sm:w-auto border-stone-200 dark:border-stone-800">
+          <RotateCcw className="w-3.5 h-3.5 mr-2" />
+          Re-Analyze
         </Button>
       </div>
 
-      <div className="grid gap-6 p-6 bg-white rounded-xl border shadow-sm">
+      <div className="grid gap-6 p-4 sm:p-6 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800">
         {/* 1. Product Identity */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">1. Product Identity</h3>
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">1. Product Identity</h3>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Product Name</label>
+              <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">Product Name</label>
               <Input
                 value={brandData.product_name}
                 onChange={e => updateField('product_name', e.target.value)}
+                className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">What is it literally?</label>
+              <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">What is it literally?</label>
               <Input
                 value={brandData.product_identity.literally}
                 onChange={e => updateField('product_identity.literally', e.target.value)}
+                className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">What is it emotionally?</label>
+              <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">What is it emotionally?</label>
               <Input
                 value={brandData.product_identity.emotionally}
                 onChange={e => updateField('product_identity.emotionally', e.target.value)}
+                className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">What is it NOT?</label>
+              <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">What is it NOT?</label>
               <Input
                 value={brandData.product_identity.not}
                 onChange={e => updateField('product_identity.not', e.target.value)}
+                className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800"
               />
             </div>
           </div>
@@ -185,32 +196,35 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
 
         {/* 2. Mission */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">2. Mission</h3>
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">2. Mission</h3>
           <div>
-            <label className="block text-sm font-medium mb-1">The "Why"</label>
+            <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">The "Why"</label>
             <Textarea
               value={brandData.mission}
               onChange={e => updateField('mission', e.target.value)}
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
             />
           </div>
         </div>
 
         {/* 3. Audience */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">3. Audience</h3>
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">3. Audience</h3>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Primary Audience</label>
+              <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">Primary Audience</label>
               <Input
                 value={brandData.audience.primary}
                 onChange={e => updateField('audience.primary', e.target.value)}
+                className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Psychology (Desires/Fears)</label>
+              <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">Psychology (Desires/Fears)</label>
               <Textarea
                 value={brandData.audience.psychology}
                 onChange={e => updateField('audience.psychology', e.target.value)}
+                className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
               />
             </div>
           </div>
@@ -218,72 +232,89 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
 
         {/* 4. Enemy */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">4. Enemy (What you fight against)</h3>
-          <p className="text-xs text-gray-500">One item per line</p>
-          <Textarea
-            value={brandData.enemy.join('\n')}
-            onChange={e => updateArray('enemy', e.target.value)}
-          />
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">4. Enemy (What you fight against)</h3>
+          <div className="relative">
+            <Textarea
+              value={brandData.enemy.join('\n')}
+              onChange={e => updateArray('enemy', e.target.value)}
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
+            />
+            <p className="text-[10px] text-stone-400 mt-1 text-right">One item per line</p>
+          </div>
         </div>
 
         {/* 5. Voice & Tone */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">5. Voice & Tone</h3>
-          <p className="text-xs text-gray-500">One item per line</p>
-          <Textarea
-            value={brandData.voice_tone.join('\n')}
-            onChange={e => updateArray('voice_tone', e.target.value)}
-          />
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">5. Voice & Tone</h3>
+          <div className="relative">
+            <Textarea
+              value={brandData.voice_tone.join('\n')}
+              onChange={e => updateArray('voice_tone', e.target.value)}
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
+            />
+            <p className="text-[10px] text-stone-400 mt-1 text-right">One item per line</p>
+          </div>
         </div>
 
         {/* 6. UVP */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">6. Unique Value Proposition</h3>
-          <p className="text-xs text-gray-500">One item per line</p>
-          <Textarea
-            value={brandData.uvp.join('\n')}
-            onChange={e => updateArray('uvp', e.target.value)}
-          />
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">6. Unique Value Proposition</h3>
+          <div className="relative">
+            <Textarea
+              value={brandData.uvp.join('\n')}
+              onChange={e => updateArray('uvp', e.target.value)}
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
+            />
+            <p className="text-[10px] text-stone-400 mt-1 text-right">One item per line</p>
+          </div>
         </div>
 
         {/* 7. Core Features */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">7. Core Features</h3>
-          <p className="text-xs text-gray-500">One item per line</p>
-          <Textarea
-            value={brandData.core_features.join('\n')}
-            onChange={e => updateArray('core_features', e.target.value)}
-          />
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">7. Core Features</h3>
+          <div className="relative">
+            <Textarea
+              value={brandData.core_features.join('\n')}
+              onChange={e => updateArray('core_features', e.target.value)}
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
+            />
+            <p className="text-[10px] text-stone-400 mt-1 text-right">One item per line</p>
+          </div>
         </div>
 
         {/* 8. Pricing */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">8. Pricing</h3>
-          <p className="text-xs text-gray-500">One item per line (e.g., "Pro Plan: $29/mo", "Free Tier available")</p>
-          <Textarea
-            value={brandData.pricing?.join('\n') || ''}
-            onChange={e => updateArray('pricing', e.target.value)}
-          />
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">8. Pricing</h3>
+          <div className="relative">
+            <Textarea
+              value={brandData.pricing?.join('\n') || ''}
+              onChange={e => updateArray('pricing', e.target.value)}
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
+            />
+            <p className="text-[10px] text-stone-400 mt-1 text-right">One line e.g. "Pro Plan: $29/mo"</p>
+          </div>
         </div>
 
         {/* 9. How it Works */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">9. How it Works</h3>
-          <p className="text-xs text-gray-500">One step per line (e.g., "Step 1: Sign up", "Step 2: Upload photo")</p>
-          <Textarea
-            value={brandData.how_it_works?.join('\n') || ''}
-            onChange={e => updateArray('how_it_works', e.target.value)}
-          />
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">9. How it Works</h3>
+          <div className="relative">
+            <Textarea
+              value={brandData.how_it_works?.join('\n') || ''}
+              onChange={e => updateArray('how_it_works', e.target.value)}
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
+            />
+            <p className="text-[10px] text-stone-400 mt-1 text-right">One step per line</p>
+          </div>
         </div>
 
         {/* 10. Image Style */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-lg border-b pb-2">10. Featured Image Style</h3>
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">10. Featured Image Style</h3>
           <div>
-            <label className="block text-sm font-medium mb-1">Style Preference</label>
-            <p className="text-xs text-gray-500 mb-2">Select the style for AI-generated featured images.</p>
-            <select 
-              className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            <label className="block text-xs font-medium mb-1 text-stone-600 dark:text-stone-400">Style Preference</label>
+            <select
+              className="flex h-10 w-full items-center justify-between rounded-md border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950 px-3 py-2 text-sm placeholder:text-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-400 disabled:cursor-not-allowed disabled:opacity-50"
               value={brandData.image_style || "stock"}
               onChange={e => updateField('image_style', e.target.value)}
             >
@@ -294,14 +325,19 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
               <option value="cyberpunk">Cyberpunk (Neon, Tech)</option>
               <option value="watercolor">Watercolor (Artistic, Soft)</option>
             </select>
+            <p className="text-[10px] text-stone-400 mt-1">Select the style for AI-generated featured images.</p>
           </div>
         </div>
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
 
-        <div className="flex justify-end pt-4">
-          <Button onClick={handleSave} disabled={saving} className="px-8">
-            {saving ? "Saving..." : brandId ? "Update Brand" : "Save & Continue"}
+        <div className="flex justify-end pt-4 sticky bottom-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm py-4 border-t border-stone-100 dark:border-stone-800 mt-4">
+          <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto px-8 bg-stone-900 dark:bg-white text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200">
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...
+              </>
+            ) : brandId ? "Update Brand" : "Save & Continue"}
           </Button>
         </div>
       </div>

@@ -10,6 +10,21 @@ import { marked } from "marked"
 import { generateImage } from "@/lib/fal"
 import { putR2Object } from "@/lib/r2"
 import { randomUUID } from "crypto"
+import { jsonrepair } from "jsonrepair"
+
+const cleanAndParse = (text: string) => {
+  const clean = text.replace(/```json/g, "").replace(/```/g, "")
+  try {
+    return JSON.parse(clean)
+  } catch (e) {
+    try {
+      return JSON.parse(jsonrepair(clean))
+    } catch (e2) {
+      console.error("JSON Parse Failed. Original:", text, "Error:", e2)
+      throw new Error("Failed to parse JSON from LLM response")
+    }
+  }
+}
 
 
 // Clients will be initialized inside the task
@@ -283,8 +298,8 @@ export const generateBlogPost = task({
         analyzeText += (c as any).text || ""
       }
 
-      const cleanAnalyze = analyzeText.replace(/```json/g, "").replace(/```/g, "")
-      const competitorData = CompetitorDataSchema.parse(JSON.parse(cleanAnalyze))
+      const competitorData = CompetitorDataSchema.parse(cleanAndParse(analyzeText))
+
 
       await supabase
         .from("articles")
@@ -314,8 +329,8 @@ export const generateBlogPost = task({
         outlineText += (c as any).text || ""
       }
 
-      const cleanOutline = outlineText.replace(/```json/g, "").replace(/```/g, "")
-      const outline = ArticleOutlineSchema.parse(JSON.parse(cleanOutline))
+      const outline = ArticleOutlineSchema.parse(cleanAndParse(outlineText))
+
 
       // Initialize draft with Title
       const initialDraft = `# ${outline.title}\n\n`
@@ -496,7 +511,8 @@ export const generateBlogPost = task({
           contents: seoContents
         })
         const seoText = seoResponse.text || ""
-        const seoData = JSON.parse(seoText)
+        const seoData = cleanAndParse(seoText)
+
         meta_description = seoData.meta_description
       } catch (e) {
         console.error("SEO Generation failed, using fallback", e)

@@ -501,16 +501,6 @@ export default function ArticleDetailPage() {
                         <div className="flex-1 overflow-y-auto scrollbar-hide">
                             <TabsContent value="editor" className="m-0 min-h-full p-4 pt-0 max-w-4xl mx-auto focus-visible:ring-0 outline-none">
                                 <div className=" min-h-[calc(100vh-10rem)]">
-                                    {article.error_message && (
-                                        <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-100 mb-8 flex items-start gap-3">
-                                            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className="font-medium">Generation Error</p>
-                                                <p className="text-sm opacity-90">{article.error_message}</p>
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {article.status === 'completed' ? (
                                         <div className="prose prose-slate prose-lg max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl">
                                             {/* Featured Image Display */}

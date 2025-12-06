@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
+import { jsonrepair } from "jsonrepair"
 
 const genAI = getGeminiClient()
 
@@ -75,7 +76,13 @@ export async function POST(req: NextRequest) {
         if (!responseText) {
             throw new Error("No response generated")
         }
-        const json = JSON.parse(responseText)
+        
+        let json
+        try {
+            json = JSON.parse(responseText)
+        } catch (e) {
+            json = JSON.parse(jsonrepair(responseText))
+        }
 
         return NextResponse.json({ titles: json.titles })
 
