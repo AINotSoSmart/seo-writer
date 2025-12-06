@@ -43,6 +43,24 @@ type Article = {
     featured_image_url?: string | null
 }
 
+/**
+ * Converts old R2 direct URLs to proxy URLs for backward compatibility.
+ * Old format: https://[bucket].r2.cloudflarestorage.com/featured-images/...
+ * New format: /api/images/featured-images/...
+ */
+const getProxiedImageUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null
+
+    // Check if it's an old R2 direct URL
+    if (url.includes('.r2.cloudflarestorage.com/')) {
+        const key = url.split('.r2.cloudflarestorage.com/')[1]
+        return `/api/images/${key}`
+    }
+
+    // Already a proxy URL or external URL
+    return url
+}
+
 export default function ArticleDetailPage() {
     const params = useParams()
     const id = params?.id as string
@@ -507,30 +525,37 @@ export default function ArticleDetailPage() {
                                             {article.featured_image_url && (
                                                 <div className="mb-8 relative rounded-xl overflow-hidden group border border-gray-100 shadow-sm">
                                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                    <img 
-                                                      src={article.featured_image_url} 
-                                                      alt="Featured" 
-                                                      className="w-full max-h-[400px] object-cover"
+                                                    <img
+                                                        src={getProxiedImageUrl(article.featured_image_url) || ''}
+                                                        alt="Featured"
+                                                        className="w-full max-h-[400px] object-cover"
                                                     />
                                                     <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <Button 
-                                                            size="sm" 
+                                                        <Button
+                                                            size="sm"
                                                             variant="secondary"
                                                             className="h-8 px-3 text-xs backdrop-blur-md bg-white/90 hover:bg-white"
-                                                            onClick={() => window.open(article.featured_image_url || '', '_blank')}
-                                                        >
-                                                            <LinkIcon className="w-3 h-3 mr-1.5" /> Open
-                                                        </Button>
-                                                        <Button 
-                                                            size="sm" 
-                                                            variant="secondary"
-                                                            className="h-8 px-3 text-xs backdrop-blur-md bg-white/90 hover:bg-white"
-                                                            onClick={() => {
-                                                                navigator.clipboard.writeText(article.featured_image_url || "")
-                                                                toast.success("Image URL copied")
+                                                            onClick={async () => {
+                                                                const imageUrl = getProxiedImageUrl(article.featured_image_url)
+                                                                if (!imageUrl) return
+                                                                try {
+                                                                    const response = await fetch(imageUrl)
+                                                                    const blob = await response.blob()
+                                                                    const blobUrl = URL.createObjectURL(blob)
+                                                                    const link = document.createElement('a')
+                                                                    link.href = blobUrl
+                                                                    link.download = `featured-image-${article.id}.png`
+                                                                    document.body.appendChild(link)
+                                                                    link.click()
+                                                                    document.body.removeChild(link)
+                                                                    URL.revokeObjectURL(blobUrl)
+                                                                    toast.success("Image downloaded")
+                                                                } catch (err) {
+                                                                    toast.error("Failed to download image")
+                                                                }
                                                             }}
                                                         >
-                                                            <Copy className="w-3 h-3 mr-1.5" /> Copy URL
+                                                            <Download className="w-3 h-3 mr-1.5" /> Download
                                                         </Button>
                                                     </div>
                                                 </div>

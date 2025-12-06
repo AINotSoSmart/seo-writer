@@ -524,7 +524,7 @@ export const generateBlogPost = task({
       let featured_image_url = null
       try {
         const imageStyle = brandDetails?.image_style || "stock"
-        
+
         // 1. Generate Image Prompt
         const imagePromptSystem = `You are an expert AI Art Director.
         Your task is to generate a detailed, creative prompt for an AI image generator (like Midjourney or Flux) to create a featured image for a blog post.
@@ -542,39 +542,41 @@ export const generateBlogPost = task({
         - If style is 'indo', use vibrant colors and cultural elements if applicable, or specific artistic style associated with the brand.
         - Output ONLY the prompt string. No JSON.
         `
-        
+
         const imagePromptConfig = { responseMimeType: "text/plain" }
         const imagePromptContents = [{ role: "user", parts: [{ text: imagePromptSystem }] }]
-        
+
         const imagePromptResponse = await genAI.models.generateContent({
           model: "gemini-2.0-flash",
           config: imagePromptConfig,
           contents: imagePromptContents
         })
         const imagePrompt = imagePromptResponse.text || `A professional featured image for a blog post about ${keyword}`
-        
+
         // 2. Generate Image using Fal.ai
         const imageResult = await generateImage(imagePrompt) as any
         const imageUrl = imageResult?.images?.[0]?.url
-        
+
         // 3. Upload to R2
         if (imageUrl) {
-           const imageResponse = await fetch(imageUrl)
-           const imageBuffer = await imageResponse.arrayBuffer()
-           const imageKey = `featured-images/${articleId}/${randomUUID()}.png`
-           
-           // Upload to R2
-           await putR2Object(imageKey, Buffer.from(imageBuffer), "image/png")
-           
-           // Construct Public URL
-           const publicDomain = process.env.R2_PUBLIC_DOMAIN
-           if (publicDomain) {
-             featured_image_url = `${publicDomain}/${imageKey}`
-           } else {
-             featured_image_url = `https://${process.env.R2_BUCKET_NAME}.r2.cloudflarestorage.com/${imageKey}`
-           }
+          const imageResponse = await fetch(imageUrl)
+          const imageBuffer = await imageResponse.arrayBuffer()
+          const imageKey = `featured-images/${articleId}/${randomUUID()}.png`
+
+          // Upload to R2
+          await putR2Object(imageKey, Buffer.from(imageBuffer), "image/png")
+
+          // Construct Public URL
+          const publicDomain = process.env.R2_PUBLIC_DOMAIN
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+          if (publicDomain) {
+            featured_image_url = `${publicDomain}/${imageKey}`
+          } else {
+            // Use the proxy API route instead of direct R2 URL
+            featured_image_url = `${appUrl}/api/images/${imageKey}`
+          }
         }
-        
+
       } catch (e) {
         console.error("Image Generation failed", e)
         // Non-blocking, just continue
@@ -582,9 +584,9 @@ export const generateBlogPost = task({
 
       await supabase
         .from("articles")
-        .update({ 
-          raw_content: finalMarkdown, 
-          final_html: finalHtml, 
+        .update({
+          raw_content: finalMarkdown,
+          final_html: finalHtml,
           status: "completed",
           meta_description,
           slug,
