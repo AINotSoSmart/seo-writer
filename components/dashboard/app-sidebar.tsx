@@ -7,9 +7,10 @@ import {
   Coins,
   Sparkles,
   Image as ImageIcon,
-  Upload,
+  DatabaseZap,
   Sparkles as SparklesIcon,
-  FolderOpen,
+  Settings,
+  NotebookPen,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -41,7 +42,7 @@ const navSecondary = [
 // Credits Card Component
 function CreditsCard({ userId }: { userId?: string }) {
   const { balance, loading } = useCreditManager(userId || null)
-  
+
   if (loading) {
     return (
       <Card className="mb-4 py-2">
@@ -53,7 +54,7 @@ function CreditsCard({ userId }: { userId?: string }) {
       </Card>
     )
   }
-  
+
   return (
     <Card className="py-2">
       <CardContent className="gap-1 flex flex-col px-3">
@@ -71,9 +72,9 @@ function CreditsCard({ userId }: { userId?: string }) {
   )
 }
 
-export function AppSidebar({ 
+export function AppSidebar({
   user,
-  ...props 
+  ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user?: {
     name: string
@@ -94,19 +95,24 @@ export function AppSidebar({
     {
       title: "Dashboard",
       url: "/blog-writer",
-      icon: SquareTerminal,
+      icon: NotebookPen,
       isActive: true,
     },
-      {
-        title: "Articles",
-        url: "/articles",
-        icon: SparklesIcon,
-      },
-      {
-        title: "Settings",
-        url: "/settings",
-        icon: FolderOpen,
-      },
+    {
+      title: "Articles",
+      url: "/articles",
+      icon: SparklesIcon,
+    },
+    {
+      title: "Settings",
+      url: "/settings",
+      icon: Settings,
+    },
+    {
+      title: "Integrations",
+      url: "/integrations",
+      icon: DatabaseZap,
+    },
 
   ], [])
 
@@ -116,8 +122,8 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-               <Link href="/">
-                  <Image src="/site-logo.png" alt="Unrealshot AI" width={30} height={30} className="rounded-sm"/>
+              <Link href="/">
+                <Image src="/site-logo.png" alt="Unrealshot AI" width={30} height={30} className="rounded-sm" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">Unrealshot AI</span>
                   <span className="truncate text-xs">Realistic AI Photoshoots</span>

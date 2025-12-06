@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/utils/supabase/client"
+import Image from "next/image"
 import Link from "next/link"
 import { format } from "date-fns"
 import { GlobalCard } from "@/components/ui/global-card"
@@ -27,23 +28,25 @@ type ArticleRow = {
   current_step_index: number | null
   final_html: string | null
   wordpress_post_url: string | null
+  webflow_item_id: string | null
   published_at: string | null
 }
 
-type WordPressConnection = {
+type Connection = {
   id: string
   site_name: string | null
-  site_url: string
   is_default: boolean
+  platform: 'wordpress' | 'webflow'
 }
 
 export default function ArticlesPage() {
   const supabase = useMemo(() => createClient(), [])
   const [articles, setArticles] = useState<ArticleRow[]>([])
   const [loading, setLoading] = useState<boolean>(true)
-  const [connections, setConnections] = useState<WordPressConnection[]>([])
+  const [connections, setConnections] = useState<Connection[]>([])
   const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
   const [pendingPublishId, setPendingPublishId] = useState<string | null>(null)
+  const [selectedPlatform, setSelectedPlatform] = useState<'wordpress' | 'webflow'>('wordpress')
 
   useEffect(() => {
     let mounted = true
@@ -52,7 +55,7 @@ export default function ArticlesPage() {
       // Load articles
       const { data: articlesData } = await supabase
         .from("articles")
-        .select("id,keyword,status,created_at,current_step_index,final_html,wordpress_post_url,published_at")
+        .select("id,keyword,status,created_at,current_step_index,final_html,wordpress_post_url,webflow_item_id,published_at")
         .order("created_at", { ascending: false })
 
       if (mounted && articlesData) {
@@ -60,13 +63,29 @@ export default function ArticlesPage() {
       }
 
       // Load WordPress connections
-      const { data: connectionsData } = await supabase
+      const { data: wpData } = await supabase
         .from("wordpress_connections")
-        .select("id,site_name,site_url,is_default")
+        .select("id,site_name,is_default")
         .order("is_default", { ascending: false })
 
-      if (mounted && connectionsData) {
-        setConnections(connectionsData as WordPressConnection[])
+      // Load Webflow connections
+      const { data: wfData } = await supabase
+        .from("webflow_connections")
+        .select("id,site_name,is_default")
+        .order("is_default", { ascending: false })
+
+      if (mounted) {
+        const allConnections: Connection[] = [
+          ...(wpData || []).map(c => ({ ...c, platform: 'wordpress' as const })),
+          ...(wfData || []).map(c => ({ ...c, platform: 'webflow' as const })),
+        ]
+        setConnections(allConnections)
+
+        // Set default platform based on available connections
+        if (allConnections.length > 0) {
+          const defaultConn = allConnections.find(c => c.is_default) || allConnections[0]
+          setSelectedPlatform(defaultConn.platform)
+        }
       }
 
       setLoading(false)
@@ -100,11 +119,12 @@ export default function ArticlesPage() {
     }
   }, [supabase])
 
-  const handlePublish = async (articleId: string) => {
-    const defaultConnection = connections.find(c => c.is_default) || connections[0]
+  const handlePublish = async (articleId: string, platform: 'wordpress' | 'webflow') => {
+    const platformConnections = connections.filter(c => c.platform === platform)
+    const defaultConnection = platformConnections.find(c => c.is_default) || platformConnections[0]
 
     if (!defaultConnection) {
-      toast.error("No WordPress site connected", {
+      toast.error(`No ${platform === 'wordpress' ? 'WordPress' : 'Webflow'} site connected`, {
         action: {
           label: "Connect",
           onClick: () => window.location.href = "/integrations"
@@ -116,7 +136,7 @@ export default function ArticlesPage() {
     setPublishingIds(prev => new Set(prev).add(articleId))
 
     try {
-      const response = await fetch("/api/wordpress/publish", {
+      const response = await fetch(`/api/${platform}/publish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,19 +152,27 @@ export default function ArticlesPage() {
         throw new Error(result.error || "Failed to publish")
       }
 
-      toast.success("Published as draft!", {
-        action: {
+      toast.success(`Published to ${platform === 'wordpress' ? 'WordPress' : 'Webflow'} as draft!`, {
+        action: result.postUrl ? {
           label: "View",
           onClick: () => window.open(result.postUrl, "_blank")
-        }
+        } : undefined
       })
 
-      // Update local state
-      setArticles(prev => prev.map(a =>
-        a.id === articleId
-          ? { ...a, wordpress_post_url: result.postUrl, published_at: new Date().toISOString() }
-          : a
-      ))
+      // Reload articles to get updated publish status
+      const { data: updatedArticle } = await supabase
+        .from("articles")
+        .select("wordpress_post_url,webflow_item_id,published_at")
+        .eq("id", articleId)
+        .single()
+
+      if (updatedArticle) {
+        setArticles(prev => prev.map(a =>
+          a.id === articleId
+            ? { ...a, ...updatedArticle }
+            : a
+        ))
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to publish")
     } finally {
@@ -155,6 +183,17 @@ export default function ArticlesPage() {
       })
     }
   }
+
+  const getPublishedPlatforms = (article: ArticleRow) => {
+    const platforms: string[] = []
+    if (article.wordpress_post_url) platforms.push('WP')
+    if (article.webflow_item_id) platforms.push('WF')
+    return platforms
+  }
+
+  const wpConnections = connections.filter(c => c.platform === 'wordpress')
+  const wfConnections = connections.filter(c => c.platform === 'webflow')
+  const hasAnyConnection = connections.length > 0
 
   if (loading) {
     return (
@@ -228,57 +267,70 @@ export default function ArticlesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-                {articles.map((article) => (
-                  <tr key={article.id} className="group hover:bg-stone-50/50 dark:hover:bg-stone-800/50 transition-colors">
-                    <td className="px-6 py-4 text-stone-900 dark:text-white whitespace-nowrap">
-                      {article.keyword}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={article.status} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {article.status === 'completed' ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                          Done
-                        </span>
-                      ) : article.status === 'failed' ? (
-                        <span className="text-red-600 dark:text-red-400 font-medium">Failed</span>
-                      ) : (
-                        <span className="text-blue-600 dark:text-blue-400">
-                          Step {article.current_step_index ?? 0}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-stone-500 dark:text-stone-400 tabular-nums whitespace-nowrap">
-                      {format(new Date(article.created_at), "MMM d, yyyy")}
-                    </td>
-                    <td className="
-                       px-6 py-4 text-right sticky right-0 z-10
-                       bg-white dark:bg-stone-900
-                       group-hover:bg-stone-50 dark:group-hover:bg-stone-800
-                       transition-colors
-                       border-l border-stone-100 dark:border-stone-800
-                    ">
-                      <div className="flex items-center justify-end gap-2">
-                        {article.status === 'completed' && article.final_html && (
-                          <>
-                            {/* Published Badge or Publish Button */}
-                            {article.wordpress_post_url ? (
-                              <a
-                                href={article.wordpress_post_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-medium hover:underline"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                Published
-                              </a>
-                            ) : (
+                {articles.map((article) => {
+                  const publishedPlatforms = getPublishedPlatforms(article)
+
+                  return (
+                    <tr key={article.id} className="group hover:bg-stone-50/50 dark:hover:bg-stone-800/50 transition-colors">
+                      <td className="px-6 py-4 text-stone-900 dark:text-white whitespace-nowrap">
+                        {article.keyword}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={article.status} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {article.status === 'completed' ? (
+                          <span className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            Done
+                          </span>
+                        ) : article.status === 'failed' ? (
+                          <span className="text-red-600 dark:text-red-400 font-medium">Failed</span>
+                        ) : (
+                          <span className="text-blue-600 dark:text-blue-400">
+                            Step {article.current_step_index ?? 0}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-stone-500 dark:text-stone-400 tabular-nums whitespace-nowrap">
+                        {format(new Date(article.created_at), "MMM d, yyyy")}
+                      </td>
+                      <td className="
+                         px-6 py-4 text-right sticky right-0 z-10
+                         bg-white dark:bg-stone-900
+                         group-hover:bg-stone-50 dark:group-hover:bg-stone-800
+                         transition-colors
+                         border-l border-stone-100 dark:border-stone-800
+                      ">
+                        <div className="flex items-center justify-end gap-2">
+                          {article.status === 'completed' && article.final_html && (
+                            <>
+                              {/* Published badges */}
+                              {publishedPlatforms.length > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  {publishedPlatforms.map(p => (
+                                    <div
+                                      key={p}
+                                      className="w-5 h-5 rounded bg-green-100 dark:bg-green-900/30 p-0.5 flex items-center justify-center"
+                                      title={p === 'WP' ? 'Published to WordPress' : 'Published to Webflow'}
+                                    >
+                                      <Image
+                                        src={p === 'WP' ? '/brands/wordpress.svg' : '/brands/webflow.svg'}
+                                        alt={p === 'WP' ? 'WordPress' : 'Webflow'}
+                                        width={14}
+                                        height={14}
+                                        className="opacity-80"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Publish button - always show if any connection exists */}
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                disabled={publishingIds.has(article.id) || connections.length === 0}
+                                disabled={publishingIds.has(article.id) || !hasAnyConnection}
                                 onClick={() => setPendingPublishId(article.id)}
                                 className="h-7 px-2 text-xs gap-1"
                               >
@@ -287,23 +339,23 @@ export default function ArticlesPage() {
                                 ) : (
                                   <Send className="w-3 h-3" />
                                 )}
-                                {connections.length === 0 ? "No WP" : "Publish"}
+                                Publish
                               </Button>
-                            )}
 
-                            <Link
-                              href={`/articles/${article.id}`}
-                              className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-900 dark:hover:text-white font-medium transition-colors"
-                            >
-                              Edit
-                              <FilePenLine className="w-3 h-3" />
-                            </Link>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                              <Link
+                                href={`/articles/${article.id}`}
+                                className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-900 dark:hover:text-white font-medium transition-colors"
+                              >
+                                Edit
+                                <FilePenLine className="w-3 h-3" />
+                              </Link>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -314,18 +366,61 @@ export default function ArticlesPage() {
       <AlertDialog open={!!pendingPublishId} onOpenChange={(open) => !open && setPendingPublishId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Publish to WordPress?</AlertDialogTitle>
+            <AlertDialogTitle>Publish Article</AlertDialogTitle>
             <AlertDialogDescription>
-              This will create a <strong>draft</strong> post on your WordPress site.
-              You can review and publish it from WordPress dashboard.
+              Choose where to publish this article. It will be created as a <strong>draft</strong>.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {/* Platform selector */}
+          <div className="flex gap-2 my-4">
+            {wpConnections.length > 0 && (
+              <button
+                onClick={() => setSelectedPlatform('wordpress')}
+                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'wordpress'
+                  ? 'border-[#21759b] bg-[#21759b]/10'
+                  : 'border-stone-200 dark:border-stone-700'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded flex items-center justify-center">
+                    <Image src="/brands/wordpress.svg" alt="WordPress" width={24} height={24} />
+                  </div>
+                  <span className="font-medium text-sm">WordPress</span>
+                </div>
+              </button>
+            )}
+            {wfConnections.length > 0 && (
+              <button
+                onClick={() => setSelectedPlatform('webflow')}
+                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'webflow'
+                  ? 'border-[#4353ff] bg-[#4353ff]/10'
+                  : 'border-stone-200 dark:border-stone-700'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded flex items-center justify-center">
+                    <Image src="/brands/webflow.svg" alt="Webflow" width={24} height={24} />
+                  </div>
+                  <span className="font-medium text-sm">Webflow</span>
+                </div>
+              </button>
+            )}
+          </div>
+
+          {!hasAnyConnection && (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              No CMS connected. <Link href="/integrations" className="underline">Connect now</Link>
+            </p>
+          )}
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={!hasAnyConnection}
               onClick={() => {
                 if (pendingPublishId) {
-                  handlePublish(pendingPublishId)
+                  handlePublish(pendingPublishId, selectedPlatform)
                   setPendingPublishId(null)
                 }
               }}
