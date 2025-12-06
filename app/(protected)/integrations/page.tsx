@@ -19,8 +19,15 @@ import {
     deleteWebflowConnection,
     setDefaultWebflowConnection
 } from "@/actions/webflow"
+import {
+    getShopifyConnections,
+    testShopifyConnection,
+    addShopifyConnection,
+    deleteShopifyConnection,
+    setDefaultShopifyConnection
+} from "@/actions/shopify"
 import { toast } from "sonner"
-import { Plus, Trash2, ExternalLink, Check, Loader2, Globe, Lock, User, Key, ChevronDown } from "lucide-react"
+import { Plus, Trash2, ExternalLink, Check, Loader2, Globe, Lock, User, Key, ChevronDown, Store } from "lucide-react"
 
 // Types
 interface WordPressConnection {
@@ -52,6 +59,21 @@ interface WebflowCollection {
     slug: string
 }
 
+interface ShopifyConnection {
+    id: string
+    store_name: string
+    store_domain: string
+    blog_id: string
+    blog_title: string | null
+    is_default: boolean
+    created_at: string
+}
+
+interface ShopifyBlog {
+    id: number
+    title: string
+}
+
 export default function IntegrationsPage() {
     // WordPress state
     const [wpConnections, setWpConnections] = useState<WordPressConnection[]>([])
@@ -72,6 +94,16 @@ export default function IntegrationsPage() {
     const [wfSelectedCollection, setWfSelectedCollection] = useState<WebflowCollection | null>(null)
     const [wfStep, setWfStep] = useState<1 | 2 | 3>(1) // 1: token, 2: site, 3: collection
 
+    // Shopify state
+    const [spConnections, setSpConnections] = useState<ShopifyConnection[]>([])
+    const [showSpForm, setShowSpForm] = useState(false)
+    const [spSubmitting, setSpSubmitting] = useState(false)
+    const [spStoreDomain, setSpStoreDomain] = useState("")
+    const [spAccessToken, setSpAccessToken] = useState("")
+    const [spShopName, setSpShopName] = useState("")
+    const [spBlogs, setSpBlogs] = useState<ShopifyBlog[]>([])
+    const [spStep, setSpStep] = useState<1 | 2>(1) // 1: credentials, 2: select blog
+
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -79,13 +111,15 @@ export default function IntegrationsPage() {
     }, [])
 
     const loadConnections = async () => {
-        const [wpResult, wfResult] = await Promise.all([
+        const [wpResult, wfResult, spResult] = await Promise.all([
             getWordPressConnections(),
-            getWebflowConnections()
+            getWebflowConnections(),
+            getShopifyConnections()
         ])
 
         if (!wpResult.error) setWpConnections(wpResult.connections)
         if (!wfResult.error) setWfConnections(wfResult.connections)
+        if (!spResult.error) setSpConnections(spResult.connections)
         setLoading(false)
     }
 
@@ -217,6 +251,80 @@ export default function IntegrationsPage() {
         }
     }
 
+    // Shopify handlers
+    const handleSpTestConnection = async () => {
+        if (!spStoreDomain || !spAccessToken) {
+            toast.error("Please fill in all fields")
+            return
+        }
+
+        setSpSubmitting(true)
+        const result = await testShopifyConnection({
+            storeDomain: spStoreDomain,
+            accessToken: spAccessToken,
+        })
+        setSpSubmitting(false)
+
+        if (result.success && result.blogs) {
+            setSpShopName(result.shopName || spStoreDomain)
+            if (result.blogs.length === 0) {
+                toast.error("No blogs found in this store. Create a blog first.")
+                return
+            }
+            setSpBlogs(result.blogs)
+            setSpStep(2)
+            toast.success("Connected!")
+        } else {
+            toast.error(result.error || "Failed to connect")
+        }
+    }
+
+    const handleSpSelectBlog = async (blog: ShopifyBlog) => {
+        setSpSubmitting(true)
+
+        const result = await addShopifyConnection({
+            storeDomain: spStoreDomain,
+            accessToken: spAccessToken,
+            storeName: spShopName,
+            blogId: String(blog.id),
+            blogTitle: blog.title,
+        })
+        setSpSubmitting(false)
+
+        if (result.success) {
+            toast.success("Shopify connected!")
+            resetSpForm()
+            loadConnections()
+        } else {
+            toast.error(result.error || "Failed to connect")
+        }
+    }
+
+    const resetSpForm = () => {
+        setShowSpForm(false)
+        setSpStoreDomain("")
+        setSpAccessToken("")
+        setSpShopName("")
+        setSpBlogs([])
+        setSpStep(1)
+    }
+
+    const handleSpDelete = async (id: string) => {
+        const result = await deleteShopifyConnection(id)
+        if (result.success) {
+            toast.success("Connection removed")
+            loadConnections()
+        }
+    }
+
+    const handleSpSetDefault = async (id: string) => {
+        const result = await setDefaultShopifyConnection(id)
+        if (result.success) {
+            toast.success("Default updated")
+            loadConnections()
+        }
+    }
+
     if (loading) {
         return (
             <div className="w-full min-h-screen flex items-center justify-center">
@@ -240,8 +348,8 @@ export default function IntegrationsPage() {
                     <IntegrationSection
                         title="WordPress"
                         description="Publish articles directly to your WordPress site"
-                        iconBg="#21759b"
-                        icon={<svg viewBox="0 0 24 24" className="w-6 h-6 text-white" fill="currentColor"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm-1.5 16.5l-3-9h1.5l2 6 2-6H14l-3 9h-0.5zm6.5-9c-.828 0-1.5.672-1.5 1.5s.672 1.5 1.5 1.5 1.5-.672 1.5-1.5-.672-1.5-1.5-1.5z" /></svg>}
+                        iconBg="#ffffffff"
+                        icon={<img src="/brands/wordpress.svg" alt="WordPress" />}
                         showForm={showWpForm}
                         onShowForm={() => setShowWpForm(true)}
                         connections={wpConnections}
@@ -324,8 +432,8 @@ export default function IntegrationsPage() {
                     <IntegrationSection
                         title="Webflow"
                         description="Publish articles to your Webflow CMS collections"
-                        iconBg="#4353ff"
-                        icon={<svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="currentColor"><path d="M17.802 8.56s-1.946 6.066-2.097 6.53c-.046-.49-.8-6.53-.8-6.53h-4.293s-.645 6.11-.706 6.54c-.147-.452-1.992-6.54-1.992-6.54H4l4.06 10.88h4.04s.7-5.7.76-6.29c.04.59.8 6.29.8 6.29h4.04L22 8.56h-4.198z" /></svg>}
+                        iconBg="#ffffffff"
+                        icon={<img src="/brands/webflow.svg" alt="Webflow" />}
                         showForm={showWfForm}
                         onShowForm={() => setShowWfForm(true)}
                         connections={wfConnections}
@@ -419,10 +527,104 @@ export default function IntegrationsPage() {
                         emptyText="No Webflow sites connected yet"
                     />
 
+                    {/* Shopify Section */}
+                    <IntegrationSection
+                        title="Shopify"
+                        description="Publish articles to your Shopify store blog"
+                        iconBg="#96bf48"
+                        icon={<Store className="w-5 h-5 text-white" />}
+                        showForm={showSpForm}
+                        onShowForm={() => setShowSpForm(true)}
+                        connections={spConnections}
+                        renderForm={
+                            <div className="mb-6 p-4 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700">
+                                {/* Step indicator */}
+                                <div className="flex items-center gap-2 mb-4 text-xs text-stone-500">
+                                    <span className={spStep >= 1 ? "text-stone-900 dark:text-white font-medium" : ""}>1. Store Credentials</span>
+                                    <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
+                                    <span className={spStep >= 2 ? "text-stone-900 dark:text-white font-medium" : ""}>2. Select Blog</span>
+                                </div>
+
+                                {spStep === 1 && (
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="spStoreDomain" className="text-sm font-medium flex items-center gap-2">
+                                                <Globe className="w-4 h-4 text-stone-400" />
+                                                Store Domain
+                                            </Label>
+                                            <Input
+                                                id="spStoreDomain"
+                                                type="text"
+                                                placeholder="mystore.myshopify.com"
+                                                value={spStoreDomain}
+                                                onChange={(e) => setSpStoreDomain(e.target.value)}
+                                                className="h-10"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="spAccessToken" className="text-sm font-medium flex items-center gap-2">
+                                                <Key className="w-4 h-4 text-stone-400" />
+                                                Admin API Access Token
+                                            </Label>
+                                            <Input
+                                                id="spAccessToken"
+                                                type="password"
+                                                placeholder="shpat_xxxxx"
+                                                value={spAccessToken}
+                                                onChange={(e) => setSpAccessToken(e.target.value)}
+                                                className="h-10"
+                                            />
+                                            <p className="text-xs text-stone-500">
+                                                Create in Shopify Admin → Settings → Apps → Develop apps
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button onClick={handleSpTestConnection} disabled={spSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white dark:bg-white dark:text-stone-900">
+                                                {spSubmitting ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Verifying...</> : <>Continue</>}
+                                            </Button>
+                                            <Button type="button" variant="ghost" onClick={resetSpForm} className="h-9">Cancel</Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {spStep === 2 && (
+                                    <div className="space-y-3">
+                                        <Label className="text-sm font-medium">Select Blog</Label>
+                                        <p className="text-xs text-stone-500 -mt-2">Choose where to publish articles</p>
+                                        {spBlogs.map((blog) => (
+                                            <button
+                                                key={blog.id}
+                                                onClick={() => handleSpSelectBlog(blog)}
+                                                disabled={spSubmitting}
+                                                className="w-full p-3 text-left rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                                            >
+                                                <span className="font-medium text-stone-900 dark:text-white">{blog.title}</span>
+                                            </button>
+                                        ))}
+                                        <Button type="button" variant="ghost" onClick={resetSpForm} className="h-9 mt-2">Cancel</Button>
+                                    </div>
+                                )}
+                            </div>
+                        }
+                        renderConnections={spConnections.map((conn) => (
+                            <ConnectionCard
+                                key={conn.id}
+                                name={conn.store_name}
+                                subtitle={`Blog: ${conn.blog_title || conn.blog_id}`}
+                                isDefault={conn.is_default}
+                                iconBg="#96bf48"
+                                onSetDefault={() => handleSpSetDefault(conn.id)}
+                                onOpen={() => window.open(`https://${conn.store_domain}/admin`, '_blank')}
+                                onDelete={() => handleSpDelete(conn.id)}
+                            />
+                        ))}
+                        emptyText="No Shopify stores connected yet"
+                    />
+
                     {/* More integrations */}
                     <div className="border-t border-stone-200 dark:border-stone-800 pt-6">
                         <p className="text-sm text-stone-500 text-center">
-                            More integrations coming soon (Ghost, Shopify, Medium...)
+                            More integrations coming soon (Ghost, Medium...)
                         </p>
                     </div>
                 </div>

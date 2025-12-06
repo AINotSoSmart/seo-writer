@@ -29,6 +29,7 @@ type ArticleRow = {
   final_html: string | null
   wordpress_post_url: string | null
   webflow_item_id: string | null
+  shopify_article_id: string | null
   published_at: string | null
 }
 
@@ -36,7 +37,7 @@ type Connection = {
   id: string
   site_name: string | null
   is_default: boolean
-  platform: 'wordpress' | 'webflow'
+  platform: 'wordpress' | 'webflow' | 'shopify'
 }
 
 export default function ArticlesPage() {
@@ -46,7 +47,7 @@ export default function ArticlesPage() {
   const [connections, setConnections] = useState<Connection[]>([])
   const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
   const [pendingPublishId, setPendingPublishId] = useState<string | null>(null)
-  const [selectedPlatform, setSelectedPlatform] = useState<'wordpress' | 'webflow'>('wordpress')
+  const [selectedPlatform, setSelectedPlatform] = useState<'wordpress' | 'webflow' | 'shopify'>('wordpress')
 
   useEffect(() => {
     let mounted = true
@@ -55,7 +56,7 @@ export default function ArticlesPage() {
       // Load articles
       const { data: articlesData } = await supabase
         .from("articles")
-        .select("id,keyword,status,created_at,current_step_index,final_html,wordpress_post_url,webflow_item_id,published_at")
+        .select("id,keyword,status,created_at,current_step_index,final_html,wordpress_post_url,webflow_item_id,shopify_article_id,published_at")
         .order("created_at", { ascending: false })
 
       if (mounted && articlesData) {
@@ -74,10 +75,17 @@ export default function ArticlesPage() {
         .select("id,site_name,is_default")
         .order("is_default", { ascending: false })
 
+      // Load Shopify connections
+      const { data: spData } = await supabase
+        .from("shopify_connections")
+        .select("id,store_name,is_default")
+        .order("is_default", { ascending: false })
+
       if (mounted) {
         const allConnections: Connection[] = [
           ...(wpData || []).map(c => ({ ...c, platform: 'wordpress' as const })),
           ...(wfData || []).map(c => ({ ...c, platform: 'webflow' as const })),
+          ...(spData || []).map(c => ({ id: c.id, site_name: c.store_name, is_default: c.is_default, platform: 'shopify' as const })),
         ]
         setConnections(allConnections)
 
@@ -119,12 +127,14 @@ export default function ArticlesPage() {
     }
   }, [supabase])
 
-  const handlePublish = async (articleId: string, platform: 'wordpress' | 'webflow') => {
+  const handlePublish = async (articleId: string, platform: 'wordpress' | 'webflow' | 'shopify') => {
     const platformConnections = connections.filter(c => c.platform === platform)
     const defaultConnection = platformConnections.find(c => c.is_default) || platformConnections[0]
 
+    const platformNames = { wordpress: 'WordPress', webflow: 'Webflow', shopify: 'Shopify' }
+
     if (!defaultConnection) {
-      toast.error(`No ${platform === 'wordpress' ? 'WordPress' : 'Webflow'} site connected`, {
+      toast.error(`No ${platformNames[platform]} site connected`, {
         action: {
           label: "Connect",
           onClick: () => window.location.href = "/integrations"
@@ -152,17 +162,17 @@ export default function ArticlesPage() {
         throw new Error(result.error || "Failed to publish")
       }
 
-      toast.success(`Published to ${platform === 'wordpress' ? 'WordPress' : 'Webflow'} as draft!`, {
-        action: result.postUrl ? {
+      toast.success(`Published to ${platformNames[platform]} as draft!`, {
+        action: result.postUrl || result.articleUrl ? {
           label: "View",
-          onClick: () => window.open(result.postUrl, "_blank")
+          onClick: () => window.open(result.postUrl || result.articleUrl, "_blank")
         } : undefined
       })
 
       // Reload articles to get updated publish status
       const { data: updatedArticle } = await supabase
         .from("articles")
-        .select("wordpress_post_url,webflow_item_id,published_at")
+        .select("wordpress_post_url,webflow_item_id,shopify_article_id,published_at")
         .eq("id", articleId)
         .single()
 
@@ -188,11 +198,13 @@ export default function ArticlesPage() {
     const platforms: string[] = []
     if (article.wordpress_post_url) platforms.push('WP')
     if (article.webflow_item_id) platforms.push('WF')
+    if (article.shopify_article_id) platforms.push('SP')
     return platforms
   }
 
   const wpConnections = connections.filter(c => c.platform === 'wordpress')
   const wfConnections = connections.filter(c => c.platform === 'webflow')
+  const spConnections = connections.filter(c => c.platform === 'shopify')
   const hasAnyConnection = connections.length > 0
 
   if (loading) {
@@ -308,21 +320,29 @@ export default function ArticlesPage() {
                               {/* Published badges */}
                               {publishedPlatforms.length > 0 && (
                                 <div className="flex items-center gap-1.5">
-                                  {publishedPlatforms.map(p => (
-                                    <div
-                                      key={p}
-                                      className="w-5 h-5 rounded bg-green-100 dark:bg-green-900/30 p-0.5 flex items-center justify-center"
-                                      title={p === 'WP' ? 'Published to WordPress' : 'Published to Webflow'}
-                                    >
-                                      <Image
-                                        src={p === 'WP' ? '/brands/wordpress.svg' : '/brands/webflow.svg'}
-                                        alt={p === 'WP' ? 'WordPress' : 'Webflow'}
-                                        width={14}
-                                        height={14}
-                                        className="opacity-80"
-                                      />
-                                    </div>
-                                  ))}
+                                  {publishedPlatforms.map(p => {
+                                    const platformInfo = {
+                                      WP: { src: '/brands/wordpress.svg', alt: 'WordPress', title: 'Published to WordPress' },
+                                      WF: { src: '/brands/webflow.svg', alt: 'Webflow', title: 'Published to Webflow' },
+                                      SP: { src: '/brands/shopify.svg', alt: 'Shopify', title: 'Published to Shopify' },
+                                    }[p] || { src: '', alt: p, title: p }
+
+                                    return (
+                                      <div
+                                        key={p}
+                                        className="w-5 h-5 rounded bg-green-100 dark:bg-green-900/30 p-0.5 flex items-center justify-center"
+                                        title={platformInfo.title}
+                                      >
+                                        <Image
+                                          src={platformInfo.src}
+                                          alt={platformInfo.alt}
+                                          width={14}
+                                          height={14}
+                                          className="opacity-80"
+                                        />
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               )}
 
@@ -403,6 +423,22 @@ export default function ArticlesPage() {
                     <Image src="/brands/webflow.svg" alt="Webflow" width={24} height={24} />
                   </div>
                   <span className="font-medium text-sm">Webflow</span>
+                </div>
+              </button>
+            )}
+            {spConnections.length > 0 && (
+              <button
+                onClick={() => setSelectedPlatform('shopify')}
+                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'shopify'
+                  ? 'border-[#96bf48] bg-[#96bf48]/10'
+                  : 'border-stone-200 dark:border-stone-700'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded flex items-center justify-center">
+                    <Image src="/brands/shopify.svg" alt="Shopify" width={24} height={24} />
+                  </div>
+                  <span className="font-medium text-sm">Shopify</span>
                 </div>
               </button>
             )}
