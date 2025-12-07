@@ -397,7 +397,7 @@ export default function ArticlesPage() {
             {wpConnections.length > 0 && (
               <button
                 onClick={() => setSelectedPlatform('wordpress')}
-                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'wordpress'
+                className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'wordpress'
                   ? 'border-[#21759b] bg-[#21759b]/10'
                   : 'border-stone-200 dark:border-stone-700'
                   }`}
@@ -413,7 +413,7 @@ export default function ArticlesPage() {
             {wfConnections.length > 0 && (
               <button
                 onClick={() => setSelectedPlatform('webflow')}
-                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'webflow'
+                className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'webflow'
                   ? 'border-[#4353ff] bg-[#4353ff]/10'
                   : 'border-stone-200 dark:border-stone-700'
                   }`}
@@ -429,7 +429,7 @@ export default function ArticlesPage() {
             {spConnections.length > 0 && (
               <button
                 onClick={() => setSelectedPlatform('shopify')}
-                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'shopify'
+                className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'shopify'
                   ? 'border-[#96bf48] bg-[#96bf48]/10'
                   : 'border-stone-200 dark:border-stone-700'
                   }`}

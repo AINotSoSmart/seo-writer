@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
         // 1. Fetch the article
         const { data: article, error: articleError } = await supabase
             .from("articles")
-            .select("id, outline, final_html, meta_description, slug, user_id")
+            .select("id, outline, final_html, meta_description, slug, featured_image_url, user_id")
             .eq("id", articleId)
             .eq("user_id", user.id)
             .single()
@@ -46,6 +46,59 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Webflow connection not found" }, { status: 404 })
         }
 
+        // 3. Get the featured image URL (use proxy if needed)
+        let featuredImageUrl = article.featured_image_url
+        if (featuredImageUrl) {
+            let fetchUrl = featuredImageUrl
+
+            // Construct fetchable URL
+            if (featuredImageUrl.includes('.r2.cloudflarestorage.com/')) {
+                const key = featuredImageUrl.split('.r2.cloudflarestorage.com/')[1]
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL
+                    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+                fetchUrl = `${appUrl}/api/images/${key}`
+            } else if (featuredImageUrl.startsWith('/api/images/')) {
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL
+                    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+                fetchUrl = `${appUrl}${featuredImageUrl}`
+            }
+
+            // Detect if we are on localhost
+            const isLocalhost = fetchUrl.includes('localhost') || fetchUrl.includes('127.0.0.1')
+
+            // If on localhost, we MUST upload the asset to Webflow first because they can't reach us.
+            // Even in prod, uploading as an asset is safer/cleaner than hotlinking to our R2 proxy.
+            try {
+                console.log(`[Webflow Publish] Fetching image for asset upload: ${fetchUrl}`)
+                const imageRes = await fetch(fetchUrl)
+                if (imageRes.ok) {
+                    const arrayBuffer = await imageRes.arrayBuffer()
+                    const buffer = Buffer.from(arrayBuffer)
+
+                    // Upload to Webflow Assets
+                    const { uploadAssetToWebflow } = await import("@/lib/integrations/webflow-client")
+                    const assetResult = await uploadAssetToWebflow(
+                        connection.api_token,
+                        connection.site_id,
+                        buffer,
+                        `image-${Date.now()}.jpg` // Simple unique name
+                    )
+
+                    if (assetResult.url) {
+                        featuredImageUrl = assetResult.url
+                        console.log(`[Webflow Publish] Asset uploaded successfully: ${featuredImageUrl}`)
+                    } else {
+                        console.warn(`[Webflow Publish] Asset upload failed: ${assetResult.error}`)
+                        // Fallback to original URL if not localhost (might work if public)
+                        if (isLocalhost) featuredImageUrl = null
+                    }
+                }
+            } catch (err) {
+                console.error(`[Webflow Publish] Error processing image:`, err)
+                if (isLocalhost) featuredImageUrl = null
+            }
+        }
+
         // 3. Publish to Webflow
         const result = await publishToWebflow(
             {
@@ -58,6 +111,7 @@ export async function POST(req: NextRequest) {
                 content: article.final_html,
                 slug: article.slug || undefined,
                 excerpt: article.meta_description || undefined,
+                featuredImageUrl,
             },
             connection.field_mapping || {}
         )

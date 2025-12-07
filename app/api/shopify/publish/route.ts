@@ -46,17 +46,37 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Shopify connection not found" }, { status: 404 })
         }
 
-        // 3. Get the featured image URL (use proxy if needed)
+        // 3. Get the featured image URL and fetch content
+        let featuredImageAttachment: string | null = null
         let featuredImageUrl = article.featured_image_url
-        if (featuredImageUrl && featuredImageUrl.includes('.r2.cloudflarestorage.com/')) {
-            const key = featuredImageUrl.split('.r2.cloudflarestorage.com/')[1]
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL
-                || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-            featuredImageUrl = `${appUrl}/api/images/${key}`
-        } else if (featuredImageUrl && featuredImageUrl.startsWith('/api/images/')) {
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL
-                || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-            featuredImageUrl = `${appUrl}${featuredImageUrl}`
+
+        if (featuredImageUrl) {
+            let fetchUrl = featuredImageUrl
+
+            // Construct fetchable URL
+            if (featuredImageUrl.includes('.r2.cloudflarestorage.com/')) {
+                const key = featuredImageUrl.split('.r2.cloudflarestorage.com/')[1]
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL
+                    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+                fetchUrl = `${appUrl}/api/images/${key}`
+            } else if (featuredImageUrl.startsWith('/api/images/')) {
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL
+                    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+                fetchUrl = `${appUrl}${featuredImageUrl}`
+            }
+
+            try {
+                console.log(`[Shopify Publish] Fetching image from: ${fetchUrl}`)
+                const imageRes = await fetch(fetchUrl)
+                if (imageRes.ok) {
+                    const arrayBuffer = await imageRes.arrayBuffer()
+                    featuredImageAttachment = Buffer.from(arrayBuffer).toString('base64')
+                } else {
+                    console.warn(`[Shopify Publish] Failed to fetch image: ${imageRes.status}`)
+                }
+            } catch (err) {
+                console.error(`[Shopify Publish] Error fetching image:`, err)
+            }
         }
 
         // 4. Fetch user info for author name
@@ -80,7 +100,8 @@ export async function POST(req: NextRequest) {
                 content: article.final_html,
                 author: authorName,
                 tags: article.keyword || undefined,
-                featuredImageUrl,
+                featuredImageUrl: null, // We use attachment
+                featuredImageAttachment,
             },
             true // publishAsDraft
         )

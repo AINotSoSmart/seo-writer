@@ -43,6 +43,7 @@ export async function testShopifyConnection(params: {
 }): Promise<{
     success: boolean
     shopName?: string
+    normalizedDomain?: string
     blogs?: { id: number; title: string }[]
     error?: string
 }> {
@@ -62,13 +63,15 @@ export async function testShopifyConnection(params: {
         accessToken: params.accessToken,
     })
 
-    if (blogsResult.error) {
+    // If error is about no blogs, that's OK - we'll still show the error in UI
+    if (blogsResult.error && blogsResult.blogs.length === 0) {
         return { success: false, error: blogsResult.error }
     }
 
     return {
         success: true,
         shopName: testResult.shopName,
+        normalizedDomain: testResult.normalizedDomain,
         blogs: blogsResult.blogs.map(b => ({ id: b.id, title: b.title })),
     }
 }

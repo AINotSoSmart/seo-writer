@@ -99,6 +99,7 @@ export default function IntegrationsPage() {
     const [showSpForm, setShowSpForm] = useState(false)
     const [spSubmitting, setSpSubmitting] = useState(false)
     const [spStoreDomain, setSpStoreDomain] = useState("")
+    const [spNormalizedDomain, setSpNormalizedDomain] = useState("")
     const [spAccessToken, setSpAccessToken] = useState("")
     const [spShopName, setSpShopName] = useState("")
     const [spBlogs, setSpBlogs] = useState<ShopifyBlog[]>([])
@@ -267,6 +268,7 @@ export default function IntegrationsPage() {
 
         if (result.success && result.blogs) {
             setSpShopName(result.shopName || spStoreDomain)
+            setSpNormalizedDomain(result.normalizedDomain || spStoreDomain)
             if (result.blogs.length === 0) {
                 toast.error("No blogs found in this store. Create a blog first.")
                 return
@@ -283,7 +285,7 @@ export default function IntegrationsPage() {
         setSpSubmitting(true)
 
         const result = await addShopifyConnection({
-            storeDomain: spStoreDomain,
+            storeDomain: spNormalizedDomain || spStoreDomain,
             accessToken: spAccessToken,
             storeName: spShopName,
             blogId: String(blog.id),
@@ -303,6 +305,7 @@ export default function IntegrationsPage() {
     const resetSpForm = () => {
         setShowSpForm(false)
         setSpStoreDomain("")
+        setSpNormalizedDomain("")
         setSpAccessToken("")
         setSpShopName("")
         setSpBlogs([])
@@ -555,11 +558,14 @@ export default function IntegrationsPage() {
                                             <Input
                                                 id="spStoreDomain"
                                                 type="text"
-                                                placeholder="mystore.myshopify.com"
+                                                placeholder="mystore or mystore.myshopify.com"
                                                 value={spStoreDomain}
                                                 onChange={(e) => setSpStoreDomain(e.target.value)}
                                                 className="h-10"
                                             />
+                                            <p className="text-xs text-stone-500">
+                                                Just enter your store name (e.g., &quot;mystore&quot;)
+                                            </p>
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="spAccessToken" className="text-sm font-medium flex items-center gap-2">
@@ -569,14 +575,39 @@ export default function IntegrationsPage() {
                                             <Input
                                                 id="spAccessToken"
                                                 type="password"
-                                                placeholder="shpat_xxxxx"
+                                                placeholder="shpat_xxxxx..."
                                                 value={spAccessToken}
                                                 onChange={(e) => setSpAccessToken(e.target.value)}
                                                 className="h-10"
                                             />
-                                            <p className="text-xs text-stone-500">
-                                                Create in Shopify Admin → Settings → Apps → Develop apps
-                                            </p>
+                                            <div className="text-xs text-stone-500 space-y-2">
+                                                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
+                                                    <p className="font-medium text-blue-800 dark:text-blue-300 mb-1">
+                                                        Need the right token?
+                                                    </p>
+                                                    <p className="mb-2">Don&apos;t use the Partner Dashboard. Use the store admin directly:</p>
+                                                    {spStoreDomain ? (
+                                                        <a
+                                                            href={`https://admin.shopify.com/store/${spStoreDomain.replace('.myshopify.com', '')}/settings/apps/development`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                                                        >
+                                                            Open Custom App Settings <ExternalLink className="w-3 h-3" />
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-stone-400">Enter store domain to see link</span>
+                                                    )}
+                                                </div>
+                                                <p><strong>Steps:</strong></p>
+                                                <ol className="list-decimal ml-4 space-y-0.5">
+                                                    <li>Click the link above (or go to Settings → Apps → Develop apps)</li>
+                                                    <li>Click &quot;Create an app&quot; (or "Allow custom app development")</li>
+                                                    <li>Click &quot;Configure Admin API scopes&quot;</li>
+                                                    <li>Check: <code className="bg-stone-200 dark:bg-stone-700 px-1 rounded">read_content</code> and <code className="bg-stone-200 dark:bg-stone-700 px-1 rounded">write_content</code></li>
+                                                    <li>Install app → <strong>Reveal Admin API token</strong> (starts with <code>shpat_</code>)</li>
+                                                </ol>
+                                            </div>
                                         </div>
                                         <div className="flex gap-2">
                                             <Button onClick={handleSpTestConnection} disabled={spSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white dark:bg-white dark:text-stone-900">
