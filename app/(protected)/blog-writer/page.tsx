@@ -7,6 +7,7 @@ import { getUserDefaults } from "@/actions/preferences"
 import { STYLE_PRESETS } from "@/lib/presets"
 import BrandOnboarding from "./BrandOnboarding"
 import { BlogWriterIsland } from "@/components/blog-writer-island"
+import { ArticleType } from "@/lib/prompts/article-types"
 
 type BrandVoice = { id: string; name: string }
 type BrandInfo = { id: string; website_url: string; created_at: string }
@@ -45,6 +46,9 @@ export default function BlogWriterPage() {
   const [selectedTitle, setSelectedTitle] = useState<string>("")
   const [step, setStep] = useState<"input" | "selection">("input")
   const [generatingTitles, setGeneratingTitles] = useState<boolean>(false)
+
+  // Article Type State
+  const [articleType, setArticleType] = useState<ArticleType>("informational")
 
   const [presetKey, setPresetKey] = useState<string>("linkedin-influencer")
   const [mimicUrl, setMimicUrl] = useState<string>("")
@@ -224,7 +228,8 @@ export default function BlogWriterPage() {
         body: JSON.stringify({
           keyword,
           voiceId: selectedVoiceId,
-          brandId
+          brandId,
+          articleType
         }),
       })
       const json = await res.json()
@@ -260,7 +265,8 @@ export default function BlogWriterPage() {
           keyword,
           voiceId: selectedVoiceId,
           brandId, // Pass brandId to generation
-          title: selectedTitle // Pass selected title
+          title: selectedTitle, // Pass selected title
+          articleType // Pass article type
         }),
       })
       const json = await res.json()
@@ -287,6 +293,8 @@ export default function BlogWriterPage() {
       <BlogWriterIsland
         keyword={keyword}
         onKeywordChange={setKeyword}
+        articleType={articleType}
+        onArticleTypeChange={setArticleType}
         onSubmit={generateTitles}
         isGenerating={generatingTitles}
         titles={titles}

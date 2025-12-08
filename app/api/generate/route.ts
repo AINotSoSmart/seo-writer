@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { tasks } from "@trigger.dev/sdk/v3"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
+import { ArticleType } from "@/lib/prompts/article-types"
 
 export async function POST(req: NextRequest) {
   try {
-    const { keyword, voiceId, brandId, title } = await req.json()
+    const { keyword, voiceId, brandId, title, articleType = 'informational' } = await req.json()
     if (!keyword || !voiceId) {
       return NextResponse.json({ error: "Missing keyword or voiceId" }, { status: 400 })
     }
@@ -18,10 +19,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // We might want to store brandId in articles table later, for now just passing to task
+    // Store articleType along with other article data
     const { data: article, error } = await supabase
       .from("articles")
-      .insert({ user_id: userId, keyword, voice_id: voiceId, status: "queued" })
+      .insert({
+        user_id: userId,
+        keyword,
+        voice_id: voiceId,
+        status: "queued",
+        article_type: articleType // Store article type in database
+      })
       .select()
       .single()
 
@@ -36,6 +43,7 @@ export async function POST(req: NextRequest) {
         voiceId,
         brandId, // Pass brandId
         title, // Pass selected title
+        articleType: articleType as ArticleType, // Pass article type
       })
       return NextResponse.json({ jobId: handle.id, articleId: article.id })
     } catch (err: unknown) {

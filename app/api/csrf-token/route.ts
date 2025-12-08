@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getClientCSRFToken } from '@/utils/csrf'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const token = await getClientCSRFToken()
     
-    return NextResponse.json(
+    const response = NextResponse.json(
       { token },
       {
         status: 200,
@@ -16,6 +18,8 @@ export async function GET(request: NextRequest) {
         },
       }
     )
+
+    return response
   } catch (error) {
     console.error('Failed to generate CSRF token:', error)
     return NextResponse.json(

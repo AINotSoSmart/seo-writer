@@ -2,11 +2,14 @@
 
 import React, { useRef, useEffect, useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import { ChevronUp, Check, Loader2, Sparkles, Search, ArrowRight, ArrowLeft } from "lucide-react"
+import { ChevronUp, Check, Loader2, Sparkles, Search, ArrowRight, ArrowLeft, ChevronDown, FileText, Scale, BookOpen } from "lucide-react"
+import { ArticleType, ARTICLE_TYPES } from "@/lib/prompts/article-types"
 
 interface BlogWriterIslandProps {
     keyword: string
     onKeywordChange: (value: string) => void
+    articleType: ArticleType
+    onArticleTypeChange: (type: ArticleType) => void
     onSubmit: () => void
     isGenerating: boolean
     titles: string[]
@@ -18,9 +21,18 @@ interface BlogWriterIslandProps {
     disabled?: boolean
 }
 
+// Icon map for article types
+const ARTICLE_TYPE_ICONS: Record<ArticleType, React.ReactNode> = {
+    informational: <BookOpen className="w-4 h-4" />,
+    commercial: <Scale className="w-4 h-4" />,
+    howto: <FileText className="w-4 h-4" />
+}
+
 export function BlogWriterIsland({
     keyword,
     onKeywordChange,
+    articleType,
+    onArticleTypeChange,
     onSubmit,
     isGenerating,
     titles,
@@ -173,13 +185,56 @@ export function BlogWriterIsland({
                         ) : (
                             /* STATE 3: INPUT FORM */
                             <form onSubmit={handleSubmit} className="p-4">
-                                {/* Header Section */}
+                                {/* Article Type Selector */}
+                                <div className="mb-4">
+                                    <label
+                                        className={`block text-xs font-medium mb-2 pl-1 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}
+                                    >
+                                        Article Type
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {ARTICLE_TYPES.map((type) => (
+                                            <button
+                                                key={type.value}
+                                                type="button"
+                                                onClick={() => onArticleTypeChange(type.value)}
+                                                className={`
+                                                    flex flex-col items-center gap-1.5 p-2.5 rounded-lg border transition-all duration-200
+                                                    ${articleType === type.value
+                                                        ? (isDark
+                                                            ? 'bg-stone-800 border-stone-600 ring-1 ring-stone-600'
+                                                            : 'bg-stone-50 border-stone-400 ring-1 ring-stone-400')
+                                                        : (isDark
+                                                            ? 'border-stone-800 hover:bg-stone-800/50 hover:border-stone-700'
+                                                            : 'border-stone-200 hover:bg-stone-50 hover:border-stone-300')
+                                                    }
+                                                `}
+                                            >
+                                                <div className={`${articleType === type.value
+                                                    ? (isDark ? 'text-white' : 'text-stone-900')
+                                                    : (isDark ? 'text-stone-500' : 'text-stone-400')
+                                                    }`}>
+                                                    {ARTICLE_TYPE_ICONS[type.value]}
+                                                </div>
+                                                <span className={`text-[10px] text-center leading-tight font-medium ${articleType === type.value
+                                                        ? (isDark ? 'text-white' : 'text-stone-900')
+                                                        : (isDark ? 'text-stone-400' : 'text-stone-600')
+                                                    }`}>
+                                                    {type.value === 'informational' ? 'Deep Dive' :
+                                                        type.value === 'commercial' ? 'Comparison' : 'Tutorial'}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Keyword Section */}
                                 <div className="mb-4 space-y-2">
                                     <label
                                         htmlFor="keyword"
-                                        className={`block text-sm font-medium mb-1 pl-1 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}
+                                        className={`block text-xs font-medium mb-1 pl-1 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}
                                     >
-                                        Create new post
+                                        Keyword / Topic
                                     </label>
 
                                     <div className="relative group">
@@ -187,7 +242,11 @@ export function BlogWriterIsland({
                                             ref={inputRef}
                                             id="keyword"
                                             type="text"
-                                            placeholder="e.g. Future of AI Marketing"
+                                            placeholder={
+                                                articleType === 'informational' ? 'e.g. What is Next.js?' :
+                                                    articleType === 'commercial' ? 'e.g. Top 5 AI Writing Tools' :
+                                                        'e.g. How to deploy to Vercel'
+                                            }
                                             value={keyword}
                                             onChange={(e) => onKeywordChange(e.target.value)}
                                             onFocus={() => setIsFocused(true)}
@@ -211,7 +270,9 @@ export function BlogWriterIsland({
                                     </div>
 
                                     <p className={`text-xs tracking-tight pl-1 ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
-                                        Keyphrase or topic to generate titles.
+                                        {articleType === 'informational' ? 'Topic or concept you want to explain in depth.' :
+                                            articleType === 'commercial' ? 'Product category or tools to compare.' :
+                                                'Task or process you want to teach.'}
                                     </p>
                                 </div>
 

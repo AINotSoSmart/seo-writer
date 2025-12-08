@@ -11,6 +11,8 @@ import { generateImage } from "@/lib/fal"
 import { putR2Object } from "@/lib/r2"
 import { randomUUID } from "crypto"
 import { jsonrepair } from "jsonrepair"
+import { ArticleType } from "@/lib/prompts/article-types"
+import { getArticleStrategy } from "@/lib/prompts/strategies"
 
 const cleanAndParse = (text: string) => {
   const clean = text.replace(/```json/g, "").replace(/```/g, "")
@@ -52,12 +54,19 @@ STRUCTURE:
 4. Conclude by clearly stating that the solution is not complex or expensive. Frame the rest of the blog post as the simple, actionable fix to the major problem you've just outlined.
 `
 
-const RESEARCH_SYSTEM_PROMPT = `
+const getResearchSystemPrompt = (articleType: ArticleType) => {
+  const strategy = getArticleStrategy(articleType)
+
+  return `
 You are an expert SEO Strategist and Data Analyst. 
 I will provide you with the raw text content of the Top 5 Google Search results for a specific keyword.
 
 YOUR GOAL:
 Analyze this data to create a "Research Brief" that allows us to write a better article than all of them combined.
+
+**ARTICLE TYPE: ${articleType.toUpperCase()}**
+
+${strategy.research_focus}
 
 DATA CLEANING RULES:
 1. The input contains raw web scrapes. Ignore UI elements like "Login", "Sign Up", "Footer", "Cookie Policy", "Alt tags".
@@ -71,6 +80,11 @@ OUTPUT REQUIREMENTS (Return strict JSON):
    - Do they fail to answer a specific "why"?
    - Is the tone too robotic?
    - Note: If one source has a Transcript (like a YouTube video), extract unique tips from it that text blogs missed.
+3. "product_matrix": (ONLY for commercial/comparison articles) Extract product details for each product/tool mentioned:
+   - name, price (or "Unknown" if not found), pros (array), cons (array), unique_selling_point, best_for
+4. "step_sequence": (ONLY for how-to/tutorial articles) Extract the step-by-step sequence:
+   - step (number), title, details, pro_tip (optional)
+5. "prerequisites": (ONLY for how-to/tutorial articles) What the reader needs before starting.
 
 JSON SCHEMA:
 {
@@ -80,31 +94,41 @@ JSON SCHEMA:
     "outdated_info": string,
     "user_intent_gaps": string[]
   },
-  "sources_summary": { url: string, title: string }[]
+  "sources_summary": { url: string, title: string }[],
+  "product_matrix": [{ name: string, price: string, pros: string[], cons: string[], unique_selling_point: string, best_for: string }],
+  "step_sequence": [{ step: number, title: string, details: string, pro_tip?: string }],
+  "prerequisites": string[]
 }
 `
+}
 
-const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, brandDetails: any = null, title?: string) => `
+const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string) => {
+  const strategy = getArticleStrategy(articleType)
+
+  return `
 You are an expert Content Architect.
 Your goal is to outline a high-ranking blog post that beats the competition by filling their "Content Gaps".
+
+**ARTICLE TYPE: ${articleType.toUpperCase()}**
 
 INPUT CONTEXT:
 1. KEYWORD: "${keyword}"
 2. COMPETITOR & GAP DATA: ${JSON.stringify(competitorData)}
 ${brandDetails ? `3. BRAND DETAILS: ${JSON.stringify(brandDetails)}` : ""}
 
+TYPE-SPECIFIC STRATEGY:
+${strategy.outline_instruction}
+
 INSTRUCTIONS:
 1. **Title:** ${title ? `Use the provided title: "${title}".` : 'Generate a catchy H1 based on the Keyword and Content Gap.'}
 2. **Intro/Hook:** Plan a strong introduction.
    - Do NOT list this in the "sections" array.
    - It needs to hook the reader immediately.
-3. **Structure (H2/H3):** Create a logical flow.
+3. **Structure (H2/H3):** Create a logical flow FOLLOWING the TYPE-SPECIFIC STRATEGY above.
    - **MANDATORY:** You MUST create specific sections that address the "missing_topics" identified in the Competitor Data.
    - **USER INTENT:** Ensure the structure answers the specific questions users are asking.
 4. **Instruction Notes (CRITICAL CHANGE):** 
    - For EACH section, write a "Content Focus" note.
-   - **Tell the writer WHAT data points, facts, or specific "Gap" concepts to cover.**
-- For EACH section, write a "Content Focus" note.
    - **Tell the writer WHAT data points, facts, or specific "Gap" concepts to cover.**
    - **DO NOT** write style instructions (e.g., "Use bullets", "Be professional"). The writer already knows the style. Only focus on the **Substance**.
    - Example GOOD Note: "Explain the pricing tier differences. Mention that the Pro plan is required for API access (Gap found in research)."
@@ -127,6 +151,7 @@ INSTRUCTIONS:
   ]
 }
 `
+}
 
 const generateWritingSystemPrompt = (styleDNA: any, factSheet: any, brandDetails: any = null) => `
 You are an expert Blog Writer. You are NOT an AI assistant. You are a subject matter expert.
@@ -231,8 +256,8 @@ Return the polished content in **Raw Markdown**. Do NOT use code blocks.
 
 export const generateBlogPost = task({
   id: "generate-blog-post",
-  run: async (payload: { articleId: string; keyword: string; voiceId: string; brandId?: string; title?: string }) => {
-    const { articleId, keyword, voiceId, brandId, title } = payload
+  run: async (payload: { articleId: string; keyword: string; voiceId: string; brandId?: string; title?: string; articleType?: ArticleType }) => {
+    const { articleId, keyword, voiceId, brandId, title, articleType = 'informational' } = payload
     const supabase = createAdminClient()
     let phase: "research" | "outline" | "writing" | "polish" = "research"
 
@@ -276,12 +301,13 @@ export const generateBlogPost = task({
 
       // Using Gemini 3 Pro for Research
       const analyzeConfig = { tools: [{ googleSearch: {} }] }
+      const researchPrompt = getResearchSystemPrompt(articleType)
       const analyzeContents = [
         {
           role: "user",
           parts: [
             {
-              text: RESEARCH_SYSTEM_PROMPT + `\n\nINPUT DATA (Search Results for "${keyword}"):\n` + JSON.stringify(searchResults.results)
+              text: researchPrompt + `\n\nINPUT DATA (Search Results for "${keyword}"):\n` + JSON.stringify(searchResults.results)
             },
           ],
         },
@@ -309,7 +335,7 @@ export const generateBlogPost = task({
       // --- PHASE 3: OUTLINE (The "Architect") ---
       phase = "outline"
 
-      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, competitorData, brandDetails, title)
+      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, competitorData, articleType, brandDetails, title)
       const outlineConfig = {}
       const outlineContents = [
         {

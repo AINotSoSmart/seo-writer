@@ -1,17 +1,18 @@
 import { createHash, randomBytes } from 'crypto'
 import { cookies } from 'next/headers'
 
-const CSRF_TOKEN_NAME = 'csrf-token'
-const CSRF_SECRET_NAME = 'csrf-secret'
+export const CSRF_TOKEN_NAME = 'csrf-token'
+export const CSRF_SECRET_NAME = 'csrf-secret'
+export const CSRF_CLIENT_TOKEN_NAME = 'csrf-token-client'
 const TOKEN_LENGTH = 32
 
 // Generate a random secret for CSRF token generation
-function generateSecret(): string {
+export function generateSecret(): string {
   return randomBytes(TOKEN_LENGTH).toString('hex')
 }
 
 // Generate CSRF token based on secret
-function generateToken(secret: string): string {
+export function generateToken(secret: string): string {
   const timestamp = Date.now().toString()
   const hash = createHash('sha256')
     .update(secret + timestamp)

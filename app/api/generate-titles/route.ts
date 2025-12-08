@@ -3,30 +3,34 @@ import { createClient } from "@/utils/supabase/server"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { jsonrepair } from "jsonrepair"
+import { ArticleType } from "@/lib/prompts/article-types"
+import { getTitlePrompt } from "@/lib/prompts/strategies"
 
 const genAI = getGeminiClient()
 
-const GENERATE_TITLES_PROMPT = (keyword: string, brandDetails: any = null) => `
+const GENERATE_TITLES_PROMPT = (keyword: string, articleType: ArticleType, brandDetails: any = null) => `
 You are an expert Copywriter and SEO Specialist.
 Your goal is to generate 5 catchy, high-converting blog post titles for a specific keyword.
 
 INPUT CONTEXT:
 1. KEYWORD: "${keyword}"
-${brandDetails ? `2. BRAND DETAILS: ${JSON.stringify(brandDetails)}` : ""}
+2. ARTICLE TYPE: ${articleType.toUpperCase()}
+${brandDetails ? `3. BRAND DETAILS: ${JSON.stringify(brandDetails)}` : ""}
 
 CRITICAL RULES (Must Follow):
 1. **NO COLONS OR SEMI-COLONS:** Titles must be a single, flowing sentence. (Bad: "Restoration: How to do it", Good: "How to restore your old photos easily")
 2. **NO "AI SLOP":** Do not use clichés like "Unleash", "Unlock", "Elevate", "Mastering", "Ultimate Guide to", "Symphony", "Tapestry".
-3. **FOCUS ON INTENT:** Understand *why* the user is searching for this keyword. Are they looking for a tutorial? A list? A comparison? Write the title to answer that intent.
-4. **NATURAL LANGUAGE:** Write like a human, not a marketing bot. Use conversational but authoritative language.
+3. **NATURAL LANGUAGE:** Write like a human, not a marketing bot. Use conversational but authoritative language.
 
-INSTRUCTIONS:
+TYPE-SPECIFIC INSTRUCTIONS:
+${getTitlePrompt(articleType, keyword)}
+
+GLOBAL INSTRUCTIONS:
 1. Generate 5 distinct title options.
 2. Titles should incorporate the keyword naturally.
 3. No emotional words or clichés.
 4. Keep titles simple direct SEO style.
-5. Match search intent
-6. No storytelling tone, only informative titles.
+5. No storytelling tone, only informative titles.
 
 OUTPUT REQUIREMENTS (Return strict JSON):
 {
@@ -36,7 +40,7 @@ OUTPUT REQUIREMENTS (Return strict JSON):
 
 export async function POST(req: NextRequest) {
     try {
-        const { keyword, voiceId, brandId } = await req.json()
+        const { keyword, voiceId, brandId, articleType = 'informational' } = await req.json()
 
         if (!keyword || !voiceId) {
             return NextResponse.json({ error: "Missing keyword or voiceId" }, { status: 400 })
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const prompt = GENERATE_TITLES_PROMPT(keyword, brandDetails)
+        const prompt = GENERATE_TITLES_PROMPT(keyword, articleType as ArticleType, brandDetails)
 
         const result = await genAI.models.generateContent({
             model: "gemini-2.0-flash-lite",
@@ -76,7 +80,7 @@ export async function POST(req: NextRequest) {
         if (!responseText) {
             throw new Error("No response generated")
         }
-        
+
         let json
         try {
             json = JSON.parse(responseText)
