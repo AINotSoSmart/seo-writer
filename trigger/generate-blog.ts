@@ -357,9 +357,11 @@ export const generateBlogPost = task({
 
       const outline = ArticleOutlineSchema.parse(cleanAndParse(outlineText))
 
+      // Use user's chosen title if provided, otherwise use AI-generated title
+      const finalTitle = title || outline.title
 
       // Initialize draft with Title
-      const initialDraft = `# ${outline.title}\n\n`
+      const initialDraft = `# ${finalTitle}\n\n`
 
       await supabase
         .from("articles")
@@ -505,13 +507,13 @@ export const generateBlogPost = task({
           .replace(/[^\w\-]+/g, '') // Remove all non-word chars
           .replace(/\-\-+/g, '-')   // Replace multiple - with single -
       }
-      const slug = slugify(outline.title || keyword)
+      const slug = slugify(title || outline.title || keyword)
 
       // 2. Generate Meta Description (AI)
       const seoSystemPrompt = `You are an expert SEO Specialist.
       Your task is to generate a compelling, natural, Meta Description for a blog post based on given inout outline and keyword.
       INPUT:
-      Title: ${outline.title}
+      Title: ${finalTitle}
       Keyword: ${keyword}
 
       REQUIREMENTS:
@@ -556,7 +558,7 @@ export const generateBlogPost = task({
         Your task is to generate a detailed, creative prompt for an AI image generator (like Midjourney or Flux) to create a featured image for a blog post.
         
         INPUT:
-        Title: ${outline.title}
+        Title: ${finalTitle}
         Outline Summary: ${outline.sections.map(s => s.heading).join(", ")}
         Style: ${imageStyle}
         
