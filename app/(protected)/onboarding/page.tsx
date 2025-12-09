@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
-import { Loader2, ChevronUp, ArrowRight, Globe, Sparkles, BadgeCheck, PenTool } from "lucide-react"
+import { Loader2, ChevronUp, ArrowRight, Globe, Sparkles, BadgeCheck, PenTool, Users, Calendar, TrendingUp, Zap, Target, ExternalLink, Shield, CheckCircle2 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { saveBrandAction } from "@/actions/brand"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { STYLE_PRESETS } from "@/lib/presets"
 import { StyleDNA } from "@/lib/schemas/style"
+import { ContentPlanItem, CompetitorData } from "@/lib/schemas/content-plan"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -24,9 +25,13 @@ const STORAGE_KEYS = {
     VOICE_MIMIC_URL: 'onboarding_voice_mimic_url',
     VOICE_NAME: 'onboarding_voice_name',
     VOICE_STYLE_JSON: 'onboarding_voice_style_json',
+    COMPETITORS: 'onboarding_competitors',
+    COMPETITOR_SEEDS: 'onboarding_competitor_seeds',
+    CONTENT_PLAN: 'onboarding_content_plan',
+    PLAN_ID: 'onboarding_plan_id',
 } as const
 
-type Step = "brand" | "voice"
+type Step = "brand" | "voice" | "competitors" | "plan" | "gsc-prompt" | "gsc-reassurance" | "complete"
 
 export default function OnboardingPage() {
     const router = useRouter()
@@ -52,6 +57,21 @@ export default function OnboardingPage() {
     const [voiceName, setVoiceName] = useState("")
     const [styleJson, setStyleJson] = useState(JSON.stringify(STYLE_PRESETS["linkedin-influencer"], null, 2))
     const [savingVoice, setSavingVoice] = useState(false)
+
+    // Competitor Analysis State
+    const [analyzingCompetitors, setAnalyzingCompetitors] = useState(false)
+    const [competitors, setCompetitors] = useState<CompetitorData[]>([])
+    const [competitorSeeds, setCompetitorSeeds] = useState<string[]>([])
+
+    // Content Plan State
+    const [generatingPlan, setGeneratingPlan] = useState(false)
+    const [contentPlan, setContentPlan] = useState<ContentPlanItem[]>([])
+    const [planId, setPlanId] = useState<string | null>(null)
+    const [savingPlan, setSavingPlan] = useState(false)
+
+    // GSC State
+    const [hasGSC, setHasGSC] = useState(false)
+    const [enhancingWithGSC, setEnhancingWithGSC] = useState(false)
 
     const [error, setError] = useState("")
 
@@ -295,13 +315,152 @@ export default function OnboardingPage() {
 
             if (error) throw error
 
-            // Success! Clear localStorage and redirect to blog-writer
-            clearOnboardingStorage()
-            router.push("/blog-writer")
+            // Proceed to competitor analysis step (not redirecting yet)
+            setStep("competitors")
+            // Auto-start competitor analysis
+            handleAnalyzeCompetitors()
         } catch (e: any) {
             setError(e.message || "Failed to save voice")
         } finally {
             setSavingVoice(false)
+        }
+    }
+
+    // Competitor Analysis handler
+    const handleAnalyzeCompetitors = async () => {
+        if (!url || !brandData) return
+        setAnalyzingCompetitors(true)
+        setError("")
+        try {
+            const res = await fetch("/api/analyze-competitors", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    url,
+                    brandContext: `${brandData.product_name} - ${brandData.product_identity.literally}. Target: ${brandData.audience.primary}`,
+                }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Failed to analyze competitors")
+
+            setCompetitors(data.competitors || [])
+            setCompetitorSeeds(data.seeds || [])
+
+            // Persist to localStorage
+            localStorage.setItem(STORAGE_KEYS.COMPETITORS, JSON.stringify(data.competitors || []))
+            localStorage.setItem(STORAGE_KEYS.COMPETITOR_SEEDS, JSON.stringify(data.seeds || []))
+
+            // Auto-proceed to plan generation
+            setStep("plan")
+            handleGeneratePlan(data.seeds)
+        } catch (e: any) {
+            setError(e.message || "Failed to analyze competitors")
+        } finally {
+            setAnalyzingCompetitors(false)
+        }
+    }
+
+    // Content Plan Generation handler
+    const handleGeneratePlan = async (seeds: string[]) => {
+        if (!brandData || seeds.length === 0) return
+        setGeneratingPlan(true)
+        setError("")
+        try {
+            const res = await fetch("/api/generate-content-plan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ seeds, brandData }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Failed to generate plan")
+
+            setContentPlan(data.plan || [])
+            localStorage.setItem(STORAGE_KEYS.CONTENT_PLAN, JSON.stringify(data.plan || []))
+        } catch (e: any) {
+            setError(e.message || "Failed to generate content plan")
+        } finally {
+            setGeneratingPlan(false)
+        }
+    }
+
+    // Save Content Plan handler
+    const handleSavePlan = async () => {
+        if (contentPlan.length === 0) return
+        setSavingPlan(true)
+        setError("")
+        try {
+            const res = await fetch("/api/content-plan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    planData: contentPlan,
+                    brandId,
+                    competitorSeeds,
+                }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Failed to save plan")
+
+            setPlanId(data.id)
+            localStorage.setItem(STORAGE_KEYS.PLAN_ID, data.id)
+
+            // Proceed to GSC prompt
+            setStep("gsc-prompt")
+        } catch (e: any) {
+            setError(e.message || "Failed to save content plan")
+        } finally {
+            setSavingPlan(false)
+        }
+    }
+
+    // GSC Connection handler
+    const handleConnectGSC = () => {
+        // Redirect to GSC OAuth
+        window.location.href = "/api/auth/gsc"
+    }
+
+    // Skip GSC and complete onboarding
+    const handleSkipGSC = () => {
+        clearOnboardingStorage()
+        router.push("/content-plan")
+    }
+
+    // Complete with GSC enhancement
+    const handleCompleteWithGSC = async () => {
+        setEnhancingWithGSC(true)
+        setError("")
+        try {
+            // Enhance plan with GSC data
+            const res = await fetch("/api/gsc/fetch-insights", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ planItems: contentPlan }),
+            })
+
+            if (res.ok) {
+                const data = await res.json()
+                // Update plan with enhanced items
+                if (data.enhancedItems) {
+                    await fetch("/api/content-plan", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            planId,
+                            planData: data.enhancedItems,
+                            gscEnhanced: true,
+                        }),
+                    })
+                }
+            }
+
+            clearOnboardingStorage()
+            router.push("/content-plan")
+        } catch (e: any) {
+            // Even on error, proceed to content plan
+            clearOnboardingStorage()
+            router.push("/content-plan")
+        } finally {
+            setEnhancingWithGSC(false)
         }
     }
 
@@ -325,18 +484,52 @@ export default function OnboardingPage() {
         setBrandData(prev => prev ? ({ ...prev, [field]: arr }) : null)
     }
 
-    // Progress indicator
+    // Progress indicator - simplified to show 4 main phases
+    const stepOrder: Step[] = ["brand", "voice", "competitors", "plan", "gsc-prompt", "gsc-reassurance", "complete"]
+    const currentStepIndex = stepOrder.indexOf(step)
+
+    const isStepComplete = (checkStep: Step) => {
+        return stepOrder.indexOf(checkStep) < currentStepIndex
+    }
+
+    const isStepActive = (checkStep: Step) => {
+        // Group steps into phases for display
+        if (checkStep === "brand") return step === "brand"
+        if (checkStep === "voice") return step === "voice"
+        if (checkStep === "competitors" || checkStep === "plan") return step === "competitors" || step === "plan"
+        return step === "gsc-prompt" || step === "gsc-reassurance" || step === "complete"
+    }
+
     const ProgressIndicator = () => (
         <div className="flex items-center justify-center gap-2 mb-6">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "brand" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-400' : 'bg-stone-100 text-stone-500')}`}>
+            {/* Step 1: Brand DNA */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "brand" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("brand") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
                 <Globe className="w-3.5 h-3.5" />
-                <span>Brand DNA</span>
-                {step === "voice" && <BadgeCheck className="w-3 h-3 text-green-500" />}
+                <span>Brand</span>
+                {isStepComplete("brand") && <BadgeCheck className="w-3 h-3 text-green-500" />}
             </div>
-            <div className={`w-6 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "voice" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
+            <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
+
+            {/* Step 2: Voice Style */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "voice" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("voice") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
                 <PenTool className="w-3.5 h-3.5" />
-                <span>Voice Style</span>
+                <span>Voice</span>
+                {isStepComplete("voice") && <BadgeCheck className="w-3 h-3 text-green-500" />}
+            </div>
+            <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
+
+            {/* Step 3: Content Plan */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "competitors" || step === "plan") ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("plan") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Plan</span>
+                {isStepComplete("plan") && <BadgeCheck className="w-3 h-3 text-green-500" />}
+            </div>
+            <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
+
+            {/* Step 4: Complete/GSC */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "gsc-prompt" || step === "gsc-reassurance" || step === "complete") ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>Insights</span>
             </div>
         </div>
     )
@@ -796,7 +989,7 @@ export default function OnboardingPage() {
                                     </div>
                                 )}
 
-                                {/* Complete Button */}
+                                {/* Continue Button */}
                                 <Button
                                     onClick={handleSaveVoice}
                                     disabled={savingVoice || !voiceName}
@@ -810,15 +1003,294 @@ export default function OnboardingPage() {
                                     {savingVoice ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                            Finishing...
+                                            Saving...
                                         </>
                                     ) : (
                                         <>
-                                            <Sparkles className="w-4 h-4 mr-2" />
-                                            Complete Setup
+                                            Continue to Content Plan
+                                            <ArrowRight className="w-4 h-4 ml-2" />
                                         </>
                                     )}
                                 </Button>
+                            </motion.div>
+                        )}
+
+                        {/* Step 3: Competitor Analysis & Content Plan Generation */}
+                        {(step === "competitors" || step === "plan") && (
+                            <motion.div
+                                key="plan-step"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="p-6 space-y-6"
+                            >
+                                {(analyzingCompetitors || generatingPlan) ? (
+                                    // Loading State
+                                    <div className="text-center space-y-6 py-8">
+                                        <div className="relative w-16 h-16 mx-auto">
+                                            <div className={`absolute inset-0 rounded-full border-4 ${isDark ? 'border-stone-700' : 'border-stone-200'}`} />
+                                            <div className={`absolute inset-0 rounded-full border-4 border-t-stone-600 animate-spin`} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                {analyzingCompetitors ? "Analyzing competitors..." : "Generating your 30-day content plan..."}
+                                            </h2>
+                                            <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                {analyzingCompetitors
+                                                    ? "Finding competitor content and extracting keywords"
+                                                    : "Creating personalized blog topics for your brand"}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center justify-center gap-2">
+                                            {analyzingCompetitors ? (
+                                                <>
+                                                    <Users className={`w-4 h-4 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                                    <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Researching competitor keywords</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Calendar className={`w-4 h-4 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                                    <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Building your content calendar</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    // Plan Display
+                                    <>
+                                        <div className="text-center space-y-2">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <Sparkles className={`w-5 h-5 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
+                                                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                    Your 30-Day Content Plan
+                                                </h2>
+                                            </div>
+                                            <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                {contentPlan.length} blog posts tailored to your brand
+                                            </p>
+                                        </div>
+
+                                        {/* Plan Preview */}
+                                        <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
+                                            <div className="max-h-[300px] overflow-y-auto divide-y divide-stone-200 dark:divide-stone-700">
+                                                {contentPlan.slice(0, 10).map((item, i) => (
+                                                    <div key={item.id} className={`p-3 flex items-start gap-3 ${isDark ? 'hover:bg-stone-800' : 'hover:bg-stone-100'}`}>
+                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-medium ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-600'}`}>
+                                                            {i + 1}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                                {item.title}
+                                                            </p>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-600'}`}>
+                                                                    {item.main_keyword}
+                                                                </span>
+                                                                <span className={`text-[10px] capitalize ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                                                    {item.intent}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {contentPlan.length > 10 && (
+                                                <div className={`p-3 text-center text-xs ${isDark ? 'bg-stone-800 text-stone-400' : 'bg-stone-100 text-stone-500'}`}>
+                                                    +{contentPlan.length - 10} more posts in your plan
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Save Button */}
+                                        <Button
+                                            onClick={handleSavePlan}
+                                            disabled={savingPlan || contentPlan.length === 0}
+                                            className={`
+                                                w-full h-10 font-semibold
+                                                bg-gradient-to-b from-stone-800 to-stone-950
+                                                hover:from-stone-700 hover:to-stone-900
+                                                dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
+                                            `}
+                                        >
+                                            {savingPlan ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                    Saving Plan...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    Save & Continue
+                                                    <ArrowRight className="w-4 h-4 ml-2" />
+                                                </>
+                                            )}
+                                        </Button>
+                                    </>
+                                )}
+                            </motion.div>
+                        )}
+
+                        {/* Step 4: GSC Upgrade Prompt */}
+                        {step === "gsc-prompt" && (
+                            <motion.div
+                                key="gsc-prompt-step"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="p-6 space-y-6"
+                            >
+                                <div className="text-center space-y-2">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <CheckCircle2 className={`w-6 h-6 text-green-500`} />
+                                    </div>
+                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                        Your content plan is ready!
+                                    </h2>
+                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        Want to make it even better?
+                                    </p>
+                                </div>
+
+                                {/* GSC Upgrade Card */}
+                                <div className={`rounded-xl border p-4 space-y-4 ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
+                                    <div className="flex items-start gap-3">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`}>
+                                            <TrendingUp className={`w-5 h-5 ${isDark ? 'text-stone-300' : 'text-stone-600'}`} />
+                                        </div>
+                                        <div>
+                                            <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                Connect Google Search Console
+                                            </h3>
+                                            <p className={`text-xs mt-0.5 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                Personalize your plan with real search data
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <ul className="space-y-2">
+                                        {[
+                                            { icon: Zap, text: "High-impact topics with proven impressions" },
+                                            { icon: Target, text: "Quick-win keywords on page 2" },
+                                            { icon: TrendingUp, text: "Low CTR opportunities to fix" },
+                                        ].map((item, i) => (
+                                            <li key={i} className="flex items-center gap-2">
+                                                <item.icon className={`w-3.5 h-3.5 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                                <span className={`text-xs ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                    {item.text}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+
+                                    <Button
+                                        onClick={() => setStep("gsc-reassurance")}
+                                        className={`
+                                            w-full h-10 font-semibold
+                                            bg-gradient-to-b from-stone-800 to-stone-950
+                                            hover:from-stone-700 hover:to-stone-900
+                                            dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
+                                        `}
+                                    >
+                                        <TrendingUp className="w-4 h-4 mr-2" />
+                                        Connect Search Console
+                                    </Button>
+                                </div>
+
+                                {/* Skip Option */}
+                                <button
+                                    onClick={handleSkipGSC}
+                                    className={`w-full text-center text-sm underline underline-offset-2 ${isDark ? 'text-stone-400 hover:text-stone-300' : 'text-stone-500 hover:text-stone-600'}`}
+                                >
+                                    Continue without Search Console
+                                </button>
+                            </motion.div>
+                        )}
+
+                        {/* Step 5: GSC Reassurance Screen */}
+                        {step === "gsc-reassurance" && (
+                            <motion.div
+                                key="gsc-reassurance-step"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="p-6 space-y-6"
+                            >
+                                <div className="text-center space-y-2">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Shield className={`w-6 h-6 ${isDark ? 'text-stone-300' : 'text-stone-600'}`} />
+                                    </div>
+                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                        We only read your search data
+                                    </h2>
+                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        Read-only access, nothing more
+                                    </p>
+                                </div>
+
+                                {/* What We Access */}
+                                <div className={`rounded-xl border p-4 space-y-3 ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
+                                    <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                        What we access:
+                                    </h3>
+                                    <ul className="space-y-2">
+                                        {[
+                                            "Keywords you already rank for",
+                                            "Pages near the top of Google",
+                                            "Topics with growth potential",
+                                        ].map((item, i) => (
+                                            <li key={i} className="flex items-center gap-2">
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                                                <span className={`text-xs ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                    {item}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                {/* What We Don't Do */}
+                                <div className={`rounded-xl border p-4 space-y-3 ${isDark ? 'bg-stone-800/30 border-stone-700' : 'bg-white border-stone-200'}`}>
+                                    <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                        We never:
+                                    </h3>
+                                    <ul className="space-y-2">
+                                        {[
+                                            "Modify anything in your account",
+                                            "Access your analytics or emails",
+                                            "Store raw GSC data",
+                                        ].map((item, i) => (
+                                            <li key={i} className="flex items-center gap-2">
+                                                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isDark ? 'border-stone-600' : 'border-stone-300'}`}>
+                                                    <span className={`w-1.5 h-0.5 ${isDark ? 'bg-stone-500' : 'bg-stone-400'}`} />
+                                                </span>
+                                                <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                    {item}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                {/* Connect Button */}
+                                <Button
+                                    onClick={handleConnectGSC}
+                                    className={`
+                                        w-full h-10 font-semibold
+                                        bg-gradient-to-b from-stone-800 to-stone-950
+                                        hover:from-stone-700 hover:to-stone-900
+                                        dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
+                                    `}
+                                >
+                                    <ExternalLink className="w-4 h-4 mr-2" />
+                                    Connect Securely with Google
+                                </Button>
+
+                                {/* Skip Option */}
+                                <button
+                                    onClick={handleSkipGSC}
+                                    className={`w-full text-center text-sm underline underline-offset-2 ${isDark ? 'text-stone-400 hover:text-stone-300' : 'text-stone-500 hover:text-stone-600'}`}
+                                >
+                                    Continue without Search Console
+                                </button>
                             </motion.div>
                         )}
                     </AnimatePresence>
