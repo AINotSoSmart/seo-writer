@@ -539,45 +539,70 @@ export default function OnboardingPage() {
             }
             const insights = await insightsRes.json()
 
-            // Enhance the existing content plan with GSC data
-            const enhancedPlan = contentPlan.map(item => {
-                // Find matching opportunity by keyword
-                const match = insights.top_opportunities?.find((opp: any) =>
-                    item.main_keyword.toLowerCase().includes(opp.query.toLowerCase()) ||
-                    opp.query.toLowerCase().includes(item.main_keyword.toLowerCase())
-                )
+            // DEBUG: Log what we got from GSC
+            console.log("=== GSC INSIGHTS DEBUG ===")
+            console.log("Top Opportunities Count:", insights.top_opportunities?.length || 0)
+            console.log("Top Opportunities:", insights.top_opportunities)
 
-                if (match) {
-                    return {
-                        ...item,
-                        opportunity_score: match.opportunity_score,
-                        badge: match.badge,
-                        gsc_impressions: match.impressions,
-                        gsc_position: match.position,
-                        gsc_ctr: match.ctr,
-                    }
+            // Generate a NEW content plan based on GSC data
+            // The GSC queries become the foundation for the 30-day plan
+            const gscOpportunities = insights.top_opportunities || []
+
+            if (gscOpportunities.length === 0) {
+                throw new Error("No GSC data found for this site. Try selecting a different site or continue without GSC.")
+            }
+
+            // Generate content plan items directly from GSC queries
+            const today = new Date()
+            const gscBasedPlan: ContentPlanItem[] = gscOpportunities.slice(0, 30).map((opp: any, index: number) => {
+                const scheduledDate = new Date(today)
+                scheduledDate.setDate(today.getDate() + index)
+
+                // Determine article type based on query characteristics
+                let articleType: "informational" | "commercial" | "howto" = "informational"
+                const queryLower = opp.query.toLowerCase()
+                if (queryLower.includes("how to") || queryLower.includes("guide") || queryLower.includes("tutorial")) {
+                    articleType = "howto"
+                } else if (queryLower.includes("best") || queryLower.includes("vs") || queryLower.includes("review") || queryLower.includes("alternative")) {
+                    articleType = "commercial"
                 }
-                return item
+
+                // Generate title from query
+                const title = generateTitleFromQuery(opp.query, articleType)
+
+                return {
+                    id: `gsc-${Date.now()}-${index}`,
+                    title,
+                    main_keyword: opp.query,
+                    supporting_keywords: [], // Will be generated later or empty
+                    article_type: articleType,
+                    cluster: "GSC Opportunity",
+                    scheduled_date: scheduledDate.toISOString().split("T")[0],
+                    status: "pending" as const,
+                    // GSC data attached directly
+                    opportunity_score: opp.opportunity_score,
+                    badge: opp.badge,
+                    gsc_impressions: opp.impressions,
+                    gsc_position: opp.position,
+                    gsc_ctr: opp.ctr,
+                }
             })
 
-            // Sort by opportunity score (items with GSC data first)
-            enhancedPlan.sort((a, b) => {
-                if (a.opportunity_score && b.opportunity_score) {
-                    return b.opportunity_score - a.opportunity_score
-                }
-                if (a.opportunity_score) return -1
-                if (b.opportunity_score) return 1
-                return 0
-            })
+            // Sort by opportunity score (highest first)
+            gscBasedPlan.sort((a, b) => (b.opportunity_score || 0) - (a.opportunity_score || 0))
 
-            // Update existing plan in database using PUT (not POST!)
+            console.log("=== GSC-BASED PLAN GENERATED ===")
+            console.log("Plan items:", gscBasedPlan.length)
+            console.log("First 5:", gscBasedPlan.slice(0, 5).map(p => ({ title: p.title.slice(0, 50), badge: p.badge })))
+
+            // Update existing plan in database using PUT
             if (planId) {
                 const updateRes = await fetch("/api/content-plan", {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         planId,
-                        planData: enhancedPlan,
+                        planData: gscBasedPlan,
                         gscEnhanced: true,
                     }),
                 })
@@ -595,6 +620,26 @@ export default function OnboardingPage() {
             // Even on error, allow user to skip
         } finally {
             setEnhancingWithGSC(false)
+        }
+    }
+
+    // Helper function to generate a title from GSC query
+    const generateTitleFromQuery = (query: string, articleType: "informational" | "commercial" | "howto"): string => {
+        const capitalizedQuery = query
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ')
+
+        switch (articleType) {
+            case "howto":
+                return `How to ${capitalizedQuery}: A Complete Guide`
+            case "commercial":
+                if (query.toLowerCase().includes("best")) {
+                    return `The ${capitalizedQuery} in ${new Date().getFullYear()}`
+                }
+                return `${capitalizedQuery}: Complete Review & Comparison`
+            default:
+                return `${capitalizedQuery}: Everything You Need to Know`
         }
     }
 

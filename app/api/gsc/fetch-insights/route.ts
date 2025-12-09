@@ -131,6 +131,19 @@ export async function GET(req: NextRequest) {
         const queriesData = await queriesResponse.json()
         const queries: GSCQueryRow[] = queriesData.rows || []
 
+        // DEBUG: Log raw GSC data
+        console.log("=== GSC API DEBUG (Server-side) ===")
+        console.log("Site URL:", siteUrl)
+        console.log("Date Range:", dateRange)
+        console.log("Raw Queries Count:", queries.length)
+        console.log("First 5 Raw Queries:", queries.slice(0, 5).map(q => ({
+            query: q.keys[0],
+            impressions: q.impressions,
+            clicks: q.clicks,
+            position: q.position,
+            ctr: q.ctr
+        })))
+
         // Fetch top pages
         const pagesResponse = await fetch(
             `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
@@ -151,6 +164,8 @@ export async function GET(req: NextRequest) {
         const pagesData = await pagesResponse.json()
         const pages: GSCPageRow[] = pagesData.rows || []
 
+        console.log("Raw Pages Count:", pages.length)
+
         // Compute insights
         const topOpportunities = queries
             .map(q => {
@@ -166,6 +181,8 @@ export async function GET(req: NextRequest) {
             })
             .sort((a, b) => b.opportunity_score - a.opportunity_score)
             .slice(0, 20)
+
+        console.log("Computed Top Opportunities:", topOpportunities.slice(0, 5))
 
         const pagesOnPageTwo = pages
             .filter(p => p.position >= 11 && p.position <= 20)
