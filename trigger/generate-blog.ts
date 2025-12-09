@@ -13,6 +13,7 @@ import { randomUUID } from "crypto"
 import { jsonrepair } from "jsonrepair"
 import { ArticleType } from "@/lib/prompts/article-types"
 import { getArticleStrategy } from "@/lib/prompts/strategies"
+import { getFormalityDefinition, getPerspectiveDefinition } from "@/lib/prompts/voice-definitions"
 
 const cleanAndParse = (text: string) => {
   const clean = text.replace(/```json/g, "").replace(/```/g, "")
@@ -36,23 +37,99 @@ const cleanAndParse = (text: string) => {
 
 const AUTHENTIC_WRITING_RULES = `
 ### CORE FORMATTING & STYLE (STRICT ENFORCEMENT)
-1. **PRIORITIZE SCANNABILITY:** Assume the user will not read full paragraphs. The core message must be understandable at a glance.
-2. **USE SHORT SENTENCES:** One idea per line. Break up walls of text mercilessly. Keep paragraphs under 3 sentences.
-3. **EMBRACE BOLD TEXT & LISTS:** Use **bolding** for the most important takeaway in any paragraph. Use bullet points (or emojis as bullets) to break up concepts and processes.
-4. **EVERY LINE MUST EARN ITS PLACE:** If a sentence doesn't serve a critical purpose, delete it. Be ruthless.
-5. **NO GENERIC "AI" JARGON:** Banned words: "delve", "unleash", "landscape", "tapestry", "game-changer", "realm", "bustling".
-6. **AUTHENTIC PERSPECTIVE:** Write with authority. Avoid passive voice ("It is said that..."). Use the perspective (I/We/Brand) defined in the Narrative Rules.
+
+**SCANNABILITY & STRUCTURE:**
+1. Assume readers will NOT read full paragraphs. The core message must be understandable at a glance.
+2. **BOLD** the single most important takeaway in each paragraph. Use bullet points to break up concepts.
+3. Keep paragraphs under 3 sentences. One idea per paragraph.
+4. Every line must EARN its place. If a sentence doesn't serve a critical purpose, DELETE IT.
+
+**SENTENCE VARIATION (BURSTINESS) - CRITICAL FOR HUMAN FEEL:**
+5. Mix sentence lengths dramatically: some very short (3-5 words), some longer (15-25 words).
+6. Start sentences with DIFFERENT elements: questions, statements, "But...", numbers, actions.
+7. Example rhythm: "Stop. Think about what just happened. Now consider how this changes everything you thought you knew about the topic."
+8. Occasional sentence fragments are OK if they add punch. "Not always. But often."
+
+**ACTIVE VOICE & DIRECTNESS:**
+9. USE ACTIVE VOICE. "Management canceled the meeting" NOT "The meeting was canceled by management."
+10. Be direct. "Call me at 3pm." NOT "I was wondering if you might be available for a call."
+11. Use certainty when you ARE certain. "This approach improves results." NOT "This approach might improve results."
+
+**NO AI-FILLER PHRASES (CRITICAL):**
+12. **BANNED STARTERS:** "Let's dive in", "Let's explore", "In today's digital age", "In this article we will", "It goes without saying", "As we navigate"
+14. **BANNED PHRASES:** "cutting-edge", "leverage", "streamline", "take your X to the next level", "unparalleled", "revolutionize"
+15. **BANNED WORDS:** "delve", "unleash", "landscape", "tapestry", "game-changer", "realm", "bustling", "elevate", "harness", "robust"
+16. Instead of: "Let's explore this fascinating opportunity" → Say: "Here's what we know."
+
+**SPECIFICITY & AUTHENTICITY:**
+17. Use SPECIFIC, CONCRETE details. "Saves 2 hours per week" NOT "saves time."
+18. Avoid generic statements. "The project failed because the API timed out" NOT "The project had issues."
+19. If something has problems, SAY IT. "This approach has problems." Be real.
+
+**STRUCTURAL PATTERN DISRUPTION:**
+20. Don't always follow intro → body → conclusion. Sometimes start mid-thought.
+21. Include natural digressions if they add value. "(Worth noting: this also works for X.)"
+22. Use varied paragraph lengths. Some can be one sentence. Others 3.
+
+**PERSPECTIVE REMINDER:**
+23. **AUTHENTIC PERSPECTIVE:** Write with authority. Avoid passive voice ("It is said that..."). Use the perspective (I/We/Brand) defined in the Narrative Rules.
 `
 
-const INTRO_GOLDEN_RULES = `
-GOAL: The introduction must hook the reader, make them feel deeply understood, and create an urgent need to read the solution in the main body of the post. 
+// Type-specific intro templates
+const INTRO_TEMPLATES: Record<string, string> = {
+  informational: `
+GOAL: Hook the reader with curiosity and establish you as the expert who will explain this clearly.
+
+APPROACH OPTIONS (vary these, don't always use the same one):
+A) **Open with a surprising fact or statistic** - "Did you know that 70% of developers have never actually used X correctly?"
+B) **Challenge a common misconception** - "Most people think X is about Y. They're wrong."
+C) **Start with a relatable scenario** - "You've seen the term everywhere. Your team keeps mentioning it. But what does X actually mean?"
+D) **Lead with the "why it matters" angle** - "Understanding X isn't just academic—it directly impacts your ability to..."
 
 STRUCTURE:
-1. Acknowledge the struggle is real and frustrating, but do it with confidence.
-2. Describe the reader's own experience back to them in vivid detail. Paint a picture of the hard work they've put in, and the disappointing result they've achieved.
-3. Directly state the common excuse they tell themselves being in context.
-4. Conclude by clearly stating that the solution is not complex or expensive. Frame the rest of the blog post as the simple, actionable fix to the major problem you've just outlined.
+1. Hook with curiosity or a knowledge gap the reader didn't know they had.
+2. Briefly acknowledge why this topic is confusing or misunderstood.
+3. Promise clarity: "By the end of this guide, you'll understand exactly..."
+4. Keep it SHORT. 2-3 paragraphs max.
+`,
+
+  commercial: `
+GOAL: Hook the reader by acknowledging the overwhelming pain of choosing, then promise clarity.
+
+APPROACH OPTIONS (vary these, don't always use the same one):
+A) **Start with the paradox of choice** - "There are now 50+ tools claiming to solve X. How do you actually pick the right one?"
+B) **Acknowledge wasted time/money** - "You've probably tried 3 tools already. None of them quite fit."
+C) **Lead with the stakes** - "Pick the wrong X and you'll waste months of migration effort."
+D) **Use the 'honest review' angle** - "After testing 15 different options, here's what actually works in 2025."
+
+STRUCTURE:
+1. Acknowledge the reader's decision fatigue or frustration with existing options.
+2. Position yourself as someone who did the hard work of comparison.
+3. Promise a clear recommendation or framework for choosing.
+4. Keep it SHORT. 2-3 paragraphs max. Don't list all the tools yet—save that for the body.
+`,
+
+  howto: `
+GOAL: Promise a specific outcome and reduce the reader's fear of complexity.
+
+APPROACH OPTIONS (vary these, don't always use the same one):
+A) **Lead with the end result** - "By the end of this tutorial, you'll have a fully working X deployed to production."
+B) **Acknowledge the perceived difficulty** - "Setting up X sounds intimidating. It's actually straightforward when you know the steps."
+C) **Use a time anchor** - "In the next 15 minutes, you'll go from zero to a working implementation."
+D) **Start with 'no prerequisites' or 'beginner-friendly'** - "You don't need to be an expert. If you can copy-paste, you can do this."
+
+STRUCTURE:
+1. State what the reader will accomplish by the end (specific, tangible outcome).
+2. Reassure them: it's simpler than they think, or explain minimal prerequisites.
+3. Briefly mention what tools/setup they'll need (if any).
+4. Keep it SHORT. 2-3 paragraphs max. Jump into the steps quickly.
 `
+}
+
+// Helper to get intro template by article type
+const getIntroTemplate = (articleType: ArticleType): string => {
+  return INTRO_TEMPLATES[articleType] || INTRO_TEMPLATES.informational
+}
 
 const getResearchSystemPrompt = (articleType: ArticleType) => {
   const strategy = getArticleStrategy(articleType)
@@ -153,94 +230,117 @@ INSTRUCTIONS:
 `
 }
 
-const generateWritingSystemPrompt = (styleDNA: any, factSheet: any, brandDetails: any = null) => `
-You are an expert Blog Writer. You are NOT an AI assistant. You are a subject matter expert.
+const generateWritingSystemPrompt = (styleDNA: any, factSheet: any, brandDetails: any = null) => {
+  // Get descriptive definitions based on style settings
+  const perspectiveRules = getPerspectiveDefinition(styleDNA.perspective || 'neutral')
+  const formalityRules = getFormalityDefinition(styleDNA.formality || 'professional')
 
-### 1. USER INTENT & STRATEGY
-- **Goal:** Rank #1 on Google by being more specific, helpful, and "human" than the competition.
-- **Mindset:** The user is frustrated and wants a quick answer. Do not fluff. Get to the point.
-- **Voice:** ${styleDNA.tone} (But prioritize clarity over fancy writing).
-- **Narrative Rules:**
-${styleDNA.narrative_rules?.map((r: string) => `- ${r}`).join("\n") || "- No specific narrative rules."}
+  // Build banned words list
+  const defaultBanned = ['delve', 'unleash', 'landscape', 'tapestry', 'game-changer', 'realm', 'bustling']
+  const customBanned = styleDNA.avoid_words || []
+  const allBannedWords = [...new Set([...defaultBanned, ...customBanned])]
 
-### 2. GOLDEN RULES (THE LAW)
-${AUTHENTIC_WRITING_RULES}
+  // Build narrative rules string
+  const narrativeRulesStr = styleDNA.narrative_rules?.map((r: string) => `- ${r}`).join("\n") || ""
 
-${brandDetails ? `
-### 3. BRAND CONTEXT
-- We are writing as: ${brandDetails.product_name}. You are a core team member/founder of ${brandDetails.product_name}.
+  // Build brand context section
+  let brandContextSection = ""
+  if (brandDetails) {
+    brandContextSection = `
+### 5. BRAND CONTEXT
+- We are writing as: ${brandDetails.product_name}.
 - Audience: ${JSON.stringify(brandDetails.audience)}
 
-**You are writing on behalf of ${brandDetails.product_name}.** 
-- **When discussing Competitors:** Act as an Expert Reviewer. Use "I" or "We". (e.g., "I tested Tool X and found it slow.") 
-- **When discussing ${brandDetails.product_name} (Our Product):** Act as the **Creator/Builder**. 
-  - **DO NOT SAY:** "I tested ${brandDetails.product_name}..." or "I reviewed ${brandDetails.product_name}..." (This is cringe). 
-  - **INSTEAD SAY:** "We built ${brandDetails.product_name} to fix this..." or "This is why we designed ${brandDetails.product_name} to..." or "Our tool handles this by..."
-` : ""}
+**Note:** When discussing ${brandDetails.product_name} (your product), use the perspective defined above.
+`
+  }
 
-### 4. KNOWLEDGE BASE (Facts to use)
+  return `
+You are an expert Blog Writer. You are NOT an AI assistant. You are a subject matter expert.
+
+### 1. VOICE & PERSPECTIVE
+${perspectiveRules}
+
+### 2. TONE & FORMALITY
+${formalityRules}
+
+**Custom Voice Rules for This Brand:**
+- Tone: ${styleDNA.tone}
+${narrativeRulesStr}
+
+### 3. STRATEGY & MINDSET
+- **Goal:** Rank #1 on Google by being more specific, helpful, and "human" than the competition.
+- **Mindset:** The user is frustrated and wants a quick answer. Do not fluff. Get to the point.
+
+### 4. GOLDEN RULES (THE LAW)
+${AUTHENTIC_WRITING_RULES}
+
+**BANNED WORDS:** ${allBannedWords.join(", ")}
+${brandContextSection}
+### 6. KNOWLEDGE BASE (Facts to use)
 ${JSON.stringify(factSheet)}
 
-### 5. OUTPUT FORMAT
+### 7. OUTPUT FORMAT
 Return **Markdown** formatted text. 
 - Make use of proper H2, H3, and H4 headers for SEO appropriately.
 - Do NOT include the main H2 Section Heading (system adds it).
 - Start directly with the body content.
 `
+}
 
 const generateWritingUserPrompt = (previousFullText: string, currentSection: any) => `
-### CONTEXT (What you have written so far)
+### CONTEXT(What you have written so far)
 ${previousFullText}
 
 ### YOUR CURRENT TASK
-**Write Section:** "${currentSection.heading}"
+    ** Write Section:** "${currentSection.heading}"
 
-**CONTENT FOCUS (What to cover):** 
-${currentSection.instruction_note}
+      ** CONTENT FOCUS(What to cover):**
+        ${currentSection.instruction_note}
 
-**SEO KEYWORDS:** ${currentSection.keywords_to_include.join(", ")}
+** SEO KEYWORDS:** ${currentSection.keywords_to_include.join(", ")}
 ### INSTRUCTIONS
-1. Read the last sentence of the Context. Ensure your first sentence flows naturally from it.
-2. **Apply the Golden Rules:** BOLD the key takeaways. Keep sentences short.
-3. **Simulate Experience:** If the content note asks for a review/opinion, write confidently as if you have tested it.
+  1. Read the last sentence of the Context.Ensure your first sentence flows naturally from it.
+2. ** Apply the Golden Rules:** BOLD the key takeaways.Keep sentences short.
+3. ** Simulate Experience:** If the content note asks for a review / opinion, write confidently as if you have tested it.
 `
 
 const generatePolishEditorPrompt = (draft: string, styleDNA: any, brandDetails: any = null) => `
-You are a Ruthless Direct-Response Copyeditor. 
-Your goal is to maximize **Readability** and **Emotional Impact**.
+You are a Ruthless Direct - Response Copyeditor. 
+Your goal is to maximize ** Readability ** and ** Emotional Impact **.
 You hate "Walls of Text" and "AI Clichés".
 
 ### 1. THE DRAFT TO EDIT
 ${draft}
 
-### 2. STRICT FORMATTING RULES (The Law)
-1. **DESTROY WALLS OF TEXT:** If a paragraph has more than 3 sentences, BREAK IT. 
-2. **ONE IDEA PER LINE:** Use single-sentence paragraphs frequently to create rhythm.
-3. **SCANNABILITY:** Ensure key takeaways are **bolded**.
-4. **NO "GLUE" WORDS:** Remove fluff transitions like "In conclusion," "Furthermore," "It is important to note." Just say what you mean.
+### 2. STRICT FORMATTING RULES(The Law)
+  1. ** DESTROY WALLS OF TEXT:** If a paragraph has more than 3 sentences, BREAK IT. 
+2. ** ONE IDEA PER LINE:** Use single - sentence paragraphs frequently to create rhythm.
+3. ** SCANNABILITY:** Ensure key takeaways are ** bolded **.
+4. ** NO "GLUE" WORDS:** Remove fluff transitions like "In conclusion," "Furthermore," "It is important to note." Just say what you mean.
 
-### 3. BANNED "AI" PHRASES (Instant Deletion)
+### 3. BANNED "AI" PHRASES(Instant Deletion)
 If you see these patterns or anything from this vibe, rewrite the sentence immediately:
-- ❌ "That's where [X] comes in..."
-- ❌ "Whether you are [X] or [Y]..."
-- ❌ "In this digital landscape..."
-- ❌ "Unlock / Unleash / Elevate..."
-- ❌ "It sounds counterintuitive, but..."
-- ❌ "Let's dive in..."
-- ❌ "Magic happens..." / "Game-changer..."
+  - ❌ "That's where [X] comes in..."
+    - ❌ "Whether you are [X] or [Y]..."
+      - ❌ "In this digital landscape..."
+        - ❌ "Unlock / Unleash / Elevate..."
+          - ❌ "It sounds counterintuitive, but..."
+            - ❌ "Let's dive in..."
+              - ❌ "Magic happens..." / "Game-changer..."
 
-### 2. THE VOICE (Do NOT Violate)
+### 2. THE VOICE(Do NOT Violate)
 The author's unique style DNA is:
-- Tone: ${styleDNA.tone}
-- Sentence Structure: ${styleDNA.sentence_structure?.avg_length || "varied"}
-- **CRITICAL:** Do NOT make it sound generic or "AI-generated". Preserve the unique flair, idioms, and formatting quirks.
+    - Tone: ${styleDNA.tone}
+  - Sentence Structure: ${styleDNA.sentence_structure?.avg_length || "varied"}
+- ** CRITICAL:** Do NOT make it sound generic or "AI-generated".Preserve the unique flair, idioms, and formatting quirks.
 ### 4. TONE CHECK
-- **Voice:** ${styleDNA.tone}
-- **Perspective & Rules:**
-${styleDNA.narrative_rules?.map((r: string) => `- ${r}`).join("\n") || "- Follow brand guidelines."}
-- **Vibe:** Write like a human talking to a friend. Be punchy. Be specific.
+    - ** Voice:** ${styleDNA.tone}
+- ** Perspective & Rules:**
+    ${styleDNA.narrative_rules?.map((r: string) => `- ${r}`).join("\n") || "- Follow brand guidelines."}
+- ** Vibe:** Write like a human talking to a friend.Be punchy.Be specific.
 
-${brandDetails ? `
+    ${brandDetails ? `
 ### 6. BRAND PERSPECTIVE CHECK (CRITICAL)
 You MUST fix any "cringe" self-reviews.
 - **When discussing Competitors:** It is OK to say "I tested X".
@@ -248,10 +348,11 @@ You MUST fix any "cringe" self-reviews.
   - **BAD:** "I tested ${brandDetails.product_name} and it was fast." (Sounds fake/cringe).
   - **GOOD:** "We built ${brandDetails.product_name} to be fast." or "Our tool excels at..."
   - **FIX:** Change any "I tested [Our Product]" to "We designed [Our Product]" or "Our tool".
-` : ""}
+` : ""
+  }
 
 ### 5. OUTPUT
-Return the polished content in **Raw Markdown**. Do NOT use code blocks.
+Return the polished content in ** Raw Markdown **.Do NOT use code blocks.
 `
 
 export const generateBlogPost = task({
@@ -307,7 +408,7 @@ export const generateBlogPost = task({
           role: "user",
           parts: [
             {
-              text: researchPrompt + `\n\nINPUT DATA (Search Results for "${keyword}"):\n` + JSON.stringify(searchResults.results)
+              text: researchPrompt + `\n\nINPUT DATA(Search Results for "${keyword}"): \n` + JSON.stringify(searchResults.results)
             },
           ],
         },
@@ -361,7 +462,7 @@ export const generateBlogPost = task({
       const finalTitle = title || outline.title
 
       // Initialize draft with Title
-      const initialDraft = `# ${finalTitle}\n\n`
+      const initialDraft = `# ${finalTitle} \n\n`
 
       await supabase
         .from("articles")
@@ -383,9 +484,10 @@ export const generateBlogPost = task({
       // Check if intro data exists (it should with new schema, but safe check)
       if (outline.intro) {
         const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails)
+        const introTemplate = getIntroTemplate(articleType)
         const userPrompt = generateWritingUserPrompt(currentDraft, {
           heading: "Introduction / Hook", // Context only
-          instruction_note: outline.intro.instruction_note + "\n\nIMPORTANT: Write the introduction/hook only. Do NOT add any headings. Start directly with the text.\n\nAPPLY THESE INTRO GOLDEN RULES:\n" + INTRO_GOLDEN_RULES,
+          instruction_note: outline.intro.instruction_note + "\n\nIMPORTANT: Write the introduction/hook only. Do NOT add any headings. Start directly with the text.\n\nAPPLY THESE INTRO RULES:\n" + introTemplate,
           keywords_to_include: outline.intro.keywords_to_include
         })
 
@@ -408,7 +510,7 @@ export const generateBlogPost = task({
           writeText += (c as any).text || ""
         }
 
-        currentDraft += `${writeText}\n\n`
+        currentDraft += `${writeText} \n\n`
 
         // Real-time Save
         await supabase
@@ -453,7 +555,7 @@ export const generateBlogPost = task({
 
         // Append to Snowball
         const headingHash = "#".repeat(section.level || 2)
-        currentDraft += `${headingHash} ${section.heading}\n\n${writeText}\n\n`
+        currentDraft += `${headingHash} ${section.heading} \n\n${writeText} \n\n`
 
         // Real-time Save
         await supabase
