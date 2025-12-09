@@ -3,7 +3,7 @@
 import * as React from "react"
 import {
   Send,
-  SquareTerminal,
+  Brain,
   Coins,
   Sparkles,
   Image as ImageIcon,
@@ -112,6 +112,11 @@ export function AppSidebar({
       title: "Integrations",
       url: "/integrations",
       icon: DatabaseZap,
+    },
+    {
+      title: "Content Plan",
+      url: "/content-plan",
+      icon: Brain,
     },
 
   ], [])
