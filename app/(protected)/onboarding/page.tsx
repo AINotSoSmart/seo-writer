@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
-import { Loader2, ChevronUp, ArrowRight, Globe, Sparkles, Check, PenTool, MessageSquare, User, BookOpen, Zap, AlertCircle, Quote } from "lucide-react"
+import { Loader2, ChevronUp, ArrowRight, Globe, Sparkles, BadgeCheck, PenTool } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { saveBrandAction } from "@/actions/brand"
 import { BrandDetails } from "@/lib/schemas/brand"
@@ -13,12 +13,27 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 
+// localStorage keys for persistence
+const STORAGE_KEYS = {
+    STEP: 'onboarding_step',
+    BRAND_URL: 'onboarding_brand_url',
+    BRAND_DATA: 'onboarding_brand_data',
+    BRAND_ID: 'onboarding_brand_id',
+    VOICE_METHOD: 'onboarding_voice_method',
+    VOICE_PRESET: 'onboarding_voice_preset',
+    VOICE_MIMIC_URL: 'onboarding_voice_mimic_url',
+    VOICE_NAME: 'onboarding_voice_name',
+    VOICE_STYLE_JSON: 'onboarding_voice_style_json',
+} as const
+
 type Step = "brand" | "voice"
 
 export default function OnboardingPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const supabase = createClient()
 
+    const [isHydrated, setIsHydrated] = useState(false)
     const [step, setStep] = useState<Step>("brand")
     const [isDark, setIsDark] = useState(false)
 
@@ -48,6 +63,128 @@ export default function OnboardingPage() {
             return null
         }
     }, [styleJson])
+
+    // Clear all onboarding data from localStorage
+    const clearOnboardingStorage = useCallback(() => {
+        Object.values(STORAGE_KEYS).forEach(key => {
+            localStorage.removeItem(key)
+        })
+    }, [])
+
+    // Restore state from localStorage on mount
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+
+        // Check URL params first for step and brandId
+        const urlStep = searchParams.get('step') as Step | null
+        const urlBrandId = searchParams.get('brandId')
+
+        // Restore step
+        const savedStep = urlStep || localStorage.getItem(STORAGE_KEYS.STEP) as Step | null
+        if (savedStep === 'brand' || savedStep === 'voice') {
+            setStep(savedStep)
+        }
+
+        // Restore brand URL
+        const savedUrl = localStorage.getItem(STORAGE_KEYS.BRAND_URL)
+        if (savedUrl) setUrl(savedUrl)
+
+        // Restore brand data
+        const savedBrandData = localStorage.getItem(STORAGE_KEYS.BRAND_DATA)
+        if (savedBrandData) {
+            try {
+                setBrandData(JSON.parse(savedBrandData))
+            } catch { }
+        }
+
+        // Restore brand ID
+        const savedBrandId = urlBrandId || localStorage.getItem(STORAGE_KEYS.BRAND_ID)
+        if (savedBrandId) {
+            setBrandId(savedBrandId)
+            // If we have a brandId, we should be on voice step
+            if (!urlStep) setStep('voice')
+        }
+
+        // Restore voice settings
+        const savedMethod = localStorage.getItem(STORAGE_KEYS.VOICE_METHOD) as "preset" | "mimic" | null
+        if (savedMethod) setCreationMethod(savedMethod)
+
+        const savedPreset = localStorage.getItem(STORAGE_KEYS.VOICE_PRESET)
+        if (savedPreset) setPresetKey(savedPreset)
+
+        const savedMimicUrl = localStorage.getItem(STORAGE_KEYS.VOICE_MIMIC_URL)
+        if (savedMimicUrl) setMimicUrl(savedMimicUrl)
+
+        const savedVoiceName = localStorage.getItem(STORAGE_KEYS.VOICE_NAME)
+        if (savedVoiceName) setVoiceName(savedVoiceName)
+
+        const savedStyleJson = localStorage.getItem(STORAGE_KEYS.VOICE_STYLE_JSON)
+        if (savedStyleJson) setStyleJson(savedStyleJson)
+
+        setIsHydrated(true)
+    }, [searchParams])
+
+    // Persist step to localStorage and URL
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.STEP, step)
+
+        // Update URL with current step and brandId
+        const params = new URLSearchParams()
+        params.set('step', step)
+        if (brandId) params.set('brandId', brandId)
+
+        // Use replaceState to avoid adding to browser history for every change
+        window.history.replaceState(null, '', `?${params.toString()}`)
+    }, [step, brandId, isHydrated])
+
+    // Persist brand data to localStorage
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.BRAND_URL, url)
+    }, [url, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        if (brandData) {
+            localStorage.setItem(STORAGE_KEYS.BRAND_DATA, JSON.stringify(brandData))
+        } else {
+            localStorage.removeItem(STORAGE_KEYS.BRAND_DATA)
+        }
+    }, [brandData, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        if (brandId) {
+            localStorage.setItem(STORAGE_KEYS.BRAND_ID, brandId)
+        }
+    }, [brandId, isHydrated])
+
+    // Persist voice data to localStorage
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.VOICE_METHOD, creationMethod)
+    }, [creationMethod, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.VOICE_PRESET, presetKey)
+    }, [presetKey, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.VOICE_MIMIC_URL, mimicUrl)
+    }, [mimicUrl, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.VOICE_NAME, voiceName)
+    }, [voiceName, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.VOICE_STYLE_JSON, styleJson)
+    }, [styleJson, isHydrated])
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -158,7 +295,8 @@ export default function OnboardingPage() {
 
             if (error) throw error
 
-            // Success! Redirect to blog-writer
+            // Success! Clear localStorage and redirect to blog-writer
+            clearOnboardingStorage()
             router.push("/blog-writer")
         } catch (e: any) {
             setError(e.message || "Failed to save voice")
@@ -193,7 +331,7 @@ export default function OnboardingPage() {
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "brand" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-400' : 'bg-stone-100 text-stone-500')}`}>
                 <Globe className="w-3.5 h-3.5" />
                 <span>Brand DNA</span>
-                {step === "voice" && <Check className="w-3 h-3 text-green-500" />}
+                {step === "voice" && <BadgeCheck className="w-3 h-3 text-green-500" />}
             </div>
             <div className={`w-6 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "voice" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
@@ -494,7 +632,7 @@ export default function OnboardingPage() {
                                         Set your writing voice
                                     </h2>
                                     <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                        Choose a style for AI-generated content
+                                        Choose a style which suits your brand voice
                                     </p>
                                 </div>
 
@@ -504,15 +642,15 @@ export default function OnboardingPage() {
                                         onClick={() => setCreationMethod("preset")}
                                         className={`p-3 rounded-lg border text-left transition-all ${creationMethod === 'preset' ? (isDark ? 'border-stone-600 bg-stone-800' : 'border-stone-400 bg-stone-50') : (isDark ? 'border-stone-800 hover:bg-stone-800' : 'border-stone-200 hover:bg-stone-50')}`}
                                     >
-                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Use Preset</span>
+                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Use Voice Preset</span>
                                         <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Quick start templates</span>
                                     </button>
                                     <button
                                         onClick={() => setCreationMethod("mimic")}
                                         className={`p-3 rounded-lg border text-left transition-all ${creationMethod === 'mimic' ? (isDark ? 'border-stone-600 bg-stone-800' : 'border-stone-400 bg-stone-50') : (isDark ? 'border-stone-800 hover:bg-stone-800' : 'border-stone-200 hover:bg-stone-50')}`}
                                     >
-                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Mimic URL</span>
-                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Copy a writing style</span>
+                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Mimic your Brand</span>
+                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Extarct writing style</span>
                                     </button>
                                 </div>
 
@@ -566,121 +704,91 @@ export default function OnboardingPage() {
 
                                 {/* Voice Style Preview Card */}
                                 {parsedStyle && (
-                                    <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
-                                        <div className={`px-4 py-2.5 border-b ${isDark ? 'bg-stone-800 border-stone-700' : 'bg-stone-100 border-stone-200'}`}>
-                                            <div className="flex items-center gap-2">
-                                                <Sparkles className={`w-3.5 h-3.5 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
+                                    <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-900/50 border-stone-800' : 'bg-white border-stone-200'}`}>
+                                        <div className={`px-4 py-2.5 border-b ${isDark ? 'bg-stone-900 border-stone-800' : 'bg-stone-50 border-stone-200'}`}>
+                                            <div className="flex items-center justify-between">
                                                 <span className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>Voice Style Preview</span>
+                                                <span className={`text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Editable in settings</span>
                                             </div>
                                         </div>
                                         <div className="p-4 space-y-4 max-h-[280px] overflow-y-auto">
                                             {/* Tone */}
-                                            <div className="flex items-start gap-3">
-                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-blue-500/20' : 'bg-blue-50'}`}>
-                                                    <MessageSquare className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Tone</span>
-                                                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-stone-900'}`}>{parsedStyle.tone}</p>
-                                                </div>
+                                            <div>
+                                                <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Tone</span>
+                                                <p className={`text-sm font-medium mt-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>{parsedStyle.tone}</p>
                                             </div>
 
                                             {/* Perspective & Formality Row */}
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="flex items-start gap-2">
-                                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-purple-500/20' : 'bg-purple-50'}`}>
-                                                        <User className={`w-3 h-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                                                    </div>
-                                                    <div>
-                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Perspective</span>
-                                                        <p className={`text-xs font-medium capitalize ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                                            {parsedStyle.perspective?.replace('-', ' ') || 'Neutral'}
-                                                        </p>
-                                                    </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Perspective</span>
+                                                    <p className={`text-sm font-medium capitalize mt-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                        {parsedStyle.perspective?.replace('-', ' ') || 'Neutral'}
+                                                    </p>
                                                 </div>
-                                                <div className="flex items-start gap-2">
-                                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-green-500/20' : 'bg-green-50'}`}>
-                                                        <BookOpen className={`w-3 h-3 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
-                                                    </div>
-                                                    <div>
-                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Formality</span>
-                                                        <p className={`text-xs font-medium capitalize ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                                            {parsedStyle.formality || 'Professional'}
-                                                        </p>
-                                                    </div>
+                                                <div>
+                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Formality</span>
+                                                    <p className={`text-sm font-medium capitalize mt-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                        {parsedStyle.formality || 'Professional'}
+                                                    </p>
                                                 </div>
                                             </div>
 
                                             {/* Sentence Structure */}
                                             {parsedStyle.sentence_structure && (
-                                                <div className="flex items-start gap-3">
-                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-orange-500/20' : 'bg-orange-50'}`}>
-                                                        <Zap className={`w-3.5 h-3.5 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Sentence Style</span>
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-700'}`}>
-                                                                {parsedStyle.sentence_structure.avg_length} length
+                                                <div>
+                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Sentence Style</span>
+                                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                        <span className={`px-2 py-0.5 rounded text-[11px] font-medium capitalize ${isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700'}`}>
+                                                            {parsedStyle.sentence_structure.avg_length} length
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded text-[11px] font-medium capitalize ${isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700'}`}>
+                                                            {parsedStyle.sentence_structure.complexity}
+                                                        </span>
+                                                        {parsedStyle.sentence_structure.use_of_questions && (
+                                                            <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700'}`}>
+                                                                Uses questions
                                                             </span>
-                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-700'}`}>
-                                                                {parsedStyle.sentence_structure.complexity}
-                                                            </span>
-                                                            {parsedStyle.sentence_structure.use_of_questions && (
-                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
-                                                                    Uses questions
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
 
                                             {/* Narrative Rules */}
                                             {parsedStyle.narrative_rules && parsedStyle.narrative_rules.length > 0 && (
-                                                <div className="flex items-start gap-3">
-                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-cyan-500/20' : 'bg-cyan-50'}`}>
-                                                        <Quote className={`w-3.5 h-3.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Writing Rules</span>
-                                                        <ul className="mt-1 space-y-1">
-                                                            {parsedStyle.narrative_rules.slice(0, 4).map((rule, i) => (
-                                                                <li key={i} className={`text-xs flex items-start gap-1.5 ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
-                                                                    <Check className={`w-3 h-3 flex-shrink-0 mt-0.5 ${isDark ? 'text-green-400' : 'text-green-500'}`} />
-                                                                    <span>{rule}</span>
-                                                                </li>
-                                                            ))}
-                                                            {parsedStyle.narrative_rules.length > 4 && (
-                                                                <li className={`text-xs ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
-                                                                    +{parsedStyle.narrative_rules.length - 4} more rules
-                                                                </li>
-                                                            )}
-                                                        </ul>
-                                                    </div>
+                                                <div>
+                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Writing Rules</span>
+                                                    <ul className="mt-1.5 space-y-1">
+                                                        {parsedStyle.narrative_rules.slice(0, 4).map((rule, i) => (
+                                                            <li key={i} className={`text-xs flex items-start gap-2 ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                                <span className={`mt-1.5 w-1 h-1 rounded-full flex-shrink-0 ${isDark ? 'bg-stone-500' : 'bg-stone-400'}`} />
+                                                                <span>{rule}</span>
+                                                            </li>
+                                                        ))}
+                                                        {parsedStyle.narrative_rules.length > 4 && (
+                                                            <li className={`text-xs ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                                                +{parsedStyle.narrative_rules.length - 4} more rules
+                                                            </li>
+                                                        )}
+                                                    </ul>
                                                 </div>
                                             )}
 
                                             {/* Words to Avoid */}
                                             {parsedStyle.avoid_words && parsedStyle.avoid_words.length > 0 && (
-                                                <div className="flex items-start gap-3">
-                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-red-500/20' : 'bg-red-50'}`}>
-                                                        <AlertCircle className={`w-3.5 h-3.5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Words to Avoid</span>
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {parsedStyle.avoid_words.slice(0, 6).map((word, i) => (
-                                                                <span key={i} className={`px-2 py-0.5 rounded-full text-[10px] font-medium line-through opacity-60 ${isDark ? 'bg-red-500/10 text-red-300' : 'bg-red-50 text-red-600'}`}>
-                                                                    {word}
-                                                                </span>
-                                                            ))}
-                                                            {parsedStyle.avoid_words.length > 6 && (
-                                                                <span className={`text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
-                                                                    +{parsedStyle.avoid_words.length - 6} more
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                <div>
+                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Words to Avoid</span>
+                                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                        {parsedStyle.avoid_words.slice(0, 6).map((word, i) => (
+                                                            <span key={i} className={`px-2 py-0.5 rounded text-[11px] font-medium line-through ${isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-500'}`}>
+                                                                {word}
+                                                            </span>
+                                                        ))}
+                                                        {parsedStyle.avoid_words.length > 6 && (
+                                                            <span className={`text-[11px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                                                +{parsedStyle.avoid_words.length - 6} more
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
