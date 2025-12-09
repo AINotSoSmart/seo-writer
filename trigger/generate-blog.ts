@@ -56,7 +56,7 @@ const AUTHENTIC_WRITING_RULES = `
 11. Use certainty when you ARE certain. "This approach improves results." NOT "This approach might improve results."
 
 **NO AI-FILLER PHRASES (CRITICAL):**
-12. **BANNED STARTERS:** "Let's dive in", "Let's explore", "In today's digital age", "In this article we will", "It goes without saying", "As we navigate"
+12. **BANNED STARTERS:** "Let's dive in", "Let's be honest", "here's the truth", "Let's explore", "In today's digital age", "You know that gut-wrenching feeling", "In this article we will", "It goes without saying", "As we navigate"
 14. **BANNED PHRASES:** "cutting-edge", "leverage", "streamline", "take your X to the next level", "unparalleled", "revolutionize"
 15. **BANNED WORDS:** "delve", "unleash", "landscape", "tapestry", "game-changer", "realm", "bustling", "elevate", "harness", "robust"
 16. Instead of: "Let's explore this fascinating opportunity" → Say: "Here's what we know."
