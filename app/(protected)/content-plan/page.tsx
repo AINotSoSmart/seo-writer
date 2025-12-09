@@ -77,13 +77,58 @@ export default function ContentPlanPage() {
         }
     }
 
-    const handleWriteArticle = (item: ContentPlanItem) => {
-        const params = new URLSearchParams({
-            topic: item.title,
-            keyword: item.main_keyword,
-            articleType: item.article_type || "informational",
-        })
-        router.push(`/blog-writer?${params.toString()}`)
+    const handleWriteArticle = async (item: ContentPlanItem) => {
+        // Show loading state on the button
+        setLoading(true)
+        setError("")
+
+        try {
+            // Get user's voice ID and brand ID from settings
+            const settingsRes = await fetch("/api/settings")
+            if (!settingsRes.ok) {
+                throw new Error("Failed to fetch settings. Please set up your voice first.")
+            }
+            const settings = await settingsRes.json()
+
+            if (!settings.voiceId) {
+                router.push("/settings?tab=voice")
+                return
+            }
+
+            // Trigger article generation directly
+            const generateRes = await fetch("/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    keyword: item.main_keyword,
+                    voiceId: settings.voiceId,
+                    brandId: settings.brandId,
+                    title: item.title,
+                    articleType: item.article_type || "informational",
+                    supportingKeywords: item.supporting_keywords || [],
+                    cluster: item.cluster || "",
+                }),
+            })
+
+            if (!generateRes.ok) {
+                const data = await generateRes.json()
+                throw new Error(data.error || "Failed to start article generation")
+            }
+
+            const { articleId } = await generateRes.json()
+
+            // Update content plan item status to "writing"
+            if (plan) {
+                await handleUpdateStatus(item.id, "writing")
+            }
+
+            // Redirect to the article page
+            router.push(`/articles/${articleId}`)
+        } catch (e: any) {
+            setError(e.message || "Failed to generate article")
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleStartEdit = (item: ContentPlanItem) => {
@@ -204,8 +249,8 @@ export default function ContentPlanPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.02 }}
                 className={`rounded-xl border p-4 transition-all ${isUrgent
-                        ? (isDark ? 'bg-amber-950/20 border-amber-800' : 'bg-amber-50 border-amber-200')
-                        : (isDark ? 'bg-stone-900 border-stone-800 hover:border-stone-700' : 'bg-white border-stone-200 hover:border-stone-300')
+                    ? (isDark ? 'bg-amber-950/20 border-amber-800' : 'bg-amber-50 border-amber-200')
+                    : (isDark ? 'bg-stone-900 border-stone-800 hover:border-stone-700' : 'bg-white border-stone-200 hover:border-stone-300')
                     }`}
             >
                 <div className="flex items-start gap-4">
@@ -384,8 +429,8 @@ export default function ContentPlanPage() {
                                 key={f}
                                 onClick={() => setFilter(f)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filter === f
-                                        ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white')
-                                        : (isDark ? 'text-stone-400 hover:bg-stone-800' : 'text-stone-500 hover:bg-stone-200')
+                                    ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white')
+                                    : (isDark ? 'text-stone-400 hover:bg-stone-800' : 'text-stone-500 hover:bg-stone-200')
                                     }`}
                             >
                                 {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}

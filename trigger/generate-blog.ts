@@ -357,8 +357,26 @@ Return the polished content in ** Raw Markdown **.Do NOT use code blocks.
 
 export const generateBlogPost = task({
   id: "generate-blog-post",
-  run: async (payload: { articleId: string; keyword: string; voiceId: string; brandId?: string; title?: string; articleType?: ArticleType }) => {
-    const { articleId, keyword, voiceId, brandId, title, articleType = 'informational' } = payload
+  run: async (payload: {
+    articleId: string;
+    keyword: string;
+    voiceId: string;
+    brandId?: string;
+    title?: string;
+    articleType?: ArticleType;
+    supportingKeywords?: string[];
+    cluster?: string;
+  }) => {
+    const {
+      articleId,
+      keyword,
+      voiceId,
+      brandId,
+      title,
+      articleType = 'informational',
+      supportingKeywords = [],
+      cluster = ''
+    } = payload
     const supabase = createAdminClient()
     let phase: "research" | "outline" | "writing" | "polish" = "research"
 
@@ -394,7 +412,12 @@ export const generateBlogPost = task({
       await supabase.from("articles").update({ status: "researching" }).eq("id", articleId)
       phase = "research"
 
-      const searchResults = await tvly.search(keyword, {
+      // Build search query with supporting keywords for broader coverage
+      const searchQuery = supportingKeywords.length > 0
+        ? `${keyword} ${supportingKeywords.slice(0, 2).join(' ')}`
+        : keyword
+
+      const searchResults = await tvly.search(searchQuery, {
         search_depth: "advanced",
         include_text: true,
         max_results: 5,
@@ -403,12 +426,18 @@ export const generateBlogPost = task({
       // Using Gemini 3 Pro for Research
       const analyzeConfig = { tools: [{ googleSearch: {} }] }
       const researchPrompt = getResearchSystemPrompt(articleType)
+
+      // Include supporting keywords and cluster in research context
+      const additionalContext = supportingKeywords.length > 0 || cluster
+        ? `\n\nADDITIONAL SEO CONTEXT:\n- Main Keyword: "${keyword}"\n- Supporting Keywords: ${supportingKeywords.join(', ') || 'none'}\n- Topic Cluster: ${cluster || 'General'}\n`
+        : ''
+
       const analyzeContents = [
         {
           role: "user",
           parts: [
             {
-              text: researchPrompt + `\n\nINPUT DATA(Search Results for "${keyword}"): \n` + JSON.stringify(searchResults.results)
+              text: researchPrompt + additionalContext + `\n\nINPUT DATA(Search Results for "${keyword}"): \n` + JSON.stringify(searchResults.results)
             },
           ],
         },

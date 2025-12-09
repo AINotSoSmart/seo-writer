@@ -6,7 +6,16 @@ import { ArticleType } from "@/lib/prompts/article-types"
 
 export async function POST(req: NextRequest) {
   try {
-    const { keyword, voiceId, brandId, title, articleType = 'informational' } = await req.json()
+    const {
+      keyword,
+      voiceId,
+      brandId,
+      title,
+      articleType = 'informational',
+      supportingKeywords = [],
+      cluster = ''
+    } = await req.json()
+
     if (!keyword || !voiceId) {
       return NextResponse.json({ error: "Missing keyword or voiceId" }, { status: 400 })
     }
@@ -41,9 +50,11 @@ export async function POST(req: NextRequest) {
         articleId: article.id,
         keyword,
         voiceId,
-        brandId, // Pass brandId
-        title, // Pass selected title
-        articleType: articleType as ArticleType, // Pass article type
+        brandId,
+        title,
+        articleType: articleType as ArticleType,
+        supportingKeywords, // Pass supporting keywords for SEO
+        cluster, // Pass topic cluster
       })
       return NextResponse.json({ jobId: handle.id, articleId: article.id })
     } catch (err: unknown) {

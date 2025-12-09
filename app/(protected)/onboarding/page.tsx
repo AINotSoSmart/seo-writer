@@ -570,18 +570,21 @@ export default function OnboardingPage() {
                 return 0
             })
 
-            // Update plan in database
+            // Update existing plan in database using PUT (not POST!)
             if (planId) {
-                await fetch("/api/content-plan", {
-                    method: "POST",
+                const updateRes = await fetch("/api/content-plan", {
+                    method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                        planId,
                         planData: enhancedPlan,
-                        brandId,
-                        competitorSeeds,
                         gscEnhanced: true,
                     }),
                 })
+
+                if (!updateRes.ok) {
+                    console.error("Failed to update plan with GSC data")
+                }
             }
 
             // Clear storage and redirect to content plan

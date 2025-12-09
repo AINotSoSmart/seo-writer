@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const { planData, brandId, competitorSeeds } = await req.json()
+        const { planData, brandId, competitorSeeds, gscEnhanced } = await req.json()
 
         if (!planData || !Array.isArray(planData)) {
             return NextResponse.json({ error: "Plan data is required" }, { status: 400 })
@@ -60,7 +60,47 @@ export async function POST(req: NextRequest) {
                 brand_id: brandId || null,
                 plan_data: planData,
                 competitor_seeds: competitorSeeds || [],
+                gsc_enhanced: gscEnhanced || false,
             })
+            .select()
+            .single()
+
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+
+        return NextResponse.json(data)
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+}
+
+// PUT: Update existing content plan (for GSC enhancement)
+export async function PUT(req: NextRequest) {
+    try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+
+        const { planId, planData, gscEnhanced } = await req.json()
+
+        if (!planId) {
+            return NextResponse.json({ error: "Plan ID required" }, { status: 400 })
+        }
+
+        // Update existing plan
+        const { data, error } = await supabase
+            .from("content_plans")
+            .update({
+                plan_data: planData,
+                gsc_enhanced: gscEnhanced || false,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", planId)
+            .eq("user_id", user.id)
             .select()
             .single()
 
@@ -126,3 +166,4 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
+
