@@ -89,7 +89,7 @@ export default function BlogWriterPage() {
 
   useEffect(() => {
     if (!loadingBrands && brandCount === 0) {
-      router.replace('/settings')
+      router.replace('/onboarding')
     }
   }, [loadingBrands, brandCount, router])
 

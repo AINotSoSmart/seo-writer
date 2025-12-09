@@ -1,0 +1,730 @@
+"use client"
+
+import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import { motion, AnimatePresence } from "motion/react"
+import { Loader2, ChevronUp, ArrowRight, Globe, Sparkles, Check, PenTool, MessageSquare, User, BookOpen, Zap, AlertCircle, Quote } from "lucide-react"
+import { createClient } from "@/utils/supabase/client"
+import { saveBrandAction } from "@/actions/brand"
+import { BrandDetails } from "@/lib/schemas/brand"
+import { STYLE_PRESETS } from "@/lib/presets"
+import { StyleDNA } from "@/lib/schemas/style"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+
+type Step = "brand" | "voice"
+
+export default function OnboardingPage() {
+    const router = useRouter()
+    const supabase = createClient()
+
+    const [step, setStep] = useState<Step>("brand")
+    const [isDark, setIsDark] = useState(false)
+
+    // Brand DNA State
+    const [url, setUrl] = useState("")
+    const [analyzing, setAnalyzing] = useState(false)
+    const [brandData, setBrandData] = useState<BrandDetails | null>(null)
+    const [savingBrand, setSavingBrand] = useState(false)
+    const [brandId, setBrandId] = useState<string | null>(null)
+
+    // Voice State
+    const [creationMethod, setCreationMethod] = useState<"preset" | "mimic">("preset")
+    const [presetKey, setPresetKey] = useState("linkedin-influencer")
+    const [mimicUrl, setMimicUrl] = useState("")
+    const [isAnalyzingStyle, setIsAnalyzingStyle] = useState(false)
+    const [voiceName, setVoiceName] = useState("")
+    const [styleJson, setStyleJson] = useState(JSON.stringify(STYLE_PRESETS["linkedin-influencer"], null, 2))
+    const [savingVoice, setSavingVoice] = useState(false)
+
+    const [error, setError] = useState("")
+
+    // Parse styleJson into a usable object for preview
+    const parsedStyle = useMemo<StyleDNA | null>(() => {
+        try {
+            return JSON.parse(styleJson)
+        } catch {
+            return null
+        }
+    }, [styleJson])
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
+        }
+    }, [])
+
+    useEffect(() => {
+        if (creationMethod === "preset" && presetKey && STYLE_PRESETS[presetKey]) {
+            setStyleJson(JSON.stringify(STYLE_PRESETS[presetKey], null, 2))
+            const prettyName = presetKey.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+            setVoiceName(prettyName)
+        }
+    }, [presetKey, creationMethod])
+
+    // Brand DNA handlers
+    const handleAnalyzeBrand = async () => {
+        if (!url) return
+        setAnalyzing(true)
+        setError("")
+        try {
+            const res = await fetch("/api/analyze-brand", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Failed to analyze brand")
+            setBrandData(data)
+        } catch (e: any) {
+            setError(e.message || "An error occurred")
+        } finally {
+            setAnalyzing(false)
+        }
+    }
+
+    const handleSaveBrand = async () => {
+        if (!brandData) return
+        setSavingBrand(true)
+        setError("")
+        try {
+            const res = await saveBrandAction(url, brandData)
+            if (!res.success || !res.brandId) {
+                throw new Error(res.error || "Failed to save brand")
+            }
+            setBrandId(res.brandId)
+            setStep("voice")
+        } catch (e: any) {
+            setError(e.message || "Failed to save brand details")
+        } finally {
+            setSavingBrand(false)
+        }
+    }
+
+    // Voice handlers
+    const handleAnalyzeStyle = async () => {
+        if (!mimicUrl) return
+        setIsAnalyzingStyle(true)
+        setError("")
+        try {
+            const res = await fetch("/api/extract-style", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: mimicUrl }),
+            })
+            const json = await res.json()
+            if (!res.ok) throw new Error(json.error || "Failed to analyze style")
+            setStyleJson(JSON.stringify(json, null, 2))
+            try {
+                const domain = new URL(mimicUrl).hostname.replace("www.", "")
+                setVoiceName(`Style from ${domain}`)
+            } catch {
+                setVoiceName("My Custom Style")
+            }
+        } catch (e: any) {
+            setError(e.message || "Failed to analyze style")
+        } finally {
+            setIsAnalyzingStyle(false)
+        }
+    }
+
+    const handleSaveVoice = async () => {
+        if (!voiceName || !styleJson) {
+            setError("Please provide a voice name")
+            return
+        }
+        setSavingVoice(true)
+        setError("")
+        try {
+            let parsed
+            try {
+                parsed = JSON.parse(styleJson)
+            } catch {
+                throw new Error("Invalid JSON format")
+            }
+
+            const { data: { user }, error: userError } = await supabase.auth.getUser()
+            if (userError || !user) throw new Error("User not authenticated")
+
+            const { error } = await supabase
+                .from("brand_voices")
+                .insert({
+                    name: voiceName,
+                    style_dna: parsed,
+                    user_id: user.id,
+                    is_default: true,
+                })
+
+            if (error) throw error
+
+            // Success! Redirect to blog-writer
+            router.push("/blog-writer")
+        } catch (e: any) {
+            setError(e.message || "Failed to save voice")
+        } finally {
+            setSavingVoice(false)
+        }
+    }
+
+    // Helper to update nested brand state
+    const updateField = (path: string, value: any) => {
+        if (!brandData) return
+        const newData = { ...brandData }
+        if (path.includes('.')) {
+            const [parent, child] = path.split('.')
+            // @ts-ignore
+            newData[parent] = { ...newData[parent], [child]: value }
+        } else {
+            // @ts-ignore
+            newData[path] = value
+        }
+        setBrandData(newData)
+    }
+
+    const updateArray = (field: keyof BrandDetails, value: string) => {
+        const arr = value.split('\n').filter(line => line.trim() !== '')
+        setBrandData(prev => prev ? ({ ...prev, [field]: arr }) : null)
+    }
+
+    // Progress indicator
+    const ProgressIndicator = () => (
+        <div className="flex items-center justify-center gap-2 mb-6">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "brand" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-400' : 'bg-stone-100 text-stone-500')}`}>
+                <Globe className="w-3.5 h-3.5" />
+                <span>Brand DNA</span>
+                {step === "voice" && <Check className="w-3 h-3 text-green-500" />}
+            </div>
+            <div className={`w-6 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "voice" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
+                <PenTool className="w-3.5 h-3.5" />
+                <span>Voice Style</span>
+            </div>
+        </div>
+    )
+
+    return (
+        <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-12 font-sans">
+            <ProgressIndicator />
+
+            {/* Island Container */}
+            <motion.div
+                layout
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className={`
+          relative p-1 overflow-hidden w-full max-w-xl transition-all duration-300
+          shadow-[0_0_0_1px_rgba(0,0,0,0.08),0px_1px_2px_rgba(0,0,0,0.04)]
+          rounded-[20px]
+          ${isDark ? 'bg-stone-800' : 'bg-stone-100'}
+        `}
+            >
+                {/* Top Notch */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-6 z-20 flex justify-center pointer-events-none">
+                    <div className={`w-8 h-4 rounded-b-lg border-b border-x ${isDark ? 'bg-stone-800 border-stone-700' : 'bg-stone-100 border-stone-200/50'} flex items-center justify-center`}>
+                        <ChevronUp className={`w-3 h-3 ${isDark ? 'text-stone-500' : 'text-stone-400'}`} />
+                    </div>
+                </div>
+
+                {/* Inner Card */}
+                <div className={`
+          relative border overflow-hidden transition-all rounded-[16px]
+          ${isDark ? 'bg-stone-900 border-stone-700' : 'bg-white border-stone-200'}
+        `}>
+                    <AnimatePresence mode="wait">
+                        {step === "brand" ? (
+                            <motion.div
+                                key="brand-step"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                className="p-6"
+                            >
+                                {!brandData ? (
+                                    // URL Input Form
+                                    <div className="space-y-6">
+                                        <div className="text-center space-y-2">
+                                            <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                Let&apos;s understand your brand
+                                            </h2>
+                                            <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                Enter your website URL to extract your brand identity
+                                            </p>
+                                        </div>
+
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <Input
+                                                type="url"
+                                                placeholder="https://yourwebsite.com"
+                                                className={`flex-1 ${isDark ? 'bg-stone-950 border-stone-800' : 'bg-stone-50 border-stone-200'}`}
+                                                value={url}
+                                                onChange={(e) => setUrl(e.target.value)}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeBrand()}
+                                            />
+                                            <Button
+                                                onClick={handleAnalyzeBrand}
+                                                disabled={analyzing || !url}
+                                                className={`
+                          px-6 font-semibold
+                          bg-gradient-to-b from-stone-800 to-stone-950
+                          hover:from-stone-700 hover:to-stone-900
+                          dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
+                          shadow-sm
+                        `}
+                                            >
+                                                {analyzing ? (
+                                                    <>
+                                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                        Analyzing...
+                                                    </>
+                                                ) : (
+                                                    "Analyze"
+                                                )}
+                                            </Button>
+                                        </div>
+
+                                        <div className="text-center">
+                                            <button
+                                                className={`text-xs underline underline-offset-4 cursor-pointer ${isDark ? 'text-stone-500 hover:text-stone-300' : 'text-stone-500 hover:text-stone-900'}`}
+                                                onClick={() => setBrandData({
+                                                    product_name: "",
+                                                    product_identity: { literally: "", emotionally: "", not: "" },
+                                                    mission: "",
+                                                    audience: { primary: "", psychology: "" },
+                                                    enemy: [],
+                                                    voice_tone: [],
+                                                    uvp: [],
+                                                    core_features: [],
+                                                    pricing: [],
+                                                    how_it_works: [],
+                                                    image_style: "stock",
+                                                })}
+                                            >
+                                                Or enter details manually
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    // Brand Review Form - Complete with all 10 sections
+                                    <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>Review Brand Details</h2>
+                                                <p className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Verify extracted information</p>
+                                            </div>
+                                            <Button variant="ghost" size="sm" onClick={() => setBrandData(null)} className="text-xs">
+                                                Re-Analyze
+                                            </Button>
+                                        </div>
+
+                                        {/* 1. Product Identity */}
+                                        <div className="space-y-3">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>1. Product Identity</h3>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Product Name</label>
+                                                    <Input value={brandData.product_name} onChange={e => updateField('product_name', e.target.value)} className="text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>What is it literally?</label>
+                                                    <Input value={brandData.product_identity.literally} onChange={e => updateField('product_identity.literally', e.target.value)} className="text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>What is it emotionally?</label>
+                                                    <Input value={brandData.product_identity.emotionally} onChange={e => updateField('product_identity.emotionally', e.target.value)} className="text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>What is it NOT?</label>
+                                                    <Input value={brandData.product_identity.not} onChange={e => updateField('product_identity.not', e.target.value)} className="text-sm" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. Mission */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>2. Mission</h3>
+                                            <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>The "Why"</label>
+                                            <Textarea value={brandData.mission} onChange={e => updateField('mission', e.target.value)} className="text-sm min-h-[60px]" />
+                                        </div>
+
+                                        {/* 3. Audience */}
+                                        <div className="space-y-3">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>3. Audience</h3>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <div>
+                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Primary Audience</label>
+                                                    <Input value={brandData.audience.primary} onChange={e => updateField('audience.primary', e.target.value)} className="text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Psychology (Desires/Fears)</label>
+                                                    <Textarea value={brandData.audience.psychology} onChange={e => updateField('audience.psychology', e.target.value)} className="text-sm min-h-[60px]" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 4. Enemy */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>4. Enemy (What you fight against)</h3>
+                                            <Textarea
+                                                value={brandData.enemy.join('\n')}
+                                                onChange={e => updateArray('enemy', e.target.value)}
+                                                className="text-sm min-h-[60px]"
+                                                placeholder="One item per line"
+                                            />
+                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                        </div>
+
+                                        {/* 5. Voice & Tone */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>5. Voice & Tone</h3>
+                                            <Textarea
+                                                value={brandData.voice_tone.join('\n')}
+                                                onChange={e => updateArray('voice_tone', e.target.value)}
+                                                className="text-sm min-h-[60px]"
+                                                placeholder="One item per line"
+                                            />
+                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                        </div>
+
+                                        {/* 6. Unique Value Proposition */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>6. Unique Value Proposition</h3>
+                                            <Textarea
+                                                value={brandData.uvp.join('\n')}
+                                                onChange={e => updateArray('uvp', e.target.value)}
+                                                className="text-sm min-h-[60px]"
+                                                placeholder="One item per line"
+                                            />
+                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                        </div>
+
+                                        {/* 7. Core Features */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>7. Core Features</h3>
+                                            <Textarea
+                                                value={brandData.core_features.join('\n')}
+                                                onChange={e => updateArray('core_features', e.target.value)}
+                                                className="text-sm min-h-[60px]"
+                                                placeholder="One item per line"
+                                            />
+                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                        </div>
+
+                                        {/* 8. Pricing */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>8. Pricing</h3>
+                                            <Textarea
+                                                value={brandData.pricing?.join('\n') || ''}
+                                                onChange={e => updateArray('pricing', e.target.value)}
+                                                className="text-sm min-h-[60px]"
+                                                placeholder="e.g. Pro Plan: $29/mo"
+                                            />
+                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One line e.g. "Pro Plan: $29/mo"</p>
+                                        </div>
+
+                                        {/* 9. How it Works */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>9. How it Works</h3>
+                                            <Textarea
+                                                value={brandData.how_it_works?.join('\n') || ''}
+                                                onChange={e => updateArray('how_it_works', e.target.value)}
+                                                className="text-sm min-h-[60px]"
+                                                placeholder="One step per line"
+                                            />
+                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One step per line</p>
+                                        </div>
+
+                                        {/* 10. Featured Image Style */}
+                                        <div className="space-y-2">
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>10. Featured Image Style</h3>
+                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Style Preference</label>
+                                            <select
+                                                className={`w-full h-10 rounded-md border px-3 text-sm ${isDark ? 'bg-stone-950 border-stone-800 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
+                                                value={brandData.image_style || "stock"}
+                                                onChange={e => updateField('image_style', e.target.value)}
+                                            >
+                                                <option value="stock">Stock Photography (Professional, Realistic)</option>
+                                                <option value="illustration">Modern Illustration (Flat, Vector)</option>
+                                                <option value="indo">Indo (Vibrant, Cultural Elements)</option>
+                                                <option value="minimalist">Minimalist (Clean, Abstract)</option>
+                                                <option value="cyberpunk">Cyberpunk (Neon, Tech)</option>
+                                                <option value="watercolor">Watercolor (Artistic, Soft)</option>
+                                            </select>
+                                            <p className={`text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Select the style for AI-generated featured images.</p>
+                                        </div>
+
+                                        {/* Continue Button */}
+                                        <div className="pt-4 border-t border-stone-100 dark:border-stone-800 sticky bottom-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm py-4">
+                                            <Button
+                                                onClick={handleSaveBrand}
+                                                disabled={savingBrand}
+                                                className={`
+                          w-full h-10 font-semibold
+                          bg-gradient-to-b from-stone-800 to-stone-950
+                          hover:from-stone-700 hover:to-stone-900
+                          dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
+                        `}
+                                            >
+                                                {savingBrand ? (
+                                                    <>
+                                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                        Saving...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Continue
+                                                        <ArrowRight className="w-4 h-4 ml-2" />
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </motion.div>
+                        ) : (
+                            // Step 2: Voice Setup
+                            <motion.div
+                                key="voice-step"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="p-6 space-y-6"
+                            >
+                                <div className="text-center space-y-2">
+                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                        Set your writing voice
+                                    </h2>
+                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        Choose a style for AI-generated content
+                                    </p>
+                                </div>
+
+                                {/* Method Selector */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setCreationMethod("preset")}
+                                        className={`p-3 rounded-lg border text-left transition-all ${creationMethod === 'preset' ? (isDark ? 'border-stone-600 bg-stone-800' : 'border-stone-400 bg-stone-50') : (isDark ? 'border-stone-800 hover:bg-stone-800' : 'border-stone-200 hover:bg-stone-50')}`}
+                                    >
+                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Use Preset</span>
+                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Quick start templates</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setCreationMethod("mimic")}
+                                        className={`p-3 rounded-lg border text-left transition-all ${creationMethod === 'mimic' ? (isDark ? 'border-stone-600 bg-stone-800' : 'border-stone-400 bg-stone-50') : (isDark ? 'border-stone-800 hover:bg-stone-800' : 'border-stone-200 hover:bg-stone-50')}`}
+                                    >
+                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Mimic URL</span>
+                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Copy a writing style</span>
+                                    </button>
+                                </div>
+
+                                {creationMethod === "preset" ? (
+                                    <div className="space-y-2">
+                                        <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Choose a Preset</label>
+                                        <select
+                                            value={presetKey}
+                                            onChange={e => setPresetKey(e.target.value)}
+                                            className={`w-full h-10 rounded-md border px-3 text-sm ${isDark ? 'bg-stone-950 border-stone-800 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
+                                        >
+                                            {Object.keys(STYLE_PRESETS).map(key => (
+                                                <option key={key} value={key}>
+                                                    {key.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Enter URL to Mimic</label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                value={mimicUrl}
+                                                onChange={e => setMimicUrl(e.target.value)}
+                                                placeholder="https://example.com/blog/article"
+                                                className={`flex-1 ${isDark ? 'bg-stone-950 border-stone-800' : 'bg-stone-50 border-stone-200'}`}
+                                            />
+                                            <Button
+                                                onClick={handleAnalyzeStyle}
+                                                disabled={isAnalyzingStyle || !mimicUrl}
+                                                variant="outline"
+                                                className="px-4"
+                                            >
+                                                {isAnalyzingStyle ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analyze"}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Voice Name */}
+                                <div className="space-y-2">
+                                    <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Voice Name</label>
+                                    <Input
+                                        value={voiceName}
+                                        onChange={e => setVoiceName(e.target.value)}
+                                        placeholder="e.g. Technical SEO Expert"
+                                        className={`${isDark ? 'bg-stone-950 border-stone-800' : 'bg-stone-50 border-stone-200'}`}
+                                    />
+                                </div>
+
+                                {/* Voice Style Preview Card */}
+                                {parsedStyle && (
+                                    <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
+                                        <div className={`px-4 py-2.5 border-b ${isDark ? 'bg-stone-800 border-stone-700' : 'bg-stone-100 border-stone-200'}`}>
+                                            <div className="flex items-center gap-2">
+                                                <Sparkles className={`w-3.5 h-3.5 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
+                                                <span className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>Voice Style Preview</span>
+                                            </div>
+                                        </div>
+                                        <div className="p-4 space-y-4 max-h-[280px] overflow-y-auto">
+                                            {/* Tone */}
+                                            <div className="flex items-start gap-3">
+                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-blue-500/20' : 'bg-blue-50'}`}>
+                                                    <MessageSquare className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Tone</span>
+                                                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-stone-900'}`}>{parsedStyle.tone}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Perspective & Formality Row */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="flex items-start gap-2">
+                                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-purple-500/20' : 'bg-purple-50'}`}>
+                                                        <User className={`w-3 h-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                                                    </div>
+                                                    <div>
+                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Perspective</span>
+                                                        <p className={`text-xs font-medium capitalize ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                            {parsedStyle.perspective?.replace('-', ' ') || 'Neutral'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2">
+                                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-green-500/20' : 'bg-green-50'}`}>
+                                                        <BookOpen className={`w-3 h-3 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+                                                    </div>
+                                                    <div>
+                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Formality</span>
+                                                        <p className={`text-xs font-medium capitalize ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                            {parsedStyle.formality || 'Professional'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Sentence Structure */}
+                                            {parsedStyle.sentence_structure && (
+                                                <div className="flex items-start gap-3">
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-orange-500/20' : 'bg-orange-50'}`}>
+                                                        <Zap className={`w-3.5 h-3.5 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Sentence Style</span>
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-700'}`}>
+                                                                {parsedStyle.sentence_structure.avg_length} length
+                                                            </span>
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-700'}`}>
+                                                                {parsedStyle.sentence_structure.complexity}
+                                                            </span>
+                                                            {parsedStyle.sentence_structure.use_of_questions && (
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                                                                    Uses questions
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Narrative Rules */}
+                                            {parsedStyle.narrative_rules && parsedStyle.narrative_rules.length > 0 && (
+                                                <div className="flex items-start gap-3">
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-cyan-500/20' : 'bg-cyan-50'}`}>
+                                                        <Quote className={`w-3.5 h-3.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Writing Rules</span>
+                                                        <ul className="mt-1 space-y-1">
+                                                            {parsedStyle.narrative_rules.slice(0, 4).map((rule, i) => (
+                                                                <li key={i} className={`text-xs flex items-start gap-1.5 ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                                    <Check className={`w-3 h-3 flex-shrink-0 mt-0.5 ${isDark ? 'text-green-400' : 'text-green-500'}`} />
+                                                                    <span>{rule}</span>
+                                                                </li>
+                                                            ))}
+                                                            {parsedStyle.narrative_rules.length > 4 && (
+                                                                <li className={`text-xs ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                                                    +{parsedStyle.narrative_rules.length - 4} more rules
+                                                                </li>
+                                                            )}
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Words to Avoid */}
+                                            {parsedStyle.avoid_words && parsedStyle.avoid_words.length > 0 && (
+                                                <div className="flex items-start gap-3">
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-red-500/20' : 'bg-red-50'}`}>
+                                                        <AlertCircle className={`w-3.5 h-3.5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Words to Avoid</span>
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {parsedStyle.avoid_words.slice(0, 6).map((word, i) => (
+                                                                <span key={i} className={`px-2 py-0.5 rounded-full text-[10px] font-medium line-through opacity-60 ${isDark ? 'bg-red-500/10 text-red-300' : 'bg-red-50 text-red-600'}`}>
+                                                                    {word}
+                                                                </span>
+                                                            ))}
+                                                            {parsedStyle.avoid_words.length > 6 && (
+                                                                <span className={`text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                                                    +{parsedStyle.avoid_words.length - 6} more
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Complete Button */}
+                                <Button
+                                    onClick={handleSaveVoice}
+                                    disabled={savingVoice || !voiceName}
+                                    className={`
+                    w-full h-10 font-semibold
+                    bg-gradient-to-b from-stone-800 to-stone-950
+                    hover:from-stone-700 hover:to-stone-900
+                    dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
+                  `}
+                                >
+                                    {savingVoice ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                            Finishing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-4 h-4 mr-2" />
+                                            Complete Setup
+                                        </>
+                                    )}
+                                </Button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </motion.div>
+
+            {/* Error Display */}
+            {error && (
+                <div className="mt-6 max-w-xl w-full">
+                    <div className={`p-4 rounded-xl text-sm border ${isDark ? 'bg-red-900/20 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                        {error}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
