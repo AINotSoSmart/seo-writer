@@ -562,7 +562,7 @@ export default function OnboardingPage() {
           ${isDark ? 'bg-stone-900 border-stone-700' : 'bg-white border-stone-200'}
         `}>
                     <AnimatePresence mode="wait">
-                        {step === "brand" ? (
+                        {step === "brand" && (
                             <motion.div
                                 key="brand-step"
                                 initial={{ opacity: 0, x: -20 }}
@@ -811,8 +811,9 @@ export default function OnboardingPage() {
                                     </div>
                                 )}
                             </motion.div>
-                        ) : (
-                            // Step 2: Voice Setup
+                        )}
+
+                        {step === "voice" && (
                             <motion.div
                                 key="voice-step"
                                 initial={{ opacity: 0, x: 20 }}
