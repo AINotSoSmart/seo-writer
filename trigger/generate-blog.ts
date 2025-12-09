@@ -696,14 +696,23 @@ export const generateBlogPost = task({
           // Upload to R2
           await putR2Object(imageKey, Buffer.from(imageBuffer), "image/png")
 
-          // Construct Public URL
+          // Construct Public URL with proper priority and null checks
           const publicDomain = process.env.R2_PUBLIC_DOMAIN
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+          const nextAppUrl = process.env.NEXT_PUBLIC_APP_URL
+          const vercelUrl = process.env.VERCEL_URL
+
           if (publicDomain) {
+            // Use R2 public domain if configured (e.g., via Cloudflare custom domain)
             featured_image_url = `${publicDomain}/${imageKey}`
+          } else if (nextAppUrl) {
+            // Use the app's configured URL
+            featured_image_url = `${nextAppUrl}/api/images/${imageKey}`
+          } else if (vercelUrl) {
+            // Use Vercel's auto-generated URL
+            featured_image_url = `https://${vercelUrl}/api/images/${imageKey}`
           } else {
-            // Use the proxy API route instead of direct R2 URL
-            featured_image_url = `${appUrl}/api/images/${imageKey}`
+            // Local development fallback
+            featured_image_url = `http://localhost:3000/api/images/${imageKey}`
           }
         }
 

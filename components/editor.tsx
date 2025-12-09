@@ -38,17 +38,53 @@ export default function Editor({ data, markdown, onChange, readOnly, holderId = 
   const ejInstance = useRef<EditorJS | null>(null)
   const isReady = useRef(false)
 
+  // Helper to convert marked table token to HTML string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buildTableHtml = (tableToken: any): string => {
+    let html = '<table class="editor-table" style="width:100%; border-collapse: collapse; margin: 1rem 0;">'
+
+    // Header row
+    if (tableToken.header && tableToken.header.length > 0) {
+      html += '<thead><tr>'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tableToken.header.forEach((cell: any) => {
+        const align = cell.align ? `style="text-align: ${cell.align}; padding: 8px; border: 1px solid #ddd; background: #f5f5f5; font-weight: bold;"` : 'style="padding: 8px; border: 1px solid #ddd; background: #f5f5f5; font-weight: bold;"'
+        html += `<th ${align}>${marked.parseInline(cell.text || cell.raw || '')}</th>`
+      })
+      html += '</tr></thead>'
+    }
+
+    // Body rows
+    if (tableToken.rows && tableToken.rows.length > 0) {
+      html += '<tbody>'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tableToken.rows.forEach((row: any) => {
+        html += '<tr>'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        row.forEach((cell: any) => {
+          const align = cell.align ? `style="text-align: ${cell.align}; padding: 8px; border: 1px solid #ddd;"` : 'style="padding: 8px; border: 1px solid #ddd;"'
+          html += `<td ${align}>${marked.parseInline(cell.text || cell.raw || '')}</td>`
+        })
+        html += '</tr>'
+      })
+      html += '</tbody>'
+    }
+
+    html += '</table>'
+    return html
+  }
+
   // Advanced Markdown to EditorJS blocks converter using marked
   const parseMarkdown = (md: string) => {
     // Check if it's already JSON
     try {
-        const trimmed = md.trim()
-        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-            const parsed = JSON.parse(md)
-            if (parsed.blocks) return parsed
-        }
+      const trimmed = md.trim()
+      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        const parsed = JSON.parse(md)
+        if (parsed.blocks) return parsed
+      }
     } catch (e) {
-        // Not JSON, proceed to markdown parsing
+      // Not JSON, proceed to markdown parsing
     }
 
     const tokens = marked.lexer(md)
@@ -84,30 +120,49 @@ export default function Editor({ data, markdown, onChange, readOnly, holderId = 
           })
           break
         case 'blockquote':
-            // Extract text from tokens inside the quote
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const quoteText = token.tokens?.map((t: any) => t.text).join('<br>') || token.text
-            blocks.push({
-                type: 'quote',
-                data: {
-                    text: parseInline(quoteText),
-                    alignment: 'left'
-                }
-            })
-            break
-        case 'hr':
-            blocks.push({
-                type: 'delimiter',
-                data: {}
-            })
-            break
-        case 'space':
-            break
-        default:
-            if (token.type === 'text' || (token as any).text) {
-                // Fallback
+          // Extract text from tokens inside the quote
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const quoteText = token.tokens?.map((t: any) => t.text).join('<br>') || token.text
+          blocks.push({
+            type: 'quote',
+            data: {
+              text: parseInline(quoteText),
+              alignment: 'left'
             }
-            break
+          })
+          break
+        case 'hr':
+          blocks.push({
+            type: 'delimiter',
+            data: {}
+          })
+          break
+        case 'table':
+          // Convert markdown table to raw HTML since EditorJS doesn't have native table support
+          // We render the table as HTML inside a paragraph block
+          const tableHtml = buildTableHtml(token)
+          blocks.push({
+            type: 'paragraph',
+            data: {
+              text: tableHtml
+            }
+          })
+          break
+        case 'code':
+          blocks.push({
+            type: 'code',
+            data: {
+              code: token.text
+            }
+          })
+          break
+        case 'space':
+          break
+        default:
+          if (token.type === 'text' || (token as any).text) {
+            // Fallback
+          }
+          break
       }
     })
 
@@ -127,36 +182,36 @@ export default function Editor({ data, markdown, onChange, readOnly, holderId = 
   // Helper for list items (recursive for nested lists if we were building that structure manually)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parseListItems = (items: any[]): any[] => {
-      return items.map(item => {
-          // Use tokens to extract content, excluding the nested list to avoid duplication
-          let itemText = item.text
-          
-          if (item.tokens) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const nonListTokens = item.tokens.filter((t: any) => t.type !== 'list')
-            // Reconstruct text from non-list tokens
-            // We use .raw to preserve formatting/spacing of the content parts
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            itemText = nonListTokens.map((t: any) => t.raw).join('')
-          }
+    return items.map(item => {
+      // Use tokens to extract content, excluding the nested list to avoid duplication
+      let itemText = item.text
 
-          const content = parseInline(itemText.trim())
-          
-          // Check for nested list in the item's tokens
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const nestedList = item.tokens?.find((t: any) => t.type === 'list')
-          if (nestedList) {
-              return {
-                  content: content,
-                  items: parseListItems(nestedList.items)
-              }
-          }
-          // Always return object for NestedList
-          return {
-              content: content,
-              items: []
-          }
-      })
+      if (item.tokens) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nonListTokens = item.tokens.filter((t: any) => t.type !== 'list')
+        // Reconstruct text from non-list tokens
+        // We use .raw to preserve formatting/spacing of the content parts
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        itemText = nonListTokens.map((t: any) => t.raw).join('')
+      }
+
+      const content = parseInline(itemText.trim())
+
+      // Check for nested list in the item's tokens
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nestedList = item.tokens?.find((t: any) => t.type === 'list')
+      if (nestedList) {
+        return {
+          content: content,
+          items: parseListItems(nestedList.items)
+        }
+      }
+      // Always return object for NestedList
+      return {
+        content: content,
+        items: []
+      }
+    })
   }
 
   useEffect(() => {
@@ -221,33 +276,33 @@ export default function Editor({ data, markdown, onChange, readOnly, holderId = 
         simpleImage: SimpleImage as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         image: {
-            class: ImageTool as any,
-            config: {
-                endpoints: {
-                    // If you have a backend endpoint for file uploads, configure it here.
-                    // For now, we can use byFile/byUrl if we had an endpoint.
-                    // Since user requested simple-image with backend requirement, maybe they want ImageTool.
-                    // We will leave it unconfigured or configure a mock/Supabase upload later if requested.
-                },
-                // Implementing a simple uploader if needed, but usually requires a server endpoint.
-            }
+          class: ImageTool as any,
+          config: {
+            endpoints: {
+              // If you have a backend endpoint for file uploads, configure it here.
+              // For now, we can use byFile/byUrl if we had an endpoint.
+              // Since user requested simple-image with backend requirement, maybe they want ImageTool.
+              // We will leave it unconfigured or configure a mock/Supabase upload later if requested.
+            },
+            // Implementing a simple uploader if needed, but usually requires a server endpoint.
+          }
         },
       },
     })
 
     // Cleanup
     return () => {
-        // In React 18 Strict Mode, effects run twice. We want to destroy ONLY on unmount.
-        // However, checking if component is unmounting is tricky. 
-        // Best practice with Editor.js is to destroy if instance exists.
-        if (ejInstance.current && typeof ejInstance.current.destroy === 'function') {
-            ejInstance.current.destroy()
-            ejInstance.current = null
-            isReady.current = false
-        }
+      // In React 18 Strict Mode, effects run twice. We want to destroy ONLY on unmount.
+      // However, checking if component is unmounting is tricky. 
+      // Best practice with Editor.js is to destroy if instance exists.
+      if (ejInstance.current && typeof ejInstance.current.destroy === 'function') {
+        ejInstance.current.destroy()
+        ejInstance.current = null
+        isReady.current = false
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readOnly, holderId]) 
+  }, [readOnly, holderId])
   // Removed 'data' and 'markdown' from dependency array to prevent re-init on every keystroke/prop change. 
   // We only want to init ONCE. Updates should be handled differently if needed (e.g. editor.render(newData))
 
