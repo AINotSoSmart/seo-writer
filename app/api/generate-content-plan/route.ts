@@ -47,17 +47,18 @@ For each post provide:
 1. title: A compelling, SEO-optimized blog post title
 2. main_keyword: The primary target keyword (2-4 words)
 3. supporting_keywords: 2-3 related keywords (array)
-4. intent: One of "informational", "comparison", "tutorial", or "commercial"
+4. article_type: One of "informational", "commercial", or "howto"
+   - informational: Educational, deep dive, what/why content
+   - commercial: Product comparison, reviews, best-of listicles
+   - howto: Step-by-step tutorials, guides
 5. cluster: Topic cluster/category for organization
 
 Guidelines:
-- Mix of intent types: mostly informational (60%), some tutorials (25%), few commercial (15%)
+- Mix of types: informational (60%), howto (25%), commercial (15%)
 - Titles should be specific and actionable
 - Keywords should be realistic search terms
 - Group related posts into clusters
 - Build topical authority progressively
-- Include competitive posts that target competitor keywords
-- Create content gaps the brand should fill
 `
 
         const response = await client.models.generateContent({
@@ -79,10 +80,10 @@ Guidelines:
                                         type: "ARRAY",
                                         items: { type: "STRING" }
                                     },
-                                    intent: { type: "STRING" },
+                                    article_type: { type: "STRING" },
                                     cluster: { type: "STRING" }
                                 },
-                                required: ["title", "main_keyword", "supporting_keywords", "intent", "cluster"]
+                                required: ["title", "main_keyword", "supporting_keywords", "article_type", "cluster"]
                             }
                         }
                     },
@@ -99,16 +100,16 @@ Guidelines:
             const scheduledDate = new Date(today)
             scheduledDate.setDate(today.getDate() + index)
 
-            // Validate intent
-            const validIntents = ["informational", "comparison", "tutorial", "commercial"]
-            const intent = validIntents.includes(post.intent) ? post.intent : "informational"
+            // Validate article_type
+            const validTypes = ["informational", "commercial", "howto"]
+            const articleType = validTypes.includes(post.article_type) ? post.article_type : "informational"
 
             return {
                 id: `plan-${Date.now()}-${index}`,
                 title: post.title || `Post ${index + 1}`,
                 main_keyword: post.main_keyword || "",
                 supporting_keywords: post.supporting_keywords || [],
-                intent: intent as "informational" | "comparison" | "tutorial" | "commercial",
+                article_type: articleType as "informational" | "commercial" | "howto",
                 cluster: post.cluster || "General",
                 scheduled_date: scheduledDate.toISOString().split("T")[0],
                 status: "pending" as const,

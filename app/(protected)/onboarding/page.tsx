@@ -31,7 +31,12 @@ const STORAGE_KEYS = {
     PLAN_ID: 'onboarding_plan_id',
 } as const
 
-type Step = "brand" | "voice" | "competitors" | "plan" | "gsc-prompt" | "gsc-reassurance" | "complete"
+type Step = "brand" | "voice" | "competitors" | "plan" | "gsc-prompt" | "gsc-reassurance" | "gsc-sites" | "gsc-enhancing" | "complete"
+
+interface GSCSite {
+    siteUrl: string
+    permissionLevel: string
+}
 
 export default function OnboardingPage() {
     const router = useRouter()
@@ -72,6 +77,9 @@ export default function OnboardingPage() {
     // GSC State
     const [hasGSC, setHasGSC] = useState(false)
     const [enhancingWithGSC, setEnhancingWithGSC] = useState(false)
+    const [gscSites, setGscSites] = useState<GSCSite[]>([])
+    const [selectedSite, setSelectedSite] = useState<string>("")
+    const [loadingGscSites, setLoadingGscSites] = useState(false)
 
     const [error, setError] = useState("")
 
@@ -96,13 +104,46 @@ export default function OnboardingPage() {
         if (typeof window === 'undefined') return
 
         // Check URL params first for step and brandId
-        const urlStep = searchParams.get('step') as Step | null
+        const urlStep = searchParams.get('step') // Keep as string for gsc-success handling
         const urlBrandId = searchParams.get('brandId')
 
-        // Restore step
-        const savedStep = urlStep || localStorage.getItem(STORAGE_KEYS.STEP) as Step | null
-        if (savedStep === 'brand' || savedStep === 'voice') {
-            setStep(savedStep)
+        // Handle GSC callback success - this is critical!
+        if (urlStep === 'gsc-success') {
+            // GSC connected successfully - now show site selection
+            const savedPlanId = localStorage.getItem(STORAGE_KEYS.PLAN_ID)
+            const savedContentPlan = localStorage.getItem(STORAGE_KEYS.CONTENT_PLAN)
+
+            if (savedContentPlan) {
+                try {
+                    setContentPlan(JSON.parse(savedContentPlan))
+                } catch { }
+            }
+            if (savedPlanId) setPlanId(savedPlanId)
+
+            // Restore brand data for context
+            const savedBrandData = localStorage.getItem(STORAGE_KEYS.BRAND_DATA)
+            if (savedBrandData) {
+                try {
+                    setBrandData(JSON.parse(savedBrandData))
+                } catch { }
+            }
+
+            // Set GSC connected flag and go to site selection
+            setHasGSC(true)
+            setStep("gsc-sites")
+
+            // Fetch available GSC sites
+            fetchGscSites()
+
+            setIsHydrated(true)
+            return
+        }
+
+        // Restore step (handle all valid steps)
+        const savedStep = urlStep || localStorage.getItem(STORAGE_KEYS.STEP)
+        const validSteps: Step[] = ["brand", "voice", "competitors", "plan", "gsc-prompt", "gsc-reassurance", "gsc-sites", "gsc-enhancing", "complete"]
+        if (savedStep && validSteps.includes(savedStep as Step)) {
+            setStep(savedStep as Step)
         }
 
         // Restore brand URL
@@ -121,8 +162,8 @@ export default function OnboardingPage() {
         const savedBrandId = urlBrandId || localStorage.getItem(STORAGE_KEYS.BRAND_ID)
         if (savedBrandId) {
             setBrandId(savedBrandId)
-            // If we have a brandId, we should be on voice step
-            if (!urlStep) setStep('voice')
+            // If we have a brandId but no specific step, set to voice
+            if (!urlStep && !savedStep) setStep('voice')
         }
 
         // Restore voice settings
@@ -140,6 +181,31 @@ export default function OnboardingPage() {
 
         const savedStyleJson = localStorage.getItem(STORAGE_KEYS.VOICE_STYLE_JSON)
         if (savedStyleJson) setStyleJson(savedStyleJson)
+
+        // Restore competitor and content plan data
+        const savedCompetitors = localStorage.getItem(STORAGE_KEYS.COMPETITORS)
+        if (savedCompetitors) {
+            try {
+                setCompetitors(JSON.parse(savedCompetitors))
+            } catch { }
+        }
+
+        const savedSeeds = localStorage.getItem(STORAGE_KEYS.COMPETITOR_SEEDS)
+        if (savedSeeds) {
+            try {
+                setCompetitorSeeds(JSON.parse(savedSeeds))
+            } catch { }
+        }
+
+        const savedContentPlan = localStorage.getItem(STORAGE_KEYS.CONTENT_PLAN)
+        if (savedContentPlan) {
+            try {
+                setContentPlan(JSON.parse(savedContentPlan))
+            } catch { }
+        }
+
+        const savedPlanId = localStorage.getItem(STORAGE_KEYS.PLAN_ID)
+        if (savedPlanId) setPlanId(savedPlanId)
 
         setIsHydrated(true)
     }, [searchParams])
@@ -423,6 +489,110 @@ export default function OnboardingPage() {
     const handleSkipGSC = () => {
         clearOnboardingStorage()
         router.push("/content-plan")
+    }
+
+    // Fetch GSC sites after OAuth
+    const fetchGscSites = async () => {
+        setLoadingGscSites(true)
+        setError("")
+        try {
+            const res = await fetch("/api/gsc/sites")
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Failed to fetch sites")
+
+            setGscSites(data.sites || [])
+
+            // If only one site, auto-select it
+            if (data.sites?.length === 1) {
+                setSelectedSite(data.sites[0].siteUrl)
+            }
+        } catch (e: any) {
+            setError(e.message || "Failed to fetch GSC sites")
+        } finally {
+            setLoadingGscSites(false)
+        }
+    }
+
+    // Select site and proceed to enhancement
+    const handleSelectSiteAndEnhance = async () => {
+        if (!selectedSite) {
+            setError("Please select a site")
+            return
+        }
+
+        setStep("gsc-enhancing")
+        setEnhancingWithGSC(true)
+        setError("")
+
+        try {
+            // First, save the selected site
+            await fetch("/api/gsc/sites", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ siteUrl: selectedSite }),
+            })
+
+            // Then fetch insights from that site
+            const insightsRes = await fetch("/api/gsc/fetch-insights")
+            if (!insightsRes.ok) {
+                throw new Error("Failed to fetch GSC insights")
+            }
+            const insights = await insightsRes.json()
+
+            // Enhance the existing content plan with GSC data
+            const enhancedPlan = contentPlan.map(item => {
+                // Find matching opportunity by keyword
+                const match = insights.top_opportunities?.find((opp: any) =>
+                    item.main_keyword.toLowerCase().includes(opp.query.toLowerCase()) ||
+                    opp.query.toLowerCase().includes(item.main_keyword.toLowerCase())
+                )
+
+                if (match) {
+                    return {
+                        ...item,
+                        opportunity_score: match.opportunity_score,
+                        badge: match.badge,
+                        gsc_impressions: match.impressions,
+                        gsc_position: match.position,
+                        gsc_ctr: match.ctr,
+                    }
+                }
+                return item
+            })
+
+            // Sort by opportunity score (items with GSC data first)
+            enhancedPlan.sort((a, b) => {
+                if (a.opportunity_score && b.opportunity_score) {
+                    return b.opportunity_score - a.opportunity_score
+                }
+                if (a.opportunity_score) return -1
+                if (b.opportunity_score) return 1
+                return 0
+            })
+
+            // Update plan in database
+            if (planId) {
+                await fetch("/api/content-plan", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        planData: enhancedPlan,
+                        brandId,
+                        competitorSeeds,
+                        gscEnhanced: true,
+                    }),
+                })
+            }
+
+            // Clear storage and redirect to content plan
+            clearOnboardingStorage()
+            router.push("/content-plan")
+        } catch (e: any) {
+            setError(e.message || "Failed to enhance plan with GSC data")
+            // Even on error, allow user to skip
+        } finally {
+            setEnhancingWithGSC(false)
+        }
     }
 
     // Complete with GSC enhancement
@@ -1292,6 +1462,131 @@ export default function OnboardingPage() {
                                 >
                                     Continue without Search Console
                                 </button>
+                            </motion.div>
+                        )}
+
+                        {/* Step 6: GSC Site Selection */}
+                        {step === "gsc-sites" && (
+                            <motion.div
+                                key="gsc-sites-step"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="p-6 space-y-6"
+                            >
+                                <div className="text-center space-y-2">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <CheckCircle2 className={`w-6 h-6 text-green-500`} />
+                                    </div>
+                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                        Connected to Search Console!
+                                    </h2>
+                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        Select which site to analyze
+                                    </p>
+                                </div>
+
+                                {loadingGscSites ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <Loader2 className={`w-6 h-6 animate-spin ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                    </div>
+                                ) : gscSites.length === 0 ? (
+                                    <div className={`text-center py-8 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        <p className="text-sm">No sites found in your Search Console account.</p>
+                                        <button
+                                            onClick={handleSkipGSC}
+                                            className="mt-4 text-sm underline"
+                                        >
+                                            Continue without GSC data
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
+                                            <div className="max-h-[250px] overflow-y-auto divide-y divide-stone-200 dark:divide-stone-700">
+                                                {gscSites.map((site) => (
+                                                    <button
+                                                        key={site.siteUrl}
+                                                        onClick={() => setSelectedSite(site.siteUrl)}
+                                                        className={`w-full p-3 flex items-center gap-3 text-left transition-all ${selectedSite === site.siteUrl
+                                                            ? (isDark ? 'bg-stone-700' : 'bg-stone-200')
+                                                            : (isDark ? 'hover:bg-stone-800' : 'hover:bg-stone-100')
+                                                            }`}
+                                                    >
+                                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selectedSite === site.siteUrl
+                                                            ? 'border-green-500 bg-green-500'
+                                                            : (isDark ? 'border-stone-600' : 'border-stone-300')
+                                                            }`}>
+                                                            {selectedSite === site.siteUrl && (
+                                                                <CheckCircle2 className="w-3 h-3 text-white" />
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                                {site.siteUrl.replace('sc-domain:', '').replace('https://', '').replace('http://', '')}
+                                                            </p>
+                                                            <p className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                                {site.permissionLevel}
+                                                            </p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <Button
+                                            onClick={handleSelectSiteAndEnhance}
+                                            disabled={!selectedSite}
+                                            className={`
+                                                w-full h-10 font-semibold
+                                                bg-gradient-to-b from-stone-800 to-stone-950
+                                                hover:from-stone-700 hover:to-stone-900
+                                                dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
+                                                disabled:opacity-50
+                                            `}
+                                        >
+                                            <TrendingUp className="w-4 h-4 mr-2" />
+                                            Fetch Insights & Enhance Plan
+                                        </Button>
+
+                                        <button
+                                            onClick={handleSkipGSC}
+                                            className={`w-full text-center text-sm underline underline-offset-2 ${isDark ? 'text-stone-400 hover:text-stone-300' : 'text-stone-500 hover:text-stone-600'}`}
+                                        >
+                                            Skip and continue without GSC data
+                                        </button>
+                                    </>
+                                )}
+                            </motion.div>
+                        )}
+
+                        {/* Step 7: GSC Enhancing (Loading State) */}
+                        {step === "gsc-enhancing" && (
+                            <motion.div
+                                key="gsc-enhancing-step"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="p-6 space-y-6"
+                            >
+                                <div className="text-center space-y-6 py-8">
+                                    <div className="relative w-16 h-16 mx-auto">
+                                        <div className={`absolute inset-0 rounded-full border-4 ${isDark ? 'border-stone-700' : 'border-stone-200'}`} />
+                                        <div className={`absolute inset-0 rounded-full border-4 border-t-green-500 animate-spin`} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                            Enhancing your content plan...
+                                        </h2>
+                                        <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                            Analyzing your search data to find opportunities
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-2">
+                                        <TrendingUp className={`w-4 h-4 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Adding opportunity scores and badges</span>
+                                    </div>
+                                </div>
                             </motion.div>
                         )}
                     </AnimatePresence>

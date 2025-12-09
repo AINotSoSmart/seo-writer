@@ -6,7 +6,10 @@ export const ContentPlanItemSchema = z.object({
     title: z.string(),
     main_keyword: z.string(),
     supporting_keywords: z.array(z.string()),
-    intent: z.enum(["informational", "comparison", "tutorial", "commercial"]),
+    // article_type matches generate-blog.ts ArticleType
+    article_type: z.enum(["informational", "commercial", "howto"]).default("informational"),
+    // intent is for user display/categorization
+    intent: z.enum(["informational", "comparison", "tutorial", "commercial"]).optional(),
     cluster: z.string().optional(),
     scheduled_date: z.string(), // ISO date string
     status: z.enum(["pending", "writing", "published"]).default("pending"),
