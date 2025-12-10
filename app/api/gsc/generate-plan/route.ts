@@ -18,7 +18,7 @@ interface ProcessedQuery {
     clicks: number
     ctr: number
     position: number
-    intent: "informational" | "commercial" | "transactional"
+    intent: "informational" | "commercial" | "howto"
     opportunity_score: number
     word_count: number
     expected_ctr: number // For low CTR detection
@@ -27,7 +27,7 @@ interface ProcessedQuery {
 interface KeywordCluster {
     primary_keyword: string
     supporting_keywords: string[]
-    intent: "informational" | "commercial" | "transactional"
+    intent: "informational" | "commercial" | "howto"
     opportunity_score: number
     impressions: number
     position: number
@@ -70,26 +70,26 @@ function filterGarbageQueries(queries: GSCQueryRow[], brandName?: string): GSCQu
     })
 }
 
-// Step 2: Tag query intent (per blueprint)
-function tagIntent(query: string): "informational" | "commercial" | "transactional" {
+// Step 2: Tag query intent (only 3 core types for generate-blog.ts compatibility)
+function tagIntent(query: string): "informational" | "commercial" | "howto" {
     const q = query.toLowerCase()
 
-    // Transactional patterns (tool/software/app - user wants to DO something)
-    if (q.includes("tool") || q.includes("software") || q.includes("app") ||
-        q.includes("generator") || q.includes("maker") || q.includes("creator") ||
-        q.includes("download") || q.includes("login") || q.includes("sign up")) {
-        return "transactional"
+    // How-to patterns (tutorials, guides, step-by-step)
+    if (q.includes("how") || q.includes("tutorial") || q.includes("step") ||
+        q.includes("guide") || q.includes("setup") || q.includes("create") ||
+        q.includes("make") || q.includes("build")) {
+        return "howto"
     }
 
-    // Commercial patterns (best/top/vs/review - user is comparing)
+    // Commercial patterns (comparisons, reviews, best-of lists)
     if (q.includes("best") || q.includes("top") || q.includes("vs") ||
         q.includes("review") || q.includes("alternative") || q.includes("pricing") ||
-        q.includes("compare") || q.includes("cheap") || q.includes("free")) {
+        q.includes("compare") || q.includes("cheap") || q.includes("free") ||
+        q.includes("tool") || q.includes("software") || q.includes("app")) {
         return "commercial"
     }
 
-    // Informational patterns (how/what/why/guide/tutorial - user wants to LEARN)
-    // This is the default for queries that don't match above
+    // Default: Informational (what/why/explain)
     return "informational"
 }
 
@@ -234,8 +234,7 @@ Use this strategic breakdown:
 ### 2. For each topic, provide:
 - **primary_keyword**: The main keyword to target
 - **title**: A compelling, human-like article title (NO generic patterns like "X: Everything You Need to Know")
-- **intent**: informational, commercial, or transactional
-- **article_type**: guide, listicle, comparison, deep-dive, how-to, case-study, tool-review
+- **article_type**: MUST be one of: informational, commercial, howto
 - **supporting_keywords**: Array of related keywords to include
 - **cluster**: Topic category/cluster name
 - **opportunity_score**: Number from 0-100
@@ -256,8 +255,7 @@ Use this strategic breakdown:
   {
     "primary_keyword": "string",
     "title": "string",
-    "intent": "informational|commercial|transactional",
-    "article_type": "guide|listicle|comparison|deep-dive|how-to|case-study|tool-review",
+    "article_type": "informational|commercial|howto",
     "supporting_keywords": ["string"],
     "cluster": "string",
     "opportunity_score": number,
@@ -436,11 +434,12 @@ export async function POST(req: NextRequest) {
                 title: item.title,
                 main_keyword: item.primary_keyword,
                 supporting_keywords: item.supporting_keywords || [],
-                article_type: item.article_type === "listicle" ? "commercial" :
-                    item.article_type === "comparison" ? "commercial" :
-                        item.article_type === "how-to" ? "howto" :
-                            item.intent || "informational",
-                intent: item.intent,
+                // LLM outputs one of: informational, commercial, howto
+                // Fallback to informational if invalid
+                article_type: ["informational", "commercial", "howto"].includes(item.article_type)
+                    ? item.article_type
+                    : "informational",
+                intent: item.article_type, // Same as article_type now
                 cluster: item.cluster,
                 scheduled_date: scheduledDate.toISOString().split("T")[0],
                 status: "pending",
