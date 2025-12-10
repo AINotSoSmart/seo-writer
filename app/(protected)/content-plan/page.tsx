@@ -351,8 +351,15 @@ export default function ContentPlanPage() {
                                         <div className={`flex items-center gap-3 mt-2 text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
                                             <span>📊 {item.gsc_impressions.toLocaleString()} impressions</span>
                                             {item.gsc_position && <span>📍 Position {item.gsc_position.toFixed(1)}</span>}
-                                            {item.gsc_ctr && <span>👆 {(item.gsc_ctr * 100).toFixed(1)}% CTR</span>}
+                                            {item.gsc_ctr !== undefined && <span>👆 {item.gsc_ctr.toFixed(1)}% CTR</span>}
                                         </div>
+                                    )}
+
+                                    {/* Strategic Reason */}
+                                    {item.reason && (
+                                        <p className={`mt-2 text-[11px] italic ${isDark ? 'text-stone-500' : 'text-stone-500'}`}>
+                                            💡 {item.reason}
+                                        </p>
                                     )}
                                 </div>
 

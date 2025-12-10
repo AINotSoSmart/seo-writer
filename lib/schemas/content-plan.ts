@@ -9,7 +9,7 @@ export const ContentPlanItemSchema = z.object({
     // article_type matches generate-blog.ts ArticleType
     article_type: z.enum(["informational", "commercial", "howto"]).default("informational"),
     // intent is for user display/categorization
-    intent: z.enum(["informational", "comparison", "tutorial", "commercial"]).optional(),
+    intent: z.enum(["informational", "comparison", "tutorial", "commercial", "transactional", "howto"]).optional(),
     cluster: z.string().optional(),
     scheduled_date: z.string(), // ISO date string
     status: z.enum(["pending", "writing", "published"]).default("pending"),
@@ -20,6 +20,9 @@ export const ContentPlanItemSchema = z.object({
     gsc_clicks: z.number().optional(),
     gsc_position: z.number().optional(),
     gsc_ctr: z.number().optional(),
+    // Strategic planning fields (from LLM analysis)
+    reason: z.string().optional(), // Why this topic matters
+    impact: z.enum(["Low", "Medium", "High"]).optional(), // Expected traffic impact
 })
 
 export type ContentPlanItem = z.infer<typeof ContentPlanItemSchema>
