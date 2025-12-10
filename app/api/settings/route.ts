@@ -11,7 +11,6 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        // Get user's most recent brand details (style_dna is stored here)
         const { data: brand } = await supabase
             .from("brand_details")
             .select("id")
