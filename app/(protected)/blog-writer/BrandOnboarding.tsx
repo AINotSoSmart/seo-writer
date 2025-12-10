@@ -93,7 +93,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
 
   if (!brandData) {
     return (
-      <div className="w-full mx-auto space-y-6 p-4 sm:p-6 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 shadow-sm">
+      <div className="w-full mx-auto space-y-6 p-4 sm:p-6 bg-white dark:bg-stone-900 ">
         <Button variant="ghost" size="sm" onClick={onCancel} className="mb-2 -ml-2 text-stone-500 hover:text-stone-900 dark:hover:text-white">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </Button>
@@ -124,12 +124,12 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
               mission: "",
               audience: { primary: "", psychology: "" },
               enemy: [],
-              voice_tone: [],
               uvp: [],
               core_features: [],
               pricing: [],
               how_it_works: [],
               image_style: "stock",
+              style_dna: "",
             })}
           >
             Or enter details manually
@@ -243,16 +243,17 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
           </div>
         </div>
 
-        {/* 5. Voice & Tone */}
+        {/* 5. Writing Style DNA */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">5. Voice & Tone</h3>
+          <h3 className="font-semibold text-base border-b border-stone-100 dark:border-stone-800 pb-2 text-stone-900 dark:text-white">5. Writing Style</h3>
           <div className="relative">
             <Textarea
-              value={brandData.voice_tone.join('\n')}
-              onChange={e => updateArray('voice_tone', e.target.value)}
-              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[80px]"
+              value={brandData.style_dna || ""}
+              onChange={e => setBrandData(prev => prev ? ({ ...prev, style_dna: e.target.value }) : null)}
+              placeholder="Describe your brand's writing style. E.g.: Write in a conversational yet authoritative tone. Use 'we' when referring to the brand. Keep sentences varied. Avoid corporate jargon."
+              className="bg-stone-50 dark:bg-stone-950 border-stone-200 dark:border-stone-800 min-h-[100px]"
             />
-            <p className="text-[10px] text-stone-400 mt-1 text-right">One item per line</p>
+            <p className="text-[10px] text-stone-400 mt-1 text-right">Comprehensive writing style guide</p>
           </div>
         </div>
 

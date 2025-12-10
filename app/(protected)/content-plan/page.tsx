@@ -83,25 +83,24 @@ export default function ContentPlanPage() {
         setError("")
 
         try {
-            // Get user's voice ID and brand ID from settings
+            // Get user's brand ID from settings
             const settingsRes = await fetch("/api/settings")
             if (!settingsRes.ok) {
-                throw new Error("Failed to fetch settings. Please set up your voice first.")
+                throw new Error("Failed to fetch settings. Please set up your brand first.")
             }
             const settings = await settingsRes.json()
 
-            if (!settings.voiceId) {
-                router.push("/settings?tab=voice")
+            if (!settings.brandId) {
+                router.push("/onboarding")
                 return
             }
 
-            // Trigger article generation directly
+            // Trigger article generation with brandId only (style_dna comes from brand_details)
             const generateRes = await fetch("/api/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     keyword: item.main_keyword,
-                    voiceId: settings.voiceId,
                     brandId: settings.brandId,
                     title: item.title,
                     articleType: item.article_type || "informational",

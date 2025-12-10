@@ -36,7 +36,7 @@ BRAND CONTEXT:
 - What it is: ${brandData.product_identity.literally}
 - Target Audience: ${brandData.audience.primary}
 - Unique Value: ${brandData.uvp.join(", ")}
-- Voice/Tone: ${brandData.voice_tone.join(", ")}
+- Voice/Style: ${brandData.style_dna || "Professional and informative"}
 
 SEED KEYWORDS & TOPICS FROM COMPETITOR RESEARCH:
 ${seeds.join("\n")}

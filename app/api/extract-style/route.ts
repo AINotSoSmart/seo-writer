@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
-import { StyleDNASchema } from "@/lib/schemas/style"
-import { jsonrepair } from "jsonrepair"
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +10,7 @@ export async function POST(req: NextRequest) {
     }
 
     const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY! })
-    
+
     // Attempt to use extract if available, otherwise search
     let content = ""
     try {
@@ -23,19 +21,19 @@ export async function POST(req: NextRequest) {
         content = res.rawContent || res.content
       }
     } catch (e) {
-        console.log("Tavily extract failed or not found, falling back to search", e)
+      console.log("Tavily extract failed or not found, falling back to search", e)
     }
 
     if (!content) {
-        // Fallback to search
-        const searchResult = await tvly.search(url, {
-            include_text: true,
-            search_depth: "advanced",
-            max_results: 1
-        })
-        if (searchResult.results && searchResult.results.length > 0) {
-            content = searchResult.results[0].content
-        }
+      // Fallback to search
+      const searchResult = await tvly.search(url, {
+        include_text: true,
+        search_depth: "advanced",
+        max_results: 1
+      })
+      if (searchResult.results && searchResult.results.length > 0) {
+        content = searchResult.results[0].content
+      }
     }
 
     if (!content || content.length < 50) {
@@ -44,52 +42,43 @@ export async function POST(req: NextRequest) {
 
     const client = getGeminiClient()
     const prompt = `
-      Analyze the following text and extract its writing style into a JSON object.
+      You are an expert writing style analyst. Analyze the following text and extract its writing style into a comprehensive paragraph that can guide future content creation.
       
-      IMPORTANT: Pay special attention to the Author's Perspective (POV).
-      - Does the author use "I", "We", or third-person?
-      - How do they refer to themselves vs. their product/brand?
-      - Include these specific perspective rules in the "narrative_rules" array.
+      IMPORTANT: Your output should be a SINGLE PARAGRAPH (not JSON) that describes how to write in this style.
+      
+      Analyze and include:
+      - Perspective: Does the author use "I", "We", or third-person? How do they refer to themselves?
+      - Tone: Professional, casual, formal, playful, authoritative, friendly?
+      - Sentence style: Short and punchy? Long and detailed? Varied rhythm?
+      - Formality level: Academic, corporate, conversational?
+      - Specific patterns: Do they use questions? Bullet points? Data/statistics?
+      - Words/phrases to avoid: Any patterns they seem to avoid?
+      - Unique quirks: Any distinctive writing patterns?
       
       Text Sample:
       "${content.slice(0, 15000).replace(/"/g, '\\"')}"
 
-      Return ONLY a valid JSON object matching this schema exactly:
-      {
-        "tone": "string",
-        "sentence_structure": {
-          "avg_length": "short" | "medium" | "long" | "varied",
-          "complexity": "simple" | "academic" | "technical",
-          "use_of_questions": boolean
-        },
-        "narrative_rules": ["rule1", "rule2"]
-      }
+      Output ONLY a paragraph (200-400 words) describing the writing style. Do NOT output JSON.
+      
+      Example output format:
+      "Write in a conversational yet authoritative tone. Use first-person plural ('we', 'our') when referring to the brand, and address the reader as 'you'. Keep sentences varied—mix short punchy statements with longer explanatory ones. Ask rhetorical questions to engage readers. Avoid corporate jargon like 'synergy', 'leverage', or 'paradigm'. Be direct and specific; prefer '3x faster' over 'much faster'. Use active voice. Include specific examples and data when possible. End sections with actionable takeaways."
     `
 
     const response = await client.models.generateContent({
-      model: "gemini-2.0-flash", // Fast and capable for extraction
+      model: "gemini-2.0-flash",
       contents: [{ role: "user", parts: [{ text: prompt }] }]
     })
 
-    const text = response.text || ""
-    const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim()
-    
-    let parsed
-    try {
-      parsed = JSON.parse(cleanJson)
-    } catch (e) {
-      try {
-        parsed = JSON.parse(jsonrepair(cleanJson))
-      } catch (e2) {
-        console.error("JSON Parse Error", text)
-        throw new Error("Failed to parse Gemini response")
-      }
+    const text = (response.text || "").trim()
+
+    // Clean up any quotes around the paragraph if present
+    let styleDna = text
+    if (styleDna.startsWith('"') && styleDna.endsWith('"')) {
+      styleDna = styleDna.slice(1, -1)
     }
 
-    // Validate against schema to ensure type safety
-    const validated = StyleDNASchema.parse(parsed)
-
-    return NextResponse.json(validated)
+    // Return as a simple object with the style_dna string
+    return NextResponse.json({ style_dna: styleDna })
 
   } catch (e: any) {
     console.error("Extract Style Error:", e)

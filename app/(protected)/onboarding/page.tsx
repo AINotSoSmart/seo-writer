@@ -1,14 +1,12 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
-import { Loader2, ChevronUp, ArrowRight, Globe, Sparkles, BadgeCheck, PenTool, Users, Calendar, TrendingUp, Zap, Target, ExternalLink, Shield, CheckCircle2 } from "lucide-react"
+import { Loader2, ChevronUp, ArrowRight, Globe, BadgeCheck, Calendar, TrendingUp, ExternalLink, Shield, CheckCircle2, Users, Sparkles, Zap, Target } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { saveBrandAction } from "@/actions/brand"
 import { BrandDetails } from "@/lib/schemas/brand"
-import { STYLE_PRESETS } from "@/lib/presets"
-import { StyleDNA } from "@/lib/schemas/style"
 import { ContentPlanItem, CompetitorData } from "@/lib/schemas/content-plan"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -20,18 +18,14 @@ const STORAGE_KEYS = {
     BRAND_URL: 'onboarding_brand_url',
     BRAND_DATA: 'onboarding_brand_data',
     BRAND_ID: 'onboarding_brand_id',
-    VOICE_METHOD: 'onboarding_voice_method',
-    VOICE_PRESET: 'onboarding_voice_preset',
-    VOICE_MIMIC_URL: 'onboarding_voice_mimic_url',
-    VOICE_NAME: 'onboarding_voice_name',
-    VOICE_STYLE_JSON: 'onboarding_voice_style_json',
     COMPETITORS: 'onboarding_competitors',
     COMPETITOR_SEEDS: 'onboarding_competitor_seeds',
     CONTENT_PLAN: 'onboarding_content_plan',
     PLAN_ID: 'onboarding_plan_id',
 } as const
 
-type Step = "brand" | "voice" | "competitors" | "plan" | "gsc-prompt" | "gsc-reassurance" | "gsc-sites" | "gsc-enhancing" | "complete"
+// Voice step removed - style_dna is now part of brand extraction
+type Step = "brand" | "competitors" | "plan" | "gsc-prompt" | "gsc-reassurance" | "gsc-sites" | "gsc-enhancing" | "complete"
 
 interface GSCSite {
     siteUrl: string
@@ -54,15 +48,6 @@ export default function OnboardingPage() {
     const [savingBrand, setSavingBrand] = useState(false)
     const [brandId, setBrandId] = useState<string | null>(null)
 
-    // Voice State
-    const [creationMethod, setCreationMethod] = useState<"preset" | "mimic">("preset")
-    const [presetKey, setPresetKey] = useState("linkedin-influencer")
-    const [mimicUrl, setMimicUrl] = useState("")
-    const [isAnalyzingStyle, setIsAnalyzingStyle] = useState(false)
-    const [voiceName, setVoiceName] = useState("")
-    const [styleJson, setStyleJson] = useState(JSON.stringify(STYLE_PRESETS["linkedin-influencer"], null, 2))
-    const [savingVoice, setSavingVoice] = useState(false)
-
     // Competitor Analysis State
     const [analyzingCompetitors, setAnalyzingCompetitors] = useState(false)
     const [competitors, setCompetitors] = useState<CompetitorData[]>([])
@@ -82,15 +67,6 @@ export default function OnboardingPage() {
     const [loadingGscSites, setLoadingGscSites] = useState(false)
 
     const [error, setError] = useState("")
-
-    // Parse styleJson into a usable object for preview
-    const parsedStyle = useMemo<StyleDNA | null>(() => {
-        try {
-            return JSON.parse(styleJson)
-        } catch {
-            return null
-        }
-    }, [styleJson])
 
     // Clear all onboarding data from localStorage
     const clearOnboardingStorage = useCallback(() => {
@@ -139,9 +115,9 @@ export default function OnboardingPage() {
             return
         }
 
-        // Restore step (handle all valid steps)
+        // Restore step (handle all valid steps - voice step removed)
         const savedStep = urlStep || localStorage.getItem(STORAGE_KEYS.STEP)
-        const validSteps: Step[] = ["brand", "voice", "competitors", "plan", "gsc-prompt", "gsc-reassurance", "gsc-sites", "gsc-enhancing", "complete"]
+        const validSteps: Step[] = ["brand", "competitors", "plan", "gsc-prompt", "gsc-reassurance", "gsc-sites", "gsc-enhancing", "complete"]
         if (savedStep && validSteps.includes(savedStep as Step)) {
             setStep(savedStep as Step)
         }
@@ -162,25 +138,9 @@ export default function OnboardingPage() {
         const savedBrandId = urlBrandId || localStorage.getItem(STORAGE_KEYS.BRAND_ID)
         if (savedBrandId) {
             setBrandId(savedBrandId)
-            // If we have a brandId but no specific step, set to voice
-            if (!urlStep && !savedStep) setStep('voice')
+            // If we have a brandId but no specific step, proceed to competitors
+            if (!urlStep && !savedStep) setStep('competitors')
         }
-
-        // Restore voice settings
-        const savedMethod = localStorage.getItem(STORAGE_KEYS.VOICE_METHOD) as "preset" | "mimic" | null
-        if (savedMethod) setCreationMethod(savedMethod)
-
-        const savedPreset = localStorage.getItem(STORAGE_KEYS.VOICE_PRESET)
-        if (savedPreset) setPresetKey(savedPreset)
-
-        const savedMimicUrl = localStorage.getItem(STORAGE_KEYS.VOICE_MIMIC_URL)
-        if (savedMimicUrl) setMimicUrl(savedMimicUrl)
-
-        const savedVoiceName = localStorage.getItem(STORAGE_KEYS.VOICE_NAME)
-        if (savedVoiceName) setVoiceName(savedVoiceName)
-
-        const savedStyleJson = localStorage.getItem(STORAGE_KEYS.VOICE_STYLE_JSON)
-        if (savedStyleJson) setStyleJson(savedStyleJson)
 
         // Restore competitor and content plan data
         const savedCompetitors = localStorage.getItem(STORAGE_KEYS.COMPETITORS)
@@ -246,45 +206,11 @@ export default function OnboardingPage() {
         }
     }, [brandId, isHydrated])
 
-    // Persist voice data to localStorage
-    useEffect(() => {
-        if (!isHydrated) return
-        localStorage.setItem(STORAGE_KEYS.VOICE_METHOD, creationMethod)
-    }, [creationMethod, isHydrated])
-
-    useEffect(() => {
-        if (!isHydrated) return
-        localStorage.setItem(STORAGE_KEYS.VOICE_PRESET, presetKey)
-    }, [presetKey, isHydrated])
-
-    useEffect(() => {
-        if (!isHydrated) return
-        localStorage.setItem(STORAGE_KEYS.VOICE_MIMIC_URL, mimicUrl)
-    }, [mimicUrl, isHydrated])
-
-    useEffect(() => {
-        if (!isHydrated) return
-        localStorage.setItem(STORAGE_KEYS.VOICE_NAME, voiceName)
-    }, [voiceName, isHydrated])
-
-    useEffect(() => {
-        if (!isHydrated) return
-        localStorage.setItem(STORAGE_KEYS.VOICE_STYLE_JSON, styleJson)
-    }, [styleJson, isHydrated])
-
     useEffect(() => {
         if (typeof window !== 'undefined') {
             setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
         }
     }, [])
-
-    useEffect(() => {
-        if (creationMethod === "preset" && presetKey && STYLE_PRESETS[presetKey]) {
-            setStyleJson(JSON.stringify(STYLE_PRESETS[presetKey], null, 2))
-            const prettyName = presetKey.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase())
-            setVoiceName(prettyName)
-        }
-    }, [presetKey, creationMethod])
 
     // Brand DNA handlers
     const handleAnalyzeBrand = async () => {
@@ -312,83 +238,24 @@ export default function OnboardingPage() {
         setSavingBrand(true)
         setError("")
         try {
+            // Save brand data (style_dna is already included in brandData)
             const res = await saveBrandAction(url, brandData)
             if (!res.success || !res.brandId) {
                 throw new Error(res.error || "Failed to save brand")
             }
             setBrandId(res.brandId)
-            setStep("voice")
-        } catch (e: any) {
-            setError(e.message || "Failed to save brand details")
-        } finally {
-            setSavingBrand(false)
-        }
-    }
 
-    // Voice handlers
-    const handleAnalyzeStyle = async () => {
-        if (!mimicUrl) return
-        setIsAnalyzingStyle(true)
-        setError("")
-        try {
-            const res = await fetch("/api/extract-style", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: mimicUrl }),
-            })
-            const json = await res.json()
-            if (!res.ok) throw new Error(json.error || "Failed to analyze style")
-            setStyleJson(JSON.stringify(json, null, 2))
-            try {
-                const domain = new URL(mimicUrl).hostname.replace("www.", "")
-                setVoiceName(`Style from ${domain}`)
-            } catch {
-                setVoiceName("My Custom Style")
-            }
-        } catch (e: any) {
-            setError(e.message || "Failed to analyze style")
-        } finally {
-            setIsAnalyzingStyle(false)
-        }
-    }
+            // No longer creating separate brand_voices entry
+            // style_dna is saved as part of brand_details
 
-    const handleSaveVoice = async () => {
-        if (!voiceName || !styleJson) {
-            setError("Please provide a voice name")
-            return
-        }
-        setSavingVoice(true)
-        setError("")
-        try {
-            let parsed
-            try {
-                parsed = JSON.parse(styleJson)
-            } catch {
-                throw new Error("Invalid JSON format")
-            }
-
-            const { data: { user }, error: userError } = await supabase.auth.getUser()
-            if (userError || !user) throw new Error("User not authenticated")
-
-            const { error } = await supabase
-                .from("brand_voices")
-                .insert({
-                    name: voiceName,
-                    style_dna: parsed,
-                    user_id: user.id,
-                    is_default: true,
-                })
-
-            if (error) throw error
-
-            // Proceed to competitor analysis step (not redirecting yet)
+            // Proceed directly to competitor analysis
             setStep("competitors")
             // Auto-start competitor analysis
             handleAnalyzeCompetitors()
         } catch (e: any) {
-            setError(e.message || "Failed to save voice")
+            setError(e.message || "Failed to save brand details")
         } finally {
-            setSavingVoice(false)
+            setSavingBrand(false)
         }
     }
 
@@ -643,8 +510,8 @@ export default function OnboardingPage() {
         setBrandData(prev => prev ? ({ ...prev, [field]: arr }) : null)
     }
 
-    // Progress indicator - simplified to show 4 main phases
-    const stepOrder: Step[] = ["brand", "voice", "competitors", "plan", "gsc-prompt", "gsc-reassurance", "complete"]
+    // Progress indicator - simplified to show 3 main phases (voice step removed)
+    const stepOrder: Step[] = ["brand", "competitors", "plan", "gsc-prompt", "gsc-reassurance", "complete"]
     const currentStepIndex = stepOrder.indexOf(step)
 
     const isStepComplete = (checkStep: Step) => {
@@ -654,14 +521,13 @@ export default function OnboardingPage() {
     const isStepActive = (checkStep: Step) => {
         // Group steps into phases for display
         if (checkStep === "brand") return step === "brand"
-        if (checkStep === "voice") return step === "voice"
         if (checkStep === "competitors" || checkStep === "plan") return step === "competitors" || step === "plan"
         return step === "gsc-prompt" || step === "gsc-reassurance" || step === "complete"
     }
 
     const ProgressIndicator = () => (
         <div className="flex items-center justify-center gap-2 mb-6">
-            {/* Step 1: Brand DNA */}
+            {/* Step 1: Brand DNA (includes voice extraction) */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "brand" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("brand") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
                 <Globe className="w-3.5 h-3.5" />
                 <span>Brand</span>
@@ -669,15 +535,7 @@ export default function OnboardingPage() {
             </div>
             <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
 
-            {/* Step 2: Voice Style */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "voice" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("voice") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
-                <PenTool className="w-3.5 h-3.5" />
-                <span>Voice</span>
-                {isStepComplete("voice") && <BadgeCheck className="w-3 h-3 text-green-500" />}
-            </div>
-            <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
-
-            {/* Step 3: Content Plan */}
+            {/* Step 2: Content Plan */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "competitors" || step === "plan") ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("plan") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
                 <Calendar className="w-3.5 h-3.5" />
                 <span>Plan</span>
@@ -685,7 +543,7 @@ export default function OnboardingPage() {
             </div>
             <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
 
-            {/* Step 4: Complete/GSC */}
+            {/* Step 3: Complete/GSC */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "gsc-prompt" || step === "gsc-reassurance" || step === "complete") ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Insights</span>
@@ -737,7 +595,7 @@ export default function OnboardingPage() {
                                                 Let&apos;s understand your brand
                                             </h2>
                                             <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                                Enter your website URL to extract your brand identity
+                                                Share your website so we can understand your product and build your brand DNA & voice profile.
                                             </p>
                                         </div>
 
@@ -781,7 +639,7 @@ export default function OnboardingPage() {
                                                     mission: "",
                                                     audience: { primary: "", psychology: "" },
                                                     enemy: [],
-                                                    voice_tone: [],
+                                                    style_dna: "",
                                                     uvp: [],
                                                     core_features: [],
                                                     pricing: [],
@@ -865,14 +723,14 @@ export default function OnboardingPage() {
 
                                         {/* 5. Voice & Tone */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>5. Voice & Tone</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>5. Brand Voice & Tone</h3>
                                             <Textarea
-                                                value={brandData.voice_tone.join('\n')}
-                                                onChange={e => updateArray('voice_tone', e.target.value)}
+                                                value={brandData.style_dna}
+                                                onChange={e => updateArray('style_dna', e.target.value)}
                                                 className="text-sm min-h-[60px]"
-                                                placeholder="One item per line"
+                                                placeholder="Describe your brand's voice and tone in detail."
                                             />
-                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Comprehensive writing style guide</p>
                                         </div>
 
                                         {/* 6. Unique Value Proposition */}
@@ -972,210 +830,7 @@ export default function OnboardingPage() {
                             </motion.div>
                         )}
 
-                        {step === "voice" && (
-                            <motion.div
-                                key="voice-step"
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -20 }}
-                                className="p-6 space-y-6"
-                            >
-                                <div className="text-center space-y-2">
-                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                        Set your writing voice
-                                    </h2>
-                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                        Choose a style which suits your brand voice
-                                    </p>
-                                </div>
-
-                                {/* Method Selector */}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => setCreationMethod("preset")}
-                                        className={`p-3 rounded-lg border text-left transition-all ${creationMethod === 'preset' ? (isDark ? 'border-stone-600 bg-stone-800' : 'border-stone-400 bg-stone-50') : (isDark ? 'border-stone-800 hover:bg-stone-800' : 'border-stone-200 hover:bg-stone-50')}`}
-                                    >
-                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Use Voice Preset</span>
-                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Quick start templates</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setCreationMethod("mimic")}
-                                        className={`p-3 rounded-lg border text-left transition-all ${creationMethod === 'mimic' ? (isDark ? 'border-stone-600 bg-stone-800' : 'border-stone-400 bg-stone-50') : (isDark ? 'border-stone-800 hover:bg-stone-800' : 'border-stone-200 hover:bg-stone-50')}`}
-                                    >
-                                        <span className={`font-semibold text-sm block mb-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>Mimic your Brand</span>
-                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Extarct writing style</span>
-                                    </button>
-                                </div>
-
-                                {creationMethod === "preset" ? (
-                                    <div className="space-y-2">
-                                        <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Choose a Preset</label>
-                                        <select
-                                            value={presetKey}
-                                            onChange={e => setPresetKey(e.target.value)}
-                                            className={`w-full h-10 rounded-md border px-3 text-sm ${isDark ? 'bg-stone-950 border-stone-800 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
-                                        >
-                                            {Object.keys(STYLE_PRESETS).map(key => (
-                                                <option key={key} value={key}>
-                                                    {key.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Enter URL to Mimic</label>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                value={mimicUrl}
-                                                onChange={e => setMimicUrl(e.target.value)}
-                                                placeholder="https://example.com/blog/article"
-                                                className={`flex-1 ${isDark ? 'bg-stone-950 border-stone-800' : 'bg-stone-50 border-stone-200'}`}
-                                            />
-                                            <Button
-                                                onClick={handleAnalyzeStyle}
-                                                disabled={isAnalyzingStyle || !mimicUrl}
-                                                variant="outline"
-                                                className="px-4"
-                                            >
-                                                {isAnalyzingStyle ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analyze"}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Voice Name */}
-                                <div className="space-y-2">
-                                    <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Voice Name</label>
-                                    <Input
-                                        value={voiceName}
-                                        onChange={e => setVoiceName(e.target.value)}
-                                        placeholder="e.g. Technical SEO Expert"
-                                        className={`${isDark ? 'bg-stone-950 border-stone-800' : 'bg-stone-50 border-stone-200'}`}
-                                    />
-                                </div>
-
-                                {/* Voice Style Preview Card */}
-                                {parsedStyle && (
-                                    <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-900/50 border-stone-800' : 'bg-white border-stone-200'}`}>
-                                        <div className={`px-4 py-2.5 border-b ${isDark ? 'bg-stone-900 border-stone-800' : 'bg-stone-50 border-stone-200'}`}>
-                                            <div className="flex items-center justify-between">
-                                                <span className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>Voice Style Preview</span>
-                                                <span className={`text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Editable in settings</span>
-                                            </div>
-                                        </div>
-                                        <div className="p-4 space-y-4 max-h-[280px] overflow-y-auto">
-                                            {/* Tone */}
-                                            <div>
-                                                <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Tone</span>
-                                                <p className={`text-sm font-medium mt-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>{parsedStyle.tone}</p>
-                                            </div>
-
-                                            {/* Perspective & Formality Row */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Perspective</span>
-                                                    <p className={`text-sm font-medium capitalize mt-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                                        {parsedStyle.perspective?.replace('-', ' ') || 'Neutral'}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Formality</span>
-                                                    <p className={`text-sm font-medium capitalize mt-0.5 ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                                        {parsedStyle.formality || 'Professional'}
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            {/* Sentence Structure */}
-                                            {parsedStyle.sentence_structure && (
-                                                <div>
-                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Sentence Style</span>
-                                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                                        <span className={`px-2 py-0.5 rounded text-[11px] font-medium capitalize ${isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700'}`}>
-                                                            {parsedStyle.sentence_structure.avg_length} length
-                                                        </span>
-                                                        <span className={`px-2 py-0.5 rounded text-[11px] font-medium capitalize ${isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700'}`}>
-                                                            {parsedStyle.sentence_structure.complexity}
-                                                        </span>
-                                                        {parsedStyle.sentence_structure.use_of_questions && (
-                                                            <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700'}`}>
-                                                                Uses questions
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Narrative Rules */}
-                                            {parsedStyle.narrative_rules && parsedStyle.narrative_rules.length > 0 && (
-                                                <div>
-                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Writing Rules</span>
-                                                    <ul className="mt-1.5 space-y-1">
-                                                        {parsedStyle.narrative_rules.slice(0, 4).map((rule, i) => (
-                                                            <li key={i} className={`text-xs flex items-start gap-2 ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
-                                                                <span className={`mt-1.5 w-1 h-1 rounded-full flex-shrink-0 ${isDark ? 'bg-stone-500' : 'bg-stone-400'}`} />
-                                                                <span>{rule}</span>
-                                                            </li>
-                                                        ))}
-                                                        {parsedStyle.narrative_rules.length > 4 && (
-                                                            <li className={`text-xs ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
-                                                                +{parsedStyle.narrative_rules.length - 4} more rules
-                                                            </li>
-                                                        )}
-                                                    </ul>
-                                                </div>
-                                            )}
-
-                                            {/* Words to Avoid */}
-                                            {parsedStyle.avoid_words && parsedStyle.avoid_words.length > 0 && (
-                                                <div>
-                                                    <span className={`text-[10px] uppercase tracking-wider font-medium ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Words to Avoid</span>
-                                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                                        {parsedStyle.avoid_words.slice(0, 6).map((word, i) => (
-                                                            <span key={i} className={`px-2 py-0.5 rounded text-[11px] font-medium line-through ${isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-500'}`}>
-                                                                {word}
-                                                            </span>
-                                                        ))}
-                                                        {parsedStyle.avoid_words.length > 6 && (
-                                                            <span className={`text-[11px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
-                                                                +{parsedStyle.avoid_words.length - 6} more
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Continue Button */}
-                                <Button
-                                    onClick={handleSaveVoice}
-                                    disabled={savingVoice || !voiceName}
-                                    className={`
-                    w-full h-10 font-semibold
-                    bg-gradient-to-b from-stone-800 to-stone-950
-                    hover:from-stone-700 hover:to-stone-900
-                    dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
-                  `}
-                                >
-                                    {savingVoice ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        <>
-                                            Continue to Content Plan
-                                            <ArrowRight className="w-4 h-4 ml-2" />
-                                        </>
-                                    )}
-                                </Button>
-                            </motion.div>
-                        )}
-
-                        {/* Step 3: Competitor Analysis & Content Plan Generation */}
+                        {/* Step 2: Competitor Analysis & Content Plan Generation */}
                         {(step === "competitors" || step === "plan") && (
                             <motion.div
                                 key="plan-step"

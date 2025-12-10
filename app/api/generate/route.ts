@@ -8,7 +8,6 @@ export async function POST(req: NextRequest) {
   try {
     const {
       keyword,
-      voiceId,
       brandId,
       title,
       articleType = 'informational',
@@ -16,8 +15,8 @@ export async function POST(req: NextRequest) {
       cluster = ''
     } = await req.json()
 
-    if (!keyword || !voiceId) {
-      return NextResponse.json({ error: "Missing keyword or voiceId" }, { status: 400 })
+    if (!keyword || !brandId) {
+      return NextResponse.json({ error: "Missing keyword or brandId" }, { status: 400 })
     }
 
     const supabase = createAdminClient()
@@ -34,9 +33,9 @@ export async function POST(req: NextRequest) {
       .insert({
         user_id: userId,
         keyword,
-        voice_id: voiceId,
+        brand_id: brandId, // Now using brand_id instead of voice_id
         status: "queued",
-        article_type: articleType // Store article type in database
+        article_type: articleType
       })
       .select()
       .single()
@@ -49,12 +48,11 @@ export async function POST(req: NextRequest) {
       const handle = await tasks.trigger("generate-blog-post", {
         articleId: article.id,
         keyword,
-        voiceId,
         brandId,
         title,
         articleType: articleType as ArticleType,
-        supportingKeywords, // Pass supporting keywords for SEO
-        cluster, // Pass topic cluster
+        supportingKeywords,
+        cluster,
       })
       return NextResponse.json({ jobId: handle.id, articleId: article.id })
     } catch (err: unknown) {

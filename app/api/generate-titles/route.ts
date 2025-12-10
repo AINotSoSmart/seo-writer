@@ -40,10 +40,10 @@ OUTPUT REQUIREMENTS (Return strict JSON):
 
 export async function POST(req: NextRequest) {
     try {
-        const { keyword, voiceId, brandId, articleType = 'informational' } = await req.json()
+        const { keyword, brandId, articleType = 'informational' } = await req.json()
 
-        if (!keyword || !voiceId) {
-            return NextResponse.json({ error: "Missing keyword or voiceId" }, { status: 400 })
+        if (!keyword || !brandId) {
+            return NextResponse.json({ error: "Missing keyword or brandId" }, { status: 400 })
         }
 
         const supabaseServer = await createClient()
@@ -54,19 +54,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        // Fetch Brand Details if brandId is present
-        let brandDetails = null
-        if (brandId) {
-            const { data: brandRec } = await supabaseServer
-                .from("brand_details")
-                .select("brand_data")
-                .eq("id", brandId)
-                .single()
+        // Fetch Brand Details
+        const { data: brandRec } = await supabaseServer
+            .from("brand_details")
+            .select("brand_data")
+            .eq("id", brandId)
+            .single()
 
-            if (brandRec) {
-                brandDetails = BrandDetailsSchema.parse(brandRec.brand_data)
-            }
+        if (!brandRec) {
+            return NextResponse.json({ error: "Brand not found" }, { status: 404 })
         }
+
+        const brandDetails = BrandDetailsSchema.parse(brandRec.brand_data)
 
         const prompt = GENERATE_TITLES_PROMPT(keyword, articleType as ArticleType, brandDetails)
 

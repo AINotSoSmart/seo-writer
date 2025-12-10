@@ -230,19 +230,8 @@ INSTRUCTIONS:
 `
 }
 
-const generateWritingSystemPrompt = (styleDNA: any, factSheet: any, brandDetails: any = null) => {
-  // Get descriptive definitions based on style settings
-  const perspectiveRules = getPerspectiveDefinition(styleDNA.perspective || 'neutral')
-  const formalityRules = getFormalityDefinition(styleDNA.formality || 'professional')
-
-  // Build banned words list
-  const defaultBanned = ['delve', 'unleash', 'landscape', 'tapestry', 'game-changer', 'realm', 'bustling']
-  const customBanned = styleDNA.avoid_words || []
-  const allBannedWords = [...new Set([...defaultBanned, ...customBanned])]
-
-  // Build narrative rules string
-  const narrativeRulesStr = styleDNA.narrative_rules?.map((r: string) => `- ${r}`).join("\n") || ""
-
+const generateWritingSystemPrompt = (styleDNA: string, factSheet: any, brandDetails: any = null) => {
+  // styleDNA is now a paragraph describing the writing style
   // Build brand context section
   let brandContextSection = ""
   if (brandDetails) {
@@ -251,36 +240,27 @@ const generateWritingSystemPrompt = (styleDNA: any, factSheet: any, brandDetails
 - We are writing as: ${brandDetails.product_name}.
 - Audience: ${JSON.stringify(brandDetails.audience)}
 
-**Note:** When discussing ${brandDetails.product_name} (your product), use the perspective defined above.
+**Note:** When discussing ${brandDetails.product_name} (your product), follow the brand voice guidelines below.
 `
   }
 
   return `
 You are an expert Blog Writer. You are NOT an AI assistant. You are a subject matter expert.
 
-### 1. VOICE & PERSPECTIVE
-${perspectiveRules}
+### 1. WRITING STYLE & VOICE (FOLLOW THESE INSTRUCTIONS PRECISELY)
+${styleDNA}
 
-### 2. TONE & FORMALITY
-${formalityRules}
-
-**Custom Voice Rules for This Brand:**
-- Tone: ${styleDNA.tone}
-${narrativeRulesStr}
-
-### 3. STRATEGY & MINDSET
+### 2. STRATEGY & MINDSET
 - **Goal:** Rank #1 on Google by being more specific, helpful, and "human" than the competition.
 - **Mindset:** The user is frustrated and wants a quick answer. Do not fluff. Get to the point.
 
-### 4. GOLDEN RULES (THE LAW)
+### 3. GOLDEN RULES (THE LAW)
 ${AUTHENTIC_WRITING_RULES}
-
-**BANNED WORDS:** ${allBannedWords.join(", ")}
 ${brandContextSection}
-### 6. KNOWLEDGE BASE (Facts to use)
+### 4. KNOWLEDGE BASE (Facts to use)
 ${JSON.stringify(factSheet)}
 
-### 7. OUTPUT FORMAT
+### 5. OUTPUT FORMAT
 Return **Markdown** formatted text. 
 - Make use of proper H2, H3, and H4 headers for SEO appropriately.
 - Do NOT include the main H2 Section Heading (system adds it).
@@ -360,8 +340,7 @@ export const generateBlogPost = task({
   run: async (payload: {
     articleId: string;
     keyword: string;
-    voiceId: string;
-    brandId?: string;
+    brandId: string;
     title?: string;
     articleType?: ArticleType;
     supportingKeywords?: string[];
@@ -370,7 +349,6 @@ export const generateBlogPost = task({
     const {
       articleId,
       keyword,
-      voiceId,
       brandId,
       title,
       articleType = 'informational',
@@ -385,28 +363,20 @@ export const generateBlogPost = task({
     const genAI = getGeminiClient()
 
     try {
-      // 0. Fetch Style DNA
-      const { data: styleRec } = await supabase
-        .from("brand_voices")
-        .select("style_dna")
-        .eq("id", voiceId)
+      // 0. Brand is required - fetch brand details including style_dna
+      if (!brandId) throw new Error("Brand ID is required")
+
+      const { data: brandRec } = await supabase
+        .from("brand_details")
+        .select("brand_data")
+        .eq("id", brandId)
         .single()
-      if (!styleRec) throw new Error("Style not found")
-      const styleDNA = StyleDNASchema.parse(styleRec.style_dna)
 
-      // 0.1 Fetch Brand Details if brandId is present
-      let brandDetails = null
-      if (brandId) {
-        const { data: brandRec } = await supabase
-          .from("brand_details")
-          .select("brand_data")
-          .eq("id", brandId)
-          .single()
+      if (!brandRec) throw new Error("Brand not found")
+      const brandDetails = BrandDetailsSchema.parse(brandRec.brand_data)
 
-        if (brandRec) {
-          brandDetails = BrandDetailsSchema.parse(brandRec.brand_data)
-        }
-      }
+      // style_dna is now a paragraph from brand_details, not a separate brand_voices lookup
+      const styleDNA = brandDetails.style_dna || "Write in a professional yet conversational tone. Use active voice and be direct. Address the reader as 'you'. Keep sentences varied for natural rhythm. Avoid corporate jargon and be specific with examples and data."
 
       // --- PHASE 2: RESEARCH (The "Gap" Engine) ---
       await supabase.from("articles").update({ status: "researching" }).eq("id", articleId)
