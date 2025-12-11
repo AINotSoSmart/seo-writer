@@ -50,6 +50,11 @@ The onboarding has **3 main phases** (displayed as progress indicators at the to
 #### Step 2: Competitor Analysis
 - Automatically starts after brand is saved
 - Calls `/api/analyze-competitors` with the brand context
+- **Smart Category-Based Discovery** (works for ANY brand, even new ones):
+  1. AI extracts the product category from your brand context (e.g., "AI photo restoration tool")
+  2. Generates search queries like "best AI photo restoration tools 2024"
+  3. Searches for competitors in that category (NOT by your brand name)
+  4. This approach works even if your brand is completely new/unknown
 - Finds competitor websites and extracts their content themes
 - Extracts "seed" keywords/topics from competitor content
 - This data is stored temporarily and passed to the next step

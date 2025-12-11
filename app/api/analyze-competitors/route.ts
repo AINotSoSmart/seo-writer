@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "URL is required" }, { status: 400 })
         }
 
-        // Extract domain for search query
+        // Extract domain to exclude from results
         let domain: string
         try {
             domain = new URL(url).hostname.replace("www.", "")
@@ -35,21 +35,79 @@ export async function POST(req: NextRequest) {
         }
 
         console.log("Starting competitor analysis for:", domain)
+        console.log("Brand context:", brandContext)
 
         const tvly = tavily({ apiKey })
+        const client = getGeminiClient()
 
-        // Search for competitors
-        const searchQuery = `${domain} competitors similar websites alternatives`
-        const searchResponse = await tvly.search(searchQuery, {
-            searchDepth: "advanced",
-            includeRawContent: "markdown",
-            maxResults: 5,
+        // STEP 1: Use AI to extract the product category/niche from brandContext
+        // This is the key fix - instead of searching for "brand competitors",
+        // we search for "best [category] tools" which works for ANY brand
+        const categoryPrompt = `
+Given this brand description, extract the product category/niche for finding competitors.
+
+Brand Context: ${brandContext || "A software business"}
+
+Return a JSON object with:
+1. category: The product category (e.g., "photo restoration software", "AI writing assistant", "project management tool", "email marketing platform")
+2. searchQueries: Array of 3 search queries to find competitors in this space. Use phrases like:
+   - "best [category] tools 2025"
+   - "top [category] software alternatives"
+   - "[category] comparison reviews"
+
+Be specific about the category. Don't be generic like "SaaS" - use the actual product type.
+`
+
+        const categoryResponse = await client.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: [{ role: "user", parts: [{ text: categoryPrompt }] }],
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "OBJECT",
+                    properties: {
+                        category: { type: "STRING" },
+                        searchQueries: {
+                            type: "ARRAY",
+                            items: { type: "STRING" }
+                        }
+                    },
+                    required: ["category", "searchQueries"]
+                }
+            }
         })
 
-        // Filter out own domain and limit to top 3
-        const competitorResults = (searchResponse.results || [])
-            .filter((r: any) => !r.url?.includes(domain))
-            .slice(0, 3)
+        const categoryData = JSON.parse(categoryResponse.text || "{}")
+        const searchQueries = categoryData.searchQueries || [`best ${categoryData.category || "software"} tools 2024`]
+
+        console.log("Generated search queries:", searchQueries)
+
+        // STEP 2: Search using category-based queries (not brand name)
+        // This finds actual competitors even for completely new/unknown brands
+        let allResults: any[] = []
+
+        for (const query of searchQueries.slice(0, 1)) { // Use top 2 queries
+            try {
+                const searchResponse = await tvly.search(query, {
+                    searchDepth: "advanced",
+                    includeRawContent: "markdown",
+                    maxResults: 5,
+                })
+                allResults.push(...(searchResponse.results || []))
+            } catch (e) {
+                console.error("Search failed for query:", query, e)
+            }
+        }
+
+        // STEP 3: Dedupe and filter out own domain
+        const seenUrls = new Set<string>()
+        const competitorResults = allResults
+            .filter((r: any) => {
+                if (!r.url || r.url.includes(domain) || seenUrls.has(r.url)) return false
+                seenUrls.add(r.url)
+                return true
+            })
+            .slice(0, 5) // Top 5 unique competitor pages
 
         if (competitorResults.length === 0) {
             return NextResponse.json({
@@ -58,8 +116,7 @@ export async function POST(req: NextRequest) {
             })
         }
 
-        // Extract keywords from competitor content using Gemini
-        const client = getGeminiClient()
+        // STEP 4: Extract keywords from competitor content using Gemini
 
         const combinedContent = competitorResults.map((r: any) => `
 ---
