@@ -4,7 +4,7 @@ import Image from "next/image"
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
-import { Loader2, ChevronUp, ArrowRight, Globe, BadgeCheck, Calendar, TrendingUp, ExternalLink, Shield, CheckCircle2, Users, Sparkles, Zap, Target } from "lucide-react"
+import { Loader2, ChevronUp, ArrowRight, Globe, BadgeCheck, Calendar, TrendingUp, ExternalLink, Shield, CheckCircle2, Users, Sparkles, Zap, Target, Lock, Ban, Trash2 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { saveBrandAction } from "@/actions/brand"
 import { BrandDetails } from "@/lib/schemas/brand"
@@ -925,14 +925,14 @@ export default function OnboardingPage() {
                             </motion.div>
                         )}
 
-                        {/* Step 4: GSC Upgrade Prompt */}
+                        {/* Step 4: GSC Upgrade Prompt - Combined Value + Transparency */}
                         {step === "gsc-prompt" && (
                             <motion.div
                                 key="gsc-prompt-step"
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="p-4 space-y-6"
+                                className="p-4 space-y-5"
                             >
                                 <div className="text-center space-y-2">
                                     <div className="flex items-center justify-center gap-2">
@@ -942,131 +942,61 @@ export default function OnboardingPage() {
                                         Your content plan is ready!
                                     </h2>
                                     <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                        Want to make it even better?
+                                        Connect GSC to tailor it using your real search footprint
                                     </p>
                                 </div>
 
-                                {/* GSC Upgrade Card */}
+                                {/* Value Unlocks + Transparency Card */}
                                 <div className={`rounded-xl border p-4 space-y-4 ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
-                                    <div className="flex items-start gap-3">
-                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`}>
-                                            <Image src="/brands/search-console.svg" alt="Search Console" width={20} height={20} className="w-6 h-6" />
-                                        </div>
-                                        <div>
-                                            <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                                Connect Google Search Console
-                                            </h3>
-                                            <p className={`text-xs mt-0.5 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                                Personalize your plan with real search data
-                                            </p>
-                                        </div>
+                                    {/* What you unlock */}
+                                    <div className="space-y-2.5">
+                                        <p className={`text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                            We&apos;ll use your data for:
+                                        </p>
+                                        <ul className="space-y-2">
+                                            {[
+                                                { icon: Zap, text: "A map of what Google already wants to rank you for." },
+                                                { icon: Target, text: "The exact keywords where you're inches from page 1." },
+                                                { icon: TrendingUp, text: "The hidden topics your brand is quietly building authority on." },
+                                            ].map((item, i) => (
+                                                <li key={i} className="flex items-start gap-2.5">
+                                                    <item.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                                    <span className={`text-sm ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                        {item.text}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
                                     </div>
 
-                                    <ul className="space-y-2">
-                                        {[
-                                            { icon: Zap, text: "High-impact topics with proven impressions" },
-                                            { icon: Target, text: "Quick-win keywords on page 2" },
-                                            { icon: TrendingUp, text: "Low CTR opportunities to fix" },
-                                        ].map((item, i) => (
-                                            <li key={i} className="flex items-center gap-2">
-                                                <item.icon className={`w-3.5 h-3.5 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
-                                                <span className={`text-xs ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
-                                                    {item.text}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    {/* Divider */}
+                                    <div className={`border-t ${isDark ? 'border-stone-700' : 'border-stone-200'}`} />
 
-                                    <Button
-                                        onClick={() => setStep("gsc-reassurance")}
-                                        className={`
-                                            w-full h-10 font-semibold
-                                            bg-gradient-to-b from-stone-800 to-stone-950
-                                            hover:from-stone-700 hover:to-stone-900
-                                            dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
-                                        `}
-                                    >
-                                        <TrendingUp className="w-4 h-4 mr-2" />
-                                        Connect Search Console
-                                    </Button>
-                                </div>
-
-                                {/* Skip Option */}
-                                <button
-                                    onClick={handleSkipGSC}
-                                    className={`w-full text-center text-sm underline underline-offset-2 ${isDark ? 'text-stone-400 hover:text-stone-300' : 'text-stone-500 hover:text-stone-600'}`}
-                                >
-                                    Continue without Search Console
-                                </button>
-                            </motion.div>
-                        )}
-
-                        {/* Step 5: GSC Reassurance Screen */}
-                        {step === "gsc-reassurance" && (
-                            <motion.div
-                                key="gsc-reassurance-step"
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -20 }}
-                                className="p-4 space-y-6"
-                            >
-                                <div className="text-center space-y-2">
-                                    <div className="flex items-center justify-center gap-2">
-                                        <Shield className={`w-6 h-6 ${isDark ? 'text-stone-300' : 'text-stone-600'}`} />
+                                    {/* Transparency Section */}
+                                    <div className="space-y-2.5">
+                                        <p className={`text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                            Read-only. Zero changes. Zero storage.
+                                        </p>
+                                        <ul className="space-y-2">
+                                            {[
+                                                { icon: Lock, text: "We don't touch your account." },
+                                                { icon: Ban, text: "We don't modify anything." },
+                                                { icon: Trash2, text: "We don't store your raw GSC data." },
+                                            ].map((item, i) => (
+                                                <li key={i} className="flex items-center gap-2.5">
+                                                    <item.icon className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                                    <span className={`text-sm ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                        {item.text}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        <p className={`text-xs ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                            We use it only to shape your content plan — then discard it on the way.
+                                        </p>
                                     </div>
-                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                        We only read your search data
-                                    </h2>
-                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                        Read-only access, nothing more
-                                    </p>
                                 </div>
 
-                                {/* What We Access */}
-                                <div className={`rounded-xl border p-4 space-y-3 ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
-                                    <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                        What we access:
-                                    </h3>
-                                    <ul className="space-y-2">
-                                        {[
-                                            "Keywords you already rank for",
-                                            "Pages near the top of Google",
-                                            "Topics with growth potential",
-                                        ].map((item, i) => (
-                                            <li key={i} className="flex items-center gap-2">
-                                                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                                                <span className={`text-xs ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
-                                                    {item}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-
-                                {/* What We Don't Do */}
-                                <div className={`rounded-xl border p-4 space-y-3 ${isDark ? 'bg-stone-800/30 border-stone-700' : 'bg-white border-stone-200'}`}>
-                                    <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                        We never:
-                                    </h3>
-                                    <ul className="space-y-2">
-                                        {[
-                                            "Modify anything in your account",
-                                            "Access your analytics or emails",
-                                            "Store raw GSC data",
-                                        ].map((item, i) => (
-                                            <li key={i} className="flex items-center gap-2">
-                                                <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isDark ? 'border-stone-600' : 'border-stone-300'}`}>
-                                                    <span className={`w-1.5 h-0.5 ${isDark ? 'bg-stone-500' : 'bg-stone-400'}`} />
-                                                </span>
-                                                <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                                    {item}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-
-                                {/* Connect Button */}
                                 <Button
                                     onClick={handleConnectGSC}
                                     className={`
@@ -1076,14 +1006,14 @@ export default function OnboardingPage() {
                                         dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
                                     `}
                                 >
-                                    <ExternalLink className="w-4 h-4 mr-2" />
-                                    Connect Securely with Google
+                                    <Image src="/brands/search-console.svg" alt="" width={16} height={16} className="w-4 h-4 mr-2" />
+                                    Connect Search Console
                                 </Button>
 
                                 {/* Skip Option */}
                                 <button
                                     onClick={handleSkipGSC}
-                                    className={`w-full text-center text-sm underline underline-offset-2 ${isDark ? 'text-stone-400 hover:text-stone-300' : 'text-stone-500 hover:text-stone-600'}`}
+                                    className={`w-full text-center text-xs underline underline-offset-2 ${isDark ? 'text-stone-500 hover:text-stone-400' : 'text-stone-400 hover:text-stone-500'}`}
                                 >
                                     Continue without Search Console
                                 </button>
