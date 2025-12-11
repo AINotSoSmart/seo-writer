@@ -7,7 +7,7 @@ import { BrandDetails } from "@/lib/schemas/brand"
 export async function saveBrandAction(url: string, brandData: BrandDetails) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { success: false, error: "Not authenticated" }
   }
@@ -17,9 +17,9 @@ export async function saveBrandAction(url: string, brandData: BrandDetails) {
   const currentCount = await getBrandCount(user.id)
 
   if (currentCount >= limit) {
-    return { 
-      success: false, 
-      error: `Plan limit reached. You have ${currentCount} brands, but your plan allows ${limit}. Please upgrade.` 
+    return {
+      success: false,
+      error: `Plan limit reached. You have ${currentCount} brands, but your plan allows ${limit}. Please upgrade.`
     }
   }
 
@@ -44,7 +44,7 @@ export async function saveBrandAction(url: string, brandData: BrandDetails) {
 export async function updateBrandAction(brandId: string, brandData: BrandDetails) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { success: false, error: "Not authenticated" }
   }
@@ -67,7 +67,7 @@ export async function updateBrandAction(brandId: string, brandData: BrandDetails
 export async function getUserBrands() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return []
 
   const { data } = await supabase
@@ -82,7 +82,7 @@ export async function getUserBrands() {
 export async function getUserBrandStatus() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return { brands: [], limit: 0, count: 0 }
 
   const [limit, brands] = await Promise.all([
@@ -100,7 +100,7 @@ export async function getUserBrandStatus() {
 export async function deleteBrandAction(brandId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { success: false, error: "Not authenticated" }
   }

@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
@@ -261,7 +262,8 @@ export default function OnboardingPage() {
 
     // Competitor Analysis handler
     const handleAnalyzeCompetitors = async () => {
-        if (!url || !brandData) return
+        // URL is optional - we use brandContext for category-based competitor search
+        if (!brandData) return
         setAnalyzingCompetitors(true)
         setError("")
         try {
@@ -269,7 +271,7 @@ export default function OnboardingPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    url,
+                    url: url || `https://${brandData.product_name.toLowerCase().replace(/\s+/g, '')}.com`, // Fallback URL for exclusion
                     brandContext: `${brandData.product_name} - ${brandData.product_identity.literally}. Target: ${brandData.audience.primary}`,
                 }),
             })
@@ -552,7 +554,7 @@ export default function OnboardingPage() {
     )
 
     return (
-        <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-12 font-sans">
+        <div className="min-h-[80vh] flex flex-col items-center justify-center py-12 font-sans">
             <ProgressIndicator />
 
             {/* Island Container */}
@@ -628,27 +630,6 @@ export default function OnboardingPage() {
                                                     "Analyze"
                                                 )}
                                             </Button>
-                                        </div>
-
-                                        <div className="text-center">
-                                            <button
-                                                className={`text-xs underline underline-offset-4 cursor-pointer ${isDark ? 'text-stone-500 hover:text-stone-300' : 'text-stone-500 hover:text-stone-900'}`}
-                                                onClick={() => setBrandData({
-                                                    product_name: "",
-                                                    product_identity: { literally: "", emotionally: "", not: "" },
-                                                    mission: "",
-                                                    audience: { primary: "", psychology: "" },
-                                                    enemy: [],
-                                                    style_dna: "",
-                                                    uvp: [],
-                                                    core_features: [],
-                                                    pricing: [],
-                                                    how_it_works: [],
-                                                    image_style: "stock",
-                                                })}
-                                            >
-                                                Or enter details manually
-                                            </button>
                                         </div>
                                     </div>
                                 ) : (
@@ -837,7 +818,7 @@ export default function OnboardingPage() {
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="p-6 space-y-6"
+                                className="p-4 space-y-6"
                             >
                                 {(analyzingCompetitors || generatingPlan) ? (
                                     // Loading State
@@ -951,7 +932,7 @@ export default function OnboardingPage() {
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="p-6 space-y-6"
+                                className="p-4 space-y-6"
                             >
                                 <div className="text-center space-y-2">
                                     <div className="flex items-center justify-center gap-2">
@@ -969,7 +950,7 @@ export default function OnboardingPage() {
                                 <div className={`rounded-xl border p-4 space-y-4 ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
                                     <div className="flex items-start gap-3">
                                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`}>
-                                            <TrendingUp className={`w-5 h-5 ${isDark ? 'text-stone-300' : 'text-stone-600'}`} />
+                                            <Image src="/brands/search-console.svg" alt="Search Console" width={20} height={20} className="w-6 h-6" />
                                         </div>
                                         <div>
                                             <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-stone-900'}`}>
@@ -1027,7 +1008,7 @@ export default function OnboardingPage() {
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="p-6 space-y-6"
+                                className="p-4 space-y-6"
                             >
                                 <div className="text-center space-y-2">
                                     <div className="flex items-center justify-center gap-2">
@@ -1116,7 +1097,7 @@ export default function OnboardingPage() {
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="p-6 space-y-6"
+                                className="p-4 space-y-6"
                             >
                                 <div className="text-center space-y-2">
                                     <div className="flex items-center justify-center gap-2">
@@ -1211,7 +1192,7 @@ export default function OnboardingPage() {
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="p-6 space-y-6"
+                                className="p-4 space-y-6"
                             >
                                 <div className="text-center space-y-6 py-8">
                                     <div className="relative w-16 h-16 mx-auto">
