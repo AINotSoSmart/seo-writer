@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
+import Link from "next/link"
 import {
     Calendar,
     Sparkles,
@@ -18,30 +19,60 @@ import {
     Save,
     FileText,
     BookOpen,
-    Code
+    Code,
+    Layout,
+    MoreHorizontal,
+    ArrowRight,
+    BarChart3,
+    MousePointerClick,
+    Search,
+    Info,
+    Lightbulb,
+    Gauge,
+    Tag
 } from "lucide-react"
 import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { Button } from "@/components/ui/button"
 import { GlobalCard } from "@/components/ui/global-card"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
-// Badge colors and icons
-const BADGE_CONFIG = {
-    high_impact: { label: "🔥 High Impact", icon: Sparkles, className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-    quick_win: { label: "⚡ Quick Win", icon: Zap, className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-    low_ctr: { label: "📈 Low CTR", icon: TrendingUp, className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    new_opportunity: { label: "🧭 New", icon: Target, className: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
+// --- Minimal Design System Configuration ---
+
+// Clean, monochrome-focused badge styles with minimal color usage
+const BADGE_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
+    high_impact: {
+        label: "High Impact",
+        icon: Sparkles,
+        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+    },
+    quick_win: {
+        label: "Quick Win",
+        icon: Zap,
+        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+    },
+    low_ctr: {
+        label: "Low CTR",
+        icon: MousePointerClick,
+        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+    },
+    new_opportunity: {
+        label: "New Opportunity",
+        icon: Target,
+        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+    },
 }
 
-const ARTICLE_TYPE_CONFIG = {
-    informational: { label: "Informational", icon: FileText, className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    commercial: { label: "Commercial", icon: TrendingUp, className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
-    howto: { label: "How-To", icon: BookOpen, className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+const ARTICLE_TYPE_CONFIG: Record<string, { label: string; icon: any }> = {
+    informational: { label: "Informational", icon: FileText },
+    commercial: { label: "Commercial", icon: BarChart3 },
+    howto: { label: "How-To", icon: BookOpen },
 }
 
-const STATUS_CONFIG = {
-    pending: { label: "Pending", icon: Clock, className: "text-stone-400" },
-    writing: { label: "Writing", icon: PenTool, className: "text-blue-500" },
-    published: { label: "Published", icon: CheckCircle2, className: "text-green-500" },
+const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
+    pending: { label: "Scheduled", icon: Calendar, className: "text-stone-500" },
+    writing: { label: "Writing", icon: PenTool, className: "text-stone-900 dark:text-white" },
+    published: { label: "Published", icon: CheckCircle2, className: "text-stone-900 dark:text-white" },
 }
 
 export default function ContentPlanPage() {
@@ -79,16 +110,12 @@ export default function ContentPlanPage() {
     }
 
     const handleWriteArticle = async (item: ContentPlanItem) => {
-        // Show loading state on the button
         setLoading(true)
         setError("")
 
         try {
-            // Get user's brand ID from settings
             const settingsRes = await fetch("/api/settings")
-            if (!settingsRes.ok) {
-                throw new Error("Failed to fetch settings. Please set up your brand first.")
-            }
+            if (!settingsRes.ok) throw new Error("Failed to fetch settings.")
             const settings = await settingsRes.json()
 
             if (!settings.brandId) {
@@ -96,7 +123,6 @@ export default function ContentPlanPage() {
                 return
             }
 
-            // Trigger article generation with brandId only (style_dna comes from brand_details)
             const generateRes = await fetch("/api/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -117,12 +143,10 @@ export default function ContentPlanPage() {
 
             const { articleId } = await generateRes.json()
 
-            // Update content plan item status to "writing"
             if (plan) {
                 await handleUpdateStatus(item.id, "writing")
             }
 
-            // Redirect to the article page
             router.push(`/articles/${articleId}`)
         } catch (e: any) {
             setError(e.message || "Failed to generate article")
@@ -204,7 +228,6 @@ export default function ContentPlanPage() {
         return item.status === filter
     }) || []
 
-    // Separate high-priority items (with GSC badges)
     const urgentItems = filteredPlan.filter(item => item.badge && ["high_impact", "quick_win"].includes(item.badge)).slice(0, 5)
     const regularItems = filteredPlan.filter(item => !urgentItems.includes(item))
 
@@ -224,11 +247,11 @@ export default function ContentPlanPage() {
     if (!plan) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4">
-                <Calendar className={`w-12 h-12 ${isDark ? 'text-stone-600' : 'text-stone-300'}`} />
-                <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                <Calendar className="w-12 h-12 text-stone-300 dark:text-stone-700" />
+                <h1 className="text-xl font-bold text-stone-900 dark:text-white">
                     No content plan yet
                 </h1>
-                <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                <p className="text-sm text-stone-500">
                     Complete the onboarding to generate your 30-day content plan
                 </p>
                 <Button onClick={() => router.push("/onboarding")}>
@@ -238,161 +261,281 @@ export default function ContentPlanPage() {
         )
     }
 
-    const renderPlanItem = (item: ContentPlanItem, index: number, isUrgent: boolean = false) => {
+    const PlanCard = ({ item, isUrgent = false }: { item: ContentPlanItem, isUrgent?: boolean }) => {
         const isEditing = editingId === item.id
         const typeConfig = ARTICLE_TYPE_CONFIG[item.article_type || "informational"]
+        const BadgeIcon = item.badge ? BADGE_CONFIG[item.badge]?.icon : null
 
         return (
             <motion.div
-                key={item.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.02 }}
-                className={`rounded-xl border p-3 md:p-4 transition-all ${isUrgent
-                    ? (isDark ? 'bg-amber-950/20 border-amber-800' : 'bg-amber-50 border-amber-200')
-                    : (isDark ? 'bg-stone-900 border-stone-800 hover:border-stone-700' : 'bg-white border-stone-200 hover:border-stone-300')
-                    }`}
+                className={cn(
+                    "group relative p-5 rounded-xl border transition-all duration-200 flex flex-col h-full bg-white dark:bg-stone-900",
+                    isUrgent
+                        ? "border-stone-300 shadow-sm dark:border-stone-700"
+                        : "border-stone-200 hover:border-stone-300 hover:shadow-sm dark:border-stone-800 dark:hover:border-stone-700"
+                )}
             >
+                {/* --- Edit Mode --- */}
                 {isEditing ? (
-                    /* Edit Mode */
                     <div className="space-y-3">
-                        <input
-                            type="text"
-                            value={editForm.title || ""}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                            className={`w-full px-3 py-2 rounded-lg border text-sm font-semibold ${isDark ? 'bg-stone-800 border-stone-700 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
-                            placeholder="Title"
-                        />
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                            <label className="text-[10px] text-stone-400 font-medium uppercase mb-1 block">Title</label>
                             <input
                                 type="text"
-                                value={editForm.main_keyword || ""}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, main_keyword: e.target.value }))}
-                                className={`px-3 py-1.5 rounded-lg border text-xs ${isDark ? 'bg-stone-800 border-stone-700 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
-                                placeholder="Main keyword"
+                                value={editForm.title || ""}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                                className="w-full px-3 py-2 text-sm font-medium bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-stone-900/10 dark:text-white dark:border-stone-700"
+                                placeholder="Article Title"
+                                autoFocus
                             />
-                            <select
-                                value={editForm.article_type || "informational"}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, article_type: e.target.value as any }))}
-                                className={`px-3 py-1.5 rounded-lg border text-xs ${isDark ? 'bg-stone-800 border-stone-700 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
-                            >
-                                <option value="informational">Informational</option>
-                                <option value="commercial">Commercial</option>
-                                <option value="howto">How-To</option>
-                            </select>
                         </div>
-                        <input
-                            type="text"
-                            value={(editForm.supporting_keywords || []).join(", ")}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, supporting_keywords: e.target.value.split(",").map(s => s.trim()).filter(Boolean) }))}
-                            className={`w-full px-3 py-1.5 rounded-lg border text-xs ${isDark ? 'bg-stone-800 border-stone-700 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
-                            placeholder="Supporting keywords (comma separated)"
-                        />
-                        <div className="flex gap-2">
-                            <Button size="sm" onClick={handleSaveEdit} className="h-7 px-3 text-xs">
-                                <Save className="w-3 h-3 mr-1" /> Save
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[10px] text-stone-400 font-medium uppercase mb-1 block">Target Keyword</label>
+                                <input
+                                    type="text"
+                                    value={editForm.main_keyword || ""}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, main_keyword: e.target.value }))}
+                                    className="w-full px-3 py-2 text-xs bg-transparent border rounded-md dark:text-white dark:border-stone-700"
+                                    placeholder="Target Keyword"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-stone-400 font-medium uppercase mb-1 block">Article Type</label>
+                                <select
+                                    value={editForm.article_type || "informational"}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, article_type: e.target.value as any }))}
+                                    className="w-full px-3 py-2 text-xs bg-transparent border rounded-md dark:text-white dark:border-stone-700"
+                                >
+                                    <option value="informational">Informational</option>
+                                    <option value="commercial">Commercial</option>
+                                    <option value="howto">How-To</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-stone-400 font-medium uppercase mb-1 block">Supporting Keywords</label>
+                            <textarea
+                                value={(editForm.supporting_keywords || []).join(", ")}
+                                onChange={(e) => setEditForm(prev => ({
+                                    ...prev,
+                                    supporting_keywords: e.target.value.split(",").map(k => k.trim()).filter(k => k.length > 0)
+                                }))}
+                                className="w-full px-3 py-2 text-xs bg-transparent border rounded-md dark:text-white dark:border-stone-700 resize-none"
+                                placeholder="keyword 1, keyword 2, keyword 3"
+                                rows={2}
+                            />
+                            <p className="text-[10px] text-stone-400 mt-1">Separate keywords with commas</p>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="h-8 text-xs">
+                                Cancel
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="h-7 px-3 text-xs">
-                                <X className="w-3 h-3 mr-1" /> Cancel
+                            <Button size="sm" onClick={handleSaveEdit} className="h-8 text-xs bg-stone-900 text-white hover:bg-stone-800 dark:bg-white dark:text-black">
+                                Save Changes
                             </Button>
                         </div>
                     </div>
                 ) : (
-                    /* View Mode - Mobile-first layout */
-                    <div className="space-y-3">
-                        {/* Top Row: Date + Title */}
-                        <div className="flex items-start gap-3">
-                            {/* Date Badge - smaller on mobile */}
-                            <div className={`flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg flex flex-col items-center justify-center ${isDark ? 'bg-stone-800' : 'bg-stone-100'}`}>
-                                <span className={`text-[10px] md:text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                    {new Date(item.scheduled_date).toLocaleDateString('en-US', { month: 'short' })}
-                                </span>
-                                <span className={`text-base md:text-lg font-bold leading-none ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                    {new Date(item.scheduled_date).getDate()}
-                                </span>
-                            </div>
-
-                            {/* Title + Badges */}
-                            <div className="flex-1 min-w-0">
-                                <h3 className={`font-semibold text-sm md:text-base leading-snug line-clamp-2 ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                    {item.title}
-                                </h3>
-                                {/* Tags Row */}
-                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                    {item.badge && BADGE_CONFIG[item.badge] && (
-                                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] md:text-[10px] font-medium ${BADGE_CONFIG[item.badge].className}`}>
-                                            {BADGE_CONFIG[item.badge].label}
-                                        </span>
-                                    )}
-                                    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] md:text-[10px] font-medium ${typeConfig.className}`}>
-                                        <typeConfig.icon className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                                        {typeConfig.label}
+                    /* --- View Mode --- */
+                    <div className="flex flex-col h-full gap-3">
+                        {/* Header: Badges, Score & Edit */}
+                        <div className="flex items-start justify-between">
+                            <div className="flex flex-wrap items-center gap-2">
+                                {item.badge && BADGE_CONFIG[item.badge] && (
+                                    <span className={cn(
+                                        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold border",
+                                        BADGE_CONFIG[item.badge].className
+                                    )}>
+                                        <BadgeIcon className="w-3 h-3" />
+                                        {BADGE_CONFIG[item.badge].label}
                                     </span>
-                                </div>
+                                )}
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium text-stone-500 border border-stone-100 bg-stone-50 dark:text-stone-400 dark:border-stone-800 dark:bg-stone-900/50">
+                                    <typeConfig.icon className="w-3 h-3" />
+                                    {typeConfig.label}
+                                </span>
+                                {/* Opportunity Score with Tooltip */}
+                                {item.opportunity_score !== undefined && item.opportunity_score > 0 && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-stone-700 bg-stone-100 border border-stone-200 cursor-help dark:text-stone-300 dark:bg-stone-800 dark:border-stone-700">
+                                                <Gauge className="w-3 h-3" />
+                                                {item.opportunity_score}
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[220px]">
+                                            <p className="font-semibold">Opportunity Score</p>
+                                            <p className="text-[11px] opacity-90">Calculated from impressions, position, CTR gap, and keyword specificity. Higher = more valuable topic.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
+                                {/* Impact Badge with Tooltip */}
+                                {item.impact && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className={cn(
+                                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium cursor-help border",
+                                                item.impact === "High" && "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-800",
+                                                item.impact === "Medium" && "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/20 dark:border-amber-800",
+                                                item.impact === "Low" && "text-stone-500 bg-stone-50 border-stone-200 dark:text-stone-400 dark:bg-stone-800 dark:border-stone-700"
+                                            )}>
+                                                <TrendingUp className="w-3 h-3" />
+                                                {item.impact}
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[200px]">
+                                            <p className="font-semibold">Expected Traffic Impact</p>
+                                            <p className="text-[11px] opacity-90">
+                                                {item.impact === "High" && "This topic can drive significant organic traffic."}
+                                                {item.impact === "Medium" && "This topic has moderate traffic potential."}
+                                                {item.impact === "Low" && "Smaller traffic potential, but good for authority."}
+                                            </p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                             </div>
+
+                            <button
+                                onClick={() => handleStartEdit(item)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-stone-100 rounded-md text-stone-400 hover:text-stone-600 dark:hover:bg-stone-800"
+                            >
+                                <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                         </div>
 
-                        {/* Keywords Row */}
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isDark ? 'bg-stone-700 text-stone-200' : 'bg-stone-200 text-stone-700'}`}>
-                                🎯 {item.main_keyword}
-                            </span>
-                            {/* Supporting keywords - hidden on mobile */}
-                            {item.supporting_keywords?.slice(0, 2).map((kw, i) => (
-                                <span key={i} className={`hidden md:inline-block px-2 py-0.5 rounded text-[10px] ${isDark ? 'bg-stone-800 text-stone-400' : 'bg-stone-100 text-stone-500'}`}>
-                                    {kw}
-                                </span>
-                            ))}
-                            {item.cluster && (
-                                <span className={`hidden md:inline text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
-                                    📁 {item.cluster}
-                                </span>
-                            )}
-                        </div>
+                        {/* Title */}
+                        <h3 className="font-semibold text-stone-900 text-[15px] leading-snug dark:text-stone-100 group-hover:text-stone-700 dark:group-hover:text-stone-300 transition-colors line-clamp-2">
+                            {item.title}
+                        </h3>
 
-                        {/* GSC Data - collapsible on mobile */}
-                        {item.gsc_impressions && (
-                            <div className={`flex flex-wrap items-center gap-2 md:gap-3 text-[9px] md:text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
-                                <span>📊 {item.gsc_impressions.toLocaleString()}</span>
-                                {item.gsc_position && <span>📍 #{item.gsc_position.toFixed(0)}</span>}
-                                {item.gsc_ctr !== undefined && <span className="hidden md:inline">👆 {item.gsc_ctr.toFixed(1)}%</span>}
-                            </div>
-                        )}
-
-                        {/* Strategic Reason - hidden on mobile */}
+                        {/* AI Strategic Reason */}
                         {item.reason && (
-                            <p className={`hidden md:block text-[11px] italic ${isDark ? 'text-stone-500' : 'text-stone-500'}`}>
-                                💡 {item.reason}
+                            <p className="text-[11px] text-stone-500 leading-relaxed italic dark:text-stone-400">
+                                <Lightbulb className="w-3 h-3 inline mr-1 opacity-70" />
+                                {item.reason}
                             </p>
                         )}
 
-                        {/* Actions - stacked on mobile */}
-                        <div className="flex flex-col md:flex-row gap-2 pt-2 border-t border-stone-200 dark:border-stone-800">
-                            <Button
-                                onClick={() => handleWriteArticle(item)}
-                                size="sm"
-                                className={`w-full md:w-auto h-9 md:h-8 px-4 text-xs font-semibold ${isDark ? 'bg-stone-800 hover:bg-stone-700 text-white' : 'bg-stone-900 hover:bg-stone-800 text-white'}`}
-                            >
-                                <PenTool className="w-3.5 h-3.5 mr-1.5" />
-                                Write Article
-                            </Button>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => handleStartEdit(item)}
-                                    className={`p-2 rounded-lg ${isDark ? 'hover:bg-stone-800 text-stone-400' : 'hover:bg-stone-100 text-stone-500'}`}
-                                >
-                                    <Edit2 className="w-4 h-4" />
-                                </button>
-                                <select
-                                    value={item.status}
-                                    onChange={(e) => handleUpdateStatus(item.id, e.target.value as any)}
-                                    className={`flex-1 md:flex-none text-xs px-3 py-2 rounded-lg border ${isDark ? 'bg-stone-800 border-stone-700 text-stone-300' : 'bg-stone-50 border-stone-200 text-stone-600'}`}
-                                >
-                                    <option value="pending">⏳ Pending</option>
-                                    <option value="writing">✍️ Writing</option>
-                                    <option value="published">✅ Published</option>
-                                </select>
+                        {/* GSC Metrics Grid */}
+                        <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-xs">
+                            {/* Main Keyword with Tooltip */}
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2 text-stone-500 truncate cursor-help col-span-2">
+                                        <Search className="w-3 h-3 flex-shrink-0" />
+                                        <span className="truncate font-medium">{item.main_keyword}</span>
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="max-w-[250px]">
+                                    <p className="font-semibold">Target Keyword</p>
+                                    <p className="text-[11px] opacity-90">The primary keyword this article will target for SEO rankings.</p>
+                                </TooltipContent>
+                            </Tooltip>
+
+                            {/* GSC Impressions */}
+                            {item.gsc_impressions && item.gsc_impressions > 0 ? (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-2 text-stone-500 cursor-help">
+                                            <TrendingUp className="w-3 h-3 flex-shrink-0" />
+                                            <span>{item.gsc_impressions.toLocaleString()} <span className="text-[10px] opacity-70">imps</span></span>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[200px] text-center">
+                                        <p className="font-semibold">Monthly Impressions</p>
+                                        <p className="text-[11px] opacity-90">How many times your site appeared in search results for this keyword.</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            ) : null}
+
+                            {/* CTR */}
+                            {item.gsc_ctr !== undefined && item.gsc_ctr > 0 ? (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex gap-2 text-stone-500 cursor-help">
+                                            <MousePointerClick className="w-3 h-3 flex-shrink-0" />
+                                            <span>{item.gsc_ctr.toFixed(1)}% <span className="text-[10px] opacity-70">CTR</span></span>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[200px]">
+                                        <p className="font-semibold">Click-Through Rate</p>
+                                        <p className="text-[11px] opacity-90">Percentage of impressions that resulted in clicks. Low CTR = opportunity to target the keyword.</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            ) : null}
+
+                            {/* Position */}
+                            {item.gsc_position && item.gsc_position > 0 ? (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex gap-2 text-stone-500 cursor-help">
+                                            <Target className="w-3 h-3 flex-shrink-0" />
+                                            <span>Pos {item.gsc_position.toFixed(1)}</span>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[220px] ">
+                                        <p className="font-semibold">Average Position</p>
+                                        <p className="text-[11px] opacity-90">Your current ranking in Google. Position 1-10 = Page 1, 11-20 = Page 2, etc.</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            ) : null}
+                        </div>
+
+                        {/* Supporting Keywords */}
+                        {item.supporting_keywords && item.supporting_keywords.length > 0 && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-1.5 text-[10px] text-stone-400 cursor-help">
+                                        <Tag className="w-3 h-3 flex-shrink-0" />
+                                        <span className="truncate">
+                                            +{item.supporting_keywords.length} related keywords
+                                        </span>
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="max-w-[280px]">
+                                    <p className="font-semibold mb-1">Supporting Keywords</p>
+                                    <p className="text-[11px] opacity-90 leading-relaxed">
+                                        {item.supporting_keywords.slice(0, 5).join(", ")}
+                                        {item.supporting_keywords.length > 5 && ` +${item.supporting_keywords.length - 5} more`}
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        )}
+
+                        {/* Footer: Date & Action */}
+                        <div className="mt-auto pt-3 flex items-end justify-between border-t border-stone-100 dark:border-stone-800">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] text-stone-400 font-medium">SCHEDULED</span>
+                                <span className="text-xs font-medium text-stone-700 dark:text-stone-300">
+                                    {new Date(item.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
                             </div>
+
+                            {item.status === 'writing' ? (
+                                <Link
+                                    href="/articles"
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-stone-900 bg-stone-100 px-3 py-1.5 rounded-lg hover:bg-stone-200 transition-colors dark:bg-stone-800 dark:text-white"
+                                >
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    Writing...
+                                </Link>
+                            ) : item.status === 'published' ? (
+                                <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-900 bg-stone-100 px-3 py-1.5 rounded-lg border border-stone-200 dark:bg-stone-800 dark:text-white dark:border-stone-700">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Published
+                                </span>
+                            ) : (
+                                <Button
+                                    onClick={() => handleWriteArticle(item)}
+                                    size="sm"
+                                    className="h-8 text-xs font-semibold bg-stone-900 text-white hover:bg-stone-800 shadow-sm rounded-lg dark:bg-white dark:text-black dark:hover:bg-stone-200"
+                                >
+                                    Write Article
+                                </Button>
+                            )}
                         </div>
                     </div>
                 )}
@@ -401,92 +544,172 @@ export default function ContentPlanPage() {
     }
 
     return (
-        <div className="w-full min-h-screen font-sans py-4 md:py-6">
-            <div className="mx-auto">
-                <GlobalCard className="w-full shadow-sm rounded-xl">
-                    {/* Integrated Header */}
-                    <div className={`flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-4 border-b ${isDark ? 'border-stone-800 bg-stone-900/40' : 'border-stone-200/50 bg-stone-50/40'} backdrop-blur-sm rounded-t-xl`}>
-                        <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-stone-800' : 'bg-stone-200'}`}>
-                                <Calendar className={`w-5 h-5 ${isDark ? 'text-stone-300' : 'text-stone-600'}`} />
-                            </div>
-                            <div>
-                                <h1 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
-                                    Content Plan
-                                </h1>
-                                <p className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                    {plan.plan_data.length} posts {plan.gsc_enhanced && "• ✨ GSC Enhanced"}
-                                </p>
-                            </div>
+        <div className="w-full min-h-screen font-sans">
+            <GlobalCard className="w-full shadow-sm rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-black">
+                {/* --- Integrated Header --- */}
+                {/* --- Integrated Header --- */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 py-4 border-b border-stone-200/50 dark:border-stone-800 bg-stone-50/40 dark:bg-stone-900/40 backdrop-blur-sm rounded-t-xl sticky top-0 z-10 backdrop-filter min-h-[72px]">
+                    <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-lg font-bold text-stone-900 dark:text-white tracking-tight flex items-center gap-2 flex-wrap">
+                                {plan?.gsc_enhanced ? (
+                                    <>
+                                        <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500/10 flex-shrink-0" />
+                                        <span>Data-Driven Strategy</span>
+                                    </>
+                                ) : (
+                                    "Content Plan"
+                                )}
+                            </h1>
+                            {plan?.plan_data && (
+                                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-stone-200/50 dark:bg-stone-800 text-[10px] font-medium text-stone-600 dark:text-stone-400 px-1.5 translate-y-[1px]">
+                                    {plan.plan_data.length}
+                                </span>
+                            )}
                         </div>
+                        {plan && (
+                            <p className="text-[10px] font-medium text-stone-400 pl-0.5">
+                                Generated {new Date().toLocaleDateString()} • 30 Day Roadmap
+                            </p>
+                        )}
+                    </div>
 
-                        {/* Stats */}
-                        <div className="hidden md:flex items-center gap-3 mt-2 md:mt-0">
+                    {plan && (
+                        <div className="flex bg-stone-100/50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-1 shadow-sm self-start md:self-center overflow-x-auto max-w-full">
                             {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                                <div key={key} className="flex items-center gap-1">
-                                    <config.icon className={`w-3.5 h-3.5 ${config.className}`} />
-                                    <span className={`text-xs font-medium ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                <button
+                                    key={key}
+                                    onClick={() => setFilter(key as any)}
+                                    className={cn(
+                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap",
+                                        filter === key
+                                            ? "bg-white text-stone-900 shadow-sm border border-stone-200/50 dark:bg-stone-800 dark:text-white dark:border-stone-700"
+                                            : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 dark:hover:bg-stone-800/50"
+                                    )}
+                                >
+                                    <span className={filter === key ? "inline" : "hidden sm:inline"}>
+                                        {config.label}
+                                    </span>
+                                    <ConfigIcon config={config} isSelected={filter === key} />
+                                    <span className={cn(
+                                        "ml-1 text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem]",
+                                        filter === key ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
+                                    )}>
                                         {planStats[key] || 0}
                                     </span>
-                                </div>
+                                </button>
                             ))}
-                        </div>
-                    </div>
-
-                    {/* Filter Tabs */}
-                    <div className={`flex items-center gap-2 px-4 md:px-6 py-3 border-b overflow-x-auto ${isDark ? 'border-stone-800 bg-stone-900/20' : 'border-stone-100 bg-stone-50/20'}`}>
-                        {(["all", "pending", "writing", "published"] as const).map((f) => (
+                            {/* 'All' Filter */}
                             <button
-                                key={f}
-                                onClick={() => setFilter(f)}
-                                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filter === f
-                                    ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white')
-                                    : (isDark ? 'text-stone-400 hover:bg-stone-800' : 'text-stone-500 hover:bg-stone-200')
-                                    }`}
+                                onClick={() => setFilter("all")}
+                                className={cn(
+                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ml-1",
+                                    filter === "all"
+                                        ? "bg-white text-stone-900 shadow-sm border border-stone-200/50 dark:bg-stone-800 dark:text-white dark:border-stone-700"
+                                        : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 dark:hover:bg-stone-800/50"
+                                )}
                             >
-                                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                                <span>All</span>
+                                <span className={cn(
+                                    "ml-1 text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem]",
+                                    filter === "all" ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
+                                )}>
+                                    {plan.plan_data.length}
+                                </span>
                             </button>
-                        ))}
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-4 md:p-6">
-                        {/* Urgent Items (Top 5 with badges) */}
-                        {urgentItems.length > 0 && (
-                            <div className="mb-6">
-                                <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                                    🔥 Top Priority
-                                    <span className={`text-xs font-normal ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Based on Google data</span>
-                                </h2>
-                                <div className="space-y-3">
-                                    {urgentItems.map((item, index) => renderPlanItem(item, index, true))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Regular Items */}
-                        <div className="space-y-3">
-                            {regularItems.map((item, index) => renderPlanItem(item, index))}
                         </div>
-
-                        {filteredPlan.length === 0 && (
-                            <div className="text-center py-12">
-                                <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
-                                    No posts match the current filter
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                </GlobalCard>
-            </div>
-
-            {error && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 max-w-md">
-                    <div className={`p-4 rounded-xl text-sm border ${isDark ? 'bg-red-900/20 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                        {error}
-                    </div>
+                    )}
                 </div>
-            )}
+
+                {/* --- Body Content --- */}
+                <div className="p-4 space-y-8">
+                    {loading ? (
+                        <div className="h-64 flex flex-col items-center justify-center gap-3">
+                            <Loader2 className="w-8 h-8 animate-spin text-stone-300" />
+                            <p className="text-sm text-stone-500 font-medium animate-pulse">Loading content plan...</p>
+                        </div>
+                    ) : error ? (
+                        <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-center dark:border-red-900/30 dark:bg-red-900/10">
+                            <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-3">{error}</p>
+                            <Button variant="outline" size="sm" onClick={fetchPlan} className="h-8 text-xs bg-white hover:bg-red-50 border-red-200 text-red-700">
+                                Retry
+                            </Button>
+                        </div>
+                    ) : !plan ? (
+                        <div className="text-center py-20 px-4">
+                            <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6 dark:bg-stone-800">
+                                <FileText className="w-8 h-8 text-stone-400" />
+                            </div>
+                            <h2 className="text-xl font-bold text-stone-900 mb-2 dark:text-white">No Content Plan Yet</h2>
+                            <p className="text-stone-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
+                                Generate a data-driven 30-day content plan based on your competitors and search trends.
+                            </p>
+                            <Button onClick={() => router.push("/blog-writer")} className="h-10 px-6 font-semibold shadow-md active:scale-95 transition-transform">
+                                <Sparkles className="w-4 h-4 mr-2" />
+                                Create First Plan
+                            </Button>
+                        </div>
+                    ) : (
+                        <>
+                            {/* --- Stats/Filters Bar REMOVED --- */}
+
+                            {/* --- Content Grid --- */}
+                            <div className="space-y-10">
+
+                                {/* Priority Section */}
+                                {urgentItems.length > 0 && filter === 'all' && (
+                                    <section>
+                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100 dark:border-stone-800/50">
+                                            <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+                                            <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider dark:text-white">
+                                                High Priority Opportunities
+                                            </h2>
+                                        </div>
+                                        {/* Strict 3-column grid for consistency */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {urgentItems.map((item) => (
+                                                <PlanCard key={item.id} item={item} isUrgent={true} />
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {/* Regular Section */}
+                                <section>
+                                    {urgentItems.length > 0 && filter === 'all' && regularItems.length > 0 && (
+                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100 border-dashed dark:border-stone-800/50 pt-4">
+                                            <Layout className="w-4 h-4 text-stone-400" />
+                                            <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider dark:text-white">
+                                                Scheduled Content
+                                            </h2>
+                                        </div>
+                                    )}
+
+                                    {regularItems.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {regularItems.map((item) => (
+                                                <PlanCard key={item.id} item={item} />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        filter !== 'all' && (
+                                            <div className="text-center py-12 text-stone-400 italic text-sm">
+                                                No articles found with status "{STATUS_CONFIG[filter].label}"
+                                            </div>
+                                        )
+                                    )}
+                                </section>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </GlobalCard>
         </div>
     )
+}
+
+// Helper to avoid TS errors in map
+function ConfigIcon({ config, isSelected }: { config: any, isSelected: boolean }) {
+    const Icon = config.icon
+    return <Icon className={cn("w-3.5 h-3.5", isSelected ? "text-stone-900 dark:text-white" : "text-stone-400")} />
 }

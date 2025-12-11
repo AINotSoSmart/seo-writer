@@ -27,9 +27,10 @@ export async function POST(req: NextRequest) {
 
         const today = new Date()
         const client = getGeminiClient()
+        const currentDate = `${today.toLocaleDateString('en-US', { month: 'long' })} ${today.getFullYear()}`
 
         const prompt = `
-You are a content strategist creating a 30-day content plan for a brand.
+You are a content strategist creating a 30-day content plan for a brand. [Current Date: ${currentDate}]
 
 BRAND CONTEXT:
 - Product: ${brandData.product_name}
@@ -43,8 +44,27 @@ ${seeds.join("\n")}
 
 Generate exactly 30 blog posts for a 30-day content calendar.
 
+---
+
+## MODERN TITLE RULES (CRITICAL - FOLLOW THESE):
+
+1. **Create curiosity, not clickbait** - Make the brain itch. Example: "Why Most AI Blogs Die In 60 Days"
+2. **Use numbers when possible** - Numbers catch the eye. Example: "7 Brutal Lessons I Learned Building SaaS Alone"
+3. **Attack a pain point** - If reader feels pain, they click. Example: "Your SEO Traffic Is Dying Because You Still Do This"
+4. **Add contrast (old vs new)** - Example: "Most People Still Do SEO Wrong. Here's The Fix"
+5. **Keep title under 60 characters** - Short titles punch harder and rank better
+6. **Remove weak words** - Avoid: very, really, extremely, maybe, possibly
+7. **Promise a result** - Example: "How To 3x Your Blog Traffic Without Posting Daily"
+8. **NO robotic words** - BANNED: "ultimate guide", "comprehensive", "definitive", "complete guide"
+9. **Use ONE power word max** - brutal, hidden, secret, insane (too many = cringe guru)
+10. **Speak like a human** - Conversational, not corporate. Example: "I Stopped Using ChatGPT For SEO And Something Crazy Happened"
+11. **Add mini conflict** - A tiny fight makes it spicy. Example: "AI Writers Are Good But This One Problem Kills Them"
+12. **Don't reveal the answer** - Make them curious enough to click
+
+---
+
 For each post provide:
-1. title: A compelling, SEO-optimized blog post title
+1. title: A compelling blog post title FOLLOWING THE RULES ABOVE
 2. main_keyword: The primary target keyword (2-4 words)
 3. supporting_keywords: 2-3 related keywords (array)
 4. article_type: One of "informational", "commercial", or "howto"
@@ -55,7 +75,6 @@ For each post provide:
 
 Guidelines:
 - Mix of types: informational (60%), howto (25%), commercial (15%)
-- Titles should be specific and actionable
 - Keywords should be realistic search terms
 - Group related posts into clusters
 - Build topical authority progressively

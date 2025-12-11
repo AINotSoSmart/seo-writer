@@ -5,6 +5,7 @@ export const ContentPlanItemSchema = z.object({
     id: z.string(),
     title: z.string(),
     main_keyword: z.string(),
+    gsc_query: z.string().optional(), // Original GSC query this article is based on (for metrics tracking)
     supporting_keywords: z.array(z.string()),
     // article_type matches generate-blog.ts ArticleType
     article_type: z.enum(["informational", "commercial", "howto"]).default("informational"),

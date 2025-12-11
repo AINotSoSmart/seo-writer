@@ -8,15 +8,15 @@
 import { ArticleType } from './article-types'
 
 interface ArticleStrategy {
-    research_focus: string
-    outline_instruction: string
-    title_prompt: string
+        research_focus: string
+        outline_instruction: string
+        title_prompt: string
 }
 
 export const ARTICLE_STRATEGIES: Record<ArticleType, ArticleStrategy> = {
-    // --- TYPE 1: INFORMATIONAL / DEEP DIVE ---
-    informational: {
-        research_focus: `
+        // --- TYPE 1: INFORMATIONAL / DEEP DIVE ---
+        informational: {
+                research_focus: `
 **ARTICLE TYPE: INFORMATIONAL / DEEP DIVE**
 
 RESEARCH FOCUS:
@@ -33,7 +33,7 @@ DATA EXTRACTION PRIORITY:
 4. Expert opinions and quotes
 5. Related concepts and how they connect
 `,
-        outline_instruction: `
+                outline_instruction: `
 **STRUCTURE FOR INFORMATIONAL ARTICLE:**
 - **Definition/Introduction:** Clear explanation of what it is
 - **Context/History:** Background, evolution, why it exists
@@ -49,25 +49,27 @@ INSTRUCTION NOTES GUIDANCE:
 - Include analogies and real-world examples
 - Focus on the "why" behind concepts, not just the "what"
 `,
-        title_prompt: `Generate 5 engaging blog titles for an Informational/Deep Dive article about '{keyword}'.
+                title_prompt: `Generate 5 engaging blog titles for an Informational/Deep Dive article about '{keyword}'.
 
-RULES:
-1. Focus on patterns like "The Complete Guide to", "Everything You Need to Know About", "Understanding X"
-2. Promise clarity and depth without being salesy
-3. Avoid clichés like "Ultimate", "Master", "Unlock"
-4. Use natural, authoritative language
-5. Can include year for freshness (e.g., "in 2025") if relevant
+MODERN TITLE RULES:
+1. Create curiosity, not clickbait - Make the brain itch
+2. Use numbers when possible - Numbers catch the eye
+3. Keep title under 60 characters - Short titles punch harder
+4. Remove weak words - Avoid: very, really, extremely, maybe
+5. BANNED: "ultimate guide", "comprehensive", "definitive", "complete guide", "everything you need to know"
+6. Speak like a human - Conversational, not corporate
+7. Don't reveal the answer - Make them curious enough to click
 
 EXAMPLES:
-- "Next.js Rendering: SSG vs SSR Explained Simply"
-- "What is Serverless? A Developer's Complete Guide"
-- "Understanding React Hooks: From useState to useContext"
+- "Why Most Developers Get SSR Wrong (And How To Fix It)"
+- "React Hooks Explained In 5 Minutes Flat"
+- "The Serverless Myth Nobody Talks About"
 `
-    },
+        },
 
-    // --- TYPE 2: COMMERCIAL / COMPARISON ---
-    commercial: {
-        research_focus: `
+        // --- TYPE 2: COMMERCIAL / COMPARISON ---
+        commercial: {
+                research_focus: `
 **ARTICLE TYPE: COMMERCIAL / COMPARISON**
 
 RESEARCH FOCUS:
@@ -87,7 +89,7 @@ DATA EXTRACTION PRIORITY:
 
 MANDATORY: If you cannot find exact pricing, note it in sources_summary but attempt to find tier names (e.g., "Free, Pro, Enterprise").
 `,
-        outline_instruction: `
+                outline_instruction: `
 **STRUCTURE FOR COMMERCIAL/COMPARISON ARTICLE:**
 - **Buying Criteria:** What to look for (3-5 key factors explained)
 - **Quick Summary Table:** Comparison matrix with product, price, best for
@@ -107,25 +109,28 @@ INSTRUCTION NOTES GUIDANCE:
 - Compare tools AGAINST each other, not in isolation
 - Include specific examples: "ShipFast's auth setup takes 10 minutes vs Supastarter's 30 minutes"
 `,
-        title_prompt: `Generate 5 high-CTR blog titles for a Product Comparison/Review article about '{keyword}'.
+                title_prompt: `Generate 5 high-CTR blog titles for a Product Comparison/Review article about '{keyword}'.
 
-RULES:
-1. Focus on patterns like "Best X for Y", "X vs Y", "Top N [Products] in [Year]"
-2. Include the current year (2025) for freshness
-3. Hint at a specific benefit (e.g., "That Save Time", "For Fast Shipping")
-4. Make it clear this is a comparison/review
-5. Avoid vague superlatives - be specific
+MODERN TITLE RULES:
+1. Create curiosity - Make them wonder which one wins
+2. Use numbers - "7 Tools Tested" works better than "Best Tools"
+3. Attack a pain point - "Stop Wasting Money on the Wrong Tool"
+4. Add contrast - "Tool A vs Tool B: One Clear Winner"
+5. Keep under 60 characters
+6. BANNED: "ultimate", "comprehensive", "definitive", "complete guide"
+7. Add mini conflict - "Both Are Good But One Has a Fatal Flaw"
+8. Speak like someone who actually tested them
 
 EXAMPLES:
-- "7 Best Next.js Boilerplates in 2025 (That Actually Save Time)"
-- "ShipFast vs Supastarter: Which SaaS Starter Kit Wins?"
-- "Top 5 AI Writing Tools for SEO in 2025 (Tested and Ranked)"
+- "I Tested 7 SaaS Boilerplates. Here's The Only One Worth Buying"
+- "ShipFast vs Supastarter: One Obvious Winner (Tested)"
+- "5 AI Writing Tools That Actually Work In 2025"
 `
-    },
+        },
 
-    // --- TYPE 3: HOW-TO / TUTORIAL ---
-    howto: {
-        research_focus: `
+        // --- TYPE 3: HOW-TO / TUTORIAL ---
+        howto: {
+                research_focus: `
 **ARTICLE TYPE: HOW-TO / TUTORIAL**
 
 RESEARCH FOCUS:
@@ -145,7 +150,7 @@ DATA EXTRACTION PRIORITY:
 
 NOTE: Tutorials should be completable. If research shows missing steps, flag it in content_gap.
 `,
-        outline_instruction: `
+                outline_instruction: `
 **STRUCTURE FOR HOW-TO/TUTORIAL ARTICLE:**
 - **Prerequisites/Tools Needed:** What reader needs before starting
 - **Brief Overview:** What we're building/achieving (with outcome preview)
@@ -163,34 +168,36 @@ INSTRUCTION NOTES GUIDANCE:
 - Include what the reader should SEE after each step (verification)
 - Keep steps atomic - one action per step when possible
 `,
-        title_prompt: `Generate 5 actionable blog titles for a How-To/Tutorial article about '{keyword}'.
+                title_prompt: `Generate 5 actionable blog titles for a How-To/Tutorial article about '{keyword}' by understanding the user intent and difficulty level.
 
-RULES:
-1. Start with "How to" or include "Step-by-Step"
-2. Mention the end result or time to complete (e.g., "in 10 Minutes")
-3. Address difficulty level if relevant (e.g., "For Beginners")
-4. Be specific about what will be achieved
-5. Avoid vague outcomes - promise something concrete
+MODERN TITLE RULES:
+1. Promise a specific result - "Deploy in 5 Minutes" beats "How to Deploy"
+2. Use time anchors when possible - People love quick wins
+3. Attack the fear - "Stop Struggling With X"
+4. Keep under 60 characters
+5. BANNED: "ultimate guide", "comprehensive", "complete walkthrough"
+6. Speak like a helpful friend, not a textbook
+7. Add a hook - "The Method Nobody Teaches"
 
 EXAMPLES:
-- "How to Deploy Next.js to Vercel in 5 Minutes (Step-by-Step)"
-- "Setting Up Stripe Payments in Next.js: A Beginner's Guide"
-- "How to Restore Old Photos Using AI (Free Method)"
+- "Deploy Next.js to Vercel In 5 Minutes (No BS Guide)"
+- "Stripe Payments Setup That Actually Works First Try"
+- "How I Fixed My Broken SEO In One Afternoon"
 `
-    }
+        }
 }
 
 /**
  * Get strategy for a specific article type
  */
 export const getArticleStrategy = (type: ArticleType): ArticleStrategy => {
-    return ARTICLE_STRATEGIES[type] || ARTICLE_STRATEGIES.informational
+        return ARTICLE_STRATEGIES[type] || ARTICLE_STRATEGIES.informational
 }
 
 /**
  * Get the title generation prompt for an article type
  */
 export const getTitlePrompt = (type: ArticleType, keyword: string): string => {
-    const strategy = getArticleStrategy(type)
-    return strategy.title_prompt.replace('{keyword}', keyword)
+        const strategy = getArticleStrategy(type)
+        return strategy.title_prompt.replace('{keyword}', keyword)
 }

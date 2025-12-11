@@ -13,6 +13,7 @@ import { jsonrepair } from "jsonrepair"
 import { ArticleType } from "@/lib/prompts/article-types"
 import { getArticleStrategy } from "@/lib/prompts/strategies"
 import { getFormalityDefinition, getPerspectiveDefinition } from "@/lib/prompts/voice-definitions"
+import { getCurrentDateContext } from "@/lib/utils/date-context"
 
 const cleanAndParse = (text: string) => {
   const clean = text.replace(/```json/g, "").replace(/```/g, "")
@@ -137,7 +138,7 @@ const getResearchSystemPrompt = (articleType: ArticleType) => {
   const strategy = getArticleStrategy(articleType)
 
   return `
-You are an expert SEO Strategist and Data Analyst. 
+You are an expert SEO Strategist and Data Analyst. ${getCurrentDateContext()}
 I will provide you with the raw text content of the Top 5 Google Search results for a specific keyword.
 
 YOUR GOAL:
@@ -185,7 +186,7 @@ const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorD
   const strategy = getArticleStrategy(articleType)
 
   return `
-You are an expert Content Architect.
+You are an expert Content Architect and SEO Strategist.
 Your goal is to outline a high-ranking blog post that beats the competition by filling their "Content Gaps".
 
 **ARTICLE TYPE: ${articleType.toUpperCase()}**
@@ -198,21 +199,52 @@ ${brandDetails ? `3. BRAND DETAILS: ${JSON.stringify(brandDetails)}` : ""}
 TYPE-SPECIFIC STRATEGY:
 ${strategy.outline_instruction}
 
-INSTRUCTIONS:
+---
+
+## HEADING HIERARCHY RULES (CRITICAL FOR SEO - MUST FOLLOW)
+
+Google rewards articles with proper nested heading hierarchy. You MUST create a rich structure:
+
+**LEVEL DEFINITIONS:**
+- **level: 2 (H2)** = Main topic sections. These are your primary content pillars.
+- **level: 3 (H3)** = Subtopics UNDER an H2 wherever required.
+- **level: 4 (H4)** = Detailed points UNDER an H3 wherever required.
+
+**STRUCTURE PATTERN (FOLLOW THIS):**
+\`\`\`
+H2: Main Topic A
+  H3: Subtopic A.1
+  H3: Subtopic A.2
+    H4: Detail A.2.1 (if needed)
+    H4: Detail A.2.2
+  H3: Subtopic A.3
+H2: Main Topic B
+  H3: Subtopic B.1
+  H3: Subtopic B.2
+\`\`\`
+
+**HIERARCHY REQUIREMENTS:**
+1. NEVER have all sections at level 2. This is WRONG and hurts SEO.
+2. Aim for at least 60% of sections to be level 3 or 4.
+3. Use level 4 (H4) for lists, comparisons, step details, or deep dives.
+4. The sections array should be FLAT but with levels indicating hierarchy.
+
+---
+
+## OTHER INSTRUCTIONS:
 1. **Title:** ${title ? `Use the provided title: "${title}".` : 'Generate a catchy H1 based on the Keyword and Content Gap.'}
 2. **Intro/Hook:** Plan a strong introduction.
    - Do NOT list this in the "sections" array.
    - It needs to hook the reader immediately.
-3. **Structure (H2/H3):** Create a logical flow FOLLOWING the TYPE-SPECIFIC STRATEGY above.
+3. **Structure:** Create a logical flow FOLLOWING the TYPE-SPECIFIC STRATEGY above.
    - **MANDATORY:** You MUST create specific sections that address the "missing_topics" identified in the Competitor Data.
    - **USER INTENT:** Ensure the structure answers the specific questions users are asking.
-4. **Instruction Notes (CRITICAL CHANGE):** 
+4. **Instruction Notes:** 
    - For EACH section, write a "Content Focus" note.
    - **Tell the writer WHAT data points, facts, or specific "Gap" concepts to cover.**
-   - **DO NOT** write style instructions (e.g., "Use bullets", "Be professional"). The writer already knows the style. Only focus on the **Substance**.
-   - Example GOOD Note: "Explain the pricing tier differences. Mention that the Pro plan is required for API access (Gap found in research)."
-   - Example BAD Note: "Write this section using bullet points and a professional tone."
- OUTPUT SCHEMA (Return strict JSON):
+   - **DO NOT** write style instructions. Only focus on the **Substance**.
+
+## OUTPUT SCHEMA (Return strict JSON):
 {
   "title": string,
   "intro": {
@@ -221,16 +253,22 @@ INSTRUCTIONS:
   },
   "sections": [
     {
-      "id": number (1-based index),
+      "id": number (1-based index, sequential),
       "heading": string,
-      "level": number (2 for H2, 3 for H3),
+      "level": number (2, 3, or 4 - USE ALL THREE LEVELS),
       "instruction_note": string, 
       "keywords_to_include": string[]
     }
   ]
 }
+
+**FINAL CHECK:** Before outputting, verify that:
+- You have H2, H3, AND H4 levels in your outline
+- No H2 stands alone without H3 children
+- Total sections: aim for 12-20 sections across all levels
 `
 }
+
 
 const generateWritingSystemPrompt = (styleDNA: string, factSheet: any, brandDetails: any = null) => {
   // styleDNA is now a paragraph describing the writing style
@@ -247,7 +285,7 @@ const generateWritingSystemPrompt = (styleDNA: string, factSheet: any, brandDeta
   }
 
   return `
-You are an expert Blog Writer. You are NOT an AI assistant. You are a subject matter expert.
+You are an expert Blog Writer. You are NOT an AI assistant. You are a subject matter expert. ${getCurrentDateContext()}
 
 ### 1. WRITING STYLE & VOICE (FOLLOW THESE INSTRUCTIONS PRECISELY)
 ${styleDNA}

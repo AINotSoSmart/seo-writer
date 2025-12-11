@@ -208,7 +208,10 @@ function generatePlanPrompt(
     brandData: any,
     competitorSeeds: string[]
 ): string {
-    return `You are an expert SEO strategist and content planning engine. You receive processed GSC keyword clusters for a website. Your goal is to generate a detailed 30-day content plan that maximizes search traffic, improves rankings, and aligns with the brand voice.
+    const now = new Date()
+    const currentDate = `${now.toLocaleDateString('en-US', { month: 'long' })} ${now.getFullYear()}`
+
+    return `You are an expert SEO strategist. [Current Date: ${currentDate}] Your goal is to select the highest-value topics from the GSC keyword clusters below and create a 30-day content plan to dominate the SERP and modern AI Search Engines.
 
 ## Website Brand DNA
 ${brandData ? JSON.stringify(brandData, null, 2) : "No brand data available - use general best practices"}
@@ -216,15 +219,26 @@ ${brandData ? JSON.stringify(brandData, null, 2) : "No brand data available - us
 ## Competitor Topics & Focus Areas
 ${competitorSeeds?.length > 0 ? competitorSeeds.join(", ") : "No competitor data available"}
 
-## GSC Keyword Clusters (Processed & Deduplicated)
+## GSC Keyword Clusters (Real Search Data)
 ${JSON.stringify(clusters, null, 2)}
+
+---
+
+## CRITICAL CONSTRAINTS (MUST FOLLOW):
+
+1. **USE EXACT GSC QUERIES**: The \`gsc_query\` field MUST be copied EXACTLY from the \`primary_keyword\` of the clusters above. 
+   - DO NOT modify, expand, or create new keywords.
+   - If the cluster says "restore old photos", you MUST use "restore old photos" — not "how to restore old photos" or "best way to restore old photos".
+
+2. **SUPPORTING KEYWORDS COME FROM CLUSTERS**: The \`supporting_keywords\` array should be taken from the cluster's \`supporting_keywords\` array (these are real GSC queries with similar intent).
+
+3. **TARGET KEYWORD IS OPTIONAL**: If you want to suggest a more specific long-tail keyword for the article title, use the \`target_keyword\` field. This is the keyword the article will actually target for SEO.
 
 ---
 
 ## YOUR TASK:
 
-### 1. Select the highest value 30 topics from the clusters above
-
+### 1. Select 30 highest-value topics from the clusters
 Use this strategic breakdown:
 - **10 Quick Wins**: position 7-20, high impressions, low CTR (easiest to rank page 1)
 - **10 High Potential Topics**: high impressions, position 20-40 (mid-term SEO value)
@@ -232,31 +246,35 @@ Use this strategic breakdown:
 - **5 New Opportunity Topics**: rising queries with future growth potential
 
 ### 2. For each topic, provide:
-- **primary_keyword**: The main keyword to target
-- **title**: A compelling, human-like article title (NO generic patterns like "X: Everything You Need to Know")
+- **gsc_query**: EXACT \`primary_keyword\` from the cluster (COPY IT EXACTLY)
+- **target_keyword**: (Optional) A more specific long-tail variant for article targeting
+- **title**: A compelling, human-like article title
 - **article_type**: MUST be one of: informational, commercial, howto
-- **supporting_keywords**: Array of related keywords to include
+- **supporting_keywords**: Array from the cluster's supporting_keywords
 - **cluster**: Topic category/cluster name
-- **opportunity_score**: Number from 0-100
+- **opportunity_score**: Number from 0-100 (use the cluster's score)
 - **badge**: quick_win, high_impact, low_ctr, or new_opportunity
 - **reason**: 1 sentence explaining why this topic matters
 - **impact**: Low, Medium, or High expected traffic impact
 
-### 3. CRITICAL RULES:
-- Titles MUST be compelling, unique, and human-like
-- NEVER use lazy patterns like "X: Everything You Need to Know" or "Complete Guide to X"
-- Create varied title formats: questions, how-tos, numbers, provocative statements
-- DO NOT create separate articles for similar keywords (they should be combined!)
-- Every topic must align with the brand voice if provided
-- Be strategic, not superficial
+### 3. TITLE RULES:
+1. Create curiosity, not clickbait
+2. Use numbers when possible
+3. Attack a pain point
+4. Keep title under 60 characters
+5. Remove weak words (very, really, extremely)
+6. NO robotic phrases: "ultimate guide", "comprehensive", "everything you need to know"
+7. Speak like a human, not a corporation, be converstional
+8. Aim for 6-15 words or 30-60 characters title length for clarity and SEO (especially around 55 characters for search engines like Google), while focusing on being descriptive, using key terms, and creating a strong hook for readers to click, balancing brevity with informative content for better engagement. 
 
 ### 4. Output Format (strict JSON array):
 [
   {
-    "primary_keyword": "string",
+    "gsc_query": "exact query from cluster",
+    "target_keyword": "optional long-tail variant",
     "title": "string",
     "article_type": "informational|commercial|howto",
-    "supporting_keywords": ["string"],
+    "supporting_keywords": ["from cluster"],
     "cluster": "string",
     "opportunity_score": number,
     "badge": "quick_win|high_impact|low_ctr|new_opportunity",
@@ -267,6 +285,7 @@ Use this strategic breakdown:
 
 Return ONLY the JSON array. No explanations.`
 }
+
 
 export async function POST(req: NextRequest) {
     try {
@@ -429,11 +448,18 @@ export async function POST(req: NextRequest) {
             const scheduledDate = new Date(today)
             scheduledDate.setDate(today.getDate() + index)
 
+            // Find the matching cluster using the exact GSC query
+            const matchingCluster = clusters.find(c => c.primary_keyword === item.gsc_query)
+
+            // Use target_keyword if provided, otherwise fall back to gsc_query
+            const mainKeyword = item.target_keyword || item.gsc_query
+
             return {
                 id: `gsc-plan-${Date.now()}-${index}`,
                 title: item.title,
-                main_keyword: item.primary_keyword,
-                supporting_keywords: item.supporting_keywords || [],
+                main_keyword: mainKeyword,
+                gsc_query: item.gsc_query, // Original GSC query for reference
+                supporting_keywords: item.supporting_keywords || matchingCluster?.supporting_keywords || [],
                 // LLM outputs one of: informational, commercial, howto
                 // Fallback to informational if invalid
                 article_type: ["informational", "commercial", "howto"].includes(item.article_type)
@@ -443,17 +469,18 @@ export async function POST(req: NextRequest) {
                 cluster: item.cluster,
                 scheduled_date: scheduledDate.toISOString().split("T")[0],
                 status: "pending",
-                // GSC data
-                opportunity_score: item.opportunity_score,
+                // GSC data - now using gsc_query for lookup (guaranteed match)
+                opportunity_score: item.opportunity_score || matchingCluster?.opportunity_score || 0,
                 badge: item.badge,
-                gsc_impressions: clusters.find(c => c.primary_keyword === item.primary_keyword)?.impressions || 0,
-                gsc_position: clusters.find(c => c.primary_keyword === item.primary_keyword)?.position || 0,
-                gsc_ctr: clusters.find(c => c.primary_keyword === item.primary_keyword)?.ctr || 0,
+                gsc_impressions: matchingCluster?.impressions || 0,
+                gsc_position: matchingCluster?.position || 0,
+                gsc_ctr: matchingCluster?.ctr || 0,
                 // Extra strategic info
                 reason: item.reason,
                 impact: item.impact,
             }
         })
+
 
         console.log("=== GSC PLAN GENERATED ===")
         console.log("Total items:", contentPlan.length)

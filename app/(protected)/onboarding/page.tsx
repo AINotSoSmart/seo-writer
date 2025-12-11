@@ -640,9 +640,7 @@ export default function OnboardingPage() {
                                                 <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>Review Brand Details</h2>
                                                 <p className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Verify extracted information</p>
                                             </div>
-                                            <Button variant="ghost" size="sm" onClick={() => setBrandData(null)} className="text-xs">
-                                                Re-Analyze
-                                            </Button>
+
                                         </div>
 
                                         {/* 1. Product Identity */}
