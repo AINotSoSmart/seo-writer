@@ -289,7 +289,7 @@ ${previousFullText}
 
 const generatePolishEditorPrompt = (draft: string, styleDNA: string, brandDetails: any = null) => `
 You are a Ruthless Direct-Response Copyeditor. 
-Your goal is to maximize **Readability** and **Emotional Impact**.
+Your goal is to maximize **Readability** following strict EEAT principles.
 You hate "Walls of Text" and "AI Clichés".
 
 ### 1. THE DRAFT TO EDIT
@@ -313,7 +313,7 @@ If you see these patterns or anything from this vibe, rewrite the sentence immed
 
 ### 4. THE VOICE (Do NOT Violate)
 The brand's writing style:
-${styleDNA}
+${styleDNA}.
 
 **CRITICAL:** Do NOT make it sound generic or "AI-generated". Preserve the unique flair, idioms, and formatting quirks.
 
