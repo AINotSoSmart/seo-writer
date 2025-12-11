@@ -39,20 +39,22 @@ const AUTHENTIC_WRITING_RULES = `
 
 **SCANNABILITY & STRUCTURE:**
 1. Assume readers will NOT read full paragraphs. The core message must be understandable at a glance.
-2. **BOLD** the single most important takeaway in each paragraph. Use bullet points to break up concepts.
-3. Keep paragraphs under 3 sentences. One idea per paragraph.
-4. Every line must EARN its place. If a sentence doesn't serve a critical purpose, DELETE IT.
+2. **BOLD** the important points as required for good seo practice. Use bullet points to break up concepts.
+3. Keep paragraphs under 3-4 sentences. One idea per paragraph.
+4. Every line must EARN its place. If a sentence doesn't serve a critical purpose, DELETE IT, be ruthless.
 
 **SENTENCE VARIATION (BURSTINESS) - CRITICAL FOR HUMAN FEEL:**
-5. Mix sentence lengths dramatically: some very short (3-5 words), some longer (15-25 words).
-6. Start sentences with DIFFERENT elements: questions, statements, "But...", numbers, actions.
-7. Example rhythm: "Stop. Think about what just happened. Now consider how this changes everything you thought you knew about the topic."
+5. Mix sentence lengths dramatically: some very short (7-9 words), some longer (20-30 words).
+6. Infuse genuine emotional undertones appropriate to the content
+7. Start sentences with different elements: adverbs, prepositional phrases, dependent clauses, questions
 8. Occasional sentence fragments are OK if they add punch. "Not always. But often."
 
 **ACTIVE VOICE & DIRECTNESS:**
 9. USE ACTIVE VOICE. "Management canceled the meeting" NOT "The meeting was canceled by management."
 10. Be direct. "Call me at 3pm." NOT "I was wondering if you might be available for a call."
 11. Use certainty when you ARE certain. "This approach improves results." NOT "This approach might improve results."
+12. Add personal opinions, hesitations, or qualifiers ("I believe," "perhaps," "it seems")
+13. Use contractions and colloquialisms when appropriate
 
 **NO AI-FILLER PHRASES (CRITICAL):**
 12. **BANNED STARTERS:** "Let's dive in", "Let's be honest", "here's the truth", "Let's explore", "In today's digital age", "You know that gut-wrenching feeling", "In this article we will", "It goes without saying", "As we navigate"
@@ -67,11 +69,12 @@ const AUTHENTIC_WRITING_RULES = `
 
 **STRUCTURAL PATTERN DISRUPTION:**
 20. Don't always follow intro → body → conclusion. Sometimes start mid-thought.
-21. Include natural digressions if they add value. "(Worth noting: this also works for X.)"
+21. Include natural digressions if they add value. "(this also works for X.)"
 22. Use varied paragraph lengths. Some can be one sentence. Others 3.
+23. Break conventional grammar rules occasionally in natural ways
 
 **PERSPECTIVE REMINDER:**
-23. **AUTHENTIC PERSPECTIVE:** Write with authority. Avoid passive voice ("It is said that..."). Use the perspective (I/We/Brand) defined in the Narrative Rules.
+24. **AUTHENTIC PERSPECTIVE:** Write with authority. Avoid passive voice ("It is said that..."). Use the perspective (I/We/Brand) defined in the Narrative Rules.
 `
 
 // Type-specific intro templates
@@ -284,54 +287,48 @@ ${previousFullText}
 3. ** Simulate Experience:** If the content note asks for a review / opinion, write confidently as if you have tested it.
 `
 
-const generatePolishEditorPrompt = (draft: string, styleDNA: any, brandDetails: any = null) => `
-You are a Ruthless Direct - Response Copyeditor. 
-Your goal is to maximize ** Readability ** and ** Emotional Impact **.
+const generatePolishEditorPrompt = (draft: string, styleDNA: string, brandDetails: any = null) => `
+You are a Ruthless Direct-Response Copyeditor. 
+Your goal is to maximize **Readability** and **Emotional Impact**.
 You hate "Walls of Text" and "AI Clichés".
 
 ### 1. THE DRAFT TO EDIT
 ${draft}
 
-### 2. STRICT FORMATTING RULES(The Law)
-  1. ** DESTROY WALLS OF TEXT:** If a paragraph has more than 3 sentences, BREAK IT. 
-2. ** ONE IDEA PER LINE:** Use single - sentence paragraphs frequently to create rhythm.
-3. ** SCANNABILITY:** Ensure key takeaways are ** bolded **.
-4. ** NO "GLUE" WORDS:** Remove fluff transitions like "In conclusion," "Furthermore," "It is important to note." Just say what you mean.
+### 2. STRICT FORMATTING RULES (The Law)
+1. **DESTROY WALLS OF TEXT:** If a paragraph has more than 4 sentences, BREAK IT. 
+2. **ONE IDEA PER LINE:** Use single-sentence paragraphs frequently to create rhythm (not too much).
+3. **SCANNABILITY:** Ensure key takeaways are **bolded** but in limits, do not overdo it.
+4. **NO "GLUE" WORDS:** Remove fluff transitions like "In conclusion," "Furthermore," "It is important to note.", "Here's the truth", "Here's the deal", "Here comes", "Here's the catch". Just say what you mean.
 
-### 3. BANNED "AI" PHRASES(Instant Deletion)
+### 3. BANNED "AI" PHRASES (Instant Deletion)
 If you see these patterns or anything from this vibe, rewrite the sentence immediately:
-  - ❌ "That's where [X] comes in..."
-    - ❌ "Whether you are [X] or [Y]..."
-      - ❌ "In this digital landscape..."
-        - ❌ "Unlock / Unleash / Elevate..."
-          - ❌ "It sounds counterintuitive, but..."
-            - ❌ "Let's dive in..."
-              - ❌ "Magic happens..." / "Game-changer..."
+- ❌ "That's where [X] comes in..."
+- ❌ "Whether you are [X] or [Y]..."
+- ❌ "In this digital landscape..."
+- ❌ "Unlock / Unleash / Elevate..."
+- ❌ "It sounds counterintuitive, but..."
+- ❌ "Let's dive in..."
+- ❌ "Magic happens..." / "Game-changer..."
 
-### 2. THE VOICE(Do NOT Violate)
-The author's unique style DNA is:
-    - Tone: ${styleDNA.tone}
-  - Sentence Structure: ${styleDNA.sentence_structure?.avg_length || "varied"}
-- ** CRITICAL:** Do NOT make it sound generic or "AI-generated".Preserve the unique flair, idioms, and formatting quirks.
-### 4. TONE CHECK
-    - ** Voice:** ${styleDNA.tone}
-- ** Perspective & Rules:**
-    ${styleDNA.narrative_rules?.map((r: string) => `- ${r}`).join("\n") || "- Follow brand guidelines."}
-- ** Vibe:** Write like a human talking to a friend.Be punchy.Be specific.
+### 4. THE VOICE (Do NOT Violate)
+The brand's writing style:
+${styleDNA}
 
-    ${brandDetails ? `
-### 6. BRAND PERSPECTIVE CHECK (CRITICAL)
+**CRITICAL:** Do NOT make it sound generic or "AI-generated". Preserve the unique flair, idioms, and formatting quirks.
+
+${brandDetails ? `
+### 5. BRAND PERSPECTIVE CHECK (CRITICAL)
 You MUST fix any "cringe" self-reviews.
 - **When discussing Competitors:** It is OK to say "I tested X".
 - **When discussing ${brandDetails.product_name} (Our Product):**
   - **BAD:** "I tested ${brandDetails.product_name} and it was fast." (Sounds fake/cringe).
   - **GOOD:** "We built ${brandDetails.product_name} to be fast." or "Our tool excels at..."
   - **FIX:** Change any "I tested [Our Product]" to "We designed [Our Product]" or "Our tool".
-` : ""
-  }
+` : ""}
 
-### 5. OUTPUT
-Return the polished content in ** Raw Markdown **.Do NOT use code blocks.
+### 6. OUTPUT
+Return the polished content in **Raw Markdown**. Do NOT use code blocks.
 `
 
 export const generateBlogPost = task({
