@@ -6,8 +6,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { GripVertical, Plus, Trash2, HelpCircle, Hash, AlignLeft, Type } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { GripVertical, Plus, Trash2, AlignLeft, Type } from "lucide-react"
 
 interface Section {
   id: number

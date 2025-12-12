@@ -66,7 +66,7 @@ Generate exactly 30 blog posts for a 30-day content calendar.
 For each post provide:
 1. title: A compelling blog post title FOLLOWING THE RULES ABOVE
 2. main_keyword: The primary target keyword (2-4 words)
-3. supporting_keywords: 2-3 related keywords (array)
+3. supporting_keywords: 2-3 highly related keywords (array)
 4. article_type: One of "informational", "commercial", or "howto"
    - informational: Educational, deep dive, what/why content
    - commercial: Product comparison, reviews, best-of listicles

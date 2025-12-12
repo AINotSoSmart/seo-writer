@@ -81,51 +81,65 @@ const AUTHENTIC_WRITING_RULES = `
 // Type-specific intro templates
 const INTRO_TEMPLATES: Record<string, string> = {
   informational: `
-GOAL: Hook the reader with curiosity and establish you as the expert who will explain this clearly.
+GOAL: Explain the core concept immediately by contrasting the "Old Understanding" vs. the "New Reality." You need to switch from "Emotional Storytelling" to "Contextual Utility.
 
-APPROACH OPTIONS (vary these, don't always use the same one):
-A) **Open with a surprising fact or statistic** - "Did you know that 70% of developers have never actually used X correctly?"
-B) **Challenge a common misconception** - "Most people think X is about Y. They're wrong."
-C) **Start with a relatable scenario** - "You've seen the term everywhere. Your team keeps mentioning it. But what does X actually mean?"
-D) **Lead with the "why it matters" angle** - "Understanding X isn't just academic—it directly impacts your ability to..."
+NEGATIVE CONSTRAINTS (STRICTLY ENFORCED):
+- NO Narrative Openers ("In a world...", "Picture this...").
+- NO Rhetorical Questions ("Have you ever wondered...?").
+- NO Dictionary Definitions ("SEO stands for...").
+
+APPROACH OPTIONS:
+A) **The "Hidden Mechanic" Angle** - Start with the technical reason why this topic is complex/important. (e.g., "The reason X fails isn't bad luck; it's a specific algorithm change in Y.")
+B) **The "Scale" Contrast** - Contrast how this concept worked 5 years ago vs. today. (e.g., "Ten years ago, X required a server farm. Today, it runs in the browser via WebASM.")
+C) **The "Counter-Intuitive" Truth** - State a hard truth that contradicts popular belief. (e.g., "More megapixels do not mean better photos. Sensor size is the only metric that matters for low light.")
 
 STRUCTURE:
-1. Hook with curiosity or a knowledge gap the reader didn't know they had.
-2. Briefly acknowledge why this topic is confusing or misunderstood.
-3. Promise clarity: "By the end of this guide, you'll understand exactly..."
-4. Keep it SHORT. 2-3 paragraphs max.
+1. Sentence 1: A direct statement of fact, a technical observation, or a contrast.
+2. Sentence 2: The implication of that fact for the reader.
+3. Sentence 3: The scope of this article (what we are covering).
 `,
 
   commercial: `
-GOAL: Hook the reader by acknowledging the overwhelming pain of choosing, then promise clarity.
+GOAL: Establish immediate trust by acting as an Auditor, not a Salesman. You need to switch from "Emotional Storytelling" to "Contextual Utility.
 
-APPROACH OPTIONS (vary these, don't always use the same one):
-A) **Start with the paradox of choice** - "There are now 50+ tools claiming to solve X. How do you actually pick the right one?"
-B) **Acknowledge wasted time/money** - "You've probably tried 3 tools already. None of them quite fit."
-C) **Lead with the stakes** - "Pick the wrong X and you'll waste months of migration effort."
-D) **Use the 'honest review' angle** - "After testing 15 different options, here's what actually works in 2025."
+NEGATIVE CONSTRAINTS (STRICTLY ENFORCED):
+- NO "Paradox of Choice" fluff ("There are so many options...").
+- NO Generic Pain ("We know it's hard to choose...").
+- NO "Perfect for everyone" claims.
+
+APPROACH OPTIONS:
+A) **The "Hard Filter"** - Immediately state the one feature that disqualifies 90% of tools. (e.g., "If an AI generator doesn't offer 'Identity Lock,' it is useless for professional portfolios.")
+B) **The "Benchmark" Opener** - Mention the specific stress test used for this review. (e.g., "We ran the same 4K video file through 10 different enhancers to see which ones crashed.")
+C) **The "Price-Performance" Ratio** - Start with the blunt financial truth. (e.g., "You can pay $50/month for X, or get 90% of the same functionality with Y for $10. The difference is only in export speed.")
 
 STRUCTURE:
-1. Acknowledge the reader's decision fatigue or frustration with existing options.
-2. Position yourself as someone who did the hard work of comparison.
-3. Promise a clear recommendation or framework for choosing.
-4. Keep it SHORT. 2-3 paragraphs max. Don't list all the tools yet—save that for the body.
+1. Sentence 1: A specific criteria or industry standard that matters most for this product category.
+2. Sentence 2: A preview of the verdict (e.g., "Most tools failed this test, but two stood out").
+3. Sentence 3: Transition to the list/comparison.
 `,
 
   howto: `
-GOAL: Promise a specific outcome and reduce the reader's fear of complexity.
+GOAL: Focus entirely on the "Efficiency" of the solution. You need to switch from "Emotional Storytelling" to "Contextual Utility.
 
-APPROACH OPTIONS (vary these, don't always use the same one):
-A) **Lead with the end result** - "By the end of this tutorial, you'll have a fully working X deployed to production."
-B) **Acknowledge the perceived difficulty** - "Setting up X sounds intimidating. It's actually straightforward when you know the steps."
-C) **Use a time anchor** - "In the next 15 minutes, you'll go from zero to a working implementation."
-D) **Start with 'no prerequisites' or 'beginner-friendly'** - "You don't need to be an expert. If you can copy-paste, you can do this."
+NEGATIVE CONSTRAINTS (STRICTLY ENFORCED):
+- NO Emotional scene-setting ("It's so frustrating when...").
+- NO "Imagine" scenarios.
+- NO Rhetorical Questions ("Have you ever...?").
+- NO False reassurance ("Don't worry, it's easy..., We know it's frustrating...").
+
+INSTRUCTION: Choose ONE of the following 3 angles and write the intro. Do not label the angle.
+
+- Angle A (The Friction Fix):
+"Start immediately with the technical challenge of the task. State why this specific task is usually hard (e.g., requires Photoshop skills, takes hours), and then immediately state how the new AI workflow solves that specific friction point."
+- Angle B (The Output Anchor):
+"Start by describing the final technical result first. Tell the user exactly what the finished product looks like (e.g., resolution, fps, realism) to hook them with the outcome, then work backward to the tool."
+- Angle C (The Accessibility Shift):
+"Start by stating the prerequisite that is NO LONGER needed. (e.g., 'You no longer need a green screen to do X'). Contrast the old requirement with the new ease of use."
 
 STRUCTURE:
-1. State what the reader will accomplish by the end (specific, tangible outcome).
-2. Reassure them: it's simpler than they think, or explain minimal prerequisites.
-3. Briefly mention what tools/setup they'll need (if any).
-4. Keep it SHORT. 2-3 paragraphs max. Jump into the steps quickly.
+1. Sentence 1: Define the specific task or the technical obstacle (The "Hard Way").
+2. Sentence 2: Introduce the tool or method as the efficiency mechanism (The "Smart Way").
+3. Sentence 3: Immediate call to action / start of steps.
 `
 }
 
@@ -155,7 +169,7 @@ DATA CLEANING RULES:
 OUTPUT REQUIREMENTS (Return strict JSON):
 1. "fact_sheet": Extract hard facts, statistics, dates, and specific steps that are mentioned across multiple sources. (e.g., "70% of users prefer X").
 2. "content_gap": Identify what is MISSING. 
-   - Are the articles outdated (e.g., mentioning 2023)?
+   - Are the articles outdated (e.g., mentioning 2023 instead of ${getCurrentDateContext()})?
    - Do they lack specific code examples?
    - Do they fail to answer a specific "why"?
    - Is the tone too robotic?
@@ -189,6 +203,9 @@ const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorD
 You are an expert Content Architect and SEO Strategist.
 Your goal is to outline a high-ranking blog post that beats the competition by filling their "Content Gaps".
 
+**CRITICAL RULE: RELEVANCE OVER LENGTH.**
+Do not fluff the outline. Only include sections that are really necessary to answer the user's search intent and satisfy modern ai search.
+
 **ARTICLE TYPE: ${articleType.toUpperCase()}**
 
 INPUT CONTEXT:
@@ -200,6 +217,21 @@ TYPE-SPECIFIC STRATEGY:
 ${strategy.outline_instruction}
 
 ---
+Before outlining, analyze the "Keyword Intent" to determine the required depth:
+
+1. **The "Quick Answer" Scope** (e.g., "how to reset iphone", "what is x"):
+   - Structure: Short, direct.
+   - Depth: Mostly H2s, few H3s.
+   - Total Sections: **5-8 sections** is sufficient.
+   - GOAL: Speed to solution.
+
+2. **The "Comprehensive Guide" Scope** (e.g., "ultimate guide to seo", "best crm software"):
+   - Structure: Deep, nested.
+   - Depth: Heavy use of H3s and H4s.
+   - Total Sections: **12-20 sections**.
+   - GOAL: Exhaustive coverage.
+
+**INSTRUCTION:** Adjust your outline length to match the keyword. Do not force a 15-section outline for a 8-section topic.
 
 ## HEADING HIERARCHY RULES (CRITICAL FOR SEO - MUST FOLLOW)
 
@@ -228,10 +260,11 @@ H2: Main Topic B
 2. Aim for at least 60% of sections to be level 3 or 4.
 3. Use level 4 (H4) for lists, comparisons, step details, or deep dives.
 4. The sections array should be FLAT but with levels indicating hierarchy.
-
+5. **Nesting is Optional:** If an H2 topic is simple, do NOT force H3s under it.
+6. **The 60/40 Rule:** Only use deep nesting (H3/H4) for complex sections (like "How-To Steps" or "Detailed Features").
 ---
 
-## OTHER INSTRUCTIONS:
+## OUTPUT INSTRUCTIONS:
 1. **Title:** ${title ? `Use the provided title: "${title}".` : 'Generate a catchy H1 based on the Keyword and Content Gap.'}
 2. **Intro/Hook:** Plan a strong introduction.
    - Do NOT list this in the "sections" array.
@@ -264,8 +297,8 @@ H2: Main Topic B
 
 **FINAL CHECK:** Before outputting, verify that:
 - You have H2, H3, AND H4 levels in your outline
-- No H2 stands alone without H3 children
-- Total sections: aim for 12-20 sections across all levels
+- Does this outline solve the specific intent of "${keyword}"?
+- Did you remove unnecessary fluff sections?
 `
 }
 
