@@ -133,6 +133,8 @@ export default function ContentPlanPage() {
                     articleType: item.article_type || "informational",
                     supportingKeywords: item.supporting_keywords || [],
                     cluster: item.cluster || "",
+                    planId: plan?.id,
+                    itemId: item.id,
                 }),
             })
 
@@ -141,13 +143,14 @@ export default function ContentPlanPage() {
                 throw new Error(data.error || "Failed to start article generation")
             }
 
-            const { articleId } = await generateRes.json()
+            // const { articleId } = await generateRes.json() // Not needed for redirect
 
             if (plan) {
                 await handleUpdateStatus(item.id, "writing")
             }
 
-            router.push(`/articles/${articleId}`)
+            // Redirect to articles list instead of the specific article
+            router.push(`/articles`)
         } catch (e: any) {
             setError(e.message || "Failed to generate article")
         } finally {

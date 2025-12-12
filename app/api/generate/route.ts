@@ -12,7 +12,9 @@ export async function POST(req: NextRequest) {
       title,
       articleType = 'informational',
       supportingKeywords = [],
-      cluster = ''
+      cluster = '',
+      planId,
+      itemId
     } = await req.json()
 
     if (!keyword || !brandId) {
@@ -53,6 +55,8 @@ export async function POST(req: NextRequest) {
         articleType: articleType as ArticleType,
         supportingKeywords,
         cluster,
+        planId,
+        itemId
       })
       return NextResponse.json({ jobId: handle.id, articleId: article.id })
     } catch (err: unknown) {

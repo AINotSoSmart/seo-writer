@@ -412,6 +412,8 @@ export const generateBlogPost = task({
     articleType?: ArticleType;
     supportingKeywords?: string[];
     cluster?: string;
+    planId?: string;
+    itemId?: string;
   }) => {
     const {
       articleId,
@@ -420,7 +422,9 @@ export const generateBlogPost = task({
       title,
       articleType = 'informational',
       supportingKeywords = [],
-      cluster = ''
+      cluster = '',
+      planId,
+      itemId
     } = payload
     const supabase = createAdminClient()
     let phase: "research" | "outline" | "writing" | "polish" = "research"
@@ -798,6 +802,39 @@ export const generateBlogPost = task({
           featured_image_url
         })
         .eq("id", articleId)
+
+      // --- PHASE 8: UPDATE CONTENT PLAN IF APPLICABLE ---
+      if (payload.planId && payload.itemId) {
+        try {
+          // 1. Fetch current plan
+          const { data: plan } = await (supabase as any)
+            .from("content_plans")
+            .select("*")
+            .eq("id", payload.planId)
+            .single()
+
+          if (plan && plan.plan_data) {
+            // 2. Update specific item status
+            const updatedPlanData = plan.plan_data.map((item: any) => {
+              if (item.id === payload.itemId) {
+                return { ...item, status: "published" } // Mark as published when generation completes
+              }
+              return item
+            })
+
+            // 3. Save back
+            await (supabase as any)
+              .from("content_plans")
+              .update({ plan_data: updatedPlanData })
+              .eq("id", payload.planId)
+
+            console.log(`Updated content plan ${payload.planId} item ${payload.itemId} to published`)
+          }
+        } catch (e) {
+          console.error("Failed to update content plan status", e)
+          // Non-blocking
+        }
+      }
 
       return { success: true, articleId }
 

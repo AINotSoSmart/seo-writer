@@ -449,7 +449,20 @@ export async function POST(req: NextRequest) {
             scheduledDate.setDate(today.getDate() + index)
 
             // Find the matching cluster using the exact GSC query
-            const matchingCluster = clusters.find(c => c.primary_keyword === item.gsc_query)
+            let matchingCluster = clusters.find(c => c.primary_keyword === item.gsc_query)
+
+            // Fallback 1: Case-insensitive match
+            if (!matchingCluster) {
+                matchingCluster = clusters.find(c => c.primary_keyword.toLowerCase().trim() === item.gsc_query.toLowerCase().trim())
+            }
+
+            // Fallback 2: Substring match (if LLM modified query slightly)
+            if (!matchingCluster) {
+                matchingCluster = clusters.find(c =>
+                    item.gsc_query.toLowerCase().includes(c.primary_keyword.toLowerCase()) ||
+                    c.primary_keyword.toLowerCase().includes(item.gsc_query.toLowerCase())
+                )
+            }
 
             // Use target_keyword if provided, otherwise fall back to gsc_query
             const mainKeyword = item.target_keyword || item.gsc_query

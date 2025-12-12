@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const { data, error } = await supabase
+        const { data: plan, error } = await supabase
             .from("content_plans")
             .select("*")
             .eq("user_id", user.id)
@@ -24,7 +24,67 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        return NextResponse.json(data || null)
+        // --- STATUS RECONCILIATION LOGIC ---
+        if (plan && plan.plan_data) {
+            // 1. Fetch all articles for this user to check actual status
+            const { data: articles } = await supabase
+                .from("articles")
+                .select("keyword, status, slug")
+                .eq("user_id", user.id)
+
+            if (articles && articles.length > 0) {
+                // 2. Create a lookup map: normalized keyword -> article status
+                const articleMap = new Map<string, string>()
+                articles.forEach((a: any) => {
+                    if (a.keyword) {
+                        articleMap.set(a.keyword.trim().toLowerCase(), a.status)
+                    }
+                })
+
+                let hasChanges = false
+                const updatedPlanData = (plan.plan_data as ContentPlanItem[]).map((item) => {
+                    const normalizedKey = item.main_keyword.trim().toLowerCase()
+                    const articleStatus = articleMap.get(normalizedKey)
+
+                    if (articleStatus) {
+                        // Map article status to plan status
+                        let newStatus: "pending" | "writing" | "published" = item.status
+
+                        if (articleStatus === "completed" || articleStatus === "published") {
+                            newStatus = "published"
+                        } else if (["processing", "researching", "outlining", "writing", "polishing", "queued"].includes(articleStatus)) {
+                            newStatus = "writing"
+                        } else if (articleStatus === "failed") {
+                            // Optional: Reset to pending if failed, or keep as writing to show retry? 
+                            // Let's keep as pending to allow retry.
+                            newStatus = "pending"
+                        }
+
+                        if (newStatus !== item.status) {
+                            hasChanges = true
+                            return { ...item, status: newStatus }
+                        }
+                    }
+                    return item
+                })
+
+                // 3. If changes found, update the plan in DB (self-healing)
+                if (hasChanges) {
+                    await supabase
+                        .from("content_plans")
+                        .update({
+                            plan_data: updatedPlanData,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq("id", plan.id)
+
+                    // Return the updated data immediately
+                    return NextResponse.json({ ...plan, plan_data: updatedPlanData })
+                }
+            }
+        }
+
+        return NextResponse.json(plan || null)
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
