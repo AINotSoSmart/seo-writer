@@ -523,7 +523,7 @@ ${styleDNA}.
 
 ${brandDetails ? `
 ### 5. BRAND PERSPECTIVE CHECK (CRITICAL)
-You MUST fix any "cringe" self-reviews.
+You MUST remove any "cringe" self-reviews, check if the brand is overlay mentioned and can destroy brand reputation.
 - **When discussing Competitors:** It is OK to say "I tested X".
 - **When discussing ${brandDetails.product_name} (Our Product):**
   - **BAD:** "I tested ${brandDetails.product_name} and it was fast." (Sounds fake/cringe).
