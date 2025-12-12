@@ -148,37 +148,73 @@ const getIntroTemplate = (articleType: ArticleType): string => {
   return INTRO_TEMPLATES[articleType] || INTRO_TEMPLATES.informational
 }
 
-const getResearchSystemPrompt = (articleType: ArticleType) => {
+// --- PHASE 2 HELPER: "The Critic" Gap Analysis Prompt ---
+const getCriticGapPrompt = (keyword: string, articleType: ArticleType, broadContext: string) => {
+  const strategy = getArticleStrategy(articleType)
+
+  return `
+You are a ruthless Research Critic. ${getCurrentDateContext()}
+
+I have gathered initial search results for the keyword: "${keyword}"
+
+YOUR TASK:
+Analyze this research data and identify EXACTLY what is MISSING that we need to write a winning article.
+
+**ARTICLE TYPE: ${articleType.toUpperCase()}**
+${strategy.research_focus}
+
+THINK LIKE A CRITIC:
+- "I see features, but where is the 2025 pricing?"
+- "They mention customer support, but is it 24/7 or email-only?"
+- "Where are the real user reviews? This is all marketing fluff."
+- "What specific statistics or benchmarks are missing?"
+- "Are there competitor comparisons that should exist but don't?"
+
+=== INITIAL RESEARCH DATA ===
+${broadContext}
+
+OUTPUT (Strict JSON):
+Return EXACTLY 3-5 highly specific search queries that will fill these gaps.
+Be SPECIFIC - not "best CRM" but "Salesforce pricing 2025" or "HubSpot vs Pipedrive user reviews reddit"
+
+{
+  "gap_analysis": string,  // Brief description of what's missing
+  "targeted_queries": string[]  // 3-5 SPECIFIC search queries to fill gaps
+}
+`
+}
+
+// --- PHASE 2 HELPER: Final Synthesis Prompt ---
+const getSynthesisPrompt = (articleType: ArticleType, keyword: string) => {
   const strategy = getArticleStrategy(articleType)
 
   return `
 You are an expert SEO Strategist and Data Analyst. ${getCurrentDateContext()}
-I will provide you with the raw text content of the Top 5 Google Search results for a specific keyword.
+
+I will provide you with TWO sets of research data:
+1. BROAD LANDSCAPE DATA - General information from top search results
+2. DEEP DIVE DATA - Specific gap-filling information we hunted down
 
 YOUR GOAL:
-Analyze this data to create a "Research Brief" that allows us to write a better article than all of them combined.
+Combine these into ONE comprehensive "Research Brief" that allows us to write a better article than all competitors combined.
 
+**KEYWORD: "${keyword}"**
 **ARTICLE TYPE: ${articleType.toUpperCase()}**
 
 ${strategy.research_focus}
 
 DATA CLEANING RULES:
-1. The input contains raw web scrapes. Ignore UI elements like "Login", "Sign Up", "Footer", "Cookie Policy", "Alt tags".
-2. Focus ONLY on the educational content, tutorials, and facts.
+1. Ignore UI elements like "Login", "Sign Up", "Footer", "Cookie Policy", "Alt tags".
+2. Focus ONLY on educational content, tutorials, and facts.
+3. PRIORITIZE the Deep Dive data - it contains the specific facts that competitors miss.
 
 OUTPUT REQUIREMENTS (Return strict JSON):
-1. "fact_sheet": Extract hard facts, statistics, dates, and specific steps that are mentioned across multiple sources. (e.g., "70% of users prefer X").
-2. "content_gap": Identify what is MISSING. 
-   - Are the articles outdated (e.g., mentioning 2023 instead of ${getCurrentDateContext()})?
-   - Do they lack specific code examples?
-   - Do they fail to answer a specific "why"?
-   - Is the tone too robotic?
-   - Note: If one source has a Transcript (like a YouTube video), extract unique tips from it that text blogs missed.
-3. "product_matrix": (ONLY for commercial/comparison articles) Extract product details for each product/tool mentioned:
-   - name, price (or "Unknown" if not found), pros (array), cons (array), unique_selling_point, best_for
-4. "step_sequence": (ONLY for how-to/tutorial articles) Extract the step-by-step sequence:
-   - step (number), title, details, pro_tip (optional)
-5. "prerequisites": (ONLY for how-to/tutorial articles) What the reader needs before starting.
+1. "fact_sheet": Extract hard facts, statistics, dates, and specific steps. MUST include fresh data from Deep Dive.
+2. "content_gap": What is STILL missing after both research phases? This helps the writer know where to add original insight.
+3. "product_matrix": (ONLY for commercial/comparison articles) Product details with REAL pricing if found.
+4. "step_sequence": (ONLY for how-to/tutorial articles) Extract step-by-step sequence.
+5. "prerequisites": (ONLY for how-to/tutorial articles) What the reader needs.
+6. "sources_summary": All sources used.
 
 JSON SCHEMA:
 {
@@ -188,12 +224,109 @@ JSON SCHEMA:
     "outdated_info": string,
     "user_intent_gaps": string[]
   },
-  "sources_summary": { url: string, title: string }[],
-  "product_matrix": [{ name: string, price: string, pros: string[], cons: string[], unique_selling_point: string, best_for: string }],
-  "step_sequence": [{ step: number, title: string, details: string, pro_tip?: string }],
+  "sources_summary": [{ "url": string, "title": string }],
+  "product_matrix": [{ "name": string, "price": string, "pros": string[], "cons": string[], "unique_selling_point": string, "best_for": string }],
+  "step_sequence": [{ "step": number, "title": string, "details": string, "pro_tip": string }],
   "prerequisites": string[]
 }
 `
+}
+
+// --- PHASE 2 HELPER: Deep Research Lite (2-Phase Tavily + Critic) ---
+const performDeepResearch = async (
+  tvly: any,
+  genAI: any,
+  keyword: string,
+  articleType: ArticleType,
+  supportingKeywords: string[] = []
+) => {
+  console.log(`[Deep Research] Phase 1: Broad Landscape Search for "${keyword}"`)
+
+  // === STEP 1: BROAD LANDSCAPE SEARCH ===
+  const broadQuery = `${keyword} ${supportingKeywords.slice(0, 2).join(' ')}`.trim()
+  const broadSearch = await tvly.search(broadQuery, {
+    search_depth: "advanced",
+    include_text: true,
+    max_results: 5,
+  })
+
+  const broadContext = broadSearch.results.map((r: any) =>
+    `Source: ${r.title} (${r.url})\nContent: ${r.content}`
+  ).join("\n\n---\n\n")
+
+  console.log(`[Deep Research] Phase 1 Complete: ${broadSearch.results.length} sources extracted`)
+
+  // === STEP 2: THE CRITIC (Gap Analysis) ===
+  console.log(`[Deep Research] Phase 2: The Critic - Analyzing gaps...`)
+
+  const criticPrompt = getCriticGapPrompt(keyword, articleType, broadContext)
+  const criticResp = await genAI.models.generateContent({
+    model: "gemini-2.0-flash",
+    config: { responseMimeType: "application/json" },
+    contents: [{ role: "user", parts: [{ text: criticPrompt }] }]
+  })
+
+  const criticAnalysis = cleanAndParse(criticResp.text || '{"gap_analysis":"","targeted_queries":[]}')
+  const targetedQueries: string[] = criticAnalysis.targeted_queries || []
+
+  console.log(`[Deep Research] Critic identified gaps:`, criticAnalysis.gap_analysis)
+  console.log(`[Deep Research] Targeted queries:`, targetedQueries)
+
+  // === STEP 3: SNIPER SEARCH (Fill the Gaps) ===
+  let deepContext = ""
+  if (targetedQueries.length > 0) {
+    console.log(`[Deep Research] Phase 3: Sniper Search - Hunting ${targetedQueries.length} specific queries...`)
+
+    // Execute targeted searches in parallel for speed
+    const deepResults = await Promise.all(
+      targetedQueries.slice(0, 4).map((q: string) =>
+        tvly.search(q, {
+          search_depth: "basic",
+          include_text: true,
+          max_results: 2
+        }).catch((err: any) => {
+          console.log(`[Deep Research] Sniper query failed: ${q}`, err.message)
+          return { results: [] }
+        })
+      )
+    )
+
+    const allDeepResults = deepResults.flatMap(r => r.results)
+    deepContext = allDeepResults.map((r: any) =>
+      `Source (Gap Fill - ${r.query || 'targeted'}): ${r.title} (${r.url})\nContent: ${r.content}`
+    ).join("\n\n---\n\n")
+
+    console.log(`[Deep Research] Phase 3 Complete: ${allDeepResults.length} gap-filling sources extracted`)
+  }
+
+  // === STEP 4: FINAL SYNTHESIS ===
+  console.log(`[Deep Research] Phase 4: Final Synthesis...`)
+
+  const synthesisPrompt = getSynthesisPrompt(articleType, keyword)
+  const combinedData = `
+=== BROAD LANDSCAPE DATA (Initial Search) ===
+${broadContext}
+
+=== DEEP DIVE DATA (Gap-Filling Search) ===
+${deepContext || "No additional gap-filling data was needed."}
+
+=== CRITIC'S GAP ANALYSIS ===
+${criticAnalysis.gap_analysis || "No major gaps identified."}
+`
+
+  const synthesisStream = await genAI.models.generateContentStream({
+    model: "gemini-2.5-flash",
+    config: {},
+    contents: [{ role: "user", parts: [{ text: synthesisPrompt + "\n\n" + combinedData }] }]
+  })
+
+  let synthesisText = ""
+  for await (const c of synthesisStream) {
+    synthesisText += (c as any).text || ""
+  }
+
+  console.log(`[Deep Research] Complete! Synthesized comprehensive research brief.`)
+  return CompetitorDataSchema.parse(cleanAndParse(synthesisText))
 }
 
 const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string) => {
@@ -449,54 +582,18 @@ export const generateBlogPost = task({
       // style_dna is now a paragraph from brand_details, not a separate brand_voices lookup
       const styleDNA = brandDetails.style_dna || "Write in a professional yet conversational tone. Use active voice and be direct. Address the reader as 'you'. Keep sentences varied for natural rhythm. Avoid corporate jargon and be specific with examples and data."
 
-      // --- PHASE 2: RESEARCH (The "Gap" Engine) ---
+      // --- PHASE 2: RESEARCH (Deep Research - 2-Phase Tavily + Critic) ---
       await supabase.from("articles").update({ status: "researching" }).eq("id", articleId)
       phase = "research"
 
-      // Build search query with supporting keywords for broader coverage
-      const searchQuery = supportingKeywords.length > 0
-        ? `${keyword} ${supportingKeywords.slice(0, 2).join(' ')}`
-        : keyword
-
-      const searchResults = await tvly.search(searchQuery, {
-        search_depth: "advanced",
-        include_text: true,
-        max_results: 5,
-      })
-
-      // Using Gemini 3 Pro for Research
-      const analyzeConfig = { tools: [{ googleSearch: {} }] }
-      const researchPrompt = getResearchSystemPrompt(articleType)
-
-      // Include supporting keywords and cluster in research context
-      const additionalContext = supportingKeywords.length > 0 || cluster
-        ? `\n\nADDITIONAL SEO CONTEXT:\n- Main Keyword: "${keyword}"\n- Supporting Keywords: ${supportingKeywords.join(', ') || 'none'}\n- Topic Cluster: ${cluster || 'General'}\n`
-        : ''
-
-      const analyzeContents = [
-        {
-          role: "user",
-          parts: [
-            {
-              text: researchPrompt + additionalContext + `\n\nINPUT DATA(Search Results for "${keyword}"): \n` + JSON.stringify(searchResults.results)
-            },
-          ],
-        },
-      ]
-
-      const analyzeStream = await genAI.models.generateContentStream({
-        model: "gemini-2.5-flash",
-        config: analyzeConfig,
-        contents: analyzeContents
-      })
-
-      let analyzeText = ""
-      for await (const c of analyzeStream) {
-        analyzeText += (c as any).text || ""
-      }
-
-      const competitorData = CompetitorDataSchema.parse(cleanAndParse(analyzeText))
-
+      // Use the 2-phase deep research: Broad Search → Critic Gap Analysis → Sniper Search → Synthesis
+      const competitorData = await performDeepResearch(
+        tvly,
+        genAI,
+        keyword,
+        articleType,
+        supportingKeywords
+      )
 
       await supabase
         .from("articles")
