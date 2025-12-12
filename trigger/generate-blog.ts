@@ -613,7 +613,7 @@ export const generateBlogPost = task({
       ]
 
       const outlineStream = await genAI.models.generateContentStream({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-pro",
         config: outlineConfig,
         contents: outlineContents
       })
@@ -739,7 +739,7 @@ export const generateBlogPost = task({
       phase = "polish"
 
       const polishPrompt = generatePolishEditorPrompt(currentDraft, styleDNA, brandDetails)
-      // Blueprint asks for Gemini 2.5 Pro (Advanced Reasoning). Using Gemini 3 Pro Preview as closest powerful model.
+      // Blueprint asks for Gemini 2.5 Pro (Advanced Reasoning).
       const polishConfig = {}
       const polishContents = [
         {
