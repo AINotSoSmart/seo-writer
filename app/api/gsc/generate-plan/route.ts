@@ -248,7 +248,7 @@ Use this strategic breakdown:
 ### 2. For each topic, provide:
 - **gsc_query**: EXACT \`primary_keyword\` from the cluster (COPY IT EXACTLY)
 - **target_keyword**: (Optional) A more specific long-tail variant for article targeting
-- **title**: A compelling, human-like article title
+- **title**: A compelling, human-like article title which rewards human-like behavior and fulfil seo needs.
 - **article_type**: MUST be one of: informational, commercial, howto
 - **supporting_keywords**: Array from the cluster's supporting_keywords
 - **cluster**: Topic category/cluster name
