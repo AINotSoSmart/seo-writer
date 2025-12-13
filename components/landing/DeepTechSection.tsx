@@ -77,51 +77,51 @@ const DeepTechSection = () => {
                                     <span>Status: Parsed</span>
                                 </div>
                                 <div className="divide-y divide-ink/10 font-mono text-[10px]">
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-zinc-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">seq_01</span>
+                                            <span className="font-bold text-ink">Init_Vector_Search: "Programmatic SEO"</span>
+                                        </div>
+                                        <span className="bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded-sm">VECTOR_SCAN</span>
+                                    </div>
                                     <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-blue-50">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-ink/30">src_01</span>
-                                            <span className="font-bold text-ink">Competitor_Blog_Analysis</span>
+                                            <span className="text-ink/30">seq_02</span>
+                                            <span className="font-bold text-ink">Global_Index_Retrieval: [Top 20 Results]</span>
                                         </div>
-                                        <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-sm">COMPETITOR</span>
-                                    </div>
-                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-orange-50">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-ink/30">src_02</span>
-                                            <span className="font-bold text-ink">Niche_Forum_Discussions</span>
-                                        </div>
-                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-sm">UGC</span>
-                                    </div>
-                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-green-50">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-ink/30">src_03</span>
-                                            <span className="font-bold text-ink">Technical_Documentation_V2</span>
-                                        </div>
-                                        <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded-sm">DATABASE</span>
+                                        <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-sm">WEB_CRAWL</span>
                                     </div>
                                     <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-red-50">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-ink/30">src_04</span>
-                                            <span className="font-bold text-ink">YouTube_Transcript_Parser</span>
+                                            <span className="text-ink/30">seq_03</span>
+                                            <span className="font-bold text-ink">Authority_Filter: "Discarding Low-Quality Nodes"</span>
                                         </div>
-                                        <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded-sm">VIDEO</span>
+                                        <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded-sm">FILTER</span>
                                     </div>
                                     <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-purple-50">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-ink/30">src_05</span>
-                                            <span className="font-bold text-ink">G_Scholar_Citation_Check</span>
+                                            <span className="text-ink/30">seq_04</span>
+                                            <span className="font-bold text-ink">Analyzing_Gap: "Missing Implementation Details"</span>
                                         </div>
-                                        <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-sm">SCHOLAR</span>
+                                        <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-sm">LLM_REASONING</span>
                                     </div>
-                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-gray-50">
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-orange-50">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-ink/30">src_06</span>
-                                            <span className="font-bold text-ink">Industry_Report_PDF</span>
+                                            <span className="text-ink/30">seq_05</span>
+                                            <span className="font-bold text-ink">Recursive_Query: "Next.js Sitemap Config"</span>
                                         </div>
-                                        <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded-sm">FILE</span>
+                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-sm">DEEP_DIVE</span>
+                                    </div>
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-green-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">seq_06</span>
+                                            <span className="font-bold text-ink">Fact_Verification: "Cross-Referencing Claims"</span>
+                                        </div>
+                                        <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded-sm">VERIFY</span>
                                     </div>
                                     <div className="px-3 py-2 flex items-center gap-2 opacity-50 bg-[#fafafa]">
                                         <div className="w-2 h-2 border-2 border-ink border-t-transparent rounded-full animate-spin"></div>
-                                        <span>Aggregating data points...</span>
+                                        <span>Constructing Answer Graph...</span>
                                     </div>
                                 </div>
                             </div>
