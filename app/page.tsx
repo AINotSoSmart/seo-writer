@@ -10,6 +10,12 @@ import Footer from '@/components/MainFooter'
 
 
 
+import ParadigmShiftSection from '@/components/landing/ParadigmShiftSection';
+import DeepTechSection from '@/components/landing/DeepTechSection';
+import TuringTestSection from '@/components/landing/TuringTestSection';
+import FAQSection from '@/components/landing/FAQSection';
+import CTASection from '@/components/landing/CTASection';
+
 export const metadata: Metadata = commonPageMetadata.home()
 
 export default function Home() {
@@ -20,7 +26,12 @@ export default function Home() {
       <main>
         <HeroSection />
         <PainSection />
+        <ParadigmShiftSection />
         <SolutionSection />
+        <DeepTechSection />
+        <TuringTestSection />
+        <FAQSection />
+        <CTASection />
       </main>
       <Footer />
       {/* WebApplication Schema - Home Page Only */}

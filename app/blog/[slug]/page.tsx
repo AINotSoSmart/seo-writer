@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import PublicHeader, { Header } from "@/components/Header"
+import Header from "@/components/Header"
 import MainFooter from "@/components/MainFooter"
 import BlogContentRenderer from "@/components/blog-content-renderer"
 import ShareButton from "@/components/share-button"
@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { getPostBySlug, getAllPostSlugs, formatDate, calculateReadingTime, type WordPressPost } from "@/lib/wordpress"
 import { notFound, redirect } from "next/navigation"
 import Image from "next/image"
-import { CTASection } from "@/components/landing/CTASection"
 
 // Ensure static generation with ISR for crawler stability
 export const dynamic = 'force-static'
@@ -152,7 +151,7 @@ function BlogPostContent({ post }: { post: WordPressPost }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(blogPostJsonLd) }}
       />
-      <PublicHeader />
+      <Header />
       <main className="pb-20">
         {/* Hero Section */}
         <div className="relative bg-[#F7F5F3] pt-24 pb-12">
@@ -164,7 +163,7 @@ function BlogPostContent({ post }: { post: WordPressPost }) {
                 Back to Blog
               </Link>
             </div>
-            
+
             <div className="space-y-6">
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                 <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium">{category}</span>
@@ -177,13 +176,13 @@ function BlogPostContent({ post }: { post: WordPressPost }) {
                   <span>{readTime}</span>
                 </div>
               </div>
-              
+
               <h1 className="text-4xl md:text-5xl font-bold text-gray-900 leading-tight">{post.title}</h1>
-              
+
               {post.excerpt && (
                 <div className="text-xl text-gray-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: post.excerpt }} suppressHydrationWarning />
               )}
-              
+
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-3">
                   {post.author.node.avatar?.url ? (
@@ -204,9 +203,9 @@ function BlogPostContent({ post }: { post: WordPressPost }) {
                     <p className="text-sm text-gray-600">Author</p>
                   </div>
                 </div>
-                
+
                 <div className="ml-auto">
-                  <ShareButton 
+                  <ShareButton
                     title={post.title}
                     url={`https://www.unrealshot.com/blog/${post.slug}`}
                     text={post.excerpt || `Check out this article: ${post.title}`}
@@ -243,8 +242,7 @@ function BlogPostContent({ post }: { post: WordPressPost }) {
 
         {/* Call to Action */}
         <div className="text-center mt-16">
-            <CTASection />
-          </div>
+        </div>
       </main>
       <MainFooter />
     </div>
