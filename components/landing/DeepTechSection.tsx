@@ -1,130 +1,222 @@
 import React from 'react';
-import { Bot, BrainCircuit, Database, BookOpen, GraduationCap, ShieldCheck, FileSearch, Network, Server, Microscope } from 'lucide-react';
+import { Bot, ShieldCheck, Ban, Network, Database, Globe, Cpu, Search, Activity, FileSearch, Layers, ScanSearch } from 'lucide-react';
 
 const DeepTechSection = () => {
     return (
-        <section className="py-24 md:py-32 bg-cream relative overflow-hidden border-b border-ink">
-            {/* Background Texture - retained as requested */}
-            <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(to_right,#00000005_1px,transparent_1px),linear-gradient(to_bottom,#00000005_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
+        <section className="py-24 bg-cream text-ink relative overflow-hidden border-b border-ink">
+
+            {/* Background Texture*/}
+            <div className="absolute inset-0 bg-grid-pattern bg-[length:40px_40px] opacity-30 pointer-events-none"></div>
 
             <div className="max-w-7xl mx-auto px-4 relative z-10">
 
-                {/* Section Header - STRICT PAIN SECTION PATTERN */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-20 border-l-2 border-signal pl-6 md:pl-8">
+                {/* Header Block */}
+                <div className="flex flex-col md:flex-row gap-12 md:items-end justify-between mb-20">
                     <div className="max-w-3xl">
-                        <div className="flex items-center gap-2 mb-4">
-                            <span className="font-mono text-xs font-bold uppercase tracking-widest text-signal flex items-center gap-2">
-                                <Microscope size={14} />
-                                Deep_Research_Lite_v2
-                            </span>
-                            <span className="h-px w-12 bg-signal/30"></span>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-ink text-ink font-mono text-xs font-bold tracking-widest uppercase mb-6 shadow-[2px_2px_0px_0px_#1a1a1a]">
+                            <Cpu size={12} />
+                            The Research Engine
                         </div>
-                        <h2 className="font-serif text-5xl md:text-6xl font-medium leading-[0.95] text-ink mb-6">
+                        <h2 className="font-serif text-5xl md:text-7xl leading-[0.9] text-ink">
                             Research at the <br />
-                            speed of <span className="italic relative inline-block z-10">
-                                silicon.
-                                <span className="absolute bottom-2 left-0 w-full h-3 bg-signal/20 -z-10 -rotate-1"></span>
-                            </span>
+                            <span className="italic font-light text-ink/70">speed of silicon.</span>
                         </h2>
                     </div>
                     <div className="max-w-sm">
-                        <p className="font-mono text-xs md:text-sm text-ink/70 leading-relaxed border-t border-ink/10 pt-4">
-                            We don't hypothesize. We scrape. Our engine digests 50+ live sources per article to build a citation graph that algorithms cannot ignore.
+                        <p className="font-mono text-sm text-ink/70 leading-relaxed border-l-2 border-signal pl-6">
+                            We don't hypothesize. We scrape. Our engine digests 50+ live sources — from competitors to databases — to build a citation graph that algorithms cannot ignore.
                         </p>
                     </div>
                 </div>
 
-                {/* Feature Grid / Control Panel - REIMAGINED AS "LAB SCHEMATICS" */}
-                <div className="grid grid-cols-1 md:grid-cols-3 border border-ink bg-white shadow-brutalist">
+                {/* The Control Panel - Technical Schematic Aesthetic */}
+                <div className="w-full bg-white border border-ink shadow-brutalist flex flex-col">
 
-                    {/* Feature 1: The Pulse */}
-                    <div className="group border-b md:border-b-0 md:border-r border-ink p-8 hover:bg-paper transition-colors relative">
-                        {/* Technical Badge */}
-                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <Network size={80} strokeWidth={1} />
+                    {/* Top Bar / Status Line */}
+                    <div className="h-10 border-b border-ink bg-[#f5f5f5] flex items-center px-4 justify-between">
+                        <div className="flex gap-2">
+                            <div className="w-2 h-2 rounded-full bg-signal animate-pulse"></div>
+                            <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-ink/60">System_Status: ACTIVE</span>
                         </div>
-
-                        <div className="flex justify-between items-start mb-8">
-                            <div className="font-mono text-[10px] uppercase tracking-widest border border-ink/20 px-2 py-1 bg-white text-ink/50">
-                                DATA_INGESTION
-                            </div>
-                            <div className="w-8 h-8 rounded-full bg-ink/5 flex items-center justify-center text-ink group-hover:bg-signal group-hover:text-white transition-colors">
-                                <FileSearch size={16} />
-                            </div>
-                        </div>
-
-                        <h3 className="font-serif text-2xl font-bold mb-3 text-ink">Reddit & Quora Pulse</h3>
-                        <p className="font-mono text-xs text-ink/60 leading-relaxed mb-6">
-                            We scan thousands of threads to find the *actual* questions humans are asking—not just what Keyword Planner tells you.
-                        </p>
-
-                        <div className="mt-auto pt-4 border-t border-ink/10 flex justify-between items-center">
-                            <span className="text-[10px] font-mono text-signal font-bold flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 bg-signal rounded-full animate-pulse"></span>
-                                LIVE_FEED_ACTIVE
-                            </span>
-                            <div className="flex gap-0.5">
-                                <span className="w-0.5 h-2 bg-signal"></span>
-                                <span className="w-0.5 h-3 bg-signal/50"></span>
-                                <span className="w-0.5 h-1 bg-signal/30"></span>
-                                <span className="w-0.5 h-2.5 bg-signal/80"></span>
-                            </div>
+                        <div className="font-mono text-[10px] text-ink/40">
+                            V.2.0.4 [STABLE]
                         </div>
                     </div>
 
-                    {/* Feature 2: Academic Core */}
-                    <div className="group border-b md:border-b-0 md:border-r border-ink p-8 hover:bg-paper transition-colors relative">
-                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <GraduationCap size={80} strokeWidth={1} />
+                    {/* Main Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-12">
+
+                        {/* FEATURE 1: Live Web Extraction */}
+                        <div className="col-span-12 md:col-span-7 border-b md:border-b-0 md:border-r border-ink p-8 md:p-12 relative overflow-hidden group hover:bg-paper transition-colors">
+
+                            {/* Background Icon */}
+                            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
+                                <Layers size={180} />
+                            </div>
+
+                            <div className="flex items-start justify-between mb-8">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="w-1.5 h-1.5 bg-ink rounded-full"></span>
+                                        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-ink/50">Multi-Source Ingestion</span>
+                                    </div>
+                                    <h3 className="font-serif text-3xl font-bold mb-2">Live Web Extraction</h3>
+                                    <p className="font-mono text-xs text-ink/60 max-w-sm leading-relaxed">
+                                        We don't limit ourselves to one source. We scan top SERP results, competitor blogs, and niche databases to construct the definitive answer for your entity.
+                                    </p>
+                                </div>
+                                <div className="w-10 h-10 border border-ink bg-white flex items-center justify-center shadow-[2px_2px_0px_0px_#1a1a1a]">
+                                    <ScanSearch size={20} />
+                                </div>
+                            </div>
+
+                            {/* VISUAL: Live Ingest Feed */}
+                            <div className="w-full border border-ink bg-white shadow-sm p-1">
+                                <div className="bg-ink text-white px-3 py-2 font-mono text-[10px] flex justify-between uppercase tracking-wider">
+                                    <span>Live_Source_Feed</span>
+                                    <span>Status: Parsed</span>
+                                </div>
+                                <div className="divide-y divide-ink/10 font-mono text-[10px]">
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-blue-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">src_01</span>
+                                            <span className="font-bold text-ink">Competitor_Blog_Analysis</span>
+                                        </div>
+                                        <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-sm">COMPETITOR</span>
+                                    </div>
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-orange-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">src_02</span>
+                                            <span className="font-bold text-ink">Niche_Forum_Discussions</span>
+                                        </div>
+                                        <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-sm">UGC</span>
+                                    </div>
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-green-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">src_03</span>
+                                            <span className="font-bold text-ink">Technical_Documentation_V2</span>
+                                        </div>
+                                        <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded-sm">DATABASE</span>
+                                    </div>
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-red-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">src_04</span>
+                                            <span className="font-bold text-ink">YouTube_Transcript_Parser</span>
+                                        </div>
+                                        <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded-sm">VIDEO</span>
+                                    </div>
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-purple-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">src_05</span>
+                                            <span className="font-bold text-ink">G_Scholar_Citation_Check</span>
+                                        </div>
+                                        <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-sm">SCHOLAR</span>
+                                    </div>
+                                    <div className="px-3 py-2 flex items-center justify-between group/row hover:bg-gray-50">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-ink/30">src_06</span>
+                                            <span className="font-bold text-ink">Industry_Report_PDF</span>
+                                        </div>
+                                        <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded-sm">FILE</span>
+                                    </div>
+                                    <div className="px-3 py-2 flex items-center gap-2 opacity-50 bg-[#fafafa]">
+                                        <div className="w-2 h-2 border-2 border-ink border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Aggregating data points...</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="flex justify-between items-start mb-8">
-                            <div className="font-mono text-[10px] uppercase tracking-widest border border-ink/20 px-2 py-1 bg-white text-ink/50">
-                                SOURCE_VALIDATION
-                            </div>
-                            <div className="w-8 h-8 rounded-full bg-ink/5 flex items-center justify-center text-ink group-hover:bg-signal group-hover:text-white transition-colors">
-                                <BookOpen size={16} />
-                            </div>
-                        </div>
+                        {/* Right Column Stack */}
+                        <div className="col-span-12 md:col-span-5 flex flex-col">
 
-                        <h3 className="font-serif text-2xl font-bold mb-3 text-ink">Academic Validation</h3>
-                        <p className="font-mono text-xs text-ink/60 leading-relaxed mb-6">
-                            Claims are cross-referenced against Google Scholar and authoritative domains. Zero hallucinations. 100% Citability.
-                        </p>
+                            {/* FEATURE 2: Fact & Entity Verification */}
+                            <div className="flex-1 border-b border-ink p-8 relative group hover:bg-paper transition-colors">
+                                <div className="flex items-start justify-between mb-6">
+                                    <div>
+                                        <h3 className="font-serif text-2xl font-bold mb-1">Fact Verification</h3>
+                                        <p className="font-mono text-[10px] text-ink/50 uppercase tracking-widest">Ground-Truth Check</p>
+                                    </div>
+                                    <div className="w-8 h-8 border border-ink bg-white flex items-center justify-center">
+                                        <ShieldCheck size={16} />
+                                    </div>
+                                </div>
 
-                        <div className="mt-auto pt-4 border-t border-ink/10 flex justify-between items-center">
-                            <span className="text-[10px] font-mono text-ink/40">p_value &lt; 0.05</span>
-                            <div className="px-1.5 py-0.5 border border-ink text-[8px] text-ink font-mono font-bold bg-white shadow-sm">
-                                VERIFIED
+                                <p className="font-mono text-xs text-ink/60 mb-6 leading-relaxed">
+                                    We cross-reference every claim against live web data to ensure accuracy and build a citation graph algorithms trust.
+                                </p>
+
+                                {/* Visual: Citation Card */}
+                                <div className="bg-white border border-ink p-3 shadow-[2px_2px_0px_0px_#1a1a1a] relative">
+                                    <div className="absolute -top-2 -left-2 bg-green-500 border border-ink w-4 h-4 rounded-full flex items-center justify-center text-white z-10">
+                                        <CheckCircle2 size={10} />
+                                    </div>
+                                    <div className="font-serif italic text-sm text-ink/80 mb-3 border-l-2 border-ink/20 pl-3">
+                                        "...demonstrating a 40% increase in entity visibility..."
+                                    </div>
+                                    <div className="flex items-center gap-2 pt-2 border-t border-dashed border-ink/20">
+                                        <div className="p-1 bg-ink/5 border border-ink/10">
+                                            <Database size={10} className="text-ink/50" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="font-mono text-[9px] font-bold uppercase">Cross-Referenced</span>
+                                            <span className="font-mono text-[8px] text-ink/40">Authority Domain • Match: 99.8%</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
+                            {/* FEATURE 3: The Anti-Pattern */}
+                            <div className="flex-1 p-8 relative group hover:bg-paper transition-colors">
+                                <div className="flex items-start justify-between mb-6">
+                                    <div>
+                                        <h3 className="font-serif text-2xl font-bold mb-1">The Anti-Pattern</h3>
+                                        <p className="font-mono text-[10px] text-ink/50 uppercase tracking-widest">Bot Detection</p>
+                                    </div>
+                                    <div className="w-8 h-8 border border-ink bg-white flex items-center justify-center">
+                                        <Ban size={16} />
+                                    </div>
+                                </div>
+
+                                <p className="font-mono text-xs text-ink/60 mb-6 leading-relaxed">
+                                    We detect common AI writing patterns ("In the rapidly evolving landscape") and ban them to ensure human-grade resonance.
+                                </p>
+
+                                {/* Visual: Diff Checker */}
+                                <div className="bg-white border border-ink font-mono text-[10px] p-1">
+                                    <div className="flex items-center justify-between px-2 py-1 bg-[#f5f5f5] border-b border-ink/10 mb-1">
+                                        <span>AI_CONTENT_DETECTION</span>
+                                        <span className="text-red-500 font-bold">-2</span>
+                                    </div>
+                                    <div className="space-y-0.5 p-1">
+                                        <div className="bg-red-50 text-red-900 line-through decoration-red-400 px-2 py-1 flex justify-between">
+                                            "In the digital landscape..."
+                                            <span className="font-bold">BAN</span>
+                                        </div>
+                                        <div className="bg-green-50 text-green-900 px-2 py-1 flex justify-between border border-green-200 mt-1">
+                                            "Founders often ignore..."
+                                            <span className="font-bold">KEEP</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 
-                    {/* Feature 3: Anti-Pattern Defense */}
-                    <div className="group p-8 hover:bg-paper transition-colors relative">
-                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <ShieldCheck size={80} strokeWidth={1} />
+                    {/* Footer / Connection Ports */}
+                    <div className="border-t border-ink bg-[#f5f5f5] p-3 flex justify-center gap-8">
+                        <div className="flex flex-col items-center gap-1 opacity-40">
+                            <div className="w-2 h-2 border border-ink bg-white"></div>
+                            <span className="font-mono text-[8px] uppercase">CUSTOM_CRAWLER</span>
                         </div>
-
-                        <div className="flex justify-between items-start mb-8">
-                            <div className="font-mono text-[10px] uppercase tracking-widest border border-ink/20 px-2 py-1 bg-white text-ink/50">
-                                AI_DETECTION
-                            </div>
-                            <div className="w-8 h-8 rounded-full bg-ink/5 flex items-center justify-center text-ink group-hover:bg-signal group-hover:text-white transition-colors">
-                                <Bot size={16} />
-                            </div>
+                        <div className="flex flex-col items-center gap-1 opacity-40">
+                            <div className="w-2 h-2 border border-ink bg-white"></div>
+                            <span className="font-mono text-[8px] uppercase">SERP_API_V3</span>
                         </div>
-
-                        <h3 className="font-serif text-2xl font-bold mb-3 text-ink">The Anti-Pattern</h3>
-                        <p className="font-mono text-xs text-ink/60 leading-relaxed mb-6">
-                            We detect common AI writing patterns ("In the rapidly evolving landscape...") and ban them at the token level.
-                        </p>
-
-                        <div className="mt-auto pt-4 border-t border-ink/10 flex justify-between items-center">
-                            <span className="text-[10px] font-mono text-red-500 font-bold">TOKENS_BLOCKED: 402</span>
-                            <div className="w-12 h-1.5 bg-ink/10 rounded-full overflow-hidden">
-                                <div className="w-2/3 h-full bg-red-500"></div>
-                            </div>
+                        <div className="flex flex-col items-center gap-1 opacity-40">
+                            <div className="w-2 h-2 border border-ink bg-white"></div>
+                            <span className="font-mono text-[8px] uppercase">VECTOR_DB</span>
                         </div>
                     </div>
 
@@ -134,5 +226,22 @@ const DeepTechSection = () => {
         </section>
     );
 };
+
+// Helper Icon Component for internal use
+const CheckCircle2 = ({ size }: { size: number }) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+    >
+        <polyline points="20 6 9 17 4 12" />
+    </svg>
+);
 
 export default DeepTechSection;
