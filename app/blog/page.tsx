@@ -3,7 +3,6 @@ import PublicHeader from '@/components/Header'
 import MainFooter from "@/components/MainFooter"
 import BlogCard from "@/components/blog-card"
 import { OfflineBanner } from "@/components/network-status"
-import { CTASection } from "@/components/landing/CTASection"
 import { getAllPosts, formatDate, calculateReadingTime, extractExcerpt, type WordPressPost } from "@/lib/wordpress"
 import { Suspense } from "react"
 
@@ -49,7 +48,7 @@ async function BlogContent() {
   try {
     const { posts } = await getAllPosts(20) // Fetch 20 posts
     const blogPosts = posts.map(transformWordPressPost)
-    
+
     return (
       <BlogPageContent blogPosts={blogPosts} />
     )
@@ -71,7 +70,7 @@ function BlogPageContent({ blogPosts }: { blogPosts: any[] }) {
         <div className="max-w-7xl mx-auto px-4">
           {/* Offline Banner */}
           <OfflineBanner />
-          
+
           {/* Header */}
           <div className="text-center mb-12">
             <h1 className="text-3xl font-bold text-black mb-4">The Unrealshot AI Blog</h1>
@@ -112,10 +111,8 @@ function BlogPageContent({ blogPosts }: { blogPosts: any[] }) {
             </div>
           )}
         </div>
-        <div className="text-center mt-16">
-           <CTASection />
-          </div>
-    </main>
+
+      </main>
 
       <MainFooter />
     </div>
