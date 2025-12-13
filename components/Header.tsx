@@ -6,7 +6,7 @@ import { Menu, X } from 'lucide-react';
 const NavItem = ({ label, active = false }: { label: string; active?: boolean }) => (
   <button
     className={`
-      h-full px-6 flex items-center text-sm font-mono tracking-tight border-l border-ink hover:bg-paper transition-colors relative group
+      h-full px-6 flex items-center text-sm mono-force tracking-tight border-l border-ink hover:bg-paper transition-colors relative group
       ${active ? 'bg-signal text-white hover:bg-orange-600' : ''}
     `}
   >
@@ -43,10 +43,10 @@ const Header = () => {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex items-stretch">
-          <button className="px-8 font-mono text-sm border-l border-ink hover:text-signal transition-colors">
+          <button className="px-8 mono-force text-sm border-l border-ink hover:text-signal transition-colors">
             LOGIN
           </button>
-          <button className="px-8 font-mono text-sm font-bold bg-ink text-white hover:bg-signal transition-colors flex items-center gap-2">
+          <button className="px-8 mono-force text-sm font-bold bg-ink text-white hover:bg-signal transition-colors flex items-center gap-2">
             START SCAN
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           </button>
@@ -66,7 +66,7 @@ const Header = () => {
         <div className="absolute top-full left-0 w-full bg-cream border border-t-0 border-ink shadow-brutalist mt-0 flex flex-col md:hidden">
           <div className="p-4 border-b border-ink">PRODUCT</div>
           <div className="p-4 border-b border-ink">PRICING</div>
-          <div className="p-4 bg-ink text-white text-center font-bold font-mono">
+          <div className="p-4 bg-ink text-white text-center font-bold mono-force">
             START FREE SCAN
           </div>
         </div>

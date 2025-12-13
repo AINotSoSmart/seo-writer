@@ -1,7 +1,5 @@
 
-
 import { Zap, ArrowRight, Play, Cpu, Search, Database, Globe, Fingerprint, Box } from 'lucide-react';
-import { ProductMockup } from './ProductMockup';
 
 const LOGOS = [
   { name: 'ChatGPT', icon: <Zap size={18} /> },
@@ -47,21 +45,52 @@ const HeroSection = () => {
         </p>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col md:flex-row items-center gap-4 mb-20">
-          <button className="group relative px-8 py-4 bg-ink text-white font-mono font-bold text-sm tracking-wide shadow-brutalist hover:translate-y-1 hover:shadow-none transition-all flex items-center gap-3">
-            START FREE VISIBILITY CHECK
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </button>
-          <button className="px-8 py-4 bg-white border border-ink text-ink font-mono font-bold text-sm tracking-wide shadow-brutalist hover:bg-paper hover:translate-y-1 hover:shadow-none transition-all flex items-center gap-2">
-            <Play className="w-4 h-4 fill-ink" />
-            WATCH DEMO
-          </button>
+        {/* --- MAGIC INPUT FIELD --- */}
+        <div className="w-full max-w-2xl mx-auto mb-20 relative z-20">
+          <div className="relative group">
+            {/* Decorative Elements */}
+            <div className="absolute -top-3 left-4 px-2 bg-white z-10">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-ink/40 font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-signal animate-pulse"></span>
+                Live_Scanner_Ready
+              </span>
+            </div>
+
+            {/* Main Input Container */}
+            <div className="flex flex-col md:flex-row bg-white border border-ink shadow-brutalist p-1.5 gap-2 transition-transform duration-300 hover:-translate-y-0.5">
+
+              {/* URL Input */}
+              <div className="flex-1 flex items-center bg-paper/50 border border-ink/5 px-4 h-14 md:h-16 group-focus-within:bg-white transition-colors">
+                <div className="font-mono text-ink/30 mr-2 select-none">https://</div>
+                <input
+                  type="text"
+                  placeholder="yourwebsite.com"
+                  className="bg-transparent border-none outline-none w-full font-mono text-lg md:text-xl text-ink placeholder:text-ink/20"
+                />
+              </div>
+
+              {/* Submit Button */}
+              <button className="h-14 md:h-16 px-8 bg-ink text-white font-mono font-bold text-sm tracking-wide shadow-sm hover:bg-signal transition-all flex items-center justify-center gap-3 whitespace-nowrap">
+                START FREE CHECK
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Helper Text & Social Proof */}
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <div className="flex justify-center gap-6 font-mono text-[10px] text-ink/40 uppercase tracking-wide">
+                <span className="flex items-center gap-1"><Zap size={10} className="text-signal" /> Instant_Report</span>
+                <span className="flex items-center gap-1"><Database size={10} /> Free_Tier_Available</span>
+              </div>
+              <p className="font-mono text-[10px] text-ink/30 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                Trusted by 500+ Founders optimizing for AEO
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* --- PRODUCT MOCKUP CONTAINER --- */}
-        <div className="w-full relative max-w-6xl mx-auto px-2 md:px-0">
-          <ProductMockup />
-        </div>
+
 
       </div>
 

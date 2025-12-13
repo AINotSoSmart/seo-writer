@@ -131,7 +131,7 @@
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -186,7 +186,7 @@
 
   /* Landing Page Theme Variables */
   --font-newsreader: var(--font-newsreader), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-jetbrains: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-jetbrains: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   --color-cream: #fdfcf8;
   --color-ink: #1a1a1a;
@@ -255,7 +255,16 @@
 /* Landing specific theme override */
 .landing-theme {
   --font-serif: var(--font-newsreader);
-  --font-mono: var(--font-jetbrains);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Force monospace font - use this class to override inherited serif */
+.mono-force {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+}
+
+.landing-theme {
 
 
   @layer base {
