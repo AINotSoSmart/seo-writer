@@ -34,27 +34,20 @@ const HeroSection = () => {
         </div>
 
         {/* Headline */}
-        <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif leading-[0.95] tracking-tight mb-8 max-w-5xl">
-          Are you <span className="italic text-signal font-light">invisible</span> to <br className="hidden md:block" />
-          the machines?
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif leading-[0.95] tracking-tight mb-8 max-w-6xl">
+          Don’t just rank on Google <br className="hidden md:block" /> <span className="italic text-signal font-light">Be the brand AI cites.</span>
         </h1>
 
         {/* Subtitle */}
         <p className="font-mono text-sm md:text-base text-ink/70 max-w-2xl mb-10 leading-relaxed">
-          FlipAEO extracts your brand voice and runs a real-time visibility check across ChatGPT, Perplexity, and Claude. We turn zero answers into a prioritized, answer-first content plan.
+          The first Agentic Writer designed for Generative Engine Optimization (GEO). We research, plan, draft, refine, and publish articles that humans love and ChatGPT, Gemini and Claude cite as sources.
         </p>
 
         {/* CTA Buttons */}
         {/* --- MAGIC INPUT FIELD --- */}
-        <div className="w-full max-w-2xl mx-auto mb-20 relative z-20">
+        <div className="w-full max-w-xl mx-auto mb-20 relative z-20">
           <div className="relative group">
-            {/* Decorative Elements */}
-            <div className="absolute -top-3 left-4 px-2 bg-white z-10">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-ink/40 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-signal animate-pulse"></span>
-                Live_Scanner_Ready
-              </span>
-            </div>
+
 
             {/* Main Input Container */}
             <div className="flex flex-col md:flex-row bg-white border border-ink shadow-brutalist p-1.5 gap-2 transition-transform duration-300 hover:-translate-y-0.5">
