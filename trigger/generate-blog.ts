@@ -475,20 +475,25 @@ Return **Markdown** formatted text.
 }
 
 const generateWritingUserPrompt = (previousFullText: string, currentSection: any) => `
-### CONTEXT(What you have written so far)
+### CONTEXT (What you have written so far)
 ${previousFullText}
 
 ### YOUR CURRENT TASK
-    ** Write Section:** "${currentSection.heading}"
+**Write Section:** "${currentSection.heading}"
 
-      ** CONTENT FOCUS(What to cover):**
-        ${currentSection.instruction_note}
+**CONTENT FOCUS (What to cover):**
+${currentSection.instruction_note}
 
-** SEO KEYWORDS:** ${currentSection.keywords_to_include.join(", ")}
+**SEO KEYWORDS:** ${currentSection.keywords_to_include.join(", ")}
+
 ### INSTRUCTIONS
-  1. Read the last sentence of the Context.Ensure your first sentence flows naturally from it.
-2. ** Apply the Golden Rules:** BOLD the key takeaways.Keep sentences short.
-3. ** Simulate Experience:** If the content note asks for a review / opinion, write confidently as if you have tested it.
+1. **DO NOT repeat or rephrase the heading.** The heading "${currentSection.heading}" is already added by the system. Start DIRECTLY with the substantive content.
+   - ❌ WRONG: "So, what exactly is ${currentSection.heading.toLowerCase().replace(/\?/g, '')}?"
+   - ❌ WRONG: "Let's talk about ${currentSection.heading.toLowerCase()}..."
+   - ✅ RIGHT: Jump straight into the answer, fact, or point.
+2. Read the last sentence of the Context. Ensure your first sentence flows naturally from it.
+3. **Apply the Golden Rules:** BOLD the key takeaways. Keep sentences short and varied.
+4. **Simulate Experience:** If the content note asks for a review/opinion, write confidently as if you have tested it.
 `
 
 const generatePolishEditorPrompt = (draft: string, styleDNA: string, brandDetails: any = null) => `
@@ -658,7 +663,7 @@ export const generateBlogPost = task({
           keywords_to_include: outline.intro.keywords_to_include
         })
 
-        const writeConfig = { tools: [{ googleSearch: {} }] }
+        const writeConfig = {}
         const writeContents = [
           {
             role: "user",
@@ -701,7 +706,7 @@ export const generateBlogPost = task({
         const userPromptFull = generateWritingUserPrompt(currentDraft, section)
 
         // Using Gemini 2.0 Flash for Speed & Context
-        const writeConfig = { tools: [{ googleSearch: {} }] } // Flash doesn't support thinking config usually, or it does? Keeping simple.
+        const writeConfig = {}
         const writeContents = [
           {
             role: "user",
