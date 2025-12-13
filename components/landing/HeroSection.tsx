@@ -29,7 +29,7 @@ const HeroSection = () => {
             <span className="relative inline-flex rounded-full h-2 w-2 bg-signal"></span>
           </span>
           <span className="font-mono text-xs font-bold uppercase tracking-wider text-ink/80">
-            Indexing Claude 3.5 & Gemini 1.5
+            THE POST-SEO ERA
           </span>
         </div>
 
