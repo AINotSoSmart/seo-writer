@@ -2,12 +2,9 @@
 import { Metadata } from 'next'
 import PublicHeader from '@/components/Header'
 
-import PricingCards from '@/components/landing/pricing-cards'
-import TestimonialSection from '@/components/landing/Testimonial'
-
 import { commonPageMetadata, generateBreadcrumbJsonLd, generateFAQJsonLd, generateProductJsonLd } from '@/lib/seo'
 import { MultipleStructuredData } from '@/components/seo/StructuredData'
-import  Footer  from '@/components/MainFooter'
+import Footer from '@/components/MainFooter'
 import Link from 'next/link'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { seoUtils } from '@/config/seo'
@@ -57,7 +54,6 @@ export default function Home() {
         </section>
 
         {/* Existing Pricing Cards */}
-        <PricingCards />
 
         {/* How We Compare */}
         <section className="max-w-5xl mx-auto px-4 py-12">
@@ -209,27 +205,26 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Testimonials from shared component */}
-        <TestimonialSection />
+
 
         {/* Contact / Enterprise CTA */}
         <section className="max-w-5xl mx-auto px-4 py-12 text-center">
           <h3 className="text-xl font-bold mb-3 font-[var(--font-inter-tight)]">Need a custom plan or invoice?</h3>
           <p className="text-gray-600 mb-6">We’re happy to help.</p>
           <Link href="mailto:support@unrealshot.com">
-              <Button
-                className="text-md sm:text-md font-semibold py-5 sm:py-6 group relative bg-[#ff6f00] hover:bg-[#ff6f00]/90 text-white rounded-md overflow-hidden cursor-pointer pr-12"
-              >
-                Contact us
-                <div className="bg-white rounded-sm p-2 sm:p-3 absolute right-1 top-1/2 -translate-y-1/2">
-                  <img
-                    src="/arrow.svg"
-                    alt="arrow-right"
-                    className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1"
-                  />
-                </div>
-              </Button>
-            </Link>
+            <Button
+              className="text-md sm:text-md font-semibold py-5 sm:py-6 group relative bg-[#ff6f00] hover:bg-[#ff6f00]/90 text-white rounded-md overflow-hidden cursor-pointer pr-12"
+            >
+              Contact us
+              <div className="bg-white rounded-sm p-2 sm:p-3 absolute right-1 top-1/2 -translate-y-1/2">
+                <img
+                  src="/arrow.svg"
+                  alt="arrow-right"
+                  className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1"
+                />
+              </div>
+            </Button>
+          </Link>
           <p className="mt-4 text-sm text-gray-500">Payments are processed securely.</p>
         </section>
       </main>
