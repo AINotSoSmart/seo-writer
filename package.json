@@ -87,6 +87,7 @@
     "react-use-measure": "^2.1.7",
     "recharts": "latest",
     "resend": "^6.1.0",
+    "sitemaps": "^2.0.6",
     "sonner": "^1.7.4",
     "standardwebhooks": "^1.0.0",
     "swiper": "^12.0.2",

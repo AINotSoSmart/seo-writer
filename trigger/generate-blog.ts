@@ -14,6 +14,7 @@ import { ArticleType } from "@/lib/prompts/article-types"
 import { getArticleStrategy } from "@/lib/prompts/strategies"
 import { getFormalityDefinition, getPerspectiveDefinition } from "@/lib/prompts/voice-definitions"
 import { getCurrentDateContext } from "@/lib/utils/date-context"
+import { getRelevantInternalLinks } from "@/lib/internal-linking"
 
 const cleanAndParse = (text: string) => {
   const clean = text.replace(/```json/g, "").replace(/```/g, "")
@@ -380,7 +381,7 @@ ${criticAnalysis.gap_analysis || "No major gaps identified."}
   return cleanParseAndValidate(synthesisText, CompetitorDataSchema, genAI)
 }
 
-const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string) => {
+const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = []) => {
   const strategy = getArticleStrategy(articleType)
 
   // Extract authority links from competitor data for external linking
@@ -391,16 +392,17 @@ You are an expert Content Architect and SEO Strategist.
 Your goal is to outline a high-ranking blog post that beats the competition by filling their "Content Gaps".
 
 **CRITICAL RULE: RELEVANCE OVER LENGTH.**
-Do not fluff the outline. Only include sections that are really necessary to answer the user's search intent and satisfy modern ai search.
+Do not fluff the outline. Only include sections that are really necessary.
 
 **ARTICLE TYPE: ${articleType.toUpperCase()}**
 
 INPUT CONTEXT:
 1. KEYWORD: "${keyword}"
 2. COMPETITOR & GAP DATA: ${JSON.stringify(competitorData)}
-${brandDetails ? `3. BRAND DETAILS: ${JSON.stringify(brandDetails)}` : ""}
+${brandDetails ? `### BRAND DNA\n${JSON.stringify(brandDetails, null, 2)}` : ''}
+${internalLinks.length > 0 ? `### INTERNAL LINKS POOL (USE 1-2 MAX)\n${internalLinks.map(l => `- Title: ${l.title} | URL: ${l.url}`).join('\n')}` : ''}
 
-TYPE-SPECIFIC STRATEGY:
+### ARTICLE REQUIREMENT STRATEGY:
 ${strategy.outline_instruction}
 
 ---
@@ -449,6 +451,9 @@ H2: Main Topic B
 4. The sections array should be FLAT but with levels indicating hierarchy.
 5. **Nesting is Optional:** If an H2 topic is simple, do NOT force H3s under it.
 6. **The 60/40 Rule:** Only use deep nesting (H3/H4) for complex sections (like "How-To Steps" or "Detailed Features").
+7. Maintain a consistent voice while ensuring the content is logically organized for both humans and search engines.
+8. If internal links are provided, plan where 1-2 of them would naturally fit in the outline.
+
 ---
 
 ## EXTERNAL LINKING STRATEGY (CRITICAL FOR SEO & E-E-A-T)
@@ -510,7 +515,7 @@ ${JSON.stringify(authorityLinks)}
 }
 
 
-const generateWritingSystemPrompt = (styleDNA: string, factSheet: any, brandDetails: any = null) => {
+const generateWritingSystemPrompt = (styleDNA: string, factSheet: any, brandDetails: any = null, internalLinks: any[] = []) => {
   // styleDNA is now a paragraph describing the writing style
   // Build brand context section
   let brandContextSection = ""
@@ -676,6 +681,23 @@ export const generateBlogPost = task({
       // style_dna is now a paragraph from brand_details, not a separate brand_voices lookup
       const styleDNA = brandDetails.style_dna || "Write in a professional yet conversational tone. Use active voice and be direct. Address the reader as 'you'. Keep sentences varied for natural rhythm. Avoid corporate jargon and be specific with examples and data."
 
+      // --- NEW: FETCH INTERNAL LINKS POOL ---
+      // Fetch user_id for this article
+      const { data: articleRec } = await supabase
+        .from("articles")
+        .select("user_id")
+        .eq("id", articleId)
+        .single()
+
+      const userId = articleRec?.user_id
+      let internalLinks: any[] = []
+
+      if (userId) {
+        console.log(`🔗 Searching for internal links for user ${userId}...`)
+        internalLinks = await getRelevantInternalLinks(title || keyword, keyword, userId)
+        console.log(`🔗 Found ${internalLinks.length} relevant internal links.`)
+      }
+
       // --- PHASE 2: RESEARCH (Deep Research - 2-Phase Tavily + Critic) ---
       await supabase.from("articles").update({ status: "researching" }).eq("id", articleId)
       phase = "research"
@@ -721,7 +743,7 @@ export const generateBlogPost = task({
         authority_links: filterAuthorityLinks(competitorData.authority_links || [])
       }
 
-      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title)
+      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks)
       const outlineConfig = {}
       const outlineContents = [
         {
@@ -783,7 +805,7 @@ export const generateBlogPost = task({
       // 4.1 Write Intro (The Hook) - Separately
       // Only write intro if not resuming (startIndex === 0)
       if (startIndex === 0 && outline.intro) {
-        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails)
+        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails, internalLinks)
         const introTemplate = getIntroTemplate(articleType)
         const userPrompt = generateWritingUserPrompt(currentDraft, {
           heading: "Introduction / Hook", // Context only
@@ -829,7 +851,7 @@ export const generateBlogPost = task({
           .update({ current_step_index: i + 1, status: "writing" })
           .eq("id", articleId)
 
-        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails)
+        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails, internalLinks)
         const userPrompt = generateWritingUserPrompt(currentDraft.slice(-3000), section) // Passing last 3000 chars for context to save tokens, or full draft if feasible. Blueprint says "Entire Draft", but context limits apply. Gemini 2.0 Flash has 1M context, so full draft is fine.
         // Actually, let's pass full draft if it's 1M context.
         const userPromptFull = generateWritingUserPrompt(currentDraft, section)

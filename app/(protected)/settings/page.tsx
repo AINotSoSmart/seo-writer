@@ -4,8 +4,9 @@ import { useEffect, useState } from "react"
 import { getUserBrandStatus, deleteBrandAction } from "@/actions/brand"
 import { getUserDefaults, setDefaultBrand } from "@/actions/preferences"
 import { createClient } from "@/utils/supabase/client"
-import { Check, Globe, Trash2, Plus, Edit, Settings2, Loader2 } from "lucide-react"
+import { Check, Globe, Trash2, Plus, Edit, Settings2, Loader2, Link2, RefreshCcw, ExternalLink } from "lucide-react"
 import BrandOnboarding from "@/app/(protected)/blog-writer/BrandOnboarding"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { GlobalCard } from "@/components/ui/global-card"
@@ -23,6 +24,7 @@ export default function SettingsPage() {
   const [brandCount, setBrandCount] = useState(0)
   const [isCreatingBrand, setIsCreatingBrand] = useState(false)
   const [editingBrand, setEditingBrand] = useState<BrandInfo | null>(null)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
 
   // Dark mode detection
   const [isDark, setIsDark] = useState(false)
@@ -62,6 +64,28 @@ export default function SettingsPage() {
     setBrandLimit(status.limit)
     // @ts-ignore
     setBrandCount(status.count)
+  }
+
+  const handleSyncLinks = async (brandId: string, websiteUrl: string) => {
+    setSyncingId(brandId)
+    try {
+      // Clean URL and assume /sitemap.xml
+      let sitemapUrl = websiteUrl.endsWith('/') ? `${websiteUrl}sitemap.xml` : `${websiteUrl}/sitemap.xml`
+
+      const res = await fetch('/api/content-plan/sync-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sitemapUrl })
+      })
+
+      if (!res.ok) throw new Error("Failed to start sync")
+
+      toast.success("Sync started! This may take a few minutes for deep indexing.")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to sync links")
+    } finally {
+      setSyncingId(null)
+    }
   }
 
   if (loading) {
@@ -142,71 +166,105 @@ export default function SettingsPage() {
                 />
               </div>
             ) : (
-              <div className="grid sm:grid-cols-1 gap-3">
+              <div className="grid sm:grid-cols-1 gap-4">
                 {brands.map((b) => {
                   const isSelected = defaultBrandId === b.id;
                   return (
                     <div
                       key={b.id}
                       className={`
-                        w-full text-left p-4 rounded-xl border transition-all duration-200
-                        group flex items-center justify-between relative
+                        w-full rounded-xl border transition-all duration-200 overflow-hidden
                         ${isSelected
-                          ? 'bg-stone-50 dark:bg-stone-800 border-stone-300 dark:border-stone-600 ring-1 ring-stone-300 dark:ring-stone-600'
-                          : 'bg-white dark:bg-stone-950/50 border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 hover:border-stone-300 dark:hover:border-stone-700'
+                          ? 'bg-stone-50 dark:bg-stone-800/30 border-stone-300 dark:border-stone-600 ring-1 ring-stone-300 dark:ring-stone-600 shadow-sm'
+                          : 'bg-white dark:bg-stone-950/50 border-stone-200 dark:border-stone-800 hover:border-stone-300 dark:hover:border-stone-700'
                         }
                       `}
                     >
-                      <div className="flex items-center gap-4 overflow-hidden">
-                        <button
-                          onClick={async () => {
+                      <div className="flex items-center justify-between p-4 group">
+                        <div className="flex items-center gap-4 overflow-hidden">
+                          <button
+                            onClick={async () => {
+                              setSaving(true)
+                              try {
+                                const res = await setDefaultBrand(b.id)
+                                if (res.success) setDefaultBrandId(b.id)
+                              } finally {
+                                setSaving(false)
+                              }
+                            }}
+                            className={`
+                              w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer
+                              ${isSelected
+                                ? 'bg-stone-900 dark:bg-stone-100 border-stone-900 dark:border-stone-100 text-white dark:text-stone-900'
+                                : 'border-stone-300 dark:border-stone-700 text-transparent hover:border-stone-400'
+                              }
+                            `}
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+
+                          <div className="flex flex-col min-w-0">
+                            <span className={`text-sm font-bold truncate ${isSelected ? 'text-stone-900 dark:text-white' : 'text-stone-700 dark:text-stone-300'}`}>
+                              {b.brand_data?.product_name || b.website_url}
+                            </span>
+                            <span className="text-[10px] text-stone-400 dark:text-stone-500 truncate flex items-center gap-1">
+                              <Globe className="w-2.5 h-2.5" />
+                              {b.website_url}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200" onClick={() => setEditingBrand(b)}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-red-600 dark:hover:text-red-400" onClick={async () => {
+                            if (!confirm("Are you sure you want to delete this brand?")) return;
                             setSaving(true)
                             try {
-                              const res = await setDefaultBrand(b.id)
-                              if (res.success) setDefaultBrandId(b.id)
+                              const res = await deleteBrandAction(b.id)
+                              if (res.success) {
+                                await refreshBrands()
+                              }
                             } finally {
                               setSaving(false)
                             }
-                          }}
-                          className={`
-                            w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer
-                            ${isSelected
-                              ? 'bg-stone-900 dark:bg-stone-100 border-stone-900 dark:border-stone-100 text-white dark:text-stone-900'
-                              : 'border-stone-300 dark:border-stone-700 text-transparent hover:border-stone-400'
-                            }
-                          `}
-                        >
-                          <Check className="w-3 h-3" />
-                        </button>
-
-                        <div className="flex flex-col min-w-0">
-                          <span className={`text-sm font-medium truncate ${isSelected ? 'text-stone-900 dark:text-white' : 'text-stone-700 dark:text-stone-300'}`}>
-                            {b.brand_data?.product_name || b.website_url}
-                          </span>
-                          <span className="text-xs text-stone-400 dark:text-stone-500 truncate">
-                            {b.website_url}
-                          </span>
+                          }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200" onClick={() => setEditingBrand(b)}>
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-red-600 dark:hover:text-red-400" onClick={async () => {
-                          if (!confirm("Are you sure you want to delete this brand?")) return;
-                          setSaving(true)
-                          try {
-                            const res = await deleteBrandAction(b.id)
-                            if (res.success) {
-                              await refreshBrands()
-                            }
-                          } finally {
-                            setSaving(false)
-                          }
-                        }}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                      {/* Internal Linking Sync Section */}
+                      <div className="px-4 pb-4">
+                        <div className="p-3 bg-white dark:bg-stone-900 rounded-lg border border-stone-100 dark:border-stone-800 flex items-center justify-between shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-stone-50 dark:bg-stone-800 rounded-md border border-stone-100 dark:border-stone-700">
+                              <Link2 className="w-3.5 h-3.5 text-stone-500" />
+                            </div>
+                            <div>
+                              <div className="text-[9px] font-bold text-stone-400 uppercase tracking-wider">Internal Linking</div>
+                              <div className="text-[11px] text-stone-600 dark:text-stone-400 font-medium leading-tight">
+                                Index your site for semantic link suggestions
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 text-[10px] gap-1.5 px-3 font-bold bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-900 dark:text-stone-100 border-none"
+                            onClick={() => handleSyncLinks(b.id, b.website_url)}
+                            disabled={syncingId === b.id}
+                          >
+                            {syncingId === b.id ? (
+                              <RefreshCcw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RefreshCcw className="w-3 h-3" />
+                            )}
+                            {syncingId === b.id ? 'SYNCING...' : 'SYNC SITE'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )
