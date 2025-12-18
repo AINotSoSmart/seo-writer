@@ -67,6 +67,7 @@ export async function getRelevantInternalLinks(
     articleTitle: string,
     articleKeyword: string,
     userId: string,
+    brandId?: string,
     limit: number = 5
 ) {
     try {
@@ -81,7 +82,8 @@ export async function getRelevantInternalLinks(
             query_embedding: embedding,
             match_threshold: 0.3, // Minimum similarity
             match_count: limit,
-            p_user_id: userId
+            p_user_id: userId,
+            p_brand_id: brandId || null
         })
 
         if (error) {

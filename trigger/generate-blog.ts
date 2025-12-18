@@ -705,8 +705,8 @@ export const generateBlogPost = task({
       let internalLinks: any[] = []
 
       if (userId) {
-        console.log(`🔗 Searching for internal links for user ${userId}...`)
-        internalLinks = await getRelevantInternalLinks(title || keyword, keyword, userId)
+        console.log(`🔗 Searching for internal links for user ${userId} and brand ${brandId}...`)
+        internalLinks = await getRelevantInternalLinks(title || keyword, keyword, userId, brandId)
         console.log(`🔗 Found ${internalLinks.length} relevant internal links.`)
       }
 

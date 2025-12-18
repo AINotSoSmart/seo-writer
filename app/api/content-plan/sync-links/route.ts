@@ -11,16 +11,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const { sitemapUrl } = await req.json()
+        const { sitemapUrl, brandId } = await req.json()
+        if (!sitemapUrl || !brandId) return NextResponse.json({ error: "Sitemap URL and Brand ID are required" }, { status: 400 })
 
-        if (!sitemapUrl) {
-            return NextResponse.json({ error: "Sitemap URL is required" }, { status: 400 })
-        }
-
-        // Trigger the task
+        // Trigger the sync task
         const handle = await syncInternalLinks.trigger({
             userId: user.id,
-            sitemapUrl
+            sitemapUrl,
+            brandId
         })
 
         return NextResponse.json({

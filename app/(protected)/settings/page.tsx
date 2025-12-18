@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { getUserBrandStatus, deleteBrandAction } from "@/actions/brand"
 import { getUserDefaults, setDefaultBrand } from "@/actions/preferences"
 import { createClient } from "@/utils/supabase/client"
+import { getBrandLinkCountAction } from "@/actions/internal-linking"
 import { Check, Globe, Trash2, Plus, Edit, Settings2, Loader2, Link2, RefreshCcw, ExternalLink } from "lucide-react"
 import BrandOnboarding from "@/app/(protected)/blog-writer/BrandOnboarding"
 import { toast } from "sonner"
@@ -25,6 +26,7 @@ export default function SettingsPage() {
   const [isCreatingBrand, setIsCreatingBrand] = useState(false)
   const [editingBrand, setEditingBrand] = useState<BrandInfo | null>(null)
   const [syncingId, setSyncingId] = useState<string | null>(null)
+  const [linkCounts, setLinkCounts] = useState<Record<string, number>>({})
 
   // Dark mode detection
   const [isDark, setIsDark] = useState(false)
@@ -56,6 +58,21 @@ export default function SettingsPage() {
     init()
   }, [supabase])
 
+  const fetchLinkCounts = async (brandsList: BrandInfo[]) => {
+    const counts: Record<string, number> = {}
+    await Promise.all(brandsList.map(async (b) => {
+      const res = await getBrandLinkCountAction(b.id)
+      if (res.success) counts[b.id] = res.count
+    }))
+    setLinkCounts(counts)
+  }
+
+  useEffect(() => {
+    if (brands.length > 0) {
+      fetchLinkCounts(brands)
+    }
+  }, [brands])
+
   const refreshBrands = async () => {
     const status = await getUserBrandStatus()
     // @ts-ignore
@@ -75,12 +92,15 @@ export default function SettingsPage() {
       const res = await fetch('/api/content-plan/sync-links', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sitemapUrl })
+        body: JSON.stringify({ sitemapUrl, brandId })
       })
 
       if (!res.ok) throw new Error("Failed to start sync")
 
       toast.success("Sync started! This may take a few minutes for deep indexing.")
+
+      // Update count after a delay (optimistic or just let user refresh)
+      setTimeout(() => fetchLinkCounts(brands), 3000)
     } catch (error: any) {
       toast.error(error.message || "Failed to sync links")
     } finally {
@@ -245,7 +265,7 @@ export default function SettingsPage() {
                             <div>
                               <div className="text-[9px] font-bold text-stone-400 uppercase tracking-wider">Internal Linking</div>
                               <div className="text-[11px] text-stone-600 dark:text-stone-400 font-medium leading-tight">
-                                Index your site for semantic link suggestions
+                                {linkCounts[b.id] !== undefined ? `${linkCounts[b.id]} links indexed` : 'Index your site for semantic link suggestions'}
                               </div>
                             </div>
                           </div>

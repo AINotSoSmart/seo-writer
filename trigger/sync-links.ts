@@ -5,9 +5,9 @@ import { extractTitleFromUrl, generateEmbedding } from "@/lib/internal-linking"
 
 export const syncInternalLinks = task({
     id: "sync-internal-links",
-    run: async (payload: { userId: string; sitemapUrl: string }) => {
-        const { userId, sitemapUrl } = payload
-        console.log(`📡 Starting sitemap sync for user ${userId} from ${sitemapUrl}`)
+    run: async (payload: { userId: string; sitemapUrl: string; brandId: string }) => {
+        const { userId, sitemapUrl, brandId } = payload
+        console.log(`📡 Starting sitemap sync for user ${userId} | Brand: ${brandId} | Sitemap: ${sitemapUrl}`)
 
         const supabase = createAdminClient() as any
         const sitemapper = new Sitemapper({
@@ -26,12 +26,12 @@ export const syncInternalLinks = task({
                 return { success: false, message: "No URLs found in sitemap" }
             }
 
-            // 2. Clear existing links for this user (optional, but keep it clean)
-            // Or only upsert new ones. For now, let's clear to avoid duplicates.
+            // 2. Clear existing links for this brand only
             await supabase
                 .from("internal_links")
                 .delete()
                 .eq("user_id", userId)
+                .eq("brand_id", brandId)
 
             // 3. Process URLs in batches to avoid rate limits
             const BATCH_SIZE = 10
@@ -48,6 +48,7 @@ export const syncInternalLinks = task({
                         const embedding = await generateEmbedding(title)
                         return {
                             user_id: userId,
+                            brand_id: brandId,
                             url,
                             title,
                             embedding
