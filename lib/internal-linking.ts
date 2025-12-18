@@ -39,12 +39,25 @@ export function extractTitleFromUrl(url: string): string {
  * Generates an embedding for a piece of text using Gemini.
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-    const genAI = getGeminiClient()
-    const result = await genAI.models.embedContent({
-        model: "text-embedding-004",
-        contents: [{ parts: [{ text }] }]
-    })
-    return (result as any).embedding.values
+    try {
+        const genAI = getGeminiClient()
+        // Using the GA SDK @google/genai structure
+        const result = await genAI.models.embedContent({
+            model: "text-embedding-004",
+            contents: [{ parts: [{ text }] }]
+        })
+
+        const embedding = (result as any).embeddings && (result as any).embeddings[0]
+
+        if (!embedding || !embedding.values) {
+            throw new Error("Failed to get embedding values from Gemini response")
+        }
+
+        return embedding.values
+    } catch (error) {
+        console.error("❌ Error generating embedding:", error)
+        throw error
+    }
 }
 
 /**
@@ -56,24 +69,29 @@ export async function getRelevantInternalLinks(
     userId: string,
     limit: number = 5
 ) {
-    const supabase = createAdminClient() as any
+    try {
+        const supabase = createAdminClient() as any
 
-    // Create a combined search string for context
-    const searchString = `${articleTitle} ${articleKeyword}`
-    const embedding = await generateEmbedding(searchString)
+        // Create a combined search string for context
+        const searchString = `${articleTitle} ${articleKeyword}`
+        const embedding = await generateEmbedding(searchString)
 
-    // Call the RPC function we defined in the migration
-    const { data, error } = await supabase.rpc('match_internal_links', {
-        query_embedding: embedding,
-        match_threshold: 0.3, // Minimum similarity
-        match_count: limit,
-        p_user_id: userId
-    })
+        // Call the RPC function we defined in the migration
+        const { data, error } = await supabase.rpc('match_internal_links', {
+            query_embedding: embedding,
+            match_threshold: 0.3, // Minimum similarity
+            match_count: limit,
+            p_user_id: userId
+        })
 
-    if (error) {
-        console.error("❌ Error fetching internal links:", error)
-        return []
+        if (error) {
+            console.error("❌ Error fetching internal links from DB:", error)
+            return []
+        }
+
+        return data || []
+    } catch (error) {
+        console.error("❌ Critical error in getRelevantInternalLinks:", error)
+        return [] // Return empty to prevent crashing the whole generation
     }
-
-    return data || []
 }

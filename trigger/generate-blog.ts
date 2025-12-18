@@ -542,6 +542,18 @@ ${styleDNA}
 ### 3. GOLDEN RULES (THE LAW)
 ${AUTHENTIC_WRITING_RULES}
 ${brandContextSection}
+${internalLinks.length > 0 ? `
+### 4. INTERNAL LINKING RULES (CRITICAL)
+You have access to the following internal links from our site:
+${internalLinks.map(l => `- Title: ${l.title} | URL: ${l.url}`).join('\n')}
+
+**YOUR TASK:**
+Select and insert **exactly 1-2** of these internal links naturally into the article draft.
+- Use descriptive, SEO-friendly anchor text.
+- Do NOT use generic text like "click here".
+- Embed them where they add genuine value to the reader.
+` : ''}
+
 ### 4. KNOWLEDGE BASE (Facts to use)
 ${JSON.stringify(factSheet)}
 

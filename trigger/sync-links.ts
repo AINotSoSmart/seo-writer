@@ -1,5 +1,5 @@
 import { task } from "@trigger.dev/sdk/v3"
-const sitemaps = require('sitemaps')
+import Sitemapper from 'sitemapper'
 import { createAdminClient } from "@/utils/supabase/admin"
 import { extractTitleFromUrl, generateEmbedding } from "@/lib/internal-linking"
 
@@ -10,12 +10,16 @@ export const syncInternalLinks = task({
         console.log(`📡 Starting sitemap sync for user ${userId} from ${sitemapUrl}`)
 
         const supabase = createAdminClient() as any
+        const sitemapper = new Sitemapper({
+            url: sitemapUrl,
+            timeout: 15000, // 15 seconds
+        })
 
         try {
             // 1. Fetch URLs from sitemap
             console.log(`🔍 Fetching sitemaps from: ${sitemapUrl}`)
-            const result = await sitemaps.fetch(sitemapUrl)
-            const urls = Object.keys(result.sites)
+            const { sites } = await sitemapper.fetch()
+            const urls = sites
             console.log(`✅ Found ${urls.length} URLs.`)
 
             if (urls.length === 0) {
