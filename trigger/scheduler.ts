@@ -89,7 +89,7 @@ export const dailyContentWatchman = schedules.task({
                         .insert({
                             brand_id: plan.brand_id,
                             keyword: item.main_keyword,
-                            status: "pending",
+                            status: "queued",
                             user_id: plan.user_id,
                         })
                         .select("id")
