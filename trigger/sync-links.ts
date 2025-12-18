@@ -19,27 +19,65 @@ export const syncInternalLinks = task({
             // 1. Fetch URLs from sitemap
             console.log(`🔍 Fetching sitemaps from: ${sitemapUrl}`)
             const { sites } = await sitemapper.fetch()
-            const urls = sites
-            console.log(`✅ Found ${urls.length} URLs.`)
+            const sitemapUrls = Array.from(new Set(sites as string[])) // Deduplicate URLs from sitemap
+            console.log(`✅ Found ${sitemapUrls.length} URLs in sitemap.`)
 
-            if (urls.length === 0) {
+            if (sitemapUrls.length === 0) {
                 return { success: false, message: "No URLs found in sitemap" }
             }
 
-            // 2. Clear existing links for this brand only
-            await supabase
+            // 2. Fetch existing URLs from DB for this brand
+            const { data: existingRecords, error: fetchError } = await supabase
                 .from("internal_links")
-                .delete()
+                .select("url")
                 .eq("user_id", userId)
                 .eq("brand_id", brandId)
 
-            // 3. Process URLs in batches to avoid rate limits
+            if (fetchError) {
+                console.error("❌ Error fetching existing links:", fetchError)
+                throw fetchError
+            }
+
+            const existingUrls = new Set<string>(existingRecords?.map((r: any) => r.url as string) || [])
+            console.log(`📊 DB currently has ${existingUrls.size} links for this brand.`)
+
+            // 3. LEGACY CLEANUP: Delete any records for this user that have NULL brand_id.
+            // This fixes the duplication issue where old records (pre-brand-isolation) 
+            // were not being wiped by the brand-specific sync.
+            console.log(`🧹 Cleaning up legacy NULL brand_id records for user ${userId}...`)
+            const { error: cleanupError } = await supabase
+                .from("internal_links")
+                .delete()
+                .eq("user_id", userId)
+                .is("brand_id", null)
+
+            if (cleanupError) {
+                console.warn("⚠️ Legacy cleanup warning:", cleanupError)
+            }
+
+            // 4. Identify changes
+            const urlsToDelete = Array.from(existingUrls).filter((url: string) => !sitemapUrls.includes(url))
+            const urlsToAdd = sitemapUrls.filter(url => !existingUrls.has(url))
+
+            console.log(`🔄 Incremental Update: ${urlsToAdd.length} to add, ${urlsToDelete.length} to remove.`)
+
+            // 5. Remove old URLs
+            if (urlsToDelete.length > 0) {
+                await supabase
+                    .from("internal_links")
+                    .delete()
+                    .eq("brand_id", brandId)
+                    .in("url", urlsToDelete)
+                console.log(`🗑️ Removed ${urlsToDelete.length} stale links.`)
+            }
+
+            // 6. Process NEW URLs in batches to avoid rate limits
             const BATCH_SIZE = 10
             let syncedCount = 0
 
-            for (let i = 0; i < urls.length; i += BATCH_SIZE) {
-                const batch = urls.slice(i, i + BATCH_SIZE)
-                console.log(`⚙️ Processing batch ${i / BATCH_SIZE + 1}...`)
+            for (let i = 0; i < urlsToAdd.length; i += BATCH_SIZE) {
+                const batch = urlsToAdd.slice(i, i + BATCH_SIZE)
+                console.log(`⚙️ Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(urlsToAdd.length / BATCH_SIZE)}...`)
 
                 const inserts = await Promise.all(batch.map(async (url) => {
                     const title = extractTitleFromUrl(url)
@@ -74,8 +112,8 @@ export const syncInternalLinks = task({
                 }
             }
 
-            console.log(`🎉 Successfully synced ${syncedCount} internal links for user ${userId}`)
-            return { success: true, syncedCount }
+            console.log(`🎉 Successfully updated internal links. Total new synced: ${syncedCount}`)
+            return { success: true, added: syncedCount, removed: urlsToDelete.length }
 
         } catch (error: any) {
             console.error("❌ Sync failed:", error)
