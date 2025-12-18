@@ -37,6 +37,7 @@ import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { Button } from "@/components/ui/button"
 import { GlobalCard } from "@/components/ui/global-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { AutomationModal } from "@/components/automation-modal"
 import { cn } from "@/lib/utils"
 
 // --- Minimal Design System Configuration ---
@@ -87,6 +88,8 @@ export default function ContentPlanPage() {
     const [editingId, setEditingId] = useState<string | null>(null)
     const [editForm, setEditForm] = useState<Partial<ContentPlanItem>>({})
     const [automationLoading, setAutomationLoading] = useState(false)
+    const [showAutomationModal, setShowAutomationModal] = useState(false)
+    const [missedCount, setMissedCount] = useState(0)
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -232,24 +235,70 @@ export default function ContentPlanPage() {
     // Automation toggle handler
     const handleToggleAutomation = async () => {
         if (!plan) return
-        setAutomationLoading(true)
 
+        const isActive = plan.automation_status === "active"
+
+        if (isActive) {
+            // Pausing automation - no modal needed
+            setAutomationLoading(true)
+            try {
+                const res = await fetch("/api/content-plan/automation", { method: "DELETE" })
+                const data = await res.json()
+                if (res.ok) {
+                    setPlan(prev => prev ? { ...prev, automation_status: data.automation_status } : prev)
+                } else {
+                    setError(data.error || "Failed to pause automation")
+                }
+            } catch (e: any) {
+                setError(e.message || "Failed to pause automation")
+            } finally {
+                setAutomationLoading(false)
+            }
+        } else {
+            // Starting automation - check for missed articles first
+            setAutomationLoading(true)
+            try {
+                const res = await fetch("/api/content-plan/automation")
+                const data = await res.json()
+
+                if (data.missedCount > 0) {
+                    // Show modal for user to choose how to handle missed articles
+                    setMissedCount(data.missedCount)
+                    setShowAutomationModal(true)
+                } else {
+                    // No missed articles - activate directly
+                    await handleActivateAutomation("gradual")
+                }
+            } catch (e: any) {
+                setError(e.message || "Failed to check automation status")
+            } finally {
+                setAutomationLoading(false)
+            }
+        }
+    }
+
+    // Handle activation with user's chosen action
+    const handleActivateAutomation = async (action: "gradual" | "skip" | "reschedule") => {
         try {
-            const isActive = plan.automation_status === "active"
-            const method = isActive ? "DELETE" : "POST"
-
-            const res = await fetch("/api/content-plan/automation", { method })
+            const res = await fetch("/api/content-plan/automation", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action })
+            })
             const data = await res.json()
 
             if (res.ok) {
                 setPlan(prev => prev ? { ...prev, automation_status: data.automation_status } : prev)
+                // Refetch plan to get updated dates if rescheduled
+                if (action === "reschedule" || action === "skip") {
+                    fetchPlan()
+                }
             } else {
-                setError(data.error || "Failed to toggle automation")
+                setError(data.error || "Failed to activate automation")
             }
         } catch (e: any) {
-            setError(e.message || "Failed to toggle automation")
-        } finally {
-            setAutomationLoading(false)
+            setError(e.message || "Failed to activate automation")
+            throw e
         }
     }
 
@@ -770,6 +819,14 @@ export default function ContentPlanPage() {
                     )}
                 </div>
             </GlobalCard>
+
+            {/* Automation Modal for handling missed articles */}
+            <AutomationModal
+                isOpen={showAutomationModal}
+                onClose={() => setShowAutomationModal(false)}
+                missedCount={missedCount}
+                onConfirm={handleActivateAutomation}
+            />
         </div>
     )
 }

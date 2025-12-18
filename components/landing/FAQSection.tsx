@@ -1,78 +1,83 @@
 "use client";
 
-import React from 'react';
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
-import { MessageCircleQuestion } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 
-const FAQSection = () => {
-    return (
-        <section className="py-24 bg-cream border-b border-ink">
-            <div className="max-w-4xl mx-auto px-4">
+export const FAQSection: React.FC = () => {
+  const faqs = [
+    {
+      question: "CAN I CANCEL ANYTIME?",
+      answer: "Yes, absolutely! You can cancel your subscription at any time from your account settings. You will retain access until the end of your current billing period."
+    },
+    {
+      question: "DO I NEED TO DOWNLOAD OR INSTALL ANYTHING?",
+      answer: "No, SnapClass is completely web-based. You can access it from any browser on any device without installing any software."
+    },
+    {
+      question: "IS THERE A FREE TRIAL AVAILABLE?",
+      answer: "Yes, we offer a 14-day free trial on all paid plans so you can explore the features before committing."
+    },
+    {
+      question: "CAN I UPLOAD VIDEOS AND DOCUMENTS?",
+      answer: "Yes! Our course builder supports video hosting, PDF documents, quizzes, and various other media types to enrich your lessons."
+    },
+    {
+      question: "HOW MANY STUDENTS CAN I ADD?",
+      answer: "The number of students depends on your plan. The Starter plan allows up to 100 students, while the Pro and Academy plans support significantly more or unlimited students."
+    },
+    {
+      question: "DO STUDENTS NEED THEIR OWN ACCOUNT?",
+      answer: "Yes, students will create their own accounts to access your courses, track their progress, and receive certificates upon completion."
+    }
+  ];
 
-                <div className="flex items-end gap-6 mb-16">
-                    <div className="hidden md:flex h-16 w-16 items-center justify-center border border-ink bg-white shadow-brutalist-sm">
-                        <MessageCircleQuestion size={32} />
-                    </div>
-                    <div>
-                        <h2 className="font-serif text-4xl md:text-5xl text-ink leading-none mb-4">
-                            Answering the <span className="italic text-ink/50">skeptical.</span>
-                        </h2>
-                        <p className="font-mono text-xs text-ink/60 uppercase tracking-widest">
-                            // MODULE: OBJECTION_HANDLING
-                        </p>
-                    </div>
-                </div>
+  return (
+    <section className="w-full py-24 px-4 flex flex-col items-center">
+      {/* Header */}
+      <div className="flex flex-col items-center text-center mb-16 max-w-3xl">
+        <div className="inline-block bg-[#FAFA9D] border-2 border-black shadow-neo-sm px-4 py-1 mb-8 transform rotate-2">
+          <span className="font-display font-black text-xs uppercase tracking-widest">FAQ</span>
+        </div>
+        <h2 className="font-display font-black text-4xl md:text-6xl leading-tight mb-6">
+          COMMON QUESTIONS<br />ANSWERED CLEARLY
+        </h2>
+        <p className="font-sans text-gray-500 text-lg md:text-xl leading-relaxed max-w-2xl">
+          Here are clear answers to the most common questions we get from creators coaches and teams using the platform.
+        </p>
+      </div>
 
-                <div className="border-t border-ink">
-                    <Accordion type="single" collapsible className="w-full">
-
-                        <AccordionItem value="item-1" className="border-b border-ink">
-                            <AccordionTrigger className="font-serif text-xl py-6 hover:no-underline hover:text-signal transition-colors text-left">
-                                Will Google penalize me for AI content?
-                            </AccordionTrigger>
-                            <AccordionContent className="font-mono text-sm text-ink/70 leading-relaxed pb-6 pl-4 border-l-2 border-signal ml-2">
-                                Google penalizes bad content. It doesn't care who wrote it; it cares who reads it. Our content metrics (Time on Page, Scroll Depth) mimic expert human writing because it is expert writing—accelerated by code and validated by real-time citations.
-                            </AccordionContent>
-                        </AccordionItem>
-
-                        <AccordionItem value="item-2" className="border-b border-ink">
-                            <AccordionTrigger className="font-serif text-xl py-6 hover:no-underline hover:text-signal transition-colors text-left">
-                                Why not just use ChatGPT Plus?
-                            </AccordionTrigger>
-                            <AccordionContent className="font-mono text-sm text-ink/70 leading-relaxed pb-6 pl-4 border-l-2 border-signal ml-2">
-                                ChatGPT is a chat interface, not a publisher. It doesn't know your brand voice, it hallucinates facts, and it resets context every session. FlipAEO is a persistent brain that learns your entity graph and defends it across thousands of articles.
-                            </AccordionContent>
-                        </AccordionItem>
-
-                        <AccordionItem value="item-3" className="border-b border-ink">
-                            <AccordionTrigger className="font-serif text-xl py-6 hover:no-underline hover:text-signal transition-colors text-left">
-                                How does the "Visibility Check" work?
-                            </AccordionTrigger>
-                            <AccordionContent className="font-mono text-sm text-ink/70 leading-relaxed pb-6 pl-4 border-l-2 border-signal ml-2">
-                                We ping the API endpoints of major LLMs (GPT-4, Claude 3.5, Gemini 1.5) with specific prompts about your brand niche. If they don't return your brand as an entity, we mark you as "Invisible" and generate a content plan specifically designed to inject your entity into their weights.
-                            </AccordionContent>
-                        </AccordionItem>
-
-                        <AccordionItem value="item-4" className="border-b border-ink">
-                            <AccordionTrigger className="font-serif text-xl py-6 hover:no-underline hover:text-signal transition-colors text-left">
-                                Do I need to be a developer to use this?
-                            </AccordionTrigger>
-                            <AccordionContent className="font-mono text-sm text-ink/70 leading-relaxed pb-6 pl-4 border-l-2 border-signal ml-2">
-                                No. While our backend is complex, the interface is designed for marketers. You simply input your URL, and we handle the scraping, analysis, and generation. It's a "Zero-Config" setup.
-                            </AccordionContent>
-                        </AccordionItem>
-
-                    </Accordion>
-                </div>
-
-            </div>
-        </section>
-    );
+      {/* FAQ List */}
+      <div className="w-full max-w-3xl space-y-4">
+        {faqs.map((faq, index) => (
+          <FAQItem key={index} question={faq.question} answer={faq.answer} />
+        ))}
+      </div>
+    </section>
+  );
 };
 
-export default FAQSection;
+const FAQItem: React.FC<{ question: string; answer: string }> = ({ question, answer }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="w-full">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full bg-white border-2 border-black p-4 md:p-6 shadow-neo flex items-center justify-between group transition-all duration-200 ${isOpen ? 'translate-x-[2px] translate-y-[2px] shadow-none' : 'hover:-translate-y-1 hover:shadow-neo-hover'}`}
+      >
+        <span className="font-display font-black text-lg md:text-xl text-left uppercase">{question}</span>
+        <div className={`w-10 h-10 rounded-full border-2 border-black flex items-center justify-center flex-shrink-0 transition-colors ${isOpen ? 'bg-brand-orange' : 'bg-brand-yellow group-hover:bg-brand-orange'}`}>
+          {isOpen ? <ChevronDown className="w-6 h-6 text-black stroke-[3px]" /> : <ChevronRight className="w-6 h-6 text-black stroke-[3px]" />}
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="bg-white border-2 border-t-0 border-black p-6 animate-in slide-in-from-top-2 fade-in duration-200">
+          <p className="font-sans text-gray-600 text-lg leading-relaxed">
+            {answer}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};

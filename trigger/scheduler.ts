@@ -9,7 +9,7 @@ import { generateBlogPost } from "./generate-blog"
  * Finds articles scheduled for today (or missed) and triggers generation.
  * 
  * Why hourly? To handle different user timezones gracefully.
- * The concurrency setting on generateBlogPost handles the load.
+ * For 'gradual' catch_up_mode: only processes 1 article per hour to avoid credit spikes.
  */
 export const dailyContentWatchman = schedules.task({
     id: "daily-content-watchman",
@@ -24,10 +24,10 @@ export const dailyContentWatchman = schedules.task({
         // Get current date (YYYY-MM-DD) in UTC
         const today = new Date().toISOString().split('T')[0]
 
-        // Fetch ALL active plans
+        // Fetch ALL active plans with catch_up_mode
         const { data: plans, error } = await supabase
             .from("content_plans")
-            .select("id, user_id, brand_id, plan_data")
+            .select("id, user_id, brand_id, plan_data, catch_up_mode")
             .eq("automation_status", "active")
 
         if (error) {
@@ -46,29 +46,38 @@ export const dailyContentWatchman = schedules.task({
         // Loop through every user's plan
         for (const plan of plans) {
             const items = (plan.plan_data as any[]) || []
+            const catchUpMode = plan.catch_up_mode || "gradual"
 
             // Find items that are:
             // A) Scheduled for TODAY or earlier (catch missed items)
-            // B) Status is still "pending" (not generated yet)
+            // B) Status is still "pending" (not generated yet, not skipped)
             const itemsDue = items.filter((item: any) => {
                 return item.scheduled_date <= today && item.status === "pending"
             })
 
-            // Check if plan is complete (all items published)
-            const allPublished = items.every((item: any) => item.status === "published")
-            if (allPublished && items.length > 0) {
+            // Check if plan is complete (all items published or skipped)
+            const allDone = items.every((item: any) =>
+                item.status === "published" || item.status === "skipped"
+            )
+            if (allDone && items.length > 0) {
                 // Mark plan as completed
                 await supabase
                     .from("content_plans")
                     .update({ automation_status: "completed" })
                     .eq("id", plan.id)
                 completedPlans++
-                console.log(`✅ Plan ${plan.id} completed - all articles published`)
+                console.log(`✅ Plan ${plan.id} completed - all articles published/skipped`)
                 continue
             }
 
-            // Trigger the Writer for each due item
-            for (const item of itemsDue) {
+            if (itemsDue.length === 0) continue
+
+            // Rate limiting for gradual catch-up mode: only process 1 article per hour
+            const itemsToProcess = catchUpMode === "gradual" ? [itemsDue[0]] : itemsDue
+            console.log(`📋 Plan ${plan.id}: ${itemsDue.length} due, processing ${itemsToProcess.length} (mode: ${catchUpMode})`)
+
+            // Trigger the Writer for each item to process
+            for (const item of itemsToProcess) {
                 console.log(`🚀 Triggering article: "${item.title}" (${item.main_keyword}) for Plan ${plan.id}`)
 
                 // If article_id doesn't exist, we need to create one first
@@ -91,16 +100,16 @@ export const dailyContentWatchman = schedules.task({
                         continue
                     }
                     articleId = newArticle.id
-
-                    // Update plan_data with the new article_id
-                    const updatedPlanData = items.map((i: any) =>
-                        i.id === item.id ? { ...i, article_id: articleId, status: "writing" } : i
-                    )
-                    await supabase
-                        .from("content_plans")
-                        .update({ plan_data: updatedPlanData })
-                        .eq("id", plan.id)
                 }
+
+                // Update plan_data with the article_id and status
+                const updatedPlanData = items.map((i: any) =>
+                    i.id === item.id ? { ...i, article_id: articleId, status: "writing" } : i
+                )
+                await supabase
+                    .from("content_plans")
+                    .update({ plan_data: updatedPlanData })
+                    .eq("id", plan.id)
 
                 // Trigger the blog generation task
                 await generateBlogPost.trigger({
@@ -115,15 +124,6 @@ export const dailyContentWatchman = schedules.task({
                     itemId: item.id,
                 })
 
-                // Update item status to writing
-                const updatedItems = items.map((i: any) =>
-                    i.id === item.id ? { ...i, status: "writing" } : i
-                )
-                await supabase
-                    .from("content_plans")
-                    .update({ plan_data: updatedItems })
-                    .eq("id", plan.id)
-
                 triggeredCount++
             }
         }
@@ -137,3 +137,4 @@ export const dailyContentWatchman = schedules.task({
         }
     },
 })
+

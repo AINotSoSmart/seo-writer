@@ -13,7 +13,7 @@ export const ContentPlanItemSchema = z.object({
     intent: z.enum(["informational", "comparison", "tutorial", "commercial", "transactional", "howto"]).optional(),
     cluster: z.string().optional(),
     scheduled_date: z.string(), // ISO date string
-    status: z.enum(["pending", "writing", "published"]).default("pending"),
+    status: z.enum(["pending", "writing", "published", "skipped"]).default("pending"),
     // Pre-created article ID for automation (Watchman pattern)
     article_id: z.string().optional(),
     // GSC enhancement fields (populated only when GSC connected)
@@ -34,6 +34,10 @@ export type ContentPlanItem = z.infer<typeof ContentPlanItemSchema>
 export const AutomationStatusSchema = z.enum(["paused", "active", "completed"]).default("paused")
 export type AutomationStatus = z.infer<typeof AutomationStatusSchema>
 
+// Catch-up mode for handling missed articles
+export const CatchUpModeSchema = z.enum(["gradual", "skip", "reschedule"]).default("gradual")
+export type CatchUpMode = z.infer<typeof CatchUpModeSchema>
+
 // Full Content Plan
 export const ContentPlanSchema = z.object({
     id: z.string().optional(),
@@ -44,6 +48,8 @@ export const ContentPlanSchema = z.object({
     gsc_enhanced: z.boolean().default(false),
     // Automation control for Watchman pattern
     automation_status: AutomationStatusSchema,
+    // How to handle missed articles when resuming
+    catch_up_mode: CatchUpModeSchema,
     created_at: z.string().optional(),
     updated_at: z.string().optional(),
 })

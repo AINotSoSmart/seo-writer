@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, Instrument_Serif, Inter_Tight, Bricolage_Grotesque, Newsreader } from "next/font/google"
+import { Inter, Instrument_Serif, Inter_Tight, Bricolage_Grotesque, Space_Grotesk } from "next/font/google"
 import "./globals.css"
 import { Suspense } from "react"
 import ErrorBoundary from "@/components/error-boundary"
@@ -46,15 +46,13 @@ const bricolage = Bricolage_Grotesque({
   preload: true,
 })
 
-const newsreader = Newsreader({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-newsreader",
-  style: ["normal", "italic"],
+  variable: "--font-space-grotesk",
+  weight: ["500", "700"],
   display: "swap",
   preload: true,
 })
-
-
 
 
 export const metadata: Metadata = generateMetadata()
@@ -66,7 +64,7 @@ export default async function RootLayout({
 }>) {
 
   return (
-    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable} ${interTight.variable} ${bricolage.variable} ${newsreader.variable} antialiased`}>
+    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable} ${interTight.variable} ${bricolage.variable} ${spaceGrotesk.variable} antialiased`}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -113,8 +111,19 @@ export default async function RootLayout({
         />
         {/* Note: WebApplication schema is page-specific and added only to home page */}
 
-
-
+        {/* Google tag (gtag.js) */}
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=G-XGFT46LL3J`}
+          strategy="afterInteractive"
+        />
+        <Script id="ga-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);} 
+            gtag('js', new Date());
+            gtag('config', 'G-XGFT46LL3J');
+          `}
+        </Script>
         {/* Removed ga-checkout-return script from main layout; relocated to protected layout */}
       </head>
       <body className="font-sans antialiased public-headings">
