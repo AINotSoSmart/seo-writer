@@ -427,6 +427,16 @@
 }
 
 /* Image stacking animations for phone mockup */
+@keyframes scan {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 @keyframes stack-images {
   0% {
     transform: translate(0, 0) scale(1);
