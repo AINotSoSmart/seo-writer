@@ -14,6 +14,8 @@ export const ContentPlanItemSchema = z.object({
     cluster: z.string().optional(),
     scheduled_date: z.string(), // ISO date string
     status: z.enum(["pending", "writing", "published"]).default("pending"),
+    // Pre-created article ID for automation (Watchman pattern)
+    article_id: z.string().optional(),
     // GSC enhancement fields (populated only when GSC connected)
     opportunity_score: z.number().optional(),
     badge: z.enum(["high_impact", "quick_win", "low_ctr", "new_opportunity"]).optional(),
@@ -28,6 +30,10 @@ export const ContentPlanItemSchema = z.object({
 
 export type ContentPlanItem = z.infer<typeof ContentPlanItemSchema>
 
+// Automation status for the Watchman pattern
+export const AutomationStatusSchema = z.enum(["paused", "active", "completed"]).default("paused")
+export type AutomationStatus = z.infer<typeof AutomationStatusSchema>
+
 // Full Content Plan
 export const ContentPlanSchema = z.object({
     id: z.string().optional(),
@@ -36,6 +42,8 @@ export const ContentPlanSchema = z.object({
     plan_data: z.array(ContentPlanItemSchema),
     competitor_seeds: z.array(z.string()).optional(),
     gsc_enhanced: z.boolean().default(false),
+    // Automation control for Watchman pattern
+    automation_status: AutomationStatusSchema,
     created_at: z.string().optional(),
     updated_at: z.string().optional(),
 })

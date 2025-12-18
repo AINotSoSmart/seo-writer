@@ -18,6 +18,13 @@ export const StepSequenceItemSchema = z.object({
   pro_tip: z.string().optional()
 })
 
+// Authority link for external citations
+export const AuthorityLinkSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  snippet: z.string().optional().default("")
+})
+
 export const CompetitorDataSchema = z.object({
   fact_sheet: z.array(z.string()),
   content_gap: z.object({
@@ -31,6 +38,8 @@ export const CompetitorDataSchema = z.object({
   // For how-to/tutorial articles
   step_sequence: z.array(StepSequenceItemSchema).optional().default([]),
   prerequisites: z.array(z.string()).optional().default([]),
+  // Authority links for external citations (high-quality, non-competitor URLs)
+  authority_links: z.array(AuthorityLinkSchema).optional().default([]),
 })
 
 export type CompetitorData = z.infer<typeof CompetitorDataSchema>

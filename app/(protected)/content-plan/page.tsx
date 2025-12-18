@@ -29,7 +29,9 @@ import {
     Info,
     Lightbulb,
     Gauge,
-    Tag
+    Tag,
+    Play,
+    Pause
 } from "lucide-react"
 import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { Button } from "@/components/ui/button"
@@ -79,11 +81,12 @@ export default function ContentPlanPage() {
     const router = useRouter()
     const [isDark, setIsDark] = useState(false)
     const [loading, setLoading] = useState(true)
-    const [plan, setPlan] = useState<{ id: string; plan_data: ContentPlanItem[]; gsc_enhanced: boolean } | null>(null)
+    const [plan, setPlan] = useState<{ id: string; plan_data: ContentPlanItem[]; gsc_enhanced: boolean; automation_status?: string } | null>(null)
     const [filter, setFilter] = useState<"all" | "pending" | "writing" | "published">("all")
     const [error, setError] = useState("")
     const [editingId, setEditingId] = useState<string | null>(null)
     const [editForm, setEditForm] = useState<Partial<ContentPlanItem>>({})
+    const [automationLoading, setAutomationLoading] = useState(false)
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -223,6 +226,30 @@ export default function ContentPlanPage() {
             })
         } catch (e) {
             console.error("Failed to update status:", e)
+        }
+    }
+
+    // Automation toggle handler
+    const handleToggleAutomation = async () => {
+        if (!plan) return
+        setAutomationLoading(true)
+
+        try {
+            const isActive = plan.automation_status === "active"
+            const method = isActive ? "DELETE" : "POST"
+
+            const res = await fetch("/api/content-plan/automation", { method })
+            const data = await res.json()
+
+            if (res.ok) {
+                setPlan(prev => prev ? { ...prev, automation_status: data.automation_status } : prev)
+            } else {
+                setError(data.error || "Failed to toggle automation")
+            }
+        } catch (e: any) {
+            setError(e.message || "Failed to toggle automation")
+        } finally {
+            setAutomationLoading(false)
         }
     }
 
@@ -577,51 +604,87 @@ export default function ContentPlanPage() {
                         )}
                     </div>
 
-                    {plan && (
-                        <div className="flex bg-stone-100/50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-1 shadow-sm self-start md:self-center overflow-x-auto max-w-full">
-                            {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+                    {/* Automation Button + Filters */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {/* Automation Toggle Button */}
+                        {plan && (
+                            <Button
+                                onClick={handleToggleAutomation}
+                                disabled={automationLoading}
+                                size="sm"
+                                className={cn(
+                                    "h-9 px-4 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 shadow-sm",
+                                    plan.automation_status === "active"
+                                        ? "bg-stone-900 text-white hover:bg-stone-800 dark:bg-white dark:text-black dark:hover:bg-stone-200"
+                                        : "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+                                )}
+                            >
+                                {automationLoading ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : plan.automation_status === "active" ? (
+                                    <>
+                                        <span className="relative flex h-2 w-2">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                        </span>
+                                        <Pause className="w-3.5 h-3.5" />
+                                        <span>Pause Automation</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Play className="w-3.5 h-3.5" />
+                                        <span>Start Automation</span>
+                                    </>
+                                )}
+                            </Button>
+                        )}
+
+                        {plan && (
+                            <div className="flex bg-stone-100/50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-1 shadow-sm self-start md:self-center overflow-x-auto max-w-full">
+                                {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => setFilter(key as any)}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap",
+                                            filter === key
+                                                ? "bg-white text-stone-900 shadow-sm border border-stone-200/50 dark:bg-stone-800 dark:text-white dark:border-stone-700"
+                                                : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 dark:hover:bg-stone-800/50"
+                                        )}
+                                    >
+                                        <span className={filter === key ? "inline" : "hidden sm:inline"}>
+                                            {config.label}
+                                        </span>
+                                        <ConfigIcon config={config} isSelected={filter === key} />
+                                        <span className={cn(
+                                            "ml-1 text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem]",
+                                            filter === key ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
+                                        )}>
+                                            {planStats[key] || 0}
+                                        </span>
+                                    </button>
+                                ))}
+                                {/* 'All' Filter */}
                                 <button
-                                    key={key}
-                                    onClick={() => setFilter(key as any)}
+                                    onClick={() => setFilter("all")}
                                     className={cn(
-                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap",
-                                        filter === key
+                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ml-1",
+                                        filter === "all"
                                             ? "bg-white text-stone-900 shadow-sm border border-stone-200/50 dark:bg-stone-800 dark:text-white dark:border-stone-700"
                                             : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 dark:hover:bg-stone-800/50"
                                     )}
                                 >
-                                    <span className={filter === key ? "inline" : "hidden sm:inline"}>
-                                        {config.label}
-                                    </span>
-                                    <ConfigIcon config={config} isSelected={filter === key} />
+                                    <span>All</span>
                                     <span className={cn(
                                         "ml-1 text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem]",
-                                        filter === key ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
+                                        filter === "all" ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
                                     )}>
-                                        {planStats[key] || 0}
+                                        {plan.plan_data.length}
                                     </span>
                                 </button>
-                            ))}
-                            {/* 'All' Filter */}
-                            <button
-                                onClick={() => setFilter("all")}
-                                className={cn(
-                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ml-1",
-                                    filter === "all"
-                                        ? "bg-white text-stone-900 shadow-sm border border-stone-200/50 dark:bg-stone-800 dark:text-white dark:border-stone-700"
-                                        : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 dark:hover:bg-stone-800/50"
-                                )}
-                            >
-                                <span>All</span>
-                                <span className={cn(
-                                    "ml-1 text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem]",
-                                    filter === "all" ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
-                                )}>
-                                    {plan.plan_data.length}
-                                </span>
-                            </button>
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* --- Body Content --- */}

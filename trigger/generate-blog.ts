@@ -29,6 +29,54 @@ const cleanAndParse = (text: string) => {
   }
 }
 
+// Self-correcting JSON parser with Zod validation retry
+const cleanParseAndValidate = async <T>(
+  text: string,
+  schema: { parse: (data: unknown) => T },
+  genAI: any,
+  maxRetries: number = 2
+): Promise<T> => {
+  const parsed = cleanAndParse(text)
+
+  try {
+    return schema.parse(parsed)
+  } catch (zodError: any) {
+    if (maxRetries <= 0) {
+      console.error("Zod validation failed after retries:", zodError)
+      throw zodError
+    }
+
+    console.log(`[Self-Correction] Zod validation failed, asking Gemini to fix. Retries left: ${maxRetries}`)
+
+    // Feed the error and invalid JSON back to Gemini to fix
+    const fixPrompt = `
+The following JSON failed Zod schema validation:
+
+=== INVALID JSON ===
+${JSON.stringify(parsed, null, 2)}
+
+=== VALIDATION ERROR ===
+${zodError.message || JSON.stringify(zodError.errors || zodError)}
+
+=== YOUR TASK ===
+Fix the JSON to match the required schema. Return ONLY the corrected JSON, no explanations.
+Make sure all required fields are present and have the correct types.
+`
+
+    const fixResponse = await genAI.models.generateContent({
+      model: "gemini-2.0-flash",
+      config: { responseMimeType: "application/json" },
+      contents: [{ role: "user", parts: [{ text: fixPrompt }] }]
+    })
+
+    const fixedText = fixResponse.text || ""
+    console.log(`[Self-Correction] Gemini returned fixed JSON, attempting to parse...`)
+
+    // Recursively try to parse and validate the fixed JSON
+    return cleanParseAndValidate(fixedText, schema, genAI, maxRetries - 1)
+  }
+}
+
 
 // Clients will be initialized inside the task
 
@@ -215,6 +263,7 @@ OUTPUT REQUIREMENTS (Return strict JSON):
 4. "step_sequence": (ONLY for how-to/tutorial articles) Extract step-by-step sequence.
 5. "prerequisites": (ONLY for how-to/tutorial articles) What the reader needs.
 6. "sources_summary": All sources used.
+7. "authority_links": Extract 3-5 HIGH-QUALITY, non-competitor URLs suitable for citation (e.g., statistics from Statista, definitions from Wikipedia, official docs, industry reports, major news). These will be used as external links in the article.
 
 JSON SCHEMA:
 {
@@ -227,7 +276,8 @@ JSON SCHEMA:
   "sources_summary": [{ "url": string, "title": string }],
   "product_matrix": [{ "name": string, "price": string, "pros": string[], "cons": string[], "unique_selling_point": string, "best_for": string }],
   "step_sequence": [{ "step": number, "title": string, "details": string, "pro_tip": string }],
-  "prerequisites": string[]
+  "prerequisites": string[],
+  "authority_links": [{ "url": string, "title": string, "snippet": string }]
 }
 `
 }
@@ -261,7 +311,7 @@ const performDeepResearch = async (
 
   const criticPrompt = getCriticGapPrompt(keyword, articleType, broadContext)
   const criticResp = await genAI.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-3-flash-preview",
     config: { responseMimeType: "application/json" },
     contents: [{ role: "user", parts: [{ text: criticPrompt }] }]
   })
@@ -315,7 +365,7 @@ ${criticAnalysis.gap_analysis || "No major gaps identified."}
 `
 
   const synthesisStream = await genAI.models.generateContentStream({
-    model: "gemini-2.5-flash",
+    model: "gemini-3-flash-preview",
     config: {},
     contents: [{ role: "user", parts: [{ text: synthesisPrompt + "\n\n" + combinedData }] }]
   })
@@ -326,11 +376,15 @@ ${criticAnalysis.gap_analysis || "No major gaps identified."}
   }
 
   console.log(`[Deep Research] Complete! Synthesized comprehensive research brief.`)
-  return CompetitorDataSchema.parse(cleanAndParse(synthesisText))
+  // Use self-correcting parser for Zod validation with retry
+  return cleanParseAndValidate(synthesisText, CompetitorDataSchema, genAI)
 }
 
 const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string) => {
   const strategy = getArticleStrategy(articleType)
+
+  // Extract authority links from competitor data for external linking
+  const authorityLinks = competitorData.authority_links || []
 
   return `
 You are an expert Content Architect and SEO Strategist.
@@ -397,6 +451,24 @@ H2: Main Topic B
 6. **The 60/40 Rule:** Only use deep nesting (H3/H4) for complex sections (like "How-To Steps" or "Detailed Features").
 ---
 
+## EXTERNAL LINKING STRATEGY (CRITICAL FOR SEO & E-E-A-T)
+
+I have provided a list of "Authority Links" from our research:
+${JSON.stringify(authorityLinks)}
+
+**YOUR TASK:** 
+- Select exactly 1-2 of these links that add the most value (e.g., a statistic, a definition, official documentation).
+- Assign them to the MOST relevant sections using the "external_link" field.
+
+**EXTERNAL LINKING RULES:**
+1. Do NOT put all links in one section. Distribute them across different sections.
+2. Do NOT force a link if it doesn't fit naturally. 1-2 links total for the whole article is enough.
+3. The "anchor_context" must explain to the writer *why* to include this link (what fact or concept it verifies).
+4. Prefer links to statistics, definitions, or official docs over generic articles.
+5. If no authority links are suitable, leave the "external_link" field empty for all sections.
+
+---
+
 ## OUTPUT INSTRUCTIONS:
 1. **Title:** ${title ? `Use the provided title: "${title}".` : 'Generate a catchy H1 based on the Keyword and Content Gap.'}
 2. **Intro/Hook:** Plan a strong introduction.
@@ -423,7 +495,8 @@ H2: Main Topic B
       "heading": string,
       "level": number (2, 3, or 4 - USE ALL THREE LEVELS),
       "instruction_note": string, 
-      "keywords_to_include": string[]
+      "keywords_to_include": string[],
+      "external_link": { "url": string, "anchor_context": string } // OPTIONAL - only add if assigning an authority link to this section
     }
   ]
 }
@@ -432,6 +505,7 @@ H2: Main Topic B
 - You have H2, H3, AND H4 levels in your outline
 - Does this outline solve the specific intent of "${keyword}"?
 - Did you remove unnecessary fluff sections?
+- Did you assign 1-2 external links to relevant sections?
 `
 }
 
@@ -474,7 +548,21 @@ Return **Markdown** formatted text.
 `
 }
 
-const generateWritingUserPrompt = (previousFullText: string, currentSection: any) => `
+const generateWritingUserPrompt = (previousFullText: string, currentSection: any) => {
+  // Build the Link Instruction Block if section has an assigned external link
+  let linkInstruction = ""
+  if (currentSection.external_link) {
+    linkInstruction = `
+### MANDATORY CITATION REQUIREMENT
+You MUST include an external hyperlink in this section.
+- **URL:** ${currentSection.external_link.url}
+- **Context:** Used to verify "${currentSection.external_link.anchor_context}"
+- **Instruction:** Embed this link naturally on relevant anchor text. Do NOT say "Click here" or "Read more". Link the relevant keywords or phrase.
+- **Format:** Use markdown link syntax: [anchor text](url)
+`
+  }
+
+  return `
 ### CONTEXT (What you have written so far)
 ${previousFullText}
 
@@ -485,7 +573,7 @@ ${previousFullText}
 ${currentSection.instruction_note}
 
 **SEO KEYWORDS:** ${currentSection.keywords_to_include.join(", ")}
-
+${linkInstruction}
 ### INSTRUCTIONS
 1. **DO NOT repeat or rephrase the heading.** The heading "${currentSection.heading}" is already added by the system. Start DIRECTLY with the substantive content.
    - ❌ WRONG: "So, what exactly is ${currentSection.heading.toLowerCase().replace(/\?/g, '')}?"
@@ -495,6 +583,7 @@ ${currentSection.instruction_note}
 3. **Apply the Golden Rules:** BOLD the key takeaways. Keep sentences short and varied.
 4. **Simulate Experience:** If the content note asks for a review/opinion, write confidently as if you have tested it.
 `
+}
 
 const generatePolishEditorPrompt = (draft: string, styleDNA: string, brandDetails: any = null) => `
 You are a Ruthless Direct-Response Copyeditor. 
@@ -608,7 +697,31 @@ export const generateBlogPost = task({
       // --- PHASE 3: OUTLINE (The "Architect") ---
       phase = "outline"
 
-      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, competitorData, articleType, brandDetails, title)
+      // Filter authority links to exclude social media and generic domains
+      const filterAuthorityLinks = (links: Array<{ url: string, title: string, snippet?: string }>) => {
+        const badDomains = [
+          "youtube.com", "facebook.com", "twitter.com", "linkedin.com",
+          "instagram.com", "tiktok.com", "pinterest.com", "reddit.com",
+          "medium.com", "quora.com" // Also exclude user-generated content platforms
+        ]
+
+        return links.filter(link => {
+          try {
+            const domain = new URL(link.url).hostname.toLowerCase()
+            return !badDomains.some(d => domain.includes(d))
+          } catch {
+            return false // Invalid URL, filter it out
+          }
+        }).slice(0, 5) // Keep top 5 candidates
+      }
+
+      // Clean authority links before passing to outline
+      const cleanedCompetitorData = {
+        ...competitorData,
+        authority_links: filterAuthorityLinks(competitorData.authority_links || [])
+      }
+
+      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title)
       const outlineConfig = {}
       const outlineContents = [
         {
@@ -618,7 +731,7 @@ export const generateBlogPost = task({
       ]
 
       const outlineStream = await genAI.models.generateContentStream({
-        model: "gemini-2.5-pro",
+        model: "gemini-3-flash-preview",
         config: outlineConfig,
         contents: outlineContents
       })
@@ -628,7 +741,8 @@ export const generateBlogPost = task({
         outlineText += (c as any).text || ""
       }
 
-      const outline = ArticleOutlineSchema.parse(cleanAndParse(outlineText))
+      // Use self-correcting parser for Zod validation with retry
+      const outline = await cleanParseAndValidate(outlineText, ArticleOutlineSchema, genAI)
 
       // Use user's chosen title if provided, otherwise use AI-generated title
       const finalTitle = title || outline.title
@@ -650,11 +764,25 @@ export const generateBlogPost = task({
       phase = "writing"
 
       let currentDraft = initialDraft
+      let startIndex = 0
       const factSheet = competitorData.fact_sheet
 
+      // === CHECKPOINT RESUMPTION: Fetch existing progress ===
+      const { data: existingArticle } = await supabase
+        .from("articles")
+        .select("raw_content, current_step_index")
+        .eq("id", articleId)
+        .single()
+
+      if (existingArticle?.raw_content && existingArticle.current_step_index > 0) {
+        currentDraft = existingArticle.raw_content
+        startIndex = existingArticle.current_step_index
+        console.log(`[Checkpoint] Resuming from section index ${startIndex}`)
+      }
+
       // 4.1 Write Intro (The Hook) - Separately
-      // Check if intro data exists (it should with new schema, but safe check)
-      if (outline.intro) {
+      // Only write intro if not resuming (startIndex === 0)
+      if (startIndex === 0 && outline.intro) {
         const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails)
         const introTemplate = getIntroTemplate(articleType)
         const userPrompt = generateWritingUserPrompt(currentDraft, {
@@ -672,7 +800,7 @@ export const generateBlogPost = task({
         ]
 
         const writeStream = await genAI.models.generateContentStream({
-          model: "gemini-2.5-flash",
+          model: "gemini-3-flash-preview",
           config: writeConfig,
           contents: writeContents
         })
@@ -691,7 +819,8 @@ export const generateBlogPost = task({
           .eq("id", articleId)
       }
 
-      for (let i = 0; i < outline.sections.length; i++) {
+      // Start loop from saved index for checkpoint resumption
+      for (let i = startIndex; i < outline.sections.length; i++) {
         const section = outline.sections[i]
 
         // Update UI
@@ -754,7 +883,7 @@ export const generateBlogPost = task({
       ]
 
       const polishStream = await genAI.models.generateContentStream({
-        model: "gemini-2.5-pro",
+        model: "gemini-3-flash-preview",
         config: polishConfig,
         contents: polishContents
       })
@@ -849,7 +978,7 @@ export const generateBlogPost = task({
         const imagePromptContents = [{ role: "user", parts: [{ text: imagePromptSystem }] }]
 
         const imagePromptResponse = await genAI.models.generateContent({
-          model: "gemini-2.0-flash",
+          model: "gemini-3-flash-preview",
           config: imagePromptConfig,
           contents: imagePromptContents
         })
