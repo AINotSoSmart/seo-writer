@@ -95,13 +95,13 @@ const AUTHENTIC_WRITING_RULES = `
 
 **SENTENCE VARIATION (BURSTINESS) - CRITICAL FOR HUMAN FEEL:**
 5. Mix sentence lengths dramatically: some very short (7-9 words), some longer (20-30 words).
-6. Infuse genuine emotional undertones appropriate to the content
+6. Infuse genuine emotional undertones appropriate to the content using active voice.
 7. Start sentences with different elements: adverbs, prepositional phrases, dependent clauses, questions
 8. Occasional sentence fragments are OK if they add punch. "Not always. But often."
 
 **ACTIVE VOICE & DIRECTNESS:**
 9. USE ACTIVE VOICE. "Management canceled the meeting" NOT "The meeting was canceled by management."
-10. Be direct. "Call me at 3pm." NOT "I was wondering if you might be available for a call."
+10. Be direct strictly. "Call me at 3pm." NOT "I was wondering if you might be available for a call."
 11. Use certainty when you ARE certain. "This approach improves results." NOT "This approach might improve results."
 12. Add personal opinions, hesitations, or qualifiers ("I believe," "perhaps," "it seems")
 13. Use contractions and colloquialisms when appropriate
@@ -110,7 +110,7 @@ const AUTHENTIC_WRITING_RULES = `
 12. **BANNED STARTERS:** "Let's dive in", "Let's be honest", "here's the truth", "Let's explore", "In today's digital age", "You know that gut-wrenching feeling", "In this article we will", "It goes without saying", "As we navigate"
 14. **BANNED PHRASES:** "cutting-edge", "leverage", "streamline", "take your X to the next level", "unparalleled", "revolutionize"
 15. **BANNED WORDS:** "delve", "unleash", "landscape", "tapestry", "game-changer", "realm", "bustling", "elevate", "harness", "robust"
-16. Instead of: "Let's explore this fascinating opportunity" → Say: "Here's what we know."
+16. Instead of: "Let's explore this fascinating opportunity" → Say: "This opporunity is fascinating."
 
 **SPECIFICITY & AUTHENTICITY:**
 17. Use SPECIFIC, CONCRETE details. "Saves 2 hours per week" NOT "saves time."
@@ -118,10 +118,10 @@ const AUTHENTIC_WRITING_RULES = `
 19. If something has problems, SAY IT. "This approach has problems." Be real.
 
 **STRUCTURAL PATTERN DISRUPTION:**
-20. Don't always follow intro → body → conclusion. Sometimes start mid-thought.
+20. Don't always follow fixed template, sometimes start mid-thought.
 21. Include natural digressions if they add value. "(this also works for X.)"
-22. Use varied paragraph lengths. Some can be one sentence. Others 3.
-23. Break conventional grammar rules occasionally in natural ways
+22. Use varied paragraph lengths. Some can be one-two sentences. Others 3-5.
+23. Break conventional grammar rules occasionally in natural ways, make a little mistakes to avoid detection
 
 **PERSPECTIVE REMINDER:**
 24. **AUTHENTIC PERSPECTIVE:** Write with authority. Avoid passive voice ("It is said that..."). Use the perspective (I/We/Brand) defined in the Narrative Rules.
@@ -834,7 +834,7 @@ export const generateBlogPost = task({
         ]
 
         const writeStream = await genAI.models.generateContentStream({
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.5-flash",
           config: writeConfig,
           contents: writeContents
         })
@@ -992,7 +992,7 @@ export const generateBlogPost = task({
 
         // 1. Generate Image Prompt
         const imagePromptSystem = `You are an expert AI Art Director.
-        Your task is to generate a detailed, creative prompt for an AI image generator (like Midjourney or Flux) to create a featured image for a blog post.
+        Your task is to generate a detailed, creative prompt for an AI image generator to create a featured image for a blog post.
         
         INPUT:
         Title: ${finalTitle}
@@ -1000,9 +1000,9 @@ export const generateBlogPost = task({
         Style: ${imageStyle}
         
         REQUIREMENTS:
-        - The image should be relevant to the topic but abstract enough to be a background or hero image.
+        - The image should be highly relevant to the topic but abstract enough to be a background or hero image.
         - PRIORITIZE LESS TEXT on the image itself (or no text).
-        - Make it visually appealing and suitable for a blog header.
+        - Make it visually appealing and conveying the essence of the topic.
         - If style is 'stock', go for high-quality realistic photography or clean vector art.
         - If style is 'indo', use vibrant colors and cultural elements if applicable, or specific artistic style associated with the brand.
         - Output ONLY the prompt string. No JSON.
@@ -1012,7 +1012,7 @@ export const generateBlogPost = task({
         const imagePromptContents = [{ role: "user", parts: [{ text: imagePromptSystem }] }]
 
         const imagePromptResponse = await genAI.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.0-flash",
           config: imagePromptConfig,
           contents: imagePromptContents
         })
