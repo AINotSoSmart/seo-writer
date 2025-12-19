@@ -130,65 +130,72 @@ const AUTHENTIC_WRITING_RULES = `
 // Type-specific intro templates
 const INTRO_TEMPLATES: Record<string, string> = {
   informational: `
-GOAL: Explain the core concept immediately by contrasting the "Old Understanding" vs. the "New Reality." You need to switch from "Emotional Storytelling" to "Contextual Utility.
+GOAL: Write an "Authority-Backed Answer" intro. 
+You must satisfy the user's intent within the first 2 sentences (AI Snippet Optimized) while immediately establishing Trust (EEAT).
 
-NEGATIVE CONSTRAINTS (STRICTLY ENFORCED):
-- NO Narrative Openers ("In a world...", "Picture this...").
-- NO Rhetorical Questions ("Have you ever wondered...?").
-- NO Dictionary Definitions ("SEO stands for...").
+**THE INGREDIENTS (You must mix these dynamically):**
+1. **The Direct Answer (BLUF):** Define the concept, answer the question, or state the core reality immediately. No fluff.
+2.  **The Trust Anchor:** Cite *why* this answer is true. Use phrases like "Based on 2024 analysis...", "Contrary to popular belief...", "In our experience testing X...".
+3. **The Value Proposition:** What specific problem will this guide solve?
 
-APPROACH OPTIONS:
-A) **The "Hidden Mechanic" Angle** - Start with the technical reason why this topic is complex/important. (e.g., "The reason X fails isn't bad luck; it's a specific algorithm change in Y.")
-B) **The "Scale" Contrast** - Contrast how this concept worked 5 years ago vs. today. (e.g., "Ten years ago, X required a server farm. Today, it runs in the browser via WebASM.")
-C) **The "Counter-Intuitive" Truth** - State a hard truth that contradicts popular belief. (e.g., "More megapixels do not mean better photos. Sensor size is the only metric that matters for low light.")
+**DYNAMIC RULES (Do NOT use the same formula every time):**
+- **Option A (The Expert Correction):** Start with a common misconception, then immediately correct it with facts.
+  *Example:* "Many believe X is Y. However, our data shows X is actually Z. This guide explains why."
+- **Option B (The Direct Definition):** Start with the answer, then back it up with context.
+  *Example:* "X is the process of Y. While simple in theory, 90% of failures happen at stage Z."
+- **Option C (The Data Hook):** Start with a startling statistic or fact that anchors the article.
 
-STRUCTURE:
-1. Sentence 1: A direct statement of fact, a technical observation, or a contrast.
-2. Sentence 2: The implication of that fact for the reader.
-3. Sentence 3: The scope of this article (what we are covering).
+**NEGATIVE CONSTRAINTS:**
+- NO "In this article" or "Let's dive in".
+- NO dictionary definitions ("Webster defines...").
+- NO rhetorical questions ("Have you ever wondered?").
 `,
 
   commercial: `
-GOAL: Establish immediate trust by acting as an Auditor, not a Salesman. You need to switch from "Emotional Storytelling" to "Contextual Utility.
+GOAL: Write a "Verdict with Proof" intro. 
+Commercial intent users want to know the *best* choice immediately. Do not bury the lead.
 
-NEGATIVE CONSTRAINTS (STRICTLY ENFORCED):
-- NO "Paradox of Choice" fluff ("There are so many options...").
-- NO Generic Pain ("We know it's hard to choose...").
-- NO "Perfect for everyone" claims.
+**THE INGREDIENTS (You must mix these dynamically):**
+1. **The Verdict:** If there is a clear winner, NAME IT immediately. If it's a tie, name the top 2.
+2. **The Trust Anchor:** You MUST establish that you have actually tested/analyzed these tools.
+   *Required Phrase Vibe:* "We tested 15 tools...", "After analyzing the top 5...", "Our benchmark revealed..."
+3. **The User Filter:** Who is this for? (e.g. "Best for enterprise, but overkill for startups").
 
-APPROACH OPTIONS:
-A) **The "Hard Filter"** - Immediately state the one feature that disqualifies 90% of tools. (e.g., "If an AI generator doesn't offer 'Identity Lock,' it is useless for professional portfolios.")
-B) **The "Benchmark" Opener** - Mention the specific stress test used for this review. (e.g., "We ran the same 4K video file through 10 different enhancers to see which ones crashed.")
-C) **The "Price-Performance" Ratio** - Start with the blunt financial truth. (e.g., "You can pay $50/month for X, or get 90% of the same functionality with Y for $10. The difference is only in export speed.")
+**DYNAMIC RULES (Do NOT use the same formula every time):**
+- **Option A (The Hard Verdict):** Name the winner instantly.
+  *Example:* "Slack is the best team chat app for large orgs, period. But for small teams, Discord might be better."
+- **Option B (The Testing Story):** Start with the *scale* of your research.
+  *Example:* "We spent 40 hours testing every major AI writer. Only 3 passed our hallucination check."
+- **Option C (The 'One Thing' Filter):** Start with the single most important buying factor.
+  *Example:* "If you need X, you only have two real options: A and B. Everything else is a compromise."
 
-STRUCTURE:
-1. Sentence 1: A specific criteria or industry standard that matters most for this product category.
-2. Sentence 2: A preview of the verdict (e.g., "Most tools failed this test, but two stood out").
-3. Sentence 3: Transition to the list/comparison.
+**NEGATIVE CONSTRAINTS:**
+- NO "Choosing the right tool is hard".
+- NO "There are many options on the market".
+- NO generic summaries. Be specific.
 `,
 
   howto: `
-GOAL: Focus entirely on the "Efficiency" of the solution. You need to switch from "Emotional Storytelling" to "Contextual Utility.
+GOAL: Write an "Efficiency Promise" intro.
+The user wants to do the task *fast* and without *errors*.
 
-NEGATIVE CONSTRAINTS (STRICTLY ENFORCED):
-- NO Emotional scene-setting ("It's so frustrating when...").
-- NO "Imagine" scenarios.
-- NO Rhetorical Questions ("Have you ever...?").
-- NO False reassurance ("Don't worry, it's easy..., We know it's frustrating...").
+**THE INGREDIENTS (You must mix these dynamically):**
+1. **The Efficiency Mechanism:** What is the "secret sauce" or specific method? (e.g. "Using the XYZ shortcut").
+2. **The Result/Benefit:** "This saves 2 hours" or "This prevents the common crash error".
+3. **The Ease of Access:** "You don't need expert skills, just..."
 
-INSTRUCTION: Choose ONE of the following 3 angles and write the intro. Do not label the angle.
+**DYNAMIC RULES (Do NOT use the same formula every time):**
+- **Option A (The Shortcut):** Start with the trick that makes it easy.
+  *Example:* "You don't need Photoshop to remove backgrounds. The fastest way is actually using..."
+- **Option B (The 'Stop Doing It Wrong' Angle):** Warn against the slow/bad way first.
+  *Example:* "Stop using the manual export function. It degrades quality. Instead, use the..."
+- **Option C (The Outcome First):** Describe the perfect end state.
+  *Example:* "To get a perfect standard deviation calculation, you need to set up your formula like this..."
 
-- Angle A (The Friction Fix):
-"Start immediately with the technical challenge of the task. State why this specific task is usually hard (e.g., requires Photoshop skills, takes hours), and then immediately state how the new AI workflow solves that specific friction point."
-- Angle B (The Output Anchor):
-"Start by describing the final technical result first. Tell the user exactly what the finished product looks like (e.g., resolution, fps, realism) to hook them with the outcome, then work backward to the tool."
-- Angle C (The Accessibility Shift):
-"Start by stating the prerequisite that is NO LONGER needed. (e.g., 'You no longer need a green screen to do X'). Contrast the old requirement with the new ease of use."
-
-STRUCTURE:
-1. Sentence 1: Define the specific task or the technical obstacle (The "Hard Way").
-2. Sentence 2: Introduce the tool or method as the efficiency mechanism (The "Smart Way").
-3. Sentence 3: Immediate call to action / start of steps.
+**NEGATIVE CONSTRAINTS:**
+- NO "In this tutorial we will show you".
+- NO "Have you ever wanted to...".
+- NO false empathy ("We know it's frustrating").
 `
 }
 
