@@ -73,7 +73,7 @@ const ARTICLE_TYPE_CONFIG: Record<string, { label: string; icon: any }> = {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
-    pending: { label: "Scheduled", icon: Calendar, className: "text-stone-500" },
+    pending: { label: "Planned", icon: Calendar, className: "text-stone-500" },
     writing: { label: "Writing", icon: PenTool, className: "text-stone-900 dark:text-white" },
     published: { label: "Published", icon: CheckCircle2, className: "text-stone-900 dark:text-white" },
 }
@@ -677,7 +677,7 @@ export default function ContentPlanPage() {
                                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                                         </span>
                                         <Pause className="w-3.5 h-3.5" />
-                                        <span>Pause Automation</span>
+                                        <span className="sm:block hidden">Pause Automation</span>
                                     </>
                                 ) : (
                                     <>

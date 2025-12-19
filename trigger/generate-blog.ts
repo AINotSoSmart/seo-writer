@@ -1031,24 +1031,30 @@ export const generateBlogPost = task({
           // Upload to R2
           await putR2Object(imageKey, Buffer.from(imageBuffer), "image/png")
 
-          // Construct Public URL with proper priority and null checks
-          const publicDomain = process.env.R2_PUBLIC_DOMAIN
-          const nextAppUrl = process.env.NEXT_PUBLIC_APP_URL
-          const vercelUrl = process.env.VERCEL_URL
+          // 4. Construct Public URL - Prioritize public accessibility for CMS/Editor
+          const r2PublicDomain = process.env.R2_PUBLIC_DOMAIN?.replace(/\/$/, '')
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+          const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace(/\/$/, '')}` : null
 
-          if (publicDomain) {
-            // Use R2 public domain if configured (e.g., via Cloudflare custom domain)
-            featured_image_url = `${publicDomain}/${imageKey}`
-          } else if (nextAppUrl) {
-            // Use the app's configured URL
-            featured_image_url = `${nextAppUrl}/api/images/${imageKey}`
-          } else if (vercelUrl) {
-            // Use Vercel's auto-generated URL
-            featured_image_url = `https://${vercelUrl}/api/images/${imageKey}`
+          if (r2PublicDomain && !r2PublicDomain.includes('localhost')) {
+            // Best option: Direct R2 public access
+            featured_image_url = `${r2PublicDomain}/${imageKey}`
           } else {
-            // Local development fallback
-            featured_image_url = `http://localhost:3000/api/images/${imageKey}`
+            // Fallback to Proxy route via App URL
+            let baseUrl = "http://localhost:3000"
+
+            if (appUrl && !appUrl.includes('localhost')) {
+              baseUrl = appUrl
+            } else if (vercelUrl) {
+              baseUrl = vercelUrl
+            } else if (appUrl) {
+              baseUrl = appUrl
+            }
+
+            featured_image_url = `${baseUrl}/api/images/${imageKey}`
           }
+
+          console.log(`🖼️ Featured image available at: ${featured_image_url}`)
         }
 
       } catch (e) {
