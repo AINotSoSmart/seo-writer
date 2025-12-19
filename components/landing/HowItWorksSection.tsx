@@ -25,11 +25,11 @@ export const HowItWorksSection: React.FC = () => {
         {/* Step 1 */}
         <StepCard
           number="01"
-          title="We understand your brand and visibility"
+          title="WE MAP HOW AI AND SEARCH SEE YOUR CATEGORY"
           content={
             <>
-              <p className="mb-4">You start with your site. We analyze your product, category, and language to understand how your brand should appear in search.</p>
-              <p className="mb-4">At the same time, we check how modern AI search engines currently answer questions in your space — and where your brand is missing from those conversations.</p>
+              <p className="mb-4">You start with your site. We break down what you sell, how people search for it, and how modern AI search engines currently explain your space.</p>
+              <p className="mb-4">We analyze the actual answers being surfaced and where your brand is absent, misunderstood, or invisible. This becomes the foundation for everything that follows.</p>
             </>
           }
           accentColor="bg-[#FAFA9D]" // Yellow

@@ -24,10 +24,9 @@ export const BenefitsSection: React.FC = () => {
         {/* Card 1: Real-Time Visibility (Yellow, Span 2) */}
         <div className="md:col-span-2 bg-[#FAFA9D] border-2 border-black p-8 shadow-neo flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden group hover:shadow-neo-hover transition-all duration-200">
           <div className="flex-1 z-10">
-            <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">Real-Time Visibility Check</h3>
+            <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">Clear visibility into where you need to win</h3>
             <p className="font-sans font-medium text-black/80 leading-relaxed text-lg">
-              We search your brand in ChatGPT, Gemini, and Claude in real-time. We don't just guess where you rank; we tell you exactly where you are missing from citations—and how to insert yourself into the conversation.
-            </p>
+              We analyze how AI search engines answer questions in your category and where your brand is missing from those answers.            </p>
           </div>
           {/* Graphic: AI Citation Mockup */}
           <div className="bg-white border-2 border-black rounded-xl p-4 w-64 shadow-sm transform rotate-2 group-hover:rotate-0 transition-transform duration-300 shrink-0">
