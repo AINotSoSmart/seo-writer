@@ -216,27 +216,34 @@ I have gathered initial search results for the keyword: "${keyword}"
 
 YOUR TASK:
 Analyze this research data and identify EXACTLY what is MISSING that we need to write a winning article.
+You MUST find at least 3 gaps - there are ALWAYS gaps in any research.
 
 **ARTICLE TYPE: ${articleType.toUpperCase()}**
 ${strategy.research_focus}
 
-THINK LIKE A CRITIC:
+THINK LIKE A CRITIC - Always find gaps:
+- "What SPECIFIC product names are mentioned? Extract them."
 - "I see features, but where is the 2025 pricing?"
 - "They mention customer support, but is it 24/7 or email-only?"
 - "Where are the real user reviews? This is all marketing fluff."
 - "What specific statistics or benchmarks are missing?"
 - "Are there competitor comparisons that should exist but don't?"
+- "What are the actual tool/product names I should research more?"
 
-=== INITIAL RESEARCH DATA ===
+=== INITIAL RESEARCH DATA (Summary) ===
 ${broadContext}
 
-OUTPUT (Strict JSON):
-Return EXACTLY 3-5 highly specific search queries that will fill these gaps.
-Be SPECIFIC - not "best CRM" but "Salesforce pricing 2025" or "HubSpot vs Pipedrive user reviews reddit"
+IMPORTANT RULES:
+1. You MUST return 3-5 targeted queries - NEVER return an empty array
+2. If the data mentions ANY product/tool names, include queries about those specific products
+3. Be SPECIFIC - not "best CRM" but "Salesforce pricing 2025" or "HubSpot vs Pipedrive user reviews reddit"
+4. Include at least one query for "[keyword] reddit" or "[keyword] reviews" for real user opinions
 
+OUTPUT (Strict JSON):
 {
-  "gap_analysis": string,  // Brief description of what's missing
-  "targeted_queries": string[]  // 3-5 SPECIFIC search queries to fill gaps
+  "gap_analysis": string,  // Brief description of what's missing (NEVER say "no gaps")
+  "competitor_names": string[],  // Extract any product/company names mentioned in the research
+  "targeted_queries": string[]  // 3-5 SPECIFIC search queries to fill gaps (REQUIRED)
 }
 `
 }
@@ -301,6 +308,10 @@ const performDeepResearch = async (
 ) => {
   console.log(`[Deep Research] Phase 1: Broad Landscape Search for "${keyword}"`)
 
+  // Content length limits to prevent overwhelming the AI
+  const MAX_CONTENT_PER_SOURCE = 3000 // chars per source
+  const MAX_TOTAL_CONTEXT = 15000 // total chars for critic phase
+
   // === STEP 1: BROAD LANDSCAPE SEARCH ===
   const broadQuery = `${keyword} ${supportingKeywords.slice(0, 2).join(' ')}`.trim()
   const broadSearch = await tvly.search(broadQuery, {
@@ -309,38 +320,60 @@ const performDeepResearch = async (
     maxResults: 5,
   })
 
-  // Extract content from Tavily results - use rawContent (from includeRawContent) or fallback to content
-  const broadContext = broadSearch.results.map((r: any) =>
-    `Source: ${r.title} (${r.url})\nContent: ${r.rawContent || r.content || 'No content available'}`
-  ).join("\n\n---\n\n")
+  // Extract and CAP content from Tavily results
+  const rawBroadContext = broadSearch.results.map((r: any) => {
+    const content = r.rawContent || r.content || 'No content available'
+    const cappedContent = content.slice(0, MAX_CONTENT_PER_SOURCE)
+    return `Source: ${r.title} (${r.url})\nContent: ${cappedContent}${content.length > MAX_CONTENT_PER_SOURCE ? '... [truncated]' : ''}`
+  }).join("\n\n---\n\n")
+
+  // Cap total context for Critic phase
+  const broadContext = rawBroadContext.slice(0, MAX_TOTAL_CONTEXT)
+  if (rawBroadContext.length > MAX_TOTAL_CONTEXT) {
+    console.log(`[Deep Research] Context capped from ${rawBroadContext.length} to ${MAX_TOTAL_CONTEXT} characters`)
+  }
 
   console.log(`[Deep Research] Phase 1 Complete: ${broadSearch.results.length} sources extracted`)
-  console.log(`[Deep Research] Context length: ${broadContext.length} characters`)
+  console.log(`[Deep Research] Context length: ${broadContext.length} characters (capped at ${MAX_TOTAL_CONTEXT})`)
 
   // === STEP 2: THE CRITIC (Gap Analysis) ===
   console.log(`[Deep Research] Phase 2: The Critic - Analyzing gaps...`)
 
   const criticPrompt = getCriticGapPrompt(keyword, articleType, broadContext)
   const criticResp = await genAI.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.0-flash",
     config: { responseMimeType: "application/json" },
     contents: [{ role: "user", parts: [{ text: criticPrompt }] }]
   })
 
-  let criticAnalysis: { gap_analysis?: string; targeted_queries?: string[] } = { gap_analysis: "", targeted_queries: [] }
+  let criticAnalysis: { gap_analysis?: string; targeted_queries?: string[]; competitor_names?: string[] } = {
+    gap_analysis: "",
+    targeted_queries: [],
+    competitor_names: []
+  }
   try {
-    const parsed = cleanAndParse(criticResp.text || '{"gap_analysis":"","targeted_queries":[]}')
+    const parsed = cleanAndParse(criticResp.text || '{}')
     criticAnalysis = {
-      gap_analysis: parsed.gap_analysis || "No major gaps identified.",
-      targeted_queries: Array.isArray(parsed.targeted_queries) ? parsed.targeted_queries : []
+      gap_analysis: parsed.gap_analysis || "Missing specific pricing, user reviews, and competitor comparisons.",
+      targeted_queries: Array.isArray(parsed.targeted_queries) && parsed.targeted_queries.length > 0
+        ? parsed.targeted_queries
+        : [`${keyword} pricing 2025`, `${keyword} reviews reddit`, `best ${keyword} comparison`], // Fallback queries
+      competitor_names: Array.isArray(parsed.competitor_names) ? parsed.competitor_names : []
     }
   } catch (parseError) {
-    console.warn(`[Deep Research] Failed to parse critic response, using defaults:`, parseError)
+    console.warn(`[Deep Research] Failed to parse critic response, using fallback queries:`, parseError)
+    // Use intelligent fallback queries based on keyword
+    criticAnalysis = {
+      gap_analysis: "Parse failed - using fallback research queries.",
+      targeted_queries: [`${keyword} pricing 2025`, `${keyword} reviews reddit`, `best ${keyword} tools comparison`],
+      competitor_names: []
+    }
   }
   const targetedQueries: string[] = criticAnalysis.targeted_queries || []
 
-  console.log(`[Deep Research] Critic identified gaps:`, criticAnalysis.gap_analysis || "None")
-  console.log(`[Deep Research] Targeted queries:`, targetedQueries.length > 0 ? targetedQueries : "None")
+  console.log(`[Deep Research] Critic identified gaps:`, criticAnalysis.gap_analysis)
+  console.log(`[Deep Research] Competitor names found:`, (criticAnalysis.competitor_names?.length ?? 0) > 0 ? criticAnalysis.competitor_names : "None")
+  console.log(`[Deep Research] Targeted queries:`, targetedQueries)
 
   // === STEP 3: SNIPER SEARCH (Fill the Gaps) ===
   let deepContext = ""
@@ -362,9 +395,12 @@ const performDeepResearch = async (
     )
 
     const allDeepResults = deepResults.flatMap(r => r.results)
-    deepContext = allDeepResults.map((r: any) =>
-      `Source (Gap Fill - ${r.query || 'targeted'}): ${r.title} (${r.url})\nContent: ${r.rawContent || r.content || 'No content available'}`
-    ).join("\n\n---\n\n")
+    // Cap each gap-fill result too
+    deepContext = allDeepResults.map((r: any) => {
+      const content = r.rawContent || r.content || 'No content available'
+      const cappedContent = content.slice(0, MAX_CONTENT_PER_SOURCE)
+      return `Source (Gap Fill): ${r.title} (${r.url})\nContent: ${cappedContent}`
+    }).join("\n\n---\n\n")
 
     console.log(`[Deep Research] Phase 3 Complete: ${allDeepResults.length} gap-filling sources extracted`)
   }
@@ -385,7 +421,7 @@ ${criticAnalysis.gap_analysis || "No major gaps identified."}
 `
 
   const synthesisStream = await genAI.models.generateContentStream({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.0-flash",
     config: {},
     contents: [{ role: "user", parts: [{ text: synthesisPrompt + "\n\n" + combinedData }] }]
   })
