@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Loader2 } from "lucide-react"
 import { signInWithMagicLink, signInWithGoogle } from "./actions"
-import Header from "@/components/Header"
-import Footer from "@/components/MainFooter"
+import { Navbar } from '@/components/landing/Navbar';
+import { Footer } from '@/components/landing/Footer';
 import { CSRFProvider, CSRFInput } from "@/components/csrf-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import Image from "next/image"
@@ -103,7 +103,7 @@ function LoginFormWithSearchParams() {
   return (
     <CSRFProvider>
       <div className="min-h-screen flex flex-col bg-[#F7F5F3]">
-        <Header />
+        <Navbar />
         <div className="h-16 " aria-hidden />
         <main className="flex-1 flex items-center justify-center px-2 sm:px-6 lg:px-8 min-h-screen">
           <div className="mx-auto max-w-4xl px-4 sm:px-1">

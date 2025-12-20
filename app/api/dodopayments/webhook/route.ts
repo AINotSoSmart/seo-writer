@@ -1,7 +1,8 @@
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHmac, timingSafeEqual, createHash } from 'crypto'
+import { Webhook } from 'standardwebhooks'
 
 export const runtime = 'nodejs'
 
@@ -15,6 +16,27 @@ function safeEqualsBase64(aB64: string, bB64: string): boolean {
     } catch {
         return false
     }
+}
+function extractSignatureCandidate(header: string): {
+    provided: string
+    format: 'v1_eq' | 'v1_comma' | 'raw' | 'empty'
+} {
+    const h = (header || '').trim()
+    if (!h) return { provided: '', format: 'empty' }
+
+    const eqMatch = h.match(/v1=([^,]+)/)
+    if (eqMatch && eqMatch[1]) {
+        return { provided: eqMatch[1].trim(), format: 'v1_eq' }
+    }
+
+    if (h.includes(',')) {
+        const parts = h.split(',').map(s => s.trim()).filter(Boolean)
+        const idx = parts.findIndex(p => p.toLowerCase() === 'v1')
+        const provided = idx >= 0 ? (parts[idx + 1] || '') : (parts.find(p => p.toLowerCase() !== 'v1') || '')
+        return { provided: (provided || '').trim(), format: 'v1_comma' }
+    }
+
+    return { provided: h, format: 'raw' }
 }
 
 function verifySignature({
@@ -30,30 +52,57 @@ function verifySignature({
     payload: string
     signatureHeader: string
 }): boolean {
-    const message = `${id}.${timestamp}.${payload}`
-    // Compute base64 HMAC per Standard Webhooks (Dodo headers provide base64 signatures)
-    const computedB64 = createHmac('sha256', secret).update(message).digest('base64')
-
     const header = (signatureHeader || '').trim()
-    let providedB64: string | null = null
+    const { provided } = extractSignatureCandidate(header)
+    if (!provided) return false
 
-    // Support formats: "v1=base64", "v1,base64", or raw "base64"
-    const eqMatch = header.match(/v1=([^,]+)/)
-    if (eqMatch && eqMatch[1]) {
-        providedB64 = eqMatch[1].trim()
-    } else if (header.includes(',')) {
-        const parts = header.split(',').map(s => s.trim())
-        if (parts[0] === 'v1' && parts[1]) {
-            providedB64 = parts[1]
-        } else {
-            providedB64 = parts.find(p => p && p !== 'v1') || null
+    // Helper: constant-time compare of provided signature against a raw digest
+    const compareProvidedToRawDigest = (prov: string, rawDigest: Buffer): boolean => {
+        const digestB64 = rawDigest.toString('base64')
+        const digestB64NoPad = digestB64.replace(/=+$/, '')
+        const digestB64Url = digestB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+        const looksHex = /^[0-9a-f]{64}$/i.test(prov)
+
+        try {
+            if (looksHex) {
+                const provBuf = Buffer.from(prov, 'hex')
+                return provBuf.length === rawDigest.length && timingSafeEqual(provBuf, rawDigest)
+            } else {
+                // Normalize possible url-safe base64 to standard base64 with padding
+                const norm = prov.replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g, '')
+                const padded = norm.length % 4 === 0 ? norm : norm + '='.repeat(4 - (norm.length % 4))
+
+                // Compare bytes
+                const provBuf = Buffer.from(padded, 'base64')
+                if (provBuf.length === rawDigest.length && timingSafeEqual(provBuf, rawDigest)) return true
+
+                // Compare base64 encodings as strings in constant time
+                const candidates = [digestB64, digestB64NoPad, digestB64Url]
+                for (const c of candidates) {
+                    const a = Buffer.from(c)
+                    const b = Buffer.from(padded)
+                    if (a.length === b.length && timingSafeEqual(a, b)) return true
+                }
+                return false
+            }
+        } catch {
+            return false
         }
-    } else {
-        providedB64 = header
     }
 
-    if (!providedB64) return false
-    return safeEqualsBase64(computedB64, providedB64)
+    // Compute HMAC over two possible message formats to be robust:
+    // 1) id.timestamp.payload (per docs)
+    // 2) timestamp.payload (some providers omit id in the signed message)
+    const msg1 = Buffer.from(`${id}.${timestamp}.${payload}`, 'utf8')
+    const raw1 = createHmac('sha256', secret).update(msg1).digest()
+    if (compareProvidedToRawDigest(provided, raw1)) return true
+
+    const msg2 = Buffer.from(`${timestamp}.${payload}`, 'utf8')
+    const raw2 = createHmac('sha256', secret).update(msg2).digest()
+    if (compareProvidedToRawDigest(provided, raw2)) return true
+
+    return false
 }
 
 async function recordEventOnce(supabase: ReturnType<typeof createAdminClient>, params: {
@@ -232,13 +281,22 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text()
 
     const webhookId = req.headers.get('webhook-id') || ''
-    const webhookSignature = req.headers.get('webhook-signature') || ''
+    const sigWH = req.headers.get('webhook-signature')
+    const sigDodoLower = req.headers.get('dodo-signature')
+    const sigDodoCase = req.headers.get('Dodo-Signature')
+    const webhookSignature = (sigWH || sigDodoLower || sigDodoCase || '') as string
+    const sigHeaderSource =
+        sigWH ? 'webhook-signature' :
+            (sigDodoLower ? 'dodo-signature' :
+                (sigDodoCase ? 'Dodo-Signature' : 'none'))
     const webhookTimestamp = req.headers.get('webhook-timestamp') || ''
 
-    const secret =
+    const secret = (
         process.env.DODO_PAYMENTS_WEBHOOK_SECRET ||
         process.env.DODO_PAYMENTS_WEBHOOK_KEY ||
-        process.env.DODO_WEBHOOK_SECRET
+        process.env.DODO_WEBHOOK_SECRET ||
+        ''
+    ).trim()
 
     if (!secret) {
         console.error('Missing Dodo Payments webhook secret environment variable')
@@ -249,16 +307,70 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Missing webhook signature headers' }, { status: 400 })
     }
 
-    // Verify signature (Standard Webhooks spec)
-    const valid = verifySignature({
-        secret,
-        id: webhookId,
-        timestamp: webhookTimestamp,
-        payload: rawBody,
-        signatureHeader: webhookSignature,
-    })
+    // Verify signature (prefer StandardWebhooks, fallback to manual) + diagnostics
+    const webhookHeaders = {
+        'webhook-id': webhookId,
+        'webhook-signature': webhookSignature,
+        'webhook-timestamp': webhookTimestamp,
+    }
 
-    if (!valid) {
+    let verified = false as boolean
+    let verifiedBy: 'standardwebhooks' | 'manual' | 'manual-trim' | null = null
+
+    // Try StandardWebhooks verifier (recommended by Dodo)
+    try {
+        const verifier = new Webhook(secret)
+        await verifier.verify(rawBody, webhookHeaders as any)
+        verified = true
+        verifiedBy = 'standardwebhooks'
+    } catch {
+        // Fallback: manual verification (Standard Webhooks spec)
+        const sigInfo = extractSignatureCandidate(webhookSignature)
+        const rawNoNL = rawBody.replace(/[\r\n]+$/, '')
+
+        const validPrimary = verifySignature({
+            secret,
+            id: webhookId,
+            timestamp: webhookTimestamp,
+            payload: rawBody,
+            signatureHeader: webhookSignature,
+        })
+        let validTrim = false
+        if (!validPrimary && rawNoNL !== rawBody) {
+            validTrim = verifySignature({
+                secret,
+                id: webhookId,
+                timestamp: webhookTimestamp,
+                payload: rawNoNL,
+                signatureHeader: webhookSignature,
+            })
+        }
+
+        verified = validPrimary || validTrim
+        verifiedBy = validPrimary ? 'manual' : (validTrim ? 'manual-trim' : null)
+
+        // Optional debug diagnostics (does not log raw payload)
+        if ((process.env.DEBUG_DODO_WEBHOOK || '').toLowerCase() === 'true' || process.env.DEBUG_DODO_WEBHOOK === '1') {
+            const hashRaw = (() => { try { return createHash('sha256').update(rawBody).digest('hex') } catch { return '' } })()
+            const hashTrim = rawNoNL !== rawBody ? (() => { try { return createHash('sha256').update(rawNoNL).digest('hex') } catch { return '' } })() : ''
+            console.log('[Dodo Webhook][debug] signature verification', {
+                id: webhookId,
+                ts: webhookTimestamp,
+                hasSecret: Boolean(process.env.DODO_PAYMENTS_WEBHOOK_SECRET || process.env.DODO_PAYMENTS_WEBHOOK_KEY || process.env.DODO_WEBHOOK_SECRET),
+                sigHeaderSource,
+                sigFormat: sigInfo.format,
+                sigProvidedLen: (sigInfo.provided || '').length,
+                bodyLen: rawBody.length,
+                bodySha256: hashRaw,
+                trimmedDifferent: rawNoNL !== rawBody,
+                trimmedBodyLen: rawNoNL.length,
+                trimmedBodySha256: hashTrim,
+                verifiedBy,
+            })
+        }
+    }
+
+    if (!verified) {
         return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 })
     }
 
