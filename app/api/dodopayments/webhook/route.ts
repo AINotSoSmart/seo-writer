@@ -172,6 +172,46 @@ async function markFailed(
         .eq('dodo_event_id', dodo_event_id)
 }
 
+/**
+ * Mark the most recent pending subscription change for a user as completed.
+ * Optionally narrow by to_plan_id and attach metadata (e.g., dodo_subscription_id).
+ */
+async function completeLatestPendingChange(
+    supabase: ReturnType<typeof createAdminClient>,
+    user_id: string,
+    to_plan_id?: string | null,
+    meta?: any,
+) {
+    let query: any = (supabase as any)
+        .from('dodo_subscription_changes')
+        .select('id')
+        .eq('user_id', user_id)
+        .eq('status', 'pending')
+
+    if (to_plan_id) {
+        query = query.eq('to_plan_id', to_plan_id)
+    }
+
+    const { data: rows } = await query
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+    const row = rows?.[0]
+    if (row?.id) {
+        const update: any = {
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+        }
+        if (meta) {
+            update.metadata = meta
+        }
+        await (supabase as any)
+            .from('dodo_subscription_changes')
+            .update(update)
+            .eq('id', row.id)
+    }
+}
+
 async function upsertSubscriptionFromEvent(supabase: ReturnType<typeof createAdminClient>, args: {
     user_id: string
     dodo_subscription_id: string
@@ -194,9 +234,12 @@ async function upsertSubscriptionFromEvent(supabase: ReturnType<typeof createAdm
 
         if (plan) {
             // @ts-ignore
-            mappedPricingPlanId = plan.id as string
+            mappedPricingPlanId = (plan as any).id as string
+            // Coerce numeric string to number
             // @ts-ignore
-            planCredits = typeof plan.credits === 'number' ? plan.credits : null
+            const pc = Number((plan as any).credits)
+            // @ts-ignore
+            planCredits = Number.isFinite(pc) ? pc : null
         }
     }
 
@@ -241,7 +284,9 @@ async function upsertSubscriptionFromEvent(supabase: ReturnType<typeof createAdm
             .eq('id', finalPricingPlanId)
             .maybeSingle()
         // @ts-ignore
-        planCredits = typeof planById?.credits === 'number' ? planById.credits : null
+        const pc2 = Number((planById as any)?.credits)
+        // @ts-ignore
+        planCredits = Number.isFinite(pc2) ? pc2 : null
     }
 
     // Upsert subscription by unique dodo_subscription_id
@@ -266,14 +311,25 @@ async function setUserCreditsToPlanCredits(
     user_id: string,
     planCredits: number | null,
 ) {
-    if (typeof planCredits !== 'number' || planCredits < 0) return
+    if (typeof planCredits !== 'number' || !Number.isFinite(planCredits) || planCredits < 0) return
 
-    await supabase
+    // Update-first strategy to avoid requiring a unique constraint on user_id
+    const { data: existing } = await supabase
         .from('credits')
-        .upsert(
-            { user_id, credits: planCredits },
-            { onConflict: 'user_id' },
-        )
+        .select('user_id')
+        .eq('user_id', user_id)
+        .maybeSingle()
+
+    if (existing) {
+        await supabase
+            .from('credits')
+            .update({ credits: planCredits })
+            .eq('user_id', user_id)
+    } else {
+        await supabase
+            .from('credits')
+            .insert({ user_id, credits: planCredits })
+    }
 }
 
 export async function POST(req: NextRequest) {
@@ -436,7 +492,7 @@ export async function POST(req: NextRequest) {
         const effective_user_id = user_id || rootUserId
 
         // Route on event type
-        if (eventType === 'subscription.created' || eventType === 'subscription.activated') {
+        if (eventType === 'subscription.created' || eventType === 'subscription.activated' || eventType === 'subscription.active') {
             if (!effective_user_id || !dodo_subscription_id) {
                 // Store as unprocessed with error for later manual replay
                 await markFailed(supabase, webhookId, 'Missing user_id or subscription_id for subscription.created/activated')
@@ -444,13 +500,25 @@ export async function POST(req: NextRequest) {
             }
 
             const status = eventType === 'subscription.activated' ? 'active' : 'pending'
-            const { planCredits } = await upsertSubscriptionFromEvent(supabase, {
+            const { planCredits, pricing_plan_id } = await upsertSubscriptionFromEvent(supabase, {
                 user_id: effective_user_id,
                 dodo_subscription_id,
                 dodo_product_id: dodo_product_id ?? null,
                 status,
                 raw: subscriptionObj,
             })
+
+            // Complete the latest pending change on activation
+            if (status === 'active') {
+                try {
+                    await completeLatestPendingChange(
+                        supabase,
+                        effective_user_id,
+                        pricing_plan_id ?? null,
+                        { dodo_subscription_id, completed_by: eventType },
+                    )
+                } catch { }
+            }
 
             // If the subscription is already active on create (some providers send as active), also provision credits
             const remoteStatus = (subscriptionObj?.status ?? '').toString().toLowerCase()
@@ -473,9 +541,18 @@ export async function POST(req: NextRequest) {
                 .eq('status', 'active')
                 .maybeSingle()
 
+            // Coerce numeric strings from PostgREST
             // @ts-ignore
-            const planCredits: number | null = activeSub?.dodo_pricing_plans?.credits ?? null
+            const planCredits: number | null = (() => {
+                const v = (activeSub as any)?.dodo_pricing_plans?.credits
+                const n = Number(v)
+                return Number.isFinite(n) ? n : null
+            })()
             await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits)
+            // Also complete the latest pending change if any
+            try {
+                await completeLatestPendingChange(supabase, effective_user_id, null, { completed_by: eventType })
+            } catch { }
         } else if (eventType === 'subscription.cancelled' || eventType === 'subscription.canceled') {
             // Handle cancellation
             if (!effective_user_id || !dodo_subscription_id) {
@@ -490,6 +567,36 @@ export async function POST(req: NextRequest) {
                 status: 'cancelled',
                 raw: subscriptionObj,
             })
+        } else if (eventType === 'subscription.plan_changed') {
+            // Plan changed mid-cycle: update mapping/status, do not reset credits
+            if (effective_user_id && dodo_subscription_id) {
+                const remoteStatus = (subscriptionObj?.status ?? '').toString().toLowerCase()
+                const statusMap: Record<string, 'pending' | 'active' | 'cancelled' | 'expired'> = {
+                    pending: 'pending',
+                    active: 'active',
+                    canceled: 'cancelled',
+                    cancelled: 'cancelled',
+                    expired: 'expired',
+                }
+                const mapped = statusMap[remoteStatus] ?? 'pending'
+                const { pricing_plan_id } = await upsertSubscriptionFromEvent(supabase, {
+                    user_id: effective_user_id,
+                    dodo_subscription_id,
+                    dodo_product_id: dodo_product_id ?? null,
+                    status: mapped,
+                    raw: subscriptionObj,
+                })
+                if (mapped === 'active') {
+                    try {
+                        await completeLatestPendingChange(
+                            supabase,
+                            effective_user_id,
+                            pricing_plan_id ?? null,
+                            { completed_by: eventType },
+                        )
+                    } catch { }
+                }
+            }
         } else if (eventType === 'subscription.updated') {
             // Track status transitions; if cancel_at_period_end included in subscriptionObj, we may update local status
             if (effective_user_id && dodo_subscription_id) {
@@ -502,13 +609,24 @@ export async function POST(req: NextRequest) {
                     expired: 'expired',
                 }
                 const mapped = statusMap[remoteStatus] ?? 'pending'
-                await upsertSubscriptionFromEvent(supabase, {
+                const { planCredits, pricing_plan_id } = await upsertSubscriptionFromEvent(supabase, {
                     user_id: effective_user_id,
                     dodo_subscription_id,
                     dodo_product_id: dodo_product_id ?? null,
                     status: mapped,
                     raw: subscriptionObj,
                 })
+                if (mapped === 'active') {
+                    await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits ?? null)
+                    try {
+                        await completeLatestPendingChange(
+                            supabase,
+                            effective_user_id,
+                            pricing_plan_id ?? null,
+                            { completed_by: eventType },
+                        )
+                    } catch { }
+                }
             }
         } else {
             // Unknown or unhandled event; accept for now

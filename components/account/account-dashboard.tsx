@@ -1,17 +1,16 @@
 'use client'
 
-
+import { useState, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-
-
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { User as UserIcon, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { cancelSubscription, updatePaymentMethod } from '@/lib/dodopayments'
 
 // Removed complex credit transaction service dependency
 
@@ -29,11 +28,20 @@ interface Payment {
   }
 }
 
+interface SubscriptionSummary {
+  subscription_id: string
+  status: 'pending' | 'active' | 'cancelled' | 'expired'
+  plan_name?: string
+  next_billing_date?: string
+  cancel_at_period_end?: boolean
+}
+
 interface AccountDashboardProps {
   user: User
   payments: Payment[]
   currentCredits: number
   totalCreditsPurchased: number
+  subscription?: SubscriptionSummary | null
 }
 
 interface UsageStats {
@@ -43,7 +51,7 @@ interface UsageStats {
   topFeatures: Array<{ feature: string; credits: number }>
 }
 
-export function AccountDashboard({ user, payments, currentCredits, totalCreditsPurchased }: AccountDashboardProps) {
+export function AccountDashboard({ user, payments, currentCredits, totalCreditsPurchased, subscription }: AccountDashboardProps) {
 
 
 
@@ -95,6 +103,91 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
               <Input id="email" value={user.email || ''} disabled />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Subscription */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserIcon className="h-5 w-5" />
+            Subscription
+          </CardTitle>
+          <CardDescription>Manage your subscription and billing</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {subscription ? (
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={
+                      subscription.status === 'active'
+                        ? 'default'
+                        : subscription.status === 'pending'
+                          ? 'secondary'
+                          : 'destructive'
+                    }
+                  >
+                    {subscription.status}
+                  </Badge>
+                  <span className="text-sm font-medium">
+                    {subscription.plan_name || 'Subscription'}
+                  </span>
+                </div>
+                {subscription.next_billing_date && (
+                  <p className="text-sm text-muted-foreground">
+                    Next billing:{' '}
+                    {new Date(subscription.next_billing_date).toLocaleString()}
+                  </p>
+                )}
+                {typeof subscription.cancel_at_period_end === 'boolean' &&
+                  subscription.cancel_at_period_end && (
+                    <p className="text-xs text-amber-600">
+                      Cancellation scheduled at period end
+                    </p>
+                  )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="px-3 py-2 text-sm bg-stone-900 text-white rounded hover:bg-stone-800 disabled:opacity-50"
+                  onClick={useCallback(async () => {
+                    try {
+                      const { url } = await updatePaymentMethod(undefined, '/account')
+                      window.location.href = url
+                    } catch (e) {
+                      console.error('Failed to open payment method portal', e)
+                      alert('Failed to open payment method portal')
+                    }
+                  }, [])}
+                >
+                  Update payment method
+                </button>
+
+                {subscription.status === 'active' && !subscription.cancel_at_period_end && (
+                  <button
+                    className="px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-500 disabled:opacity-50"
+                    onClick={useCallback(async () => {
+                      try {
+                        await cancelSubscription()
+                        // Optimistic UX: reflect cancel-at-period-end immediately
+                        window.location.reload()
+                      } catch (e) {
+                        console.error('Failed to cancel subscription', e)
+                        alert('Failed to cancel subscription')
+                      }
+                    }, [])}
+                  >
+                    Cancel at period end
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              No active subscription found.
+            </div>
+          )}
         </CardContent>
       </Card>
 
