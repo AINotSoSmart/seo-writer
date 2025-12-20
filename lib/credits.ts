@@ -92,7 +92,7 @@ export class CreditService {
       }
 
       const { balance: currentBalance } = await this.getUserCredits(userId)
-      
+
       if (currentBalance < amount) {
         return { success: false, error: 'Insufficient credits' }
       }
@@ -113,6 +113,39 @@ export class CreditService {
       return { success: true, newBalance }
     } catch (error) {
       return { success: false, error: 'Error deducting credits' }
+    }
+  }
+
+  /**
+   * Set user's credit balance to an absolute value
+   */
+  async setCredits(
+    userId: string,
+    value: number,
+    description: string = 'Credits set'
+  ): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+    try {
+      if (!userId || value < 0) {
+        return { success: false, error: 'Invalid parameters' }
+      }
+
+      const supabase = await this.getClient()
+      const upsertData: CreditsInsert = {
+        user_id: userId,
+        credits: value
+      }
+
+      const { error } = await supabase
+        .from('credits')
+        .upsert(upsertData, { onConflict: 'user_id' })
+
+      if (error) {
+        return { success: false, error: 'Failed to set credits' }
+      }
+
+      return { success: true, newBalance: value }
+    } catch (error) {
+      return { success: false, error: 'Error setting credits' }
     }
   }
 
@@ -165,6 +198,10 @@ export async function getUserCredits(userId: string) {
 
 export async function addCredits(userId: string, amount: number, description?: string) {
   return creditService.addCredits(userId, amount, description)
+}
+
+export async function setCredits(userId: string, value: number, description?: string) {
+  return creditService.setCredits(userId, value, description)
 }
 
 export async function deductCredits(userId: string, amount: number, description?: string) {

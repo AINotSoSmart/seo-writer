@@ -63,8 +63,8 @@ function CreditsCard({ userId }: { userId?: string }) {
           <span className="flex items-center gap-2"><Coins className="h-3 w-3" />Credits</span> <span className="text-amber-600"> {balance.toLocaleString()}</span>
         </div>
         <Button size="sm" className="w-full bg-black hover:bg-black/90 text-white border-0" asChild>
-          <Link href="/buy-credits">
-            <Sparkles className="h-3 w-3" /> Get Credits
+          <Link href="/subscribe">
+            <Sparkles className="h-3 w-3" /> Subscribe
           </Link>
         </Button>
       </CardContent>
@@ -130,8 +130,8 @@ export function AppSidebar({
               <Link href="/">
                 <Image src="/site-logo.png" alt="Unrealshot AI" width={30} height={30} className="rounded-sm" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Unrealshot AI</span>
-                  <span className="truncate text-xs">Realistic AI Photoshoots</span>
+                  <span className="truncate font-semibold">FlipAEO</span>
+                  <span className="truncate text-xs">AI SEO Writer</span>
                 </div>
               </Link>
             </SidebarMenuButton>

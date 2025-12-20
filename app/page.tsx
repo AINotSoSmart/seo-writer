@@ -20,14 +20,11 @@ export default function Home() {
   return (
     <div className="landing-page min-h-screen w-full flex flex-col overflow-x-hidden font-sans">
       <Navbar />
-      <main className="flex-grow flex flex-col items-center pt-16 md:pt-24 w-full">
+      <main className="flex-grow flex flex-col items-center w-full">
 
         {/* Hero Section */}
-        <div className="w-full px-4 flex flex-col items-center mb-32">
+        <div className="w-full px-4 flex flex-col items-center mb-16 md:mb-24">
           <Hero />
-          <div className="w-full max-w-[1400px] mt-16 md:mt-20 relative z-10">
-            <FeaturePreview />
-          </div>
         </div>
 
         {/* Main Content Sections */}

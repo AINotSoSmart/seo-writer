@@ -1,5 +1,171 @@
 import React from 'react';
 
+// Graphic 1: AI ignoring (Chat bubble with ?)
+const AiSearchGraphic = () => (
+  <div className="relative">
+    {/* Background decorative blob */}
+    <div className="absolute -right-6 -top-4 w-12 h-12 bg-brand-yellow rounded-full border-2 border-black opacity-100"></div>
+
+    {/* Main Chat Bubble */}
+    <div className="relative w-24 h-16 bg-white border-2 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      <span className="font-display font-black text-3xl text-gray-400">?</span>
+      {/* Tail */}
+      <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-b-2 border-r-2 border-black transform rotate-45"></div>
+    </div>
+
+    {/* Small search icon badge */}
+    <div className="absolute -left-4 -bottom-2 w-10 h-10 bg-brand-orange border-2 border-black rounded-full flex items-center justify-center shadow-sm">
+      <div className="w-4 h-4 border-2 border-black rounded-full"></div>
+      <div className="w-2 h-[2px] bg-black transform rotate-45 absolute bottom-3 right-3 origin-center"></div>
+    </div>
+  </div>
+);
+
+// Graphic 2: Robot Head
+const BotVoiceGraphic = () => (
+  <div className="relative">
+    {/* Robot Head */}
+    <div className="w-20 h-20 bg-gray-100 border-2 border-black relative shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center justify-center">
+      {/* Antenna */}
+      <div className="absolute -top-4 left-1/2 -translate-x-1/2 flex flex-col items-center">
+        <div className="w-3 h-3 bg-brand-yellow border-2 border-black rounded-full"></div>
+        <div className="w-[2px] h-2 bg-black"></div>
+      </div>
+
+      {/* Eyes */}
+      <div className="flex gap-3 mb-2">
+        <div className="w-3 h-3 bg-black"></div>
+        <div className="w-3 h-3 bg-black"></div>
+      </div>
+
+      {/* Mouth */}
+      <div className="w-10 h-1 bg-black"></div>
+
+      {/* Ears */}
+      <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-2 h-4 bg-gray-300 border-2 border-black border-r-0"></div>
+      <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-2 h-4 bg-gray-300 border-2 border-black border-l-0"></div>
+    </div>
+  </div>
+);
+
+// Graphic 3: Chart with specific data
+const ZeroClicksGraphic = () => (
+  <div className="relative w-28 h-24 flex items-end justify-center gap-3 p-2 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+    {/* Bar 1 (High Impressions) */}
+    <div className="w-8 h-[80%] bg-[#D6F5F2] border-2 border-black relative group">
+      <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-sans font-bold text-xs">10k</div>
+    </div>
+
+    {/* Bar 2 (Low Clicks) */}
+    <div className="w-8 h-[20%] bg-brand-orange border-2 border-black relative">
+      <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-sans font-bold text-xs text-red-500">0</div>
+    </div>
+
+    {/* Axis lines */}
+    <div className="absolute bottom-0 left-0 w-full h-[2px] bg-black"></div>
+    <div className="absolute bottom-0 left-0 w-[2px] h-full bg-black"></div>
+
+    {/* Cursor Icon overlay */}
+    <div className="absolute top-1/2 right-0 transform translate-x-1/2">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19177L14.8698 12.3673H5.65376Z" fill="black" stroke="black" strokeWidth="2" />
+      </svg>
+    </div>
+  </div>
+);
+
+// Placeholder for Check component to ensure syntactical correctness
+const Check = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+// --- COMPARISON TABLE SECTION ---
+const ComparisonTable = () => (
+  <div className="w-full max-w-4xl mt-32 px-4">
+    <div className="text-center mb-12">
+      <h3 className="font-display font-black text-3xl md:text-5xl uppercase mb-4">Why we win against $99/mo tools</h3>
+    </div>
+
+    <div className="w-full border-2 border-black shadow-neo bg-white overflow-hidden">
+      {/* Table Header */}
+      <div className="grid grid-cols-3 border-b-2 border-black bg-gray-50">
+        <div className="p-4 md:p-6 font-mono font-bold text-xs md:text-sm text-gray-500 uppercase tracking-widest">Feature</div>
+        <div className="p-4 md:p-6 font-display font-bold text-sm md:text-xl text-gray-400 border-l-2 border-black bg-gray-100 flex items-center justify-center">
+          Generic AI Writer
+        </div>
+        <div className="p-4 md:p-6 font-display font-black text-sm md:text-xl text-black border-l-2 border-black bg-[#D6F5F2] flex items-center justify-center relative overflow-hidden">
+          <span className="relative z-10">FlipAEO Engine</span>
+          <div className="absolute inset-0 bg-dot-pattern opacity-20"></div>
+        </div>
+      </div>
+
+      {/* Row 1: Research */}
+      <div className="grid grid-cols-3 border-b-2 border-black">
+        <div className="p-4 md:p-6 flex items-center font-bold text-sm md:text-base">Research Depth</div>
+        <div className="p-4 md:p-6 border-l-2 border-black text-gray-500 font-medium text-sm md:text-base bg-gray-50/50">
+          Single generic search
+        </div>
+        <div className="p-4 md:p-6 border-l-2 border-black font-bold text-sm md:text-base flex items-center gap-2">
+          <Check className="w-4 h-4 text-green-600" />
+          Multi-Stage "Critic" Agent
+        </div>
+      </div>
+
+      {/* Row 2: Linking */}
+      <div className="grid grid-cols-3 border-b-2 border-black">
+        <div className="p-4 md:p-6 flex items-center font-bold text-sm md:text-base">Internal Linking</div>
+        <div className="p-4 md:p-6 border-l-2 border-black text-gray-500 font-medium text-sm md:text-base bg-gray-50/50">
+          Manual or Plugin req.
+        </div>
+        <div className="p-4 md:p-6 border-l-2 border-black font-bold text-sm md:text-base flex items-center gap-2">
+          <Check className="w-4 h-4 text-green-600" />
+          Auto-Mesh (Semantic)
+        </div>
+      </div>
+
+      {/* Row 3: Citations */}
+      <div className="grid grid-cols-3 border-b-2 border-black">
+        <div className="p-4 md:p-6 flex items-center font-bold text-sm md:text-base">Trust Signals</div>
+        <div className="p-4 md:p-6 border-l-2 border-black text-gray-500 font-medium text-sm md:text-base bg-gray-50/50">
+          Often Hallucinated / None
+        </div>
+        <div className="p-4 md:p-6 border-l-2 border-black font-bold text-sm md:text-base flex items-center gap-2">
+          <Check className="w-4 h-4 text-green-600" />
+          Verified Real URLs
+        </div>
+      </div>
+
+      {/* Row 4: Voice */}
+      <div className="grid grid-cols-3">
+        <div className="p-4 md:p-6 flex items-center font-bold text-sm md:text-base">Brand Voice</div>
+        <div className="p-4 md:p-6 border-l-2 border-black text-gray-500 font-medium text-sm md:text-base bg-gray-50/50">
+          "Excited Robot"
+        </div>
+        <div className="p-4 md:p-6 border-l-2 border-black font-bold text-sm md:text-base flex items-center gap-2 bg-[#FAFA9D]/30">
+          <Check className="w-4 h-4 text-green-600" />
+          Your Brand DNA
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const ProblemCard: React.FC<{ title: string; description: string; graphic: React.ReactNode }> = ({ title, description, graphic }) => {
+  return (
+    <div className="bg-white border-2 border-black p-8 shadow-neo hover:shadow-neo-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-200 flex flex-col items-center text-center h-full">
+      <div className="h-32 w-full flex items-center justify-center mb-2">
+        {graphic}
+      </div>
+      <h3 className="font-display font-black text-2xl mb-4 uppercase leading-tight">{title}</h3>
+      <p className="font-sans text-gray-600 leading-relaxed font-medium">
+        {description}
+      </p>
+    </div>
+  );
+};
+
 export const ProblemSection: React.FC = () => {
   return (
     <section className="w-full py-24 px-4 flex flex-col items-center">
@@ -20,110 +186,25 @@ export const ProblemSection: React.FC = () => {
 
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full">
-        <ProblemCard 
-          title="AI SEARCH IGNORES YOU" 
-          description="You write 100 blogs, but ChatGPT and Claude don’t know who you are. When founders search for your category, the AI recommends your competitors."
+        <ProblemCard
+          title="AI SEARCH IGNORES YOU"
+          description="You write 100 blogs, but ChatGPT, Gemini and Claude don’t know who you are. When peoples search in your category, the AI recommends your competitors - not YOU."
           graphic={<AiSearchGraphic />}
         />
-        <ProblemCard 
-          title="YOU SOUND LIKE A BOT" 
+        <ProblemCard
+          title="YOU SOUND LIKE A BOT"
           description="Google smells 'Default GPT-4' content in 3 seconds. It has no brand voice, no unique data, and no soul. It doesn't build authority; it just adds to the noise."
           graphic={<BotVoiceGraphic />}
         />
-        <ProblemCard 
-          title="IMPRESSIONS BUT ZERO CLICKS" 
+        <ProblemCard
+          title="IMPRESSIONS BUT ZERO CLICKS"
           description="You are ranking for keywords that don't convert. Without GSC data dictating your roadmap, you are just guessing while competitors win the real answers."
           graphic={<ZeroClicksGraphic />}
         />
       </div>
+
+      {/* Comparison Table */}
+      <ComparisonTable />
     </section>
   );
 };
-
-const ProblemCard: React.FC<{ title: string; description: string; graphic: React.ReactNode }> = ({ title, description, graphic }) => {
-  return (
-    <div className="bg-white border-2 border-black p-8 shadow-neo hover:shadow-neo-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-200 flex flex-col items-center text-center h-full">
-      <div className="h-32 w-full flex items-center justify-center mb-2">
-        {graphic}
-      </div>
-      <h3 className="font-display font-black text-2xl mb-4 uppercase leading-tight">{title}</h3>
-      <p className="font-sans text-gray-600 leading-relaxed font-medium">
-        {description}
-      </p>
-    </div>
-  );
-};
-
-// Graphic 1: AI ignoring (Chat bubble with ?)
-const AiSearchGraphic = () => (
-  <div className="relative">
-     {/* Background decorative blob */}
-     <div className="absolute -right-6 -top-4 w-12 h-12 bg-brand-yellow rounded-full border-2 border-black opacity-100"></div>
-     
-     {/* Main Chat Bubble */}
-     <div className="relative w-24 h-16 bg-white border-2 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <span className="font-display font-black text-3xl text-gray-400">?</span>
-        {/* Tail */}
-        <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-b-2 border-r-2 border-black transform rotate-45"></div>
-     </div>
-     
-     {/* Small search icon badge */}
-     <div className="absolute -left-4 -bottom-2 w-10 h-10 bg-brand-orange border-2 border-black rounded-full flex items-center justify-center shadow-sm">
-        <div className="w-4 h-4 border-2 border-black rounded-full"></div>
-        <div className="w-2 h-[2px] bg-black transform rotate-45 absolute bottom-3 right-3 origin-center"></div>
-     </div>
-  </div>
-);
-
-// Graphic 2: Robot Head
-const BotVoiceGraphic = () => (
-  <div className="relative">
-      {/* Robot Head */}
-      <div className="w-20 h-20 bg-gray-100 border-2 border-black relative shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center justify-center">
-        {/* Antenna */}
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 flex flex-col items-center">
-            <div className="w-3 h-3 bg-brand-yellow border-2 border-black rounded-full"></div>
-            <div className="w-[2px] h-2 bg-black"></div>
-        </div>
-        
-        {/* Eyes */}
-        <div className="flex gap-3 mb-2">
-            <div className="w-3 h-3 bg-black"></div>
-            <div className="w-3 h-3 bg-black"></div>
-        </div>
-        
-        {/* Mouth */}
-        <div className="w-10 h-1 bg-black"></div>
-        
-        {/* Ears */}
-        <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-2 h-4 bg-gray-300 border-2 border-black border-r-0"></div>
-        <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-2 h-4 bg-gray-300 border-2 border-black border-l-0"></div>
-      </div>
-  </div>
-);
-
-// Graphic 3: Chart with specific data
-const ZeroClicksGraphic = () => (
-  <div className="relative w-28 h-24 flex items-end justify-center gap-3 p-2 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-      {/* Bar 1 (High Impressions) */}
-      <div className="w-8 h-[80%] bg-[#D6F5F2] border-2 border-black relative group">
-        <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-sans font-bold text-xs">10k</div>
-      </div>
-      
-      {/* Bar 2 (Low Clicks) */}
-      <div className="w-8 h-[20%] bg-brand-orange border-2 border-black relative">
-         <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-sans font-bold text-xs text-red-500">0</div>
-      </div>
-
-      {/* Axis lines */}
-      <div className="absolute bottom-0 left-0 w-full h-[2px] bg-black"></div>
-      <div className="absolute bottom-0 left-0 w-[2px] h-full bg-black"></div>
-      
-      {/* Cursor Icon overlay */}
-      <div className="absolute top-1/2 right-0 transform translate-x-1/2">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19177L14.8698 12.3673H5.65376Z" fill="black" stroke="black" strokeWidth="2"/>
-        </svg>
-      </div>
-  </div>
-);
