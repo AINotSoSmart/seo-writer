@@ -947,6 +947,10 @@ export const generateBlogPost = task({
       // Use user's chosen title if provided, otherwise use AI-generated title
       const finalTitle = title || outline.title
 
+      // IMPORTANT: Override outline.title with finalTitle to ensure consistency
+      // This prevents the stored outline from having a different title than the article
+      outline.title = finalTitle
+
       // Initialize draft with Title
       const initialDraft = `# ${finalTitle} \n\n`
 
