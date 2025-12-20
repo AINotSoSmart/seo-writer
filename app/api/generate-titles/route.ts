@@ -5,32 +5,48 @@ import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { jsonrepair } from "jsonrepair"
 import { ArticleType } from "@/lib/prompts/article-types"
 import { getTitlePrompt } from "@/lib/prompts/strategies"
+import { getCurrentDateContext } from "@/lib/utils/date-context"
 
 const genAI = getGeminiClient()
 
 const GENERATE_TITLES_PROMPT = (keyword: string, articleType: ArticleType, brandDetails: any = null) => `
-You are an expert Copywriter and SEO Specialist.
-Your goal is to generate 5 catchy, high-converting blog post titles for a specific keyword.
+You are an expert SEO Copywriter.
+Your goal is to generate 5 SEO-optimized, AI-search-ready blog post titles for a specific keyword.
 
 INPUT CONTEXT:
 1. KEYWORD: "${keyword}"
 2. ARTICLE TYPE: ${articleType.toUpperCase()}
-${brandDetails ? `3. BRAND DETAILS: ${JSON.stringify(brandDetails)}` : ""}
+3. ${getCurrentDateContext()}
+${brandDetails ? `4. BRAND: ${brandDetails.product_name}` : ""}
 
-CRITICAL RULES (Must Follow):
-1. **NO COLONS OR SEMI-COLONS:** Titles must be a single, flowing sentence. (Bad: "Restoration: How to do it", Good: "How to restore your old photos easily")
-2. **NO "AI SLOP":** Do not use clichés like "Unleash", "Unlock", "Elevate", "Mastering", "Ultimate Guide to", "Symphony", "Tapestry".
-3. **NATURAL LANGUAGE:** Write like a human, not a marketing bot. Use conversational but authoritative language.
+CRITICAL SEO RULES (MANDATORY - VIOLATING THESE = FAILURE):
+
+1. **INCLUDE PRIMARY KEYWORD:** The exact keyword "${keyword}" (or close natural variant) MUST appear in the title.
+
+2. **FRONT-LOAD KEYWORD:** Place the keyword as early as possible in the title.
+
+3. **NO SPECIAL PUNCTUATION - BANNED CHARACTERS:**
+   - ❌ Colons (:)
+   - ❌ Semicolons (;)
+   - ❌ Parentheses ()
+   - ❌ Single quotes ('')
+   - ❌ Em-dashes (—)
+   - ✅ ONLY commas are allowed if grammatically natural
+
+4. **SINGLE FLOWING SENTENCE:** Title must read as one smooth, natural sentence - NOT two parts split by punctuation.
+
+5. **50-60 CHARACTERS MAX:** Keep titles concise for full SERP visibility.
+
+6. **NO CLICKBAIT PATTERNS:**
+   - ❌ "The X Nobody Talks About"
+   - ❌ "Here's Why..."
+   - ❌ "You Won't Believe..."
+   - ❌ Questions that don't include the keyword
+
+7. **WRITE LIKE A SEARCH RESULT:** Titles should match what users type into Google/AI search.
 
 TYPE-SPECIFIC INSTRUCTIONS:
 ${getTitlePrompt(articleType, keyword)}
-
-GLOBAL INSTRUCTIONS:
-1. Generate 5 distinct title options.
-2. Titles should incorporate the keyword naturally.
-3. No emotional words or clichés.
-4. Keep titles simple direct SEO style.
-5. No storytelling tone, only informative titles.
 
 OUTPUT REQUIREMENTS (Return strict JSON):
 {

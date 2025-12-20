@@ -49,21 +49,26 @@ INSTRUCTION NOTES GUIDANCE:
 - Include analogies and real-world examples
 - Focus on the "why" behind concepts, not just the "what"
 `,
-                title_prompt: `Generate 5 engaging blog titles for an Informational/Deep Dive article about '{keyword}'.
+                title_prompt: `Generate 5 SEO-optimized blog titles for an Informational article about '{keyword}'.
 
-MODERN TITLE RULES:
-1. Create curiosity, not clickbait - Make the brain itch
-2. Use numbers when possible - Numbers catch the eye
-3. Keep title under 60 characters - Short titles punch harder
-4. Remove weak words - Avoid: very, really, extremely, maybe
-5. BANNED: "ultimate guide", "comprehensive", "definitive", "complete guide", "everything you need to know"
-6. Speak like a human - Conversational, not corporate
-7. Don't reveal the answer - Make them curious enough to click
+TITLE RULES (MANDATORY):
+1. Include '{keyword}' or very close variant in the title
+2. NO colons, semicolons, parentheses, or single quotes
+3. Keep under 60 characters
+4. Front-load the keyword when possible
+5. Write as a single flowing sentence
 
-EXAMPLES:
-- "Why Most Developers Get SSR Wrong (And How To Fix It)"
-- "React Hooks Explained In 5 Minutes Flat"
-- "The Serverless Myth Nobody Talks About"
+GOOD EXAMPLES:
+- "How to Restore Old Photos with AI in 2024"
+- "What Is AI Photo Restoration and How It Works"
+- "AI Photo Restoration Explained for Beginners"
+- "Complete Guide to AI Photo Restoration"
+
+BAD EXAMPLES (DO NOT USE):
+- "Restoration Magic: How AI Brings Photos Back" (colon)
+- "Is AI Photo Restoration Worth It? (Tested)" (parentheses)
+- "The 'Secret' to Perfect Photo Restoration" (single quotes)
+- "Here's Why AI Photo Restoration Changes Everything" (clickbait)
 `
         },
 
@@ -109,22 +114,26 @@ INSTRUCTION NOTES GUIDANCE:
 - Compare tools AGAINST each other, not in isolation
 - Include specific examples: "ShipFast's auth setup takes 10 minutes vs Supastarter's 30 minutes"
 `,
-                title_prompt: `Generate 5 high-CTR blog titles for a Product Comparison/Review article about '{keyword}'.
+                title_prompt: `Generate 5 SEO-optimized blog titles for a Comparison/Review article about '{keyword}'.
 
-MODERN TITLE RULES:
-1. Create curiosity - Make them wonder which one wins
-2. Use numbers - "7 Tools Tested" works better than "Best Tools"
-3. Attack a pain point - "Stop Wasting Money on the Wrong Tool"
-4. Add contrast - "Tool A vs Tool B: One Clear Winner"
-5. Keep under 60 characters
-6. BANNED: "ultimate", "comprehensive", "definitive", "complete guide"
-7. Add mini conflict - "Both Are Good But One Has a Fatal Flaw"
-8. Speak like someone who actually tested them
+TITLE RULES (MANDATORY):
+1. Include '{keyword}' or very close variant in the title
+2. NO colons, semicolons, parentheses, or single quotes
+3. Keep under 60 characters
+4. Numbers work well for listicles when relevant
+5. Write as a single flowing sentence
 
-EXAMPLES:
-- "I Tested 7 SaaS Boilerplates. Here's The Only One Worth Buying"
-- "ShipFast vs Supastarter: One Obvious Winner (Tested)"
-- "5 AI Writing Tools That Actually Work In 2025"
+GOOD EXAMPLES:
+- "Best Free AI Photo Restoration Tools in 2024"
+- "7 AI Photo Restoration Apps Compared and Reviewed"
+- "Top AI Tools for Old Photo Restoration"
+- "AI Photo Restoration Tools Worth Trying in 2024"
+
+BAD EXAMPLES (DO NOT USE):
+- "AI Tools Tested: Here's The Winner" (colon)
+- "The Best AI Tool (And It's Not What You Think)" (parentheses)
+- "I Tested 7 Tools. Here's The Only One Worth It" (overly clickbait)
+- "Tool A vs Tool B: One Clear Winner" (colon)
 `
         },
 
@@ -168,21 +177,26 @@ INSTRUCTION NOTES GUIDANCE:
 - Include what the reader should SEE after each step (verification)
 - Keep steps atomic - one action per step when possible
 `,
-                title_prompt: `Generate 5 actionable blog titles for a How-To/Tutorial article about '{keyword}' by understanding the user intent and difficulty level.
+                title_prompt: `Generate 5 SEO-optimized blog titles for a How-To/Tutorial article about '{keyword}'.
 
-MODERN TITLE RULES:
-1. Promise a specific result - "Deploy in 5 Minutes" beats "How to Deploy"
-2. Use time anchors when possible - People love quick wins
-3. Attack the fear - "Stop Struggling With X"
+TITLE RULES (MANDATORY):
+1. Start with "How to" when the keyword allows it
+2. Include '{keyword}' or very close variant in the title
+3. NO colons, semicolons, parentheses, or single quotes
 4. Keep under 60 characters
-5. BANNED: "ultimate guide", "comprehensive", "complete walkthrough"
-6. Speak like a helpful friend, not a textbook
-7. Add a hook - "The Method Nobody Teaches"
+5. Promise a clear outcome in the title
 
-EXAMPLES:
-- "Deploy Next.js to Vercel In 5 Minutes (No BS Guide)"
-- "Stripe Payments Setup That Actually Works First Try"
-- "How I Fixed My Broken SEO In One Afternoon"
+GOOD EXAMPLES:
+- "How to Remove Scratches from Old Photos Using AI"
+- "How to Colorize Black and White Photos with AI"
+- "Step by Step Guide to AI Photo Restoration"
+- "How to Restore Faded Color Photos at Home"
+
+BAD EXAMPLES (DO NOT USE):
+- "Fix Photos: A Complete Guide" (colon)
+- "Restore Photos (The Easy Way)" (parentheses)
+- "The Method Nobody Teaches You" (clickbait, no keyword)
+- "Deploy in 5 Minutes (No BS Guide)" (parentheses)
 `
         }
 }
