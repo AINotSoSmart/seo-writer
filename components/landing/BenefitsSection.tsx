@@ -75,11 +75,29 @@ export const BenefitsSection: React.FC = () => {
         </div>
 
         {/* Card 4: Quality Articles (Teal, Span 2) */}
-        <div className="md:col-span-2 bg-[#D6F5F2] border-2 border-black p-8 shadow-neo flex flex-col justify-center hover:shadow-neo-hover transition-all duration-200">
-          <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">Quality Articles That Beat the Noise</h3>
-          <p className="font-sans font-medium text-black/80 leading-relaxed text-lg max-w-2xl">
-            Most AI content reads like a Wikipedia summary. Ours reads like a field report. We validate every claim against live sources to ensure your content is technically accurate and impossible to ignore. This is how you build trust.
-          </p>
+        <div className="md:col-span-2 bg-[#D6F5F2] border-2 border-black p-8 shadow-neo flex flex-col md:flex-row items-center gap-8 hover:shadow-neo-hover transition-all duration-200">
+          <div className="flex-1">
+            <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">Quality Articles That Beat the Noise</h3>
+            <p className="font-sans font-medium text-black/80 leading-relaxed text-lg">
+              Most AI content reads like a Wikipedia summary. Ours reads like a field report. We validate every claim to ensure your content is technically accurate and impossible to ignore.
+            </p>
+          </div>
+
+          {/* Comparison Visual */}
+          <div className="flex-1 w-full max-w-sm bg-white border-2 border-black rounded-lg p-1 shadow-sm text-[10px] md:text-xs">
+            <div className="grid grid-cols-2 border-b-2 border-black">
+              <div className="p-2 border-r-2 border-black bg-gray-50 text-gray-400 font-bold text-center">GENERIC AI</div>
+              <div className="p-2 bg-teal-50 text-teal-800 font-bold text-center">FLIPAEO</div>
+            </div>
+            <div className="grid grid-cols-2">
+              <div className="p-4 border-r-2 border-black text-gray-400 leading-relaxed font-serif italic">
+                "In the rapidly evolving landscape of digital marketing, it is crucial to leverage synergies..."
+              </div>
+              <div className="p-4 bg-white text-black leading-relaxed font-medium">
+                "Stop wasting budget on broad keywords. First, identify the 3 questions your customers ask before buying..."
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Card 5: Traffic (Orange, Span 2) */}

@@ -17,59 +17,59 @@ export const FeaturesSection: React.FC = () => {
   const features = [
     {
       id: "01",
-      title: "AI Search Visibility Scan",
-      description: "See how ChatGPT, Gemini, and Claude answer questions in your category and whether your brand appears at all. Understand where you’re invisible and which conversations you need to enter.",
+      title: "AI Readiness & Category Intelligence",
+      description: "We analyze how search engines and AI models understand your category. Find the exact gaps where competitors are winning and your brand is invisible.",
       color: "bg-[#FAFA9D]", // Yellow
       Graphic: VisibilityScanGraphic
     },
     {
       id: "02",
-      title: "Answer-First Generation",
-      description: "Articles are written to explain clearly and completely, not to pad keywords. Built for how humans read and how AI systems evaluate trust.",
-      color: "bg-[#FFD8A8]", // Orange
-      Graphic: AnswerFirstGraphic
+      title: "Brand Voice Consistency",
+      description: "Your tone, positioning, and language stay consistent across every article. No generic AI voice. No reset every month.",
+      color: "bg-[#C8FFC8]", // Soft Green
+      Graphic: BrandVoiceGraphic
     },
     {
       id: "03",
-      title: "30-Day Authority-Driven Content Plan",
-      description: "A structured plan where each article supports the next. Designed to build topical authority instead of publishing disconnected posts.",
-      color: "bg-[#D6F5F2]", // Teal
-      Graphic: AuthorityPlanGraphic
-    },
-    {
-      id: "04",
       title: "Competitor Gap Analysis",
       description: "Identify where competitors fall short in their explanations. Create content that wins by being more useful, not louder.",
       color: "bg-[#FFC8C8]", // Soft Red
       Graphic: GapAnalysisGraphic
     },
     {
+      id: "04",
+      title: "30-Day Authority-Driven Content Plan",
+      description: "A structured plan where each article supports the next. Designed to build topical authority instead of publishing disconnected posts.",
+      color: "bg-[#D6F5F2]", // Teal
+      Graphic: AuthorityPlanGraphic
+    },
+    {
       id: "05",
-      title: "Optional Google Search Console Layer",
-      description: "Use real impressions and near-ranking queries to sharpen decisions. Focus effort where you’re already close to winning.",
-      color: "bg-[#C8D6FF]", // Soft Blue
-      Graphic: GSCGraphic
+      title: "Answer-First Generation",
+      description: "Articles are written to explain clearly and completely, not to pad keywords. Built for how humans read and how AI systems evaluate trust.",
+      color: "bg-[#FFD8A8]", // Orange
+      Graphic: AnswerFirstGraphic
     },
     {
       id: "06",
-      title: "WordPress & Webflow Publishing",
-      description: "Publish directly or export clean markdown. No formatting fixes. No workflow friction.",
-      color: "bg-gray-100", // Gray
-      Graphic: CMSGraphic
-    },
-    {
-      id: "07",
       title: "Topic Memory & De-Duplication",
       description: "Never repeat the same idea twice. Each new plan builds on what’s already been published.",
       color: "bg-[#E8C8FF]", // Soft Purple
       Graphic: TopicMemoryGraphic
     },
     {
+      id: "07",
+      title: "Optional Google Search Console Layer",
+      description: "Use real impressions and near-ranking queries to sharpen decisions. Focus effort where you’re already close to winning.",
+      color: "bg-[#C8D6FF]", // Soft Blue
+      Graphic: GSCGraphic
+    },
+    {
       id: "08",
-      title: "Brand Voice Consistency",
-      description: "Your tone, positioning, and language stay consistent across every article. No generic AI voice. No reset every month.",
-      color: "bg-[#C8FFC8]", // Soft Green
-      Graphic: BrandVoiceGraphic
+      title: "WordPress & Webflow Publishing",
+      description: "Publish directly or export clean markdown. No formatting fixes. No workflow friction.",
+      color: "bg-gray-100", // Gray
+      Graphic: CMSGraphic
     }
   ];
 
@@ -161,70 +161,66 @@ const FeatureRow: React.FC<FeatureRowProps> = ({ feature, isReversed }) => {
 
 const VisibilityScanGraphic = () => (
   <div className="w-full max-w-sm bg-white border-2 border-black shadow-neo rounded-xl overflow-hidden flex flex-col relative min-h-[300px]">
-    {/* Radar Screen Background */}
-    <div className="absolute inset-0 bg-dot-pattern opacity-50 z-0"></div>
-
     {/* Header */}
-    <div className="relative z-10 h-10 border-b-2 border-black bg-gray-50 flex items-center justify-between px-4">
-      <div className="flex items-center gap-2">
-        <div className="w-2.5 h-2.5 rounded-full bg-red-400 border border-black"></div>
-        <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 border border-black"></div>
-        <div className="w-2.5 h-2.5 rounded-full bg-green-400 border border-black"></div>
-      </div>
-      <div className="font-mono text-[10px] font-bold text-gray-400">SCAN_ID: 8X-29</div>
-    </div>
-
-    {/* Radar Content */}
-    <div className="relative z-10 p-6 flex flex-col items-center justify-center flex-grow">
-
-      {/* Scanning Line Animation */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="w-[200%] h-full absolute top-0 left-[-100%] bg-gradient-to-r from-transparent via-brand-yellow/30 to-transparent animate-[scan_3s_linear_infinite]"></div>
-      </div>
-
-      {/* Central Hub (Your Brand) */}
-      <div className="relative z-20 mb-8">
-        <div className="w-16 h-16 bg-brand-yellow border-2 border-black rounded-full flex items-center justify-center shadow-neo relative">
-          <div className="absolute inset-0 bg-brand-yellow rounded-full animate-ping opacity-20"></div>
-          <Database className="w-8 h-8 text-black" />
-        </div>
-        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
-          <span className="bg-black text-white text-[10px] font-bold px-2 py-0.5 rounded-full border border-black">YOUR BRAND</span>
-        </div>
-      </div>
-
-      {/* Orbiting Satellites */}
-      <div className="w-full grid grid-cols-3 gap-2 mt-4">
-        {/* ChatGPT */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 bg-[#D6F5F2] border-2 border-black rounded-full flex items-center justify-center shadow-sm z-20 transition-transform hover:scale-110">
-            <Bot className="w-5 h-5 text-black" />
-          </div>
-          <div className="text-[10px] font-bold bg-green-100 text-green-700 border border-black px-1.5 rounded">VISIBLE</div>
-        </div>
-
-        {/* Gemini */}
-        <div className="flex flex-col items-center gap-2 pt-8">
-          <div className="w-10 h-10 bg-[#C8D6FF] border-2 border-black rounded-full flex items-center justify-center shadow-sm z-20 opacity-80">
-            <Sparkles className="w-5 h-5 text-black" />
-          </div>
-          <div className="text-[10px] font-bold bg-gray-100 text-gray-500 border border-black px-1.5 rounded animate-pulse">SCANNING</div>
-        </div>
-
-        {/* Claude */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 bg-[#FFD8A8] border-2 border-black rounded-full flex items-center justify-center shadow-sm z-20 transition-transform hover:scale-110">
-            <BrainCircuit className="w-5 h-5 text-black" />
-          </div>
-          <div className="text-[10px] font-bold bg-red-100 text-red-700 border border-black px-1.5 rounded">GAP FOUND</div>
-        </div>
+    <div className="h-10 border-b-2 border-black bg-gray-50 flex items-center justify-between px-4">
+      <span className="font-mono text-[10px] font-bold text-gray-500 uppercase tracking-wider">Category_Intelligence.json</span>
+      <div className="flex gap-1.5">
+        <div className="w-2 h-2 rounded-full bg-gray-300 border border-black"></div>
+        <div className="w-2 h-2 rounded-full bg-gray-300 border border-black"></div>
       </div>
     </div>
 
-    {/* Footer Log */}
-    <div className="relative z-10 border-t-2 border-black bg-black p-2 flex justify-between items-center">
-      <span className="text-[#00ff00] font-mono text-[10px] animate-pulse">● LIVE ANALYSIS</span>
-      <span className="text-gray-400 font-mono text-[10px]">3/3 MODELS</span>
+    {/* Dashboard Content */}
+    <div className="p-6 flex flex-col gap-6 bg-white">
+      {/* Score Card */}
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">AI Readiness Score</div>
+          <div className="font-display font-black text-4xl">42<span className="text-xl text-gray-400">/100</span></div>
+        </div>
+        <div className="px-2 py-1 bg-red-100 border border-black text-[10px] font-bold text-red-700 rounded">
+          CRITICAL GAPS
+        </div>
+      </div>
+
+      {/* Metrics Grid */}
+      <div className="space-y-3">
+        {/* Metric 1 */}
+        <div className="flex items-center justify-between p-3 border border-gray-100 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-white border border-black flex items-center justify-center">
+              <Database className="w-4 h-4 text-black" />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-gray-900">Brand Mentions</div>
+              <div className="text-[9px] text-gray-500">In top 10 search results</div>
+            </div>
+          </div>
+          <div className="font-mono font-bold text-sm">0/10</div>
+        </div>
+
+        {/* Metric 2 */}
+        <div className="flex items-center justify-between p-3 border border-gray-100 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-white border border-black flex items-center justify-center">
+              <Bot className="w-4 h-4 text-black" />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-gray-900">Competitor Dominance</div>
+              <div className="text-[9px] text-gray-500">Share of voice</div>
+            </div>
+          </div>
+          <div className="font-mono font-bold text-sm">High</div>
+        </div>
+      </div>
+
+      {/* Footer Insight */}
+      <div className="mt-auto border-t border-dashed border-gray-200 pt-4">
+        <div className="flex gap-2 text-[10px]">
+          <AlertCircle className="w-4 h-4 text-brand-orange" />
+          <span className="font-medium text-gray-600 leading-tight">Your brand is missing from 85% of informational queries in this category.</span>
+        </div>
+      </div>
     </div>
   </div>
 );

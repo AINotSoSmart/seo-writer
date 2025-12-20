@@ -25,11 +25,11 @@ export const HowItWorksSection: React.FC = () => {
         {/* Step 1 */}
         <StepCard
           number="01"
-          title="WE MAP HOW AI AND SEARCH SEE YOUR CATEGORY"
+          title="We Map Your Category & Gaps"
           content={
             <>
-              <p className="mb-4">You start with your site. We break down what you sell, how people search for it, and how modern AI search engines currently explain your space.</p>
-              <p className="mb-4">We analyze the actual answers being surfaced and where your brand is absent, misunderstood, or invisible. This becomes the foundation for everything that follows.</p>
+              <p className="mb-4">You start with your site. We analyze the actual answers being surfaced in your category and identify exactly where your brand is absent or invisible.</p>
+              <p className="mb-4">This intelligence becomes the foundation for everything that follows—targeting the conversations you're currently missing.</p>
             </>
           }
           accentColor="bg-[#FAFA9D]" // Yellow
@@ -42,8 +42,8 @@ export const HowItWorksSection: React.FC = () => {
           title="We build a strategy that compounds"
           content={
             <>
-              <p className="mb-4">Using your brand context, category signals, competitor gaps, and optional Search Console data, we create a focused 30-day content strategy.</p>
-              <p className="mb-4">Each topic is chosen to strengthen authority, address real search intent, and build on the previous article — not to chase random keywords or publish filler content.</p>
+              <p className="mb-4">Using your brand context, category signals, and competitor data, we create a focused 30-day content strategy.</p>
+              <p className="mb-4">Each topic is chosen to strengthen authority and build on the previous article — not to chase random keywords or publish filler content.</p>
             </>
           }
           accentColor="bg-[#FFD8A8]" // Orange
@@ -53,11 +53,11 @@ export const HowItWorksSection: React.FC = () => {
         {/* Step 3 */}
         <StepCard
           number="03"
-          title="We write and deliver answer-first content"
+          title="We deliver answer-first content"
           content={
             <>
               <p className="mb-4">Articles are written to explain clearly, completely, and credibly — the way humans read and AI systems trust.</p>
-              <p className="mb-4">Content is delivered clean and ready to publish, with minimal friction, so execution stays simple while your authority grows consistently over time.</p>
+              <p className="mb-4">Content is delivered clean and ready to publish, with your unique brand voice baked in, so you build authority without the friction.</p>
             </>
           }
           accentColor="bg-[#D6F5F2]" // Teal
