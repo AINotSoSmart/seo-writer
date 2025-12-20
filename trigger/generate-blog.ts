@@ -304,16 +304,18 @@ const performDeepResearch = async (
   // === STEP 1: BROAD LANDSCAPE SEARCH ===
   const broadQuery = `${keyword} ${supportingKeywords.slice(0, 2).join(' ')}`.trim()
   const broadSearch = await tvly.search(broadQuery, {
-    search_depth: "advanced",
-    include_text: true,
-    max_results: 5,
+    searchDepth: "advanced",
+    includeRawContent: "markdown",
+    maxResults: 5,
   })
 
+  // Extract content from Tavily results - use rawContent (from includeRawContent) or fallback to content
   const broadContext = broadSearch.results.map((r: any) =>
-    `Source: ${r.title} (${r.url})\nContent: ${r.content}`
+    `Source: ${r.title} (${r.url})\nContent: ${r.rawContent || r.content || 'No content available'}`
   ).join("\n\n---\n\n")
 
   console.log(`[Deep Research] Phase 1 Complete: ${broadSearch.results.length} sources extracted`)
+  console.log(`[Deep Research] Context length: ${broadContext.length} characters`)
 
   // === STEP 2: THE CRITIC (Gap Analysis) ===
   console.log(`[Deep Research] Phase 2: The Critic - Analyzing gaps...`)
@@ -349,9 +351,9 @@ const performDeepResearch = async (
     const deepResults = await Promise.all(
       targetedQueries.slice(0, 4).map((q: string) =>
         tvly.search(q, {
-          search_depth: "basic",
-          include_text: true,
-          max_results: 2
+          searchDepth: "basic",
+          includeRawContent: "markdown",
+          maxResults: 2
         }).catch((err: any) => {
           console.log(`[Deep Research] Sniper query failed: ${q}`, err.message)
           return { results: [] }
@@ -361,7 +363,7 @@ const performDeepResearch = async (
 
     const allDeepResults = deepResults.flatMap(r => r.results)
     deepContext = allDeepResults.map((r: any) =>
-      `Source (Gap Fill - ${r.query || 'targeted'}): ${r.title} (${r.url})\nContent: ${r.content}`
+      `Source (Gap Fill - ${r.query || 'targeted'}): ${r.title} (${r.url})\nContent: ${r.rawContent || r.content || 'No content available'}`
     ).join("\n\n---\n\n")
 
     console.log(`[Deep Research] Phase 3 Complete: ${allDeepResults.length} gap-filling sources extracted`)

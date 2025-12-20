@@ -75,7 +75,7 @@ export async function saveTopicMemory(articleId: string, topic: string, adminCli
         const supabase = adminClient ?? await createClient()
         await supabase
             .from("articles")
-            .update({ topic_embedding: embedding })
+            .update({ topic_embedding: embedding } as any)
             .eq("id", articleId)
 
         console.log(`[Topic Memory] Saved embedding for article ${articleId}`)
