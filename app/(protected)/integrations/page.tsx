@@ -340,8 +340,8 @@ export default function IntegrationsPage() {
         <div className="w-full min-h-screen font-sans">
             <GlobalCard className="w-full shadow-sm rounded-xl">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-stone-200/50 dark:border-stone-800 bg-stone-50/40 dark:bg-stone-900/40 backdrop-blur-sm rounded-t-xl">
-                    <h1 className="text-base md:text-lg font-bold text-stone-900 dark:text-white tracking-tight">
+                <div className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-stone-200/50  bg-stone-50/40  backdrop-blur-sm rounded-t-xl">
+                    <h1 className="text-base md:text-lg font-bold text-stone-900 tracking-tight">
                         Integrations
                     </h1>
                 </div>
@@ -357,7 +357,7 @@ export default function IntegrationsPage() {
                         onShowForm={() => setShowWpForm(true)}
                         connections={wpConnections}
                         renderForm={
-                            <form onSubmit={handleWpSubmit} className="mb-6 p-4 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700">
+                            <form onSubmit={handleWpSubmit} className="mb-6 p-4 bg-stone-50 /50 rounded-xl border border-stone-200 ">
                                 <div className="grid gap-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="wpSiteUrl" className="text-sm font-medium flex items-center gap-2">
@@ -408,7 +408,7 @@ export default function IntegrationsPage() {
                                         </p>
                                     </div>
                                     <div className="flex gap-2 pt-2">
-                                        <Button type="submit" disabled={wpSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white dark:bg-white dark:text-stone-900">
+                                        <Button type="submit" disabled={wpSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white  ">
                                             {wpSubmitting ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Testing...</> : <><Check className="w-4 h-4 mr-1.5" />Test & Connect</>}
                                         </Button>
                                         <Button type="button" variant="ghost" onClick={() => setShowWpForm(false)} className="h-9">Cancel</Button>
@@ -441,14 +441,14 @@ export default function IntegrationsPage() {
                         onShowForm={() => setShowWfForm(true)}
                         connections={wfConnections}
                         renderForm={
-                            <div className="mb-6 p-4 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700">
+                            <div className="mb-6 p-4 bg-stone-50 /50 rounded-xl border border-stone-200 ">
                                 {/* Step indicator */}
                                 <div className="flex items-center gap-2 mb-4 text-xs text-stone-500">
-                                    <span className={wfStep >= 1 ? "text-stone-900 dark:text-white font-medium" : ""}>1. API Token</span>
+                                    <span className={wfStep >= 1 ? "text-stone-900  font-medium" : ""}>1. API Token</span>
                                     <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
-                                    <span className={wfStep >= 2 ? "text-stone-900 dark:text-white font-medium" : ""}>2. Select Site</span>
+                                    <span className={wfStep >= 2 ? "text-stone-900  font-medium" : ""}>2. Select Site</span>
                                     <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
-                                    <span className={wfStep >= 3 ? "text-stone-900 dark:text-white font-medium" : ""}>3. Select Collection</span>
+                                    <span className={wfStep >= 3 ? "text-stone-900  font-medium" : ""}>3. Select Collection</span>
                                 </div>
 
                                 {wfStep === 1 && (
@@ -471,7 +471,7 @@ export default function IntegrationsPage() {
                                             </p>
                                         </div>
                                         <div className="flex gap-2">
-                                            <Button onClick={handleWfTestToken} disabled={wfSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white dark:bg-white dark:text-stone-900">
+                                            <Button onClick={handleWfTestToken} disabled={wfSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white  ">
                                                 {wfSubmitting ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Verifying...</> : <>Continue</>}
                                             </Button>
                                             <Button type="button" variant="ghost" onClick={resetWfForm} className="h-9">Cancel</Button>
@@ -487,9 +487,9 @@ export default function IntegrationsPage() {
                                                 key={site.id}
                                                 onClick={() => handleWfSelectSite(site)}
                                                 disabled={wfSubmitting}
-                                                className="w-full p-3 text-left rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                                                className="w-full p-3 text-left rounded-lg border border-stone-200  hover:bg-stone-100 transition-colors"
                                             >
-                                                <span className="font-medium text-stone-900 dark:text-white">{site.displayName}</span>
+                                                <span className="font-medium text-stone-900 ">{site.displayName}</span>
                                             </button>
                                         ))}
                                         <Button type="button" variant="ghost" onClick={resetWfForm} className="h-9 mt-2">Cancel</Button>
@@ -505,9 +505,9 @@ export default function IntegrationsPage() {
                                                 key={col.id}
                                                 onClick={() => handleWfSelectCollection(col)}
                                                 disabled={wfSubmitting}
-                                                className="w-full p-3 text-left rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                                                className="w-full p-3 text-left rounded-lg border border-stone-200  hover:bg-stone-100 transition-colors"
                                             >
-                                                <span className="font-medium text-stone-900 dark:text-white">{col.displayName}</span>
+                                                <span className="font-medium text-stone-900 ">{col.displayName}</span>
                                                 <span className="text-xs text-stone-500 ml-2">/{col.slug}</span>
                                             </button>
                                         ))}
@@ -540,12 +540,12 @@ export default function IntegrationsPage() {
                         onShowForm={() => setShowSpForm(true)}
                         connections={spConnections}
                         renderForm={
-                            <div className="mb-6 p-4 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700">
+                            <div className="mb-6 p-4 bg-stone-50 /50 rounded-xl border border-stone-200 ">
                                 {/* Step indicator */}
                                 <div className="flex items-center gap-2 mb-4 text-xs text-stone-500">
-                                    <span className={spStep >= 1 ? "text-stone-900 dark:text-white font-medium" : ""}>1. Store Credentials</span>
+                                    <span className={spStep >= 1 ? "text-stone-900  font-medium" : ""}>1. Store Credentials</span>
                                     <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
-                                    <span className={spStep >= 2 ? "text-stone-900 dark:text-white font-medium" : ""}>2. Select Blog</span>
+                                    <span className={spStep >= 2 ? "text-stone-900  font-medium" : ""}>2. Select Blog</span>
                                 </div>
 
                                 {spStep === 1 && (
@@ -581,8 +581,8 @@ export default function IntegrationsPage() {
                                                 className="h-10"
                                             />
                                             <div className="text-xs text-stone-500 space-y-2">
-                                                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
-                                                    <p className="font-medium text-blue-800 dark:text-blue-300 mb-1">
+                                                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                                    <p className="font-medium text-blue-800  mb-1">
                                                         Need the right token?
                                                     </p>
                                                     <p className="mb-2">Don&apos;t use the Partner Dashboard. Use the store admin directly:</p>
@@ -591,7 +591,7 @@ export default function IntegrationsPage() {
                                                             href={`https://admin.shopify.com/store/${spStoreDomain.replace('.myshopify.com', '')}/settings/apps/development`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                                                            className="flex items-center gap-1 text-blue-600  hover:underline font-medium"
                                                         >
                                                             Open Custom App Settings <ExternalLink className="w-3 h-3" />
                                                         </a>
@@ -604,13 +604,13 @@ export default function IntegrationsPage() {
                                                     <li>Click the link above (or go to Settings → Apps → Develop apps)</li>
                                                     <li>Click &quot;Create an app&quot; (or "Allow custom app development")</li>
                                                     <li>Click &quot;Configure Admin API scopes&quot;</li>
-                                                    <li>Check: <code className="bg-stone-200 dark:bg-stone-700 px-1 rounded">read_content</code> and <code className="bg-stone-200 dark:bg-stone-700 px-1 rounded">write_content</code></li>
+                                                    <li>Check: <code className="bg-stone-200  px-1 rounded">read_content</code> and <code className="bg-stone-200  px-1 rounded">write_content</code></li>
                                                     <li>Install app → <strong>Reveal Admin API token</strong> (starts with <code>shpat_</code>)</li>
                                                 </ol>
                                             </div>
                                         </div>
                                         <div className="flex gap-2">
-                                            <Button onClick={handleSpTestConnection} disabled={spSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white dark:bg-white dark:text-stone-900">
+                                            <Button onClick={handleSpTestConnection} disabled={spSubmitting} className="h-9 px-4 bg-stone-900 hover:bg-stone-800 text-white  ">
                                                 {spSubmitting ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Verifying...</> : <>Continue</>}
                                             </Button>
                                             <Button type="button" variant="ghost" onClick={resetSpForm} className="h-9">Cancel</Button>
@@ -627,9 +627,9 @@ export default function IntegrationsPage() {
                                                 key={blog.id}
                                                 onClick={() => handleSpSelectBlog(blog)}
                                                 disabled={spSubmitting}
-                                                className="w-full p-3 text-left rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                                                className="w-full p-3 text-left rounded-lg border border-stone-200  hover:bg-stone-100 transition-colors"
                                             >
-                                                <span className="font-medium text-stone-900 dark:text-white">{blog.title}</span>
+                                                <span className="font-medium text-stone-900 ">{blog.title}</span>
                                             </button>
                                         ))}
                                         <Button type="button" variant="ghost" onClick={resetSpForm} className="h-9 mt-2">Cancel</Button>
@@ -653,7 +653,7 @@ export default function IntegrationsPage() {
                     />
 
                     {/* More integrations */}
-                    <div className="border-t border-stone-200 dark:border-stone-800 pt-6">
+                    <div className="border-t border-stone-200  pt-6">
                         <p className="text-sm text-stone-500 text-center">
                             More integrations coming soon (Ghost, Medium...)
                         </p>
@@ -696,7 +696,7 @@ function IntegrationSection({
                         {icon}
                     </div>
                     <div>
-                        <h2 className="font-semibold text-stone-900 dark:text-white">{title}</h2>
+                        <h2 className="font-semibold text-stone-900 ">{title}</h2>
                         <p className="text-sm text-stone-500">{description}</p>
                     </div>
                 </div>
@@ -713,8 +713,8 @@ function IntegrationSection({
             {connections.length > 0 ? (
                 <div className="space-y-3">{renderConnections}</div>
             ) : !showForm ? (
-                <div className="text-center py-8 bg-stone-50 dark:bg-stone-800/30 rounded-xl">
-                    <p className="text-stone-600 dark:text-stone-400 mb-4">{emptyText}</p>
+                <div className="text-center py-8 bg-stone-50 /30 rounded-xl">
+                    <p className="text-stone-600 mb-4">{emptyText}</p>
                     <Button onClick={onShowForm} variant="outline" className="h-9">
                         <Plus className="w-4 h-4 mr-1.5" />
                         Connect
@@ -743,16 +743,16 @@ function ConnectionCard({
     onDelete: () => void
 }) {
     return (
-        <div className="flex items-center justify-between p-4 bg-white dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700">
+        <div className="flex items-center justify-between p-4 bg-white /50 rounded-xl border border-stone-200 ">
             <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: iconBg }}>
                     <div className="w-4 h-4 bg-white/30 rounded" />
                 </div>
                 <div>
                     <div className="flex items-center gap-2">
-                        <span className="font-medium text-stone-900 dark:text-white">{name}</span>
+                        <span className="font-medium text-stone-900 ">{name}</span>
                         {isDefault && (
-                            <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">
+                            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700  rounded-full">
                                 Default
                             </span>
                         )}
@@ -771,7 +771,7 @@ function ConnectionCard({
                         <ExternalLink className="w-4 h-4" />
                     </Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={onDelete} className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                <Button variant="ghost" size="sm" onClick={onDelete} className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
                 </Button>
             </div>

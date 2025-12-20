@@ -47,22 +47,22 @@ const BADGE_CONFIG: Record<string, { label: string; icon: any; className: string
     high_impact: {
         label: "High Impact",
         icon: Sparkles,
-        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+        className: "text-stone-900 border-stone-200 bg-stone-50"
     },
     quick_win: {
         label: "Quick Win",
         icon: Zap,
-        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+        className: "text-stone-900 border-stone-200 bg-stone-50"
     },
     low_ctr: {
         label: "Low CTR",
         icon: MousePointerClick,
-        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+        className: "text-stone-900 border-stone-200 bg-stone-50"
     },
     new_opportunity: {
         label: "New Opportunity",
         icon: Target,
-        className: "text-stone-900 border-stone-200 bg-stone-50 dark:text-stone-100 dark:border-stone-700 dark:bg-stone-800"
+        className: "text-stone-900 border-stone-200 bg-stone-50"
     },
 }
 
@@ -74,13 +74,12 @@ const ARTICLE_TYPE_CONFIG: Record<string, { label: string; icon: any }> = {
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
     pending: { label: "Planned", icon: Calendar, className: "text-stone-500" },
-    writing: { label: "Writing", icon: PenTool, className: "text-stone-900 dark:text-white" },
-    published: { label: "Published", icon: CheckCircle2, className: "text-stone-900 dark:text-white" },
+    writing: { label: "Writing", icon: PenTool, className: "text-stone-900" },
+    published: { label: "Published", icon: CheckCircle2, className: "text-stone-900" },
 }
 
 export default function ContentPlanPage() {
     const router = useRouter()
-    const [isDark, setIsDark] = useState(false)
     const [loading, setLoading] = useState(true)
     const [plan, setPlan] = useState<{ id: string; plan_data: ContentPlanItem[]; gsc_enhanced: boolean; automation_status?: string } | null>(null)
     const [filter, setFilter] = useState<"all" | "pending" | "writing" | "published">("all")
@@ -90,12 +89,6 @@ export default function ContentPlanPage() {
     const [automationLoading, setAutomationLoading] = useState(false)
     const [showAutomationModal, setShowAutomationModal] = useState(false)
     const [missedCount, setMissedCount] = useState(0)
-
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
-        }
-    }, [])
 
     useEffect(() => {
         fetchPlan()
@@ -326,8 +319,8 @@ export default function ContentPlanPage() {
     if (!plan) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4">
-                <Calendar className="w-12 h-12 text-stone-300 dark:text-stone-700" />
-                <h1 className="text-xl font-bold text-stone-900 dark:text-white">
+                <Calendar className="w-12 h-12 text-stone-300" />
+                <h1 className="text-xl font-bold text-stone-900">
                     No content plan yet
                 </h1>
                 <p className="text-sm text-stone-500">
@@ -350,10 +343,10 @@ export default function ContentPlanPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
-                    "group relative p-5 rounded-xl border transition-all duration-200 flex flex-col h-full bg-white dark:bg-stone-900",
+                    "group relative p-5 rounded-xl border transition-all duration-200 flex flex-col h-full bg-white",
                     isUrgent
-                        ? "border-stone-300 shadow-sm dark:border-stone-700"
-                        : "border-stone-200 hover:border-stone-300 hover:shadow-sm dark:border-stone-800 dark:hover:border-stone-700"
+                        ? "border-stone-300 shadow-sm"
+                        : "border-stone-200 hover:border-stone-300 hover:shadow-sm"
                 )}
             >
                 {/* --- Edit Mode --- */}
@@ -365,7 +358,7 @@ export default function ContentPlanPage() {
                                 type="text"
                                 value={editForm.title || ""}
                                 onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                                className="w-full px-3 py-2 text-sm font-medium bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-stone-900/10 dark:text-white dark:border-stone-700"
+                                className="w-full px-3 py-2 text-sm font-medium bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-stone-900/10"
                                 placeholder="Article Title"
                                 autoFocus
                             />
@@ -377,7 +370,7 @@ export default function ContentPlanPage() {
                                     type="text"
                                     value={editForm.main_keyword || ""}
                                     onChange={(e) => setEditForm(prev => ({ ...prev, main_keyword: e.target.value }))}
-                                    className="w-full px-3 py-2 text-xs bg-transparent border rounded-md dark:text-white dark:border-stone-700"
+                                    className="w-full px-3 py-2 text-xs bg-transparent border rounded-md"
                                     placeholder="Target Keyword"
                                 />
                             </div>
@@ -386,7 +379,7 @@ export default function ContentPlanPage() {
                                 <select
                                     value={editForm.article_type || "informational"}
                                     onChange={(e) => setEditForm(prev => ({ ...prev, article_type: e.target.value as any }))}
-                                    className="w-full px-3 py-2 text-xs bg-transparent border rounded-md dark:text-white dark:border-stone-700"
+                                    className="w-full px-3 py-2 text-xs bg-transparent border rounded-md"
                                 >
                                     <option value="informational">Informational</option>
                                     <option value="commercial">Commercial</option>
@@ -402,7 +395,7 @@ export default function ContentPlanPage() {
                                     ...prev,
                                     supporting_keywords: e.target.value.split(",").map(k => k.trim()).filter(k => k.length > 0)
                                 }))}
-                                className="w-full px-3 py-2 text-xs bg-transparent border rounded-md dark:text-white dark:border-stone-700 resize-none"
+                                className="w-full px-3 py-2 text-xs bg-transparent border rounded-md resize-none"
                                 placeholder="keyword 1, keyword 2, keyword 3"
                                 rows={2}
                             />
@@ -412,7 +405,7 @@ export default function ContentPlanPage() {
                             <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="h-8 text-xs">
                                 Cancel
                             </Button>
-                            <Button size="sm" onClick={handleSaveEdit} className="h-8 text-xs bg-stone-900 text-white hover:bg-stone-800 dark:bg-white dark:text-black">
+                            <Button size="sm" onClick={handleSaveEdit} className="h-8 text-xs bg-stone-900 text-white hover:bg-stone-800">
                                 Save Changes
                             </Button>
                         </div>
@@ -432,7 +425,7 @@ export default function ContentPlanPage() {
                                         {BADGE_CONFIG[item.badge].label}
                                     </span>
                                 )}
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium text-stone-500 border border-stone-100 bg-stone-50 dark:text-stone-400 dark:border-stone-800 dark:bg-stone-900/50">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium text-stone-500 border border-stone-100 bg-stone-50">
                                     <typeConfig.icon className="w-3 h-3" />
                                     {typeConfig.label}
                                 </span>
@@ -440,7 +433,7 @@ export default function ContentPlanPage() {
                                 {item.opportunity_score !== undefined && item.opportunity_score > 0 && (
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-stone-700 bg-stone-100 border border-stone-200 cursor-help dark:text-stone-300 dark:bg-stone-800 dark:border-stone-700">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-stone-700 bg-stone-100 border border-stone-200 cursor-help">
                                                 <Gauge className="w-3 h-3" />
                                                 {item.opportunity_score}
                                             </span>
@@ -457,9 +450,9 @@ export default function ContentPlanPage() {
                                         <TooltipTrigger asChild>
                                             <span className={cn(
                                                 "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium cursor-help border",
-                                                item.impact === "High" && "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-800",
-                                                item.impact === "Medium" && "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/20 dark:border-amber-800",
-                                                item.impact === "Low" && "text-stone-500 bg-stone-50 border-stone-200 dark:text-stone-400 dark:bg-stone-800 dark:border-stone-700"
+                                                item.impact === "High" && "text-emerald-700 bg-emerald-50 border-emerald-200",
+                                                item.impact === "Medium" && "text-amber-700 bg-amber-50 border-amber-200",
+                                                item.impact === "Low" && "text-stone-500 bg-stone-50 border-stone-200"
                                             )}>
                                                 <TrendingUp className="w-3 h-3" />
                                                 {item.impact}
@@ -479,20 +472,20 @@ export default function ContentPlanPage() {
 
                             <button
                                 onClick={() => handleStartEdit(item)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-stone-100 rounded-md text-stone-400 hover:text-stone-600 dark:hover:bg-stone-800"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-stone-100 rounded-md text-stone-400 hover:text-stone-600"
                             >
                                 <Edit2 className="w-3.5 h-3.5" />
                             </button>
                         </div>
 
                         {/* Title */}
-                        <h3 className="font-semibold text-stone-900 text-[15px] leading-snug dark:text-stone-100 group-hover:text-stone-700 dark:group-hover:text-stone-300 transition-colors line-clamp-2">
+                        <h3 className="font-semibold text-stone-900 text-[15px] leading-snug group-hover:text-stone-700 transition-colors line-clamp-2">
                             {item.title}
                         </h3>
 
                         {/* AI Strategic Reason */}
                         {item.reason && (
-                            <p className="text-[11px] text-stone-500 leading-relaxed italic dark:text-stone-400">
+                            <p className="text-[11px] text-stone-500 leading-relaxed italic">
                                 <Lightbulb className="w-3 h-3 inline mr-1 opacity-70" />
                                 {item.reason}
                             </p>
@@ -585,10 +578,10 @@ export default function ContentPlanPage() {
                         )}
 
                         {/* Footer: Date & Action */}
-                        <div className="mt-auto pt-3 flex items-end justify-between border-t border-stone-100 dark:border-stone-800">
+                        <div className="mt-auto pt-3 flex items-end justify-between border-t border-stone-100">
                             <div className="flex flex-col gap-0.5">
                                 <span className="text-[10px] text-stone-400 font-medium">SCHEDULED</span>
-                                <span className="text-xs font-medium text-stone-700 dark:text-stone-300">
+                                <span className="text-xs font-medium text-stone-700">
                                     {new Date(item.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                 </span>
                             </div>
@@ -596,13 +589,13 @@ export default function ContentPlanPage() {
                             {item.status === 'writing' ? (
                                 <Link
                                     href="/articles"
-                                    className="flex items-center gap-1.5 text-xs font-semibold text-stone-900 bg-stone-100 px-3 py-1.5 rounded-lg hover:bg-stone-200 transition-colors dark:bg-stone-800 dark:text-white"
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-stone-900 bg-stone-100 px-3 py-1.5 rounded-lg hover:bg-stone-200 transition-colors"
                                 >
                                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                     Writing...
                                 </Link>
                             ) : item.status === 'published' ? (
-                                <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-900 bg-stone-100 px-3 py-1.5 rounded-lg border border-stone-200 dark:bg-stone-800 dark:text-white dark:border-stone-700">
+                                <span className="flex items-center gap-1.5 text-xs font-semibold text-stone-900 bg-stone-100 px-3 py-1.5 rounded-lg border border-stone-200">
                                     <CheckCircle2 className="w-3.5 h-3.5" />
                                     Published
                                 </span>
@@ -610,7 +603,7 @@ export default function ContentPlanPage() {
                                 <Button
                                     onClick={() => handleWriteArticle(item)}
                                     size="sm"
-                                    className="h-8 text-xs font-semibold bg-stone-900 text-white hover:bg-stone-800 shadow-sm rounded-lg dark:bg-white dark:text-black dark:hover:bg-stone-200"
+                                    className="h-8 text-xs font-semibold bg-stone-900 text-white hover:bg-stone-800 shadow-sm rounded-lg"
                                 >
                                     Write Article
                                 </Button>
@@ -624,13 +617,13 @@ export default function ContentPlanPage() {
 
     return (
         <div className="w-full min-h-screen font-sans">
-            <GlobalCard className="w-full shadow-sm rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-black">
+            <GlobalCard className="w-full shadow-sm rounded-xl border border-stone-200 bg-white">
                 {/* --- Integrated Header --- */}
                 {/* --- Integrated Header --- */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 py-4 border-b border-stone-200/50 dark:border-stone-800 bg-stone-50/40 dark:bg-stone-900/40 backdrop-blur-sm rounded-t-xl sticky top-0 z-10 backdrop-filter min-h-[72px]">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 py-4 border-b border-stone-200/50 bg-stone-50/40 backdrop-blur-sm rounded-t-xl sticky top-0 z-10 backdrop-filter min-h-[72px]">
                     <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
-                            <h1 className="text-lg font-bold text-stone-900 dark:text-white tracking-tight flex items-center gap-2 flex-wrap">
+                            <h1 className="text-lg font-bold text-stone-900 tracking-tight flex items-center gap-2 flex-wrap">
                                 {plan?.gsc_enhanced ? (
                                     <>
                                         <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500/10 flex-shrink-0" />
@@ -641,7 +634,7 @@ export default function ContentPlanPage() {
                                 )}
                             </h1>
                             {plan?.plan_data && (
-                                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-stone-200/50 dark:bg-stone-800 text-[10px] font-medium text-stone-600 dark:text-stone-400 px-1.5 translate-y-[1px]">
+                                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-stone-200/50 text-[10px] font-medium text-stone-600 px-1.5 translate-y-[1px]">
                                     {plan.plan_data.length}
                                 </span>
                             )}
@@ -664,8 +657,8 @@ export default function ContentPlanPage() {
                                 className={cn(
                                     "h-9 px-4 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 shadow-sm",
                                     plan.automation_status === "active"
-                                        ? "bg-stone-900 text-white hover:bg-stone-800 dark:bg-white dark:text-black dark:hover:bg-stone-200"
-                                        : "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+                                        ? "bg-stone-900 text-white hover:bg-stone-800"
+                                        : "bg-emerald-600 text-white hover:bg-emerald-700"
                                 )}
                             >
                                 {automationLoading ? (
@@ -689,7 +682,7 @@ export default function ContentPlanPage() {
                         )}
 
                         {plan && (
-                            <div className="flex bg-stone-100/50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-1 shadow-sm self-start md:self-center overflow-x-auto max-w-full">
+                            <div className="flex bg-stone-100/50 border border-stone-200 rounded-lg p-1 shadow-sm self-start md:self-center overflow-x-auto max-w-full">
                                 {Object.entries(STATUS_CONFIG).map(([key, config]) => (
                                     <button
                                         key={key}
@@ -697,8 +690,8 @@ export default function ContentPlanPage() {
                                         className={cn(
                                             "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap",
                                             filter === key
-                                                ? "bg-white text-stone-900 shadow-sm border border-stone-200/50 dark:bg-stone-800 dark:text-white dark:border-stone-700"
-                                                : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 dark:hover:bg-stone-800/50"
+                                                ? "bg-white text-stone-900 shadow-sm border border-stone-200/50"
+                                                : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50"
                                         )}
                                     >
                                         <span className={filter === key ? "inline" : "hidden sm:inline"}>
@@ -707,7 +700,7 @@ export default function ContentPlanPage() {
                                         <ConfigIcon config={config} isSelected={filter === key} />
                                         <span className={cn(
                                             "ml-1 text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem]",
-                                            filter === key ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
+                                            filter === key ? "bg-stone-100 " : "bg-stone-200/50"
                                         )}>
                                             {planStats[key] || 0}
                                         </span>
@@ -719,14 +712,14 @@ export default function ContentPlanPage() {
                                     className={cn(
                                         "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ml-1",
                                         filter === "all"
-                                            ? "bg-white text-stone-900 shadow-sm border border-stone-200/50 dark:bg-stone-800 dark:text-white dark:border-stone-700"
-                                            : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 dark:hover:bg-stone-800/50"
+                                            ? "bg-white text-stone-900 shadow-sm border border-stone-200/50"
+                                            : "text-stone-500 hover:text-stone-700 hover:bg-stone-200/50"
                                     )}
                                 >
                                     <span>All</span>
                                     <span className={cn(
                                         "ml-1 text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem]",
-                                        filter === "all" ? "bg-stone-100 dark:bg-stone-700" : "bg-stone-200/50 dark:bg-stone-800"
+                                        filter === "all" ? "bg-stone-100" : "bg-stone-200/50"
                                     )}>
                                         {plan.plan_data.length}
                                     </span>
@@ -744,18 +737,18 @@ export default function ContentPlanPage() {
                             <p className="text-sm text-stone-500 font-medium animate-pulse">Loading content plan...</p>
                         </div>
                     ) : error ? (
-                        <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-center dark:border-red-900/30 dark:bg-red-900/10">
-                            <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-3">{error}</p>
+                        <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-center">
+                            <p className="text-sm text-red-600 font-medium mb-3">{error}</p>
                             <Button variant="outline" size="sm" onClick={fetchPlan} className="h-8 text-xs bg-white hover:bg-red-50 border-red-200 text-red-700">
                                 Retry
                             </Button>
                         </div>
                     ) : !plan ? (
                         <div className="text-center py-20 px-4">
-                            <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6 dark:bg-stone-800">
+                            <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <FileText className="w-8 h-8 text-stone-400" />
                             </div>
-                            <h2 className="text-xl font-bold text-stone-900 mb-2 dark:text-white">No Content Plan Yet</h2>
+                            <h2 className="text-xl font-bold text-stone-900 mb-2">No Content Plan Yet</h2>
                             <p className="text-stone-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
                                 Generate a data-driven 30-day content plan based on your competitors and search trends.
                             </p>
@@ -774,9 +767,9 @@ export default function ContentPlanPage() {
                                 {/* Priority Section */}
                                 {urgentItems.length > 0 && filter === 'all' && (
                                     <section>
-                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100 dark:border-stone-800/50">
+                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100">
                                             <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500/20" />
-                                            <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider dark:text-white">
+                                            <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
                                                 High Priority Opportunities
                                             </h2>
                                         </div>
@@ -792,9 +785,9 @@ export default function ContentPlanPage() {
                                 {/* Regular Section */}
                                 <section>
                                     {urgentItems.length > 0 && filter === 'all' && regularItems.length > 0 && (
-                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100 border-dashed dark:border-stone-800/50 pt-4">
+                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100 border-dashed pt-4">
                                             <Layout className="w-4 h-4 text-stone-400" />
-                                            <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider dark:text-white">
+                                            <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
                                                 Scheduled Content
                                             </h2>
                                         </div>
@@ -834,5 +827,5 @@ export default function ContentPlanPage() {
 // Helper to avoid TS errors in map
 function ConfigIcon({ config, isSelected }: { config: any, isSelected: boolean }) {
     const Icon = config.icon
-    return <Icon className={cn("w-3.5 h-3.5", isSelected ? "text-stone-900 dark:text-white" : "text-stone-400")} />
+    return <Icon className={cn("w-3.5 h-3.5", isSelected ? "text-stone-900" : "text-stone-400")} />
 }

@@ -220,12 +220,12 @@ export default function ArticlesPage() {
     <div className="w-full min-h-screen font-sans">
       <GlobalCard className="w-full shadow-sm rounded-xl">
         {/* Integrated Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200/50 dark:border-stone-800 bg-stone-50/40 dark:bg-stone-900/40 backdrop-blur-sm rounded-t-xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200/50 bg-stone-50/40 backdrop-blur-sm rounded-t-xl">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold text-stone-900 dark:text-white tracking-tight">
+            <h1 className="text-lg font-bold text-stone-900 tracking-tight">
               My Articles
             </h1>
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-stone-200/50 dark:bg-stone-800 text-[10px] font-medium text-stone-600 dark:text-stone-400 px-1.5">
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-stone-200/50 text-[10px] font-medium text-stone-600 px-1.5">
               {articles.length}
             </span>
           </div>
@@ -236,8 +236,7 @@ export default function ArticlesPage() {
               flex h-8 items-center gap-1.5 overflow-hidden rounded-lg px-3 text-xs font-semibold text-white transition-all
               active:scale-[0.98] cursor-pointer
               bg-stone-900 hover:bg-stone-800
-              dark:bg-white dark:text-stone-900 dark:hover:bg-stone-100
-              shadow-sm border border-stone-800 dark:border-stone-200
+              shadow-sm border border-stone-800
             "
           >
             <Plus className="w-3.5 h-3.5" />
@@ -249,21 +248,21 @@ export default function ArticlesPage() {
         <div className="overflow-x-auto relative">
           {articles.length === 0 ? (
             <div className="text-center py-24 px-4">
-              <div className="w-16 h-16 bg-stone-100 dark:bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-4 text-stone-400">
+              <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-4 text-stone-400">
                 <FileText className="w-8 h-8" />
               </div>
-              <h3 className="text-lg font-medium text-stone-900 dark:text-white mb-2">No articles yet</h3>
+              <h3 className="text-lg font-medium text-stone-900 mb-2">No articles yet</h3>
               <p className="text-stone-500 mb-6">Start generating premium content for your blog today.</p>
               <Link
                 href="/blog-writer"
-                className="text-stone-900 dark:text-white font-medium hover:underline decoration-stone-300 underline-offset-4"
+                className="text-stone-900 font-medium hover:underline decoration-stone-300 underline-offset-4"
               >
                 Create your first article &rarr;
               </Link>
             </div>
           ) : (
             <table className="w-full text-sm text-left border-collapse">
-              <thead className="bg-stone-100 dark:bg-stone-800/95 text-black dark:text-white border-b border-stone-100 dark:border-stone-800">
+              <thead className="bg-stone-100 text-black border-b border-stone-100">
                 <tr>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Keyword</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Status</th>
@@ -271,20 +270,20 @@ export default function ArticlesPage() {
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Date</th>
                   <th className="
                     px-6 py-4 text-right font-medium sticky right-0 z-10
-                    bg-stone-100 dark:bg-stone-800/95 backdrop-blur-sm
-                    border-l border-stone-100 dark:border-stone-800
+                    bg-stone-100 backdrop-blur-sm
+                    border-l border-stone-100
                   ">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+              <tbody className="divide-y divide-stone-100">
                 {articles.map((article) => {
                   const publishedPlatforms = getPublishedPlatforms(article)
 
                   return (
-                    <tr key={article.id} className="group hover:bg-stone-50/50 dark:hover:bg-stone-800/50 transition-colors">
-                      <td className="px-6 py-4 text-stone-900 dark:text-white whitespace-nowrap">
+                    <tr key={article.id} className="group hover:bg-stone-50/50 transition-colors">
+                      <td className="px-6 py-4 text-stone-900 whitespace-nowrap">
                         {article.keyword}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -292,27 +291,26 @@ export default function ArticlesPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {article.status === 'completed' ? (
-                          <span className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1.5">
+                          <span className="text-green-600 font-medium flex items-center gap-1.5">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                             Done
                           </span>
                         ) : article.status === 'failed' ? (
-                          <span className="text-red-600 dark:text-red-400 font-medium">Failed</span>
+                          <span className="text-red-600 font-medium">Failed</span>
                         ) : (
-                          <span className="text-blue-600 dark:text-blue-400">
+                          <span className="text-blue-600">
                             Step {article.current_step_index ?? 0}
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-stone-500 dark:text-stone-400 tabular-nums whitespace-nowrap">
+                      <td className="px-6 py-4 text-stone-500 tabular-nums whitespace-nowrap">
                         {format(new Date(article.created_at), "MMM d, yyyy")}
                       </td>
                       <td className="
                          px-6 py-4 text-right sticky right-0 z-10
-                         bg-white dark:bg-stone-900
-                         group-hover:bg-stone-50 dark:group-hover:bg-stone-800
-                         transition-colors
-                         border-l border-stone-100 dark:border-stone-800
+                         bg-white
+                         group-hover:bg-stone-50 transition-colors
+                         border-l border-stone-100
                       ">
                         <div className="flex items-center justify-end gap-2">
                           {article.status === 'completed' && article.final_html && (
@@ -330,7 +328,7 @@ export default function ArticlesPage() {
                                     return (
                                       <div
                                         key={p}
-                                        className="w-5 h-5 rounded bg-green-100 dark:bg-green-900/30 p-0.5 flex items-center justify-center"
+                                        className="w-5 h-5 rounded bg-green-100 p-0.5 flex items-center justify-center"
                                         title={platformInfo.title}
                                       >
                                         <Image
@@ -364,7 +362,7 @@ export default function ArticlesPage() {
 
                               <Link
                                 href={`/articles/${article.id}`}
-                                className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-900 dark:hover:text-white font-medium transition-colors"
+                                className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-900 font-medium transition-colors"
                               >
                                 Edit
                                 <FilePenLine className="w-3 h-3" />
@@ -399,7 +397,7 @@ export default function ArticlesPage() {
                 onClick={() => setSelectedPlatform('wordpress')}
                 className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'wordpress'
                   ? 'border-[#21759b] bg-[#21759b]/10'
-                  : 'border-stone-200 dark:border-stone-700'
+                  : 'border-stone-200'
                   }`}
               >
                 <div className="flex items-center gap-2">
@@ -415,7 +413,7 @@ export default function ArticlesPage() {
                 onClick={() => setSelectedPlatform('webflow')}
                 className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'webflow'
                   ? 'border-[#4353ff] bg-[#4353ff]/10'
-                  : 'border-stone-200 dark:border-stone-700'
+                  : 'border-stone-200'
                   }`}
               >
                 <div className="flex items-center gap-2">
@@ -431,7 +429,7 @@ export default function ArticlesPage() {
                 onClick={() => setSelectedPlatform('shopify')}
                 className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'shopify'
                   ? 'border-[#96bf48] bg-[#96bf48]/10'
-                  : 'border-stone-200 dark:border-stone-700'
+                  : 'border-stone-200'
                   }`}
               >
                 <div className="flex items-center gap-2">
@@ -445,7 +443,7 @@ export default function ArticlesPage() {
           </div>
 
           {!hasAnyConnection && (
-            <p className="text-sm text-amber-600 dark:text-amber-400">
+            <p className="text-sm text-amber-600">
               No CMS connected. <Link href="/integrations" className="underline">Connect now</Link>
             </p>
           )}
@@ -473,20 +471,20 @@ export default function ArticlesPage() {
 function StatusBadge({ status }: { status: string }) {
   if (status === 'completed') {
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/50">
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-green-700 border border-green-200">
         Completed
       </span>
     )
   }
   if (status === 'failed') {
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-red-700 border border-red-200">
         Failed
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 animate-pulse">
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium text-amber-700 border border-amber-200 animate-pulse">
       {status === 'queued' ? 'Queued' : 'Processing...'}
     </span>
   )

@@ -159,7 +159,7 @@ export default function BlogWriterPage() {
       {/* Error display */}
       {error && (
         <div className="mt-6 max-w-md w-full">
-          <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm border border-red-100 dark:border-red-800">
+          <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100">
             {error}
           </div>
         </div>

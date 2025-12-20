@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 import { refreshGSCToken } from "@/actions/gsc"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { jsonrepair } from "jsonrepair"
+import { checkTopicDuplication } from "@/lib/topic-memory"
 
 interface GSCQueryRow {
     keys: string[]
@@ -444,7 +445,23 @@ export async function POST(req: NextRequest) {
 
         // Transform to ContentPlanItem format with dates
         const today = new Date()
-        const contentPlan = planData.slice(0, 30).map((item: any, index: number) => {
+
+        // Filter duplicates before mapping
+        const validPlanData: any[] = []
+        for (const item of planData) {
+            // Use Title + Query for rich signal
+            const topicSignal = `${item.title || ""} : ${item.gsc_query || ""}`
+            const { isDuplicate } = await checkTopicDuplication(topicSignal, user.id)
+
+            if (!isDuplicate) {
+                validPlanData.push(item)
+            } else {
+                console.log(`[GSC Plan] Skipped duplicate topic: ${topicSignal}`)
+            }
+            if (validPlanData.length >= 30) break
+        }
+
+        const contentPlan = validPlanData.slice(0, 30).map((item: any, index: number) => {
             const scheduledDate = new Date(today)
             scheduledDate.setDate(today.getDate() + index)
 

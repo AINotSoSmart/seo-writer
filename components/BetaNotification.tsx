@@ -9,22 +9,22 @@ export default function BetaNotification() {
   if (!visible) return null;
 
   return (
-    <Card className="border-l-4 border-yellow-500 bg-yellow-100 mt-8 dark:bg-yellow-900/20 dark:border-yellow-400 shadow-md">
+    <Card className="border-l-4 border-yellow-500 bg-yellow-100 mt-8 shadow-md">
       <CardContent className="flex items-start gap-3 p-4">
-        <AlertTriangle className="text-yellow-600 dark:text-yellow-400" size={24} />
+        <AlertTriangle className="text-yellow-600 " size={24} />
         <div className="flex-1">
-          <h4 className="text-sm font-semibold text-yellow-800 dark:text-yellow-300">
+          <h4 className="text-sm font-semibold text-yellow-800 ">
             Multi-Person Feature in Beta
           </h4>
-          <p className="text-sm text-yellow-700 dark:text-yellow-400">
-            AI-generated results may vary, and occasional inaccuracies may occur. We are working on improving accuracy.  
+          <p className="text-sm text-yellow-700 ">
+            AI-generated results may vary, and occasional inaccuracies may occur. We are working on improving accuracy.
             If you encounter any issues, please share your feedback.
           </p>
         </div>
         <Button
           variant="ghost"
           size="sm"
-          className="text-yellow-700 dark:text-yellow-300"
+          className="text-yellow-700"
           onClick={() => setVisible(false)}
         >
           Dismiss

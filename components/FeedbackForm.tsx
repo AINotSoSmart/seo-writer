@@ -72,11 +72,11 @@ export default function FeedbackForm({ userId }: FeedbackFormProps) {
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           {/* Backdrop */}
-          <div 
+          <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setIsOpen(false)}
           />
-          
+
           {/* Modal Content */}
           <Card className="relative w-full max-w-md mx-auto gap-2 shadow-2xl border-0">
             <CardHeader className="pb-4">
@@ -97,16 +97,16 @@ export default function FeedbackForm({ userId }: FeedbackFormProps) {
                 Help us improve! Tell us about your experience with our AI photo tool.
               </p>
             </CardHeader>
-            
+
             <CardContent className="pt-0">
               {isSubmitted ? (
                 <div className="text-center py-8">
-                  <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-6 h-6 text-green-600 " fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-medium text-green-600 dark:text-green-400 mb-2">
+                  <h3 className="text-lg font-medium text-green-600  mb-2">
                     Thank you!
                   </h3>
                   <p className="text-sm text-muted-foreground">
@@ -123,7 +123,7 @@ export default function FeedbackForm({ userId }: FeedbackFormProps) {
                       id="feedback"
                       value={feedback}
                       onChange={(e) => setFeedback(e.target.value)}
-placeholder="Share your honest thoughts. (e.g., Was the quality worth it? What's stopping your purchase?)"                      className={cn(
+                      placeholder="Share your honest thoughts. (e.g., Was the quality worth it? What's stopping your purchase?)" className={cn(
                         "w-full min-h-[120px] p-3 rounded-md border border-input bg-background",
                         "text-sm placeholder:text-muted-foreground",
                         "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
@@ -132,7 +132,7 @@ placeholder="Share your honest thoughts. (e.g., Was the quality worth it? What's
                       required
                     />
                   </div>
-                  
+
                   <div className="flex gap-2 pt-2">
                     <Button
                       type="button"

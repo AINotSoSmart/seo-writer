@@ -40,7 +40,6 @@ export default function OnboardingPage() {
 
     const [isHydrated, setIsHydrated] = useState(false)
     const [step, setStep] = useState<Step>("brand")
-    const [isDark, setIsDark] = useState(false)
 
     // Brand DNA State
     const [url, setUrl] = useState("")
@@ -206,12 +205,6 @@ export default function OnboardingPage() {
             localStorage.setItem(STORAGE_KEYS.BRAND_ID, brandId)
         }
     }, [brandId, isHydrated])
-
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
-        }
-    }, [])
 
     // Brand DNA handlers
     const handleAnalyzeBrand = async () => {
@@ -530,23 +523,23 @@ export default function OnboardingPage() {
     const ProgressIndicator = () => (
         <div className="flex items-center justify-center gap-2 mb-6">
             {/* Step 1: Brand DNA (includes voice extraction) */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "brand" ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("brand") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${step === "brand" ? 'bg-stone-900 text-white' : isStepComplete("brand") ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-500'}`}>
                 <Globe className="w-3.5 h-3.5" />
                 <span>Brand</span>
                 {isStepComplete("brand") && <BadgeCheck className="w-3 h-3 text-green-500" />}
             </div>
-            <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
+            <div className={`w-4 h-px bg-stone-200`} />
 
             {/* Step 2: Content Plan */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "competitors" || step === "plan") ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : isStepComplete("plan") ? (isDark ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-700') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "competitors" || step === "plan") ? 'bg-stone-900 text-white' : isStepComplete("plan") ? 'bg-stone-800 text-stone-300' : 'bg-stone-100 text-stone-500'}`}>
                 <Calendar className="w-3.5 h-3.5" />
                 <span>Plan</span>
                 {isStepComplete("plan") && <BadgeCheck className="w-3 h-3 text-green-500" />}
             </div>
-            <div className={`w-4 h-px ${isDark ? 'bg-stone-700' : 'bg-stone-200'}`} />
+            <div className={`w-4 h-px bg-stone-200`} />
 
             {/* Step 3: Complete/GSC */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "gsc-prompt" || step === "gsc-reassurance" || step === "complete") ? (isDark ? 'bg-stone-800 text-white' : 'bg-stone-900 text-white') : (isDark ? 'bg-stone-800 text-stone-500' : 'bg-stone-100 text-stone-400')}`}>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${(step === "gsc-prompt" || step === "gsc-reassurance" || step === "complete") ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Insights</span>
             </div>
@@ -565,20 +558,20 @@ export default function OnboardingPage() {
           relative p-1 overflow-hidden w-full max-w-xl transition-all duration-300
           shadow-[0_0_0_1px_rgba(0,0,0,0.08),0px_1px_2px_rgba(0,0,0,0.04)]
           rounded-[20px]
-          ${isDark ? 'bg-stone-800' : 'bg-stone-100'}
+          bg-stone-100
         `}
             >
                 {/* Top Notch */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-6 z-20 flex justify-center pointer-events-none">
-                    <div className={`w-8 h-4 rounded-b-lg border-b border-x ${isDark ? 'bg-stone-800 border-stone-700' : 'bg-stone-100 border-stone-200/50'} flex items-center justify-center`}>
-                        <ChevronUp className={`w-3 h-3 ${isDark ? 'text-stone-500' : 'text-stone-400'}`} />
+                    <div className={`w-8 h-4 rounded-b-lg border-b border-x bg-stone-100 border-stone-200/50 flex items-center justify-center`}>
+                        <ChevronUp className={`w-3 h-3 text-stone-400`} />
                     </div>
                 </div>
 
                 {/* Inner Card */}
                 <div className={`
           relative border overflow-hidden transition-all rounded-[16px]
-          ${isDark ? 'bg-stone-900 border-stone-700' : 'bg-white border-stone-200'}
+          bg-white border-stone-200
         `}>
                     <AnimatePresence mode="wait">
                         {step === "brand" && (
@@ -593,10 +586,10 @@ export default function OnboardingPage() {
                                     // URL Input Form
                                     <div className="space-y-6">
                                         <div className="text-center space-y-2">
-                                            <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                            <h2 className={`text-xl font-bold text-stone-900`}>
                                                 Let&apos;s understand your brand
                                             </h2>
-                                            <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                            <p className={`text-sm text-stone-500`}>
                                                 Share your website so we can understand your product and build your brand DNA & voice profile.
                                             </p>
                                         </div>
@@ -605,7 +598,7 @@ export default function OnboardingPage() {
                                             <Input
                                                 type="url"
                                                 placeholder="https://yourwebsite.com"
-                                                className={`flex-1 ${isDark ? 'bg-stone-950 border-stone-800' : 'bg-stone-50 border-stone-200'}`}
+                                                className={`flex-1 bg-stone-50 border-stone-200 py-2 px-3 text-sm`}
                                                 value={url}
                                                 onChange={(e) => setUrl(e.target.value)}
                                                 onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeBrand()}
@@ -617,7 +610,6 @@ export default function OnboardingPage() {
                           px-6 font-semibold
                           bg-gradient-to-b from-stone-800 to-stone-950
                           hover:from-stone-700 hover:to-stone-900
-                          dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
                           shadow-sm
                         `}
                                             >
@@ -637,30 +629,30 @@ export default function OnboardingPage() {
                                     <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>Review Brand Details</h2>
-                                                <p className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Verify extracted information</p>
+                                                <h2 className={`text-lg font-bold text-stone-900`}>Review Brand Details</h2>
+                                                <p className={`text-xs text-stone-500`}>Verify extracted information</p>
                                             </div>
 
                                         </div>
 
                                         {/* 1. Product Identity */}
                                         <div className="space-y-3">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>1. Product Identity</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>1. Product Identity</h3>
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div>
-                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Product Name</label>
+                                                    <label className={`block text-xs font-medium mb-1 text-stone-600`}>Product Name</label>
                                                     <Input value={brandData.product_name} onChange={e => updateField('product_name', e.target.value)} className="text-sm" />
                                                 </div>
                                                 <div>
-                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>What is it literally?</label>
+                                                    <label className={`block text-xs font-medium mb-1 text-stone-600`}>What is it literally?</label>
                                                     <Input value={brandData.product_identity.literally} onChange={e => updateField('product_identity.literally', e.target.value)} className="text-sm" />
                                                 </div>
                                                 <div>
-                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>What is it emotionally?</label>
+                                                    <label className={`block text-xs font-medium mb-1 text-stone-600`}>What is it emotionally?</label>
                                                     <Input value={brandData.product_identity.emotionally} onChange={e => updateField('product_identity.emotionally', e.target.value)} className="text-sm" />
                                                 </div>
                                                 <div>
-                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>What is it NOT?</label>
+                                                    <label className={`block text-xs font-medium mb-1 text-stone-600`}>What is it NOT?</label>
                                                     <Input value={brandData.product_identity.not} onChange={e => updateField('product_identity.not', e.target.value)} className="text-sm" />
                                                 </div>
                                             </div>
@@ -668,21 +660,21 @@ export default function OnboardingPage() {
 
                                         {/* 2. Mission */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>2. Mission</h3>
-                                            <label className={`block text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>The "Why"</label>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>2. Mission</h3>
+                                            <label className={`block text-xs font-medium text-stone-600`}>The "Why"</label>
                                             <Textarea value={brandData.mission} onChange={e => updateField('mission', e.target.value)} className="text-sm min-h-[60px]" />
                                         </div>
 
                                         {/* 3. Audience */}
                                         <div className="space-y-3">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>3. Audience</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>3. Audience</h3>
                                             <div className="grid grid-cols-1 gap-3">
                                                 <div>
-                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Primary Audience</label>
+                                                    <label className={`block text-xs font-medium mb-1 text-stone-600`}>Primary Audience</label>
                                                     <Input value={brandData.audience.primary} onChange={e => updateField('audience.primary', e.target.value)} className="text-sm" />
                                                 </div>
                                                 <div>
-                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Psychology (Desires/Fears)</label>
+                                                    <label className={`block text-xs font-medium mb-1 text-stone-600`}>Psychology (Desires/Fears)</label>
                                                     <Textarea value={brandData.audience.psychology} onChange={e => updateField('audience.psychology', e.target.value)} className="text-sm min-h-[60px]" />
                                                 </div>
                                             </div>
@@ -690,82 +682,82 @@ export default function OnboardingPage() {
 
                                         {/* 4. Enemy */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>4. Enemy (What you fight against)</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>4. Enemy (What you fight against)</h3>
                                             <Textarea
                                                 value={brandData.enemy.join('\n')}
                                                 onChange={e => updateArray('enemy', e.target.value)}
                                                 className="text-sm min-h-[60px]"
                                                 placeholder="One item per line"
                                             />
-                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                            <p className={`text-[10px] text-right text-stone-400`}>One item per line</p>
                                         </div>
 
                                         {/* 5. Voice & Tone */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>5. Brand Voice & Tone</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>5. Brand Voice & Tone</h3>
                                             <Textarea
                                                 value={brandData.style_dna}
                                                 onChange={e => updateArray('style_dna', e.target.value)}
                                                 className="text-sm min-h-[60px]"
                                                 placeholder="Describe your brand's voice and tone in detail."
                                             />
-                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Comprehensive writing style guide</p>
+                                            <p className={`text-[10px] text-right text-stone-400`}>Comprehensive writing style guide</p>
                                         </div>
 
                                         {/* 6. Unique Value Proposition */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>6. Unique Value Proposition</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>6. Unique Value Proposition</h3>
                                             <Textarea
                                                 value={brandData.uvp.join('\n')}
                                                 onChange={e => updateArray('uvp', e.target.value)}
                                                 className="text-sm min-h-[60px]"
                                                 placeholder="One item per line"
                                             />
-                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                            <p className={`text-[10px] text-right text-stone-400`}>One item per line</p>
                                         </div>
 
                                         {/* 7. Core Features */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>7. Core Features</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>7. Core Features</h3>
                                             <Textarea
                                                 value={brandData.core_features.join('\n')}
                                                 onChange={e => updateArray('core_features', e.target.value)}
                                                 className="text-sm min-h-[60px]"
                                                 placeholder="One item per line"
                                             />
-                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One item per line</p>
+                                            <p className={`text-[10px] text-right text-stone-400`}>One item per line</p>
                                         </div>
 
                                         {/* 8. Pricing */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>8. Pricing</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>8. Pricing</h3>
                                             <Textarea
                                                 value={brandData.pricing?.join('\n') || ''}
                                                 onChange={e => updateArray('pricing', e.target.value)}
                                                 className="text-sm min-h-[60px]"
                                                 placeholder="e.g. Pro Plan: $29/mo"
                                             />
-                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One line e.g. "Pro Plan: $29/mo"</p>
+                                            <p className={`text-[10px] text-right text-stone-400`}>One line e.g. "Pro Plan: $29/mo"</p>
                                         </div>
 
                                         {/* 9. How it Works */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>9. How it Works</h3>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>9. How it Works</h3>
                                             <Textarea
                                                 value={brandData.how_it_works?.join('\n') || ''}
                                                 onChange={e => updateArray('how_it_works', e.target.value)}
                                                 className="text-sm min-h-[60px]"
                                                 placeholder="One step per line"
                                             />
-                                            <p className={`text-[10px] text-right ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>One step per line</p>
+                                            <p className={`text-[10px] text-right text-stone-400`}>One step per line</p>
                                         </div>
 
                                         {/* 10. Featured Image Style */}
                                         <div className="space-y-2">
-                                            <h3 className={`text-sm font-semibold border-b pb-2 ${isDark ? 'border-stone-800 text-white' : 'border-stone-100 text-stone-900'}`}>10. Featured Image Style</h3>
-                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-stone-400' : 'text-stone-600'}`}>Style Preference</label>
+                                            <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>10. Featured Image Style</h3>
+                                            <label className={`block text-xs font-medium mb-1 text-stone-600`}>Style Preference</label>
                                             <select
-                                                className={`w-full h-10 rounded-md border px-3 text-sm ${isDark ? 'bg-stone-950 border-stone-800 text-white' : 'bg-white border-stone-200 text-stone-900'}`}
+                                                className={`w-full h-10 rounded-md border px-3 text-sm bg-white border-stone-200 text-stone-900`}
                                                 value={brandData.image_style || "stock"}
                                                 onChange={e => updateField('image_style', e.target.value)}
                                             >
@@ -776,11 +768,11 @@ export default function OnboardingPage() {
                                                 <option value="cyberpunk">Cyberpunk (Neon, Tech)</option>
                                                 <option value="watercolor">Watercolor (Artistic, Soft)</option>
                                             </select>
-                                            <p className={`text-[10px] ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>Select the style for AI-generated featured images.</p>
+                                            <p className={`text-[10px] text-right text-stone-400`}>Select the style for AI-generated featured images.</p>
                                         </div>
 
                                         {/* Continue Button */}
-                                        <div className="pt-4 border-t border-stone-100 dark:border-stone-800 sticky bottom-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm py-4">
+                                        <div className="pt-4 border-t border-stone-100  sticky bottom-0 bg-white/80 /80 backdrop-blur-sm py-4">
                                             <Button
                                                 onClick={handleSaveBrand}
                                                 disabled={savingBrand}
@@ -788,7 +780,6 @@ export default function OnboardingPage() {
                           w-full h-10 font-semibold
                           bg-gradient-to-b from-stone-800 to-stone-950
                           hover:from-stone-700 hover:to-stone-900
-                          dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
                         `}
                                             >
                                                 {savingBrand ? (
@@ -822,14 +813,14 @@ export default function OnboardingPage() {
                                     // Loading State
                                     <div className="text-center space-y-6 py-8">
                                         <div className="relative w-16 h-16 mx-auto">
-                                            <div className={`absolute inset-0 rounded-full border-4 ${isDark ? 'border-stone-700' : 'border-stone-200'}`} />
+                                            <div className={`absolute inset-0 rounded-full border-4 border-stone-200`} />
                                             <div className={`absolute inset-0 rounded-full border-4 border-t-stone-600 animate-spin`} />
                                         </div>
                                         <div className="space-y-2">
-                                            <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                            <h2 className={`text-lg font-bold text-stone-900`}>
                                                 {analyzingCompetitors ? "Analyzing competitors..." : "Generating your 30-day content plan..."}
                                             </h2>
-                                            <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                            <p className={`text-sm text-stone-500`}>
                                                 {analyzingCompetitors
                                                     ? "Finding competitor content and extracting keywords"
                                                     : "Creating personalized blog topics for your brand"}
@@ -838,13 +829,13 @@ export default function OnboardingPage() {
                                         <div className="flex items-center justify-center gap-2">
                                             {analyzingCompetitors ? (
                                                 <>
-                                                    <Users className={`w-4 h-4 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
-                                                    <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Researching competitor keywords</span>
+                                                    <Users className={`w-4 h-4 text-stone-500`} />
+                                                    <span className={`text-xs text-stone-500`}>Researching competitor keywords</span>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <Calendar className={`w-4 h-4 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
-                                                    <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Building your content calendar</span>
+                                                    <Calendar className={`w-4 h-4 text-stone-500`} />
+                                                    <span className={`text-xs text-stone-500`}>Building your content calendar</span>
                                                 </>
                                             )}
                                         </div>
@@ -854,33 +845,33 @@ export default function OnboardingPage() {
                                     <>
                                         <div className="text-center space-y-2">
                                             <div className="flex items-center justify-center gap-2">
-                                                <Sparkles className={`w-5 h-5 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
-                                                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                <Sparkles className={`w-5 h-5 text-amber-500`} />
+                                                <h2 className={`text-xl font-bold text-stone-900`}>
                                                     Your 30-Day Content Plan
                                                 </h2>
                                             </div>
-                                            <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                            <p className={`text-sm text-stone-500`}>
                                                 {contentPlan.length} blog posts tailored to your brand
                                             </p>
                                         </div>
 
                                         {/* Plan Preview */}
-                                        <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
-                                            <div className="max-h-[300px] overflow-y-auto divide-y divide-stone-200 dark:divide-stone-700">
+                                        <div className={`rounded-xl border overflow-hidden bg-stone-50 border-stone-200`}>
+                                            <div className="max-h-[300px] overflow-y-auto divide-y divide-stone-200">
                                                 {contentPlan.slice(0, 10).map((item, i) => (
-                                                    <div key={item.id} className={`p-3 flex items-start gap-3 ${isDark ? 'hover:bg-stone-800' : 'hover:bg-stone-100'}`}>
-                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-medium ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-600'}`}>
+                                                    <div key={item.id} className={`p-3 flex items-start gap-3 hover:bg-stone-100`}>
+                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-medium bg-stone-200 text-stone-600`}>
                                                             {i + 1}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                            <p className={`text-sm font-medium truncate text-stone-900`}>
                                                                 {item.title}
                                                             </p>
                                                             <div className="flex items-center gap-2 mt-1">
-                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-600'}`}>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium bg-stone-200 text-stone-600`}>
                                                                     {item.main_keyword}
                                                                 </span>
-                                                                <span className={`text-[10px] capitalize ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                                                <span className={`text-[10px] capitalize text-stone-500`}>
                                                                     {item.intent}
                                                                 </span>
                                                             </div>
@@ -889,7 +880,7 @@ export default function OnboardingPage() {
                                                 ))}
                                             </div>
                                             {contentPlan.length > 10 && (
-                                                <div className={`p-3 text-center text-xs ${isDark ? 'bg-stone-800 text-stone-400' : 'bg-stone-100 text-stone-500'}`}>
+                                                <div className={`p-3 text-center text-xs text-stone-500`}>
                                                     +{contentPlan.length - 10} more posts in your plan
                                                 </div>
                                             )}
@@ -903,7 +894,6 @@ export default function OnboardingPage() {
                                                 w-full h-10 font-semibold
                                                 bg-gradient-to-b from-stone-800 to-stone-950
                                                 hover:from-stone-700 hover:to-stone-900
-                                                dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
                                             `}
                                         >
                                             {savingPlan ? (
@@ -936,19 +926,19 @@ export default function OnboardingPage() {
                                     <div className="flex items-center justify-center gap-2">
                                         <CheckCircle2 className={`w-6 h-6 text-green-500`} />
                                     </div>
-                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                    <h2 className={`text-xl font-bold text-stone-900`}>
                                         Your content plan is ready!
                                     </h2>
-                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                    <p className={`text-sm text-stone-500`}>
                                         Connect GSC to tailor it using your real search footprint
                                     </p>
                                 </div>
 
                                 {/* Value Unlocks + Transparency Card */}
-                                <div className={`rounded-xl border p-4 space-y-4 ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
+                                <div className={`rounded-xl border p-4 space-y-4 bg-stone-50 border-stone-200`}>
                                     {/* What you unlock */}
                                     <div className="space-y-2.5">
-                                        <p className={`text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        <p className={`text-xs font-medium text-stone-500`}>
                                             We&apos;ll use your data for:
                                         </p>
                                         <ul className="space-y-2">
@@ -958,8 +948,8 @@ export default function OnboardingPage() {
                                                 { icon: TrendingUp, text: "The hidden topics your brand is quietly building authority on." },
                                             ].map((item, i) => (
                                                 <li key={i} className="flex items-start gap-2.5">
-                                                    <item.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
-                                                    <span className={`text-sm ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                    <item.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 text-stone-500`} />
+                                                    <span className={`text-sm text-stone-600`}>
                                                         {item.text}
                                                     </span>
                                                 </li>
@@ -968,11 +958,11 @@ export default function OnboardingPage() {
                                     </div>
 
                                     {/* Divider */}
-                                    <div className={`border-t ${isDark ? 'border-stone-700' : 'border-stone-200'}`} />
+                                    <div className={`border-t border-stone-200`} />
 
                                     {/* Transparency Section */}
                                     <div className="space-y-2.5">
-                                        <p className={`text-xs font-medium ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        <p className={`text-xs font-medium text-stone-500`}>
                                             Read-only. Zero changes. Zero storage.
                                         </p>
                                         <ul className="space-y-2">
@@ -982,14 +972,14 @@ export default function OnboardingPage() {
                                                 { icon: Trash2, text: "We don't store your raw GSC data." },
                                             ].map((item, i) => (
                                                 <li key={i} className="flex items-center gap-2.5">
-                                                    <item.icon className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
-                                                    <span className={`text-sm ${isDark ? 'text-stone-300' : 'text-stone-600'}`}>
+                                                    <item.icon className={`w-4 h-4 flex-shrink-0 text-stone-500`} />
+                                                    <span className={`text-sm text-stone-600`}>
                                                         {item.text}
                                                     </span>
                                                 </li>
                                             ))}
                                         </ul>
-                                        <p className={`text-xs ${isDark ? 'text-stone-500' : 'text-stone-400'}`}>
+                                        <p className={`text-xs text-stone-500`}>
                                             We use it only to shape your content plan — then discard it on the way.
                                         </p>
                                     </div>
@@ -1001,7 +991,6 @@ export default function OnboardingPage() {
                                         w-full h-10 font-semibold
                                         bg-gradient-to-b from-stone-800 to-stone-950
                                         hover:from-stone-700 hover:to-stone-900
-                                        dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
                                     `}
                                 >
                                     <Image src="/brands/search-console.svg" alt="" width={16} height={16} className="w-4 h-4 mr-2" />
@@ -1011,7 +1000,7 @@ export default function OnboardingPage() {
                                 {/* Skip Option */}
                                 <button
                                     onClick={handleSkipGSC}
-                                    className={`w-full text-center text-xs underline underline-offset-2 ${isDark ? 'text-stone-500 hover:text-stone-400' : 'text-stone-400 hover:text-stone-500'}`}
+                                    className={`w-full text-center text-xs underline underline-offset-2 text-stone-500 hover:text-stone-400`}
                                 >
                                     Continue without Search Console
                                 </button>
@@ -1031,20 +1020,20 @@ export default function OnboardingPage() {
                                     <div className="flex items-center justify-center gap-2">
                                         <CheckCircle2 className={`w-6 h-6 text-green-500`} />
                                     </div>
-                                    <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                    <h2 className={`text-xl font-bold text-stone-900`}>
                                         Connected to Search Console!
                                     </h2>
-                                    <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                    <p className={`text-sm text-stone-500`}>
                                         Select which site to analyze
                                     </p>
                                 </div>
 
                                 {loadingGscSites ? (
                                     <div className="flex items-center justify-center py-8">
-                                        <Loader2 className={`w-6 h-6 animate-spin ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
+                                        <Loader2 className={`w-6 h-6 animate-spin text-stone-500`} />
                                     </div>
                                 ) : gscSites.length === 0 ? (
-                                    <div className={`text-center py-8 ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                    <div className={`text-center py-8 text-stone-500`}>
                                         <p className="text-sm">No sites found in your Search Console account.</p>
                                         <button
                                             onClick={handleSkipGSC}
@@ -1055,30 +1044,30 @@ export default function OnboardingPage() {
                                     </div>
                                 ) : (
                                     <>
-                                        <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-stone-800/50 border-stone-700' : 'bg-stone-50 border-stone-200'}`}>
-                                            <div className="max-h-[250px] overflow-y-auto divide-y divide-stone-200 dark:divide-stone-700">
+                                        <div className={`rounded-xl border overflow-hidden bg-stone-50 border-stone-200`}>
+                                            <div className="max-h-[250px] overflow-y-auto divide-y divide-stone-200">
                                                 {gscSites.map((site) => (
                                                     <button
                                                         key={site.siteUrl}
                                                         onClick={() => setSelectedSite(site.siteUrl)}
                                                         className={`w-full p-3 flex items-center gap-3 text-left transition-all ${selectedSite === site.siteUrl
-                                                            ? (isDark ? 'bg-stone-700' : 'bg-stone-200')
-                                                            : (isDark ? 'hover:bg-stone-800' : 'hover:bg-stone-100')
+                                                            ? 'bg-stone-200'
+                                                            : 'hover:bg-stone-100'
                                                             }`}
                                                     >
                                                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selectedSite === site.siteUrl
                                                             ? 'border-green-500 bg-green-500'
-                                                            : (isDark ? 'border-stone-600' : 'border-stone-300')
+                                                            : 'border-stone-300'
                                                             }`}>
                                                             {selectedSite === site.siteUrl && (
                                                                 <CheckCircle2 className="w-3 h-3 text-white" />
                                                             )}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                                            <p className={`text-sm font-medium truncate text-stone-900`}>
                                                                 {site.siteUrl.replace('sc-domain:', '').replace('https://', '').replace('http://', '')}
                                                             </p>
-                                                            <p className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                            <p className={`text-xs text-stone-500`}>
                                                                 {site.permissionLevel}
                                                             </p>
                                                         </div>
@@ -1094,7 +1083,6 @@ export default function OnboardingPage() {
                                                 w-full h-10 font-semibold
                                                 bg-gradient-to-b from-stone-800 to-stone-950
                                                 hover:from-stone-700 hover:to-stone-900
-                                                dark:from-stone-200 dark:to-stone-400 dark:text-stone-900
                                                 disabled:opacity-50
                                             `}
                                         >
@@ -1104,7 +1092,7 @@ export default function OnboardingPage() {
 
                                         <button
                                             onClick={handleSkipGSC}
-                                            className={`w-full text-center text-sm underline underline-offset-2 ${isDark ? 'text-stone-400 hover:text-stone-300' : 'text-stone-500 hover:text-stone-600'}`}
+                                            className={`w-full text-center text-sm underline underline-offset-2 text-stone-500 hover:text-stone-600`}
                                         >
                                             Skip and continue without GSC data
                                         </button>
@@ -1124,20 +1112,20 @@ export default function OnboardingPage() {
                             >
                                 <div className="text-center space-y-6 py-8">
                                     <div className="relative w-16 h-16 mx-auto">
-                                        <div className={`absolute inset-0 rounded-full border-4 ${isDark ? 'border-stone-700' : 'border-stone-200'}`} />
+                                        <div className={`absolute inset-0 rounded-full border-4 border-stone-200`} />
                                         <div className={`absolute inset-0 rounded-full border-4 border-t-green-500 animate-spin`} />
                                     </div>
                                     <div className="space-y-2">
-                                        <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-stone-900'}`}>
+                                        <h2 className={`text-lg font-bold text-stone-900`}>
                                             Enhancing your content plan...
                                         </h2>
-                                        <p className={`text-sm ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>
+                                        <p className={`text-sm text-stone-500`}>
                                             Analyzing your search data to find opportunities
                                         </p>
                                     </div>
                                     <div className="flex items-center justify-center gap-2">
-                                        <TrendingUp className={`w-4 h-4 ${isDark ? 'text-stone-400' : 'text-stone-500'}`} />
-                                        <span className={`text-xs ${isDark ? 'text-stone-400' : 'text-stone-500'}`}>Adding opportunity scores and badges</span>
+                                        <TrendingUp className={`w-4 h-4 text-stone-500`} />
+                                        <span className={`text-xs text-stone-500`}>Adding opportunity scores and badges</span>
                                     </div>
                                 </div>
                             </motion.div>
@@ -1149,7 +1137,7 @@ export default function OnboardingPage() {
             {/* Error Display */}
             {error && (
                 <div className="mt-6 max-w-xl w-full">
-                    <div className={`p-4 rounded-xl text-sm border ${isDark ? 'bg-red-900/20 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                    <div className={`p-4 rounded-xl text-sm border bg-red-50 text-red-600 border-red-100`}>
                         {error}
                     </div>
                 </div>

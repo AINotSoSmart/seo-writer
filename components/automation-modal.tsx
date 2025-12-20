@@ -74,22 +74,22 @@ export function AutomationModal({ isOpen, onClose, missedCount, onConfirm }: Aut
                         transition={{ type: "spring", duration: 0.3 }}
                         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md mx-4"
                     >
-                        <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl border border-stone-200 dark:border-stone-800 overflow-hidden">
+                        <div className="bg-white  rounded-2xl shadow-2xl border border-stone-200  overflow-hidden">
                             {/* Header */}
-                            <div className="p-6 pb-4 border-b border-stone-100 dark:border-stone-800">
+                            <div className="p-6 pb-4 border-b border-stone-100 ">
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <h2 className="text-lg font-bold text-stone-900 dark:text-white flex items-center gap-2">
+                                        <h2 className="text-lg font-bold text-stone-900  flex items-center gap-2">
                                             <Sparkles className="w-5 h-5 text-amber-500" />
                                             Resume Automation
                                         </h2>
                                         <p className="text-sm text-stone-500 mt-1">
-                                            You have <span className="font-semibold text-stone-900 dark:text-white">{missedCount} missed articles</span> that were scheduled while automation was paused.
+                                            You have <span className="font-semibold text-stone-900 ">{missedCount} missed articles</span> that were scheduled while automation was paused.
                                         </p>
                                     </div>
                                     <button
                                         onClick={onClose}
-                                        className="p-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors"
+                                        className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors"
                                     >
                                         <X className="w-4 h-4 text-stone-400" />
                                     </button>
@@ -105,26 +105,26 @@ export function AutomationModal({ isOpen, onClose, missedCount, onConfirm }: Aut
                                         className={cn(
                                             "w-full p-4 rounded-xl border-2 text-left transition-all",
                                             selectedAction === option.value
-                                                ? "border-stone-900 bg-stone-50 dark:border-white dark:bg-stone-800/50"
-                                                : "border-stone-200 hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600"
+                                                ? "border-stone-900 bg-stone-50"
+                                                : "border-stone-200 hover:border-stone-300"
                                         )}
                                     >
                                         <div className="flex items-start gap-3">
                                             <div className={cn(
                                                 "p-2 rounded-lg",
                                                 selectedAction === option.value
-                                                    ? "bg-stone-900 text-white dark:bg-white dark:text-black"
-                                                    : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400"
+                                                    ? "bg-stone-900 text-white  "
+                                                    : "bg-stone-100 text-stone-600 "
                                             )}>
                                                 <option.icon className="w-4 h-4" />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-semibold text-stone-900 dark:text-white text-sm">
+                                                    <span className="font-semibold text-stone-900  text-sm">
                                                         {option.title}
                                                     </span>
                                                     {option.recommended && (
-                                                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded-full dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded-full">
                                                             Recommended
                                                         </span>
                                                     )}
@@ -139,7 +139,7 @@ export function AutomationModal({ isOpen, onClose, missedCount, onConfirm }: Aut
                             </div>
 
                             {/* Footer */}
-                            <div className="p-4 pt-2 border-t border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/50">
+                            <div className="p-4 pt-2 border-t border-stone-100  bg-stone-50/50 /50">
                                 <div className="flex gap-3">
                                     <Button
                                         variant="outline"
@@ -152,7 +152,7 @@ export function AutomationModal({ isOpen, onClose, missedCount, onConfirm }: Aut
                                     <Button
                                         onClick={handleConfirm}
                                         disabled={isLoading}
-                                        className="flex-1 bg-stone-900 text-white hover:bg-stone-800 dark:bg-white dark:text-black dark:hover:bg-stone-200"
+                                        className="flex-1 bg-stone-900 text-white hover:bg-stone-800"
                                     >
                                         {isLoading ? (
                                             <Loader2 className="w-4 h-4 animate-spin" />

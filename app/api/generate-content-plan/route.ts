@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { BrandDetails } from "@/lib/schemas/brand"
+import { checkTopicDuplication } from "@/lib/topic-memory"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -114,8 +115,32 @@ Guidelines:
         const text = response.text || "{}"
         const result = JSON.parse(text)
 
+        // Process posts and check for duplicates
+        // We do this sequentially or in parallel batches to respect rate limits if needed, 
+        // but for 30 items, sequential checks are safer for strict deduplication
+
+        const validPosts: any[] = []
+        const posts = result.posts || []
+
+        for (const post of posts) {
+            // Check duplication using Title + Keyword for stronger semantic match
+            const topicSignal = `${post.title || ""} : ${post.main_keyword || ""}`
+            const { isDuplicate } = await checkTopicDuplication(topicSignal, user.id)
+
+            if (!isDuplicate) {
+                validPosts.push(post)
+            } else {
+                console.log(`[Content Plan] Skipped duplicate topic: ${post.title}`)
+            }
+
+            if (validPosts.length >= 30) break
+        }
+
+        // If we filtered out too many, we might have less than 30. That is acceptable for V1.
+        // We prioritize quality/freshness over hitting exactly 30 duplicates.
+
         // Add IDs and dates to each post
-        const planItems: ContentPlanItem[] = (result.posts || []).slice(0, 30).map((post: any, index: number) => {
+        const planItems: ContentPlanItem[] = validPosts.map((post: any, index: number) => {
             const scheduledDate = new Date(today)
             scheduledDate.setDate(today.getDate() + index)
 

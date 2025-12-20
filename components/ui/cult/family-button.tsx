@@ -27,7 +27,7 @@ const FamilyButton: React.FC<FamilyButtonProps> = ({ children }) => {
       )}
     >
       <div className="rounded-[23px] border   border-black/10 ">
-        <div className="rounded-[22px] border  dark:border-stone-800 border-white/50 ">
+        <div className="rounded-[22px] border   border-white/50 ">
           <div className="rounded-[21px] border    border-neutral-950/20   flex items-center justify-center ">
             <FamilyButtonContainer
               isExpanded={isExpanded}
@@ -82,22 +82,22 @@ const FamilyButtonContainer: FC<FamilyButtonContainerProps> = ({
       animate={
         isExpanded
           ? {
-              borderRadius: 20,
-              width: CONTAINER_SIZE,
-              height: CONTAINER_SIZE + 50,
+            borderRadius: 20,
+            width: CONTAINER_SIZE,
+            height: CONTAINER_SIZE + 50,
 
-              transition: {
-                type: "spring",
-                damping: 25,
-                stiffness: 400,
-                when: "beforeChildren",
-              },
-            }
+            transition: {
+              type: "spring",
+              damping: 25,
+              stiffness: 400,
+              when: "beforeChildren",
+            },
+          }
           : {
-              borderRadius: 21,
-              width: "4rem",
-              height: "4rem",
-            }
+            borderRadius: 21,
+            width: "4rem",
+            height: "4rem",
+          }
       }
     >
       {children}

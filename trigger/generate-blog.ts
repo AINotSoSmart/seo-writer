@@ -15,6 +15,7 @@ import { getArticleStrategy } from "@/lib/prompts/strategies"
 import { getFormalityDefinition, getPerspectiveDefinition } from "@/lib/prompts/voice-definitions"
 import { getCurrentDateContext } from "@/lib/utils/date-context"
 import { getRelevantInternalLinks } from "@/lib/internal-linking"
+import { saveTopicMemory } from "@/lib/topic-memory"
 
 const cleanAndParse = (text: string) => {
   const clean = text.replace(/```json/g, "").replace(/```/g, "")
@@ -94,7 +95,7 @@ const AUTHENTIC_WRITING_RULES = `
 4. Every line must EARN its place. If a sentence doesn't serve a critical purpose, DELETE IT, be ruthless.
 
 **SENTENCE VARIATION (BURSTINESS) - CRITICAL FOR HUMAN FEEL:**
-5. Mix sentence lengths dramatically: some very short (7-9 words), some longer (20-30 words).
+5. Mix sentence lengths dramatically: some very short (7-9 words), some longer (20-30 words), dynamically use them.
 6. Infuse genuine emotional undertones appropriate to the content using active voice.
 7. Start sentences with different elements: adverbs, prepositional phrases, dependent clauses, questions
 8. Occasional sentence fragments are OK if they add punch. "Not always. But often."
@@ -1113,6 +1114,23 @@ export const generateBlogPost = task({
           // Non-blocking
         }
       }
+
+
+      // --- PHASE 5: TOPIC MEMORY SAVE ---
+      // Upgrade: Use "Title + Keyword" for rich semantic signal
+      let topicSignal = keyword
+      try {
+        const { data: finalRec } = await supabase.from("articles").select("outline").eq("id", articleId).single()
+        const finalOutline = finalRec?.outline as any
+        if (finalOutline?.title) {
+          // Combined signal captures both the specific hook (Title) and core topic (Keyword)
+          topicSignal = `${finalOutline.title} : ${keyword}`
+        }
+      } catch (e) {
+        // ignore, stick to keyword
+      }
+
+      await saveTopicMemory(articleId, topicSignal)
 
       return { success: true, articleId }
 

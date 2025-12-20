@@ -120,7 +120,7 @@ export function FloatingPanelTrigger({
       ref={triggerRef}
       layoutId={`floating-panel-trigger-${uniqueId}`}
       className={cn(
-        "flex h-9 items-center border border-zinc-950/10 bg-white px-3 text-zinc-950 dark:border-zinc-50/10 dark:bg-zinc-700 dark:text-zinc-50",
+        "flex h-9 items-center border border-zinc-950/10 bg-white px-3 text-zinc-950  dark:bg-zinc-700 dark:text-zinc-50",
         className
       )}
       style={{ borderRadius: 8 }}
@@ -198,7 +198,7 @@ export function FloatingPanelContent({
             ref={contentRef}
             layoutId={`floating-panel-${uniqueId}`}
             className={cn(
-              "fixed z-50 overflow-hidden border border-zinc-950/10 bg-white shadow-lg outline-none dark:border-zinc-50/10 dark:bg-zinc-800",
+              "fixed z-50 overflow-hidden border border-zinc-950/10 bg-white shadow-lg outline-none  dark:bg-zinc-800",
               className
             )}
             style={{
@@ -427,7 +427,7 @@ export function FloatingPanelSubmitButton({
   return (
     <motion.button
       className={cn(
-        "relative ml-1 flex h-8 shrink-0 scale-100 select-none appearance-none items-center justify-center rounded-lg border border-zinc-950/10 bg-transparent px-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:ring-2 active:scale-[0.98] dark:border-zinc-50/10 dark:text-zinc-50 dark:hover:bg-zinc-800",
+        "relative ml-1 flex h-8 shrink-0 scale-100 select-none appearance-none items-center justify-center rounded-lg border border-zinc-950/10 bg-transparent px-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:ring-2 active:scale-[0.98]  dark:text-zinc-50 dark:hover:bg-zinc-800",
         className
       )}
       type="submit"
@@ -602,7 +602,7 @@ export default {
 //       ref={triggerRef}
 //       layoutId={`floating-panel-trigger-${uniqueId}`}
 //       className={cn(
-//         "flex h-9 items-center border border-zinc-950/10 bg-white px-3 text-zinc-950 dark:border-zinc-50/10 dark:bg-zinc-700 dark:text-zinc-50",
+//         "flex h-9 items-center border border-zinc-950/10 bg-white px-3 text-zinc-950  dark:bg-zinc-700 dark:text-zinc-50",
 //         className
 //       )}
 //       style={{ borderRadius: 8 }}
@@ -673,7 +673,7 @@ export default {
 //             ref={contentRef}
 //             layoutId={`floating-panel-${uniqueId}`}
 //             className={cn(
-//               "fixed z-50 overflow-hidden border border-zinc-950/10 bg-white shadow-lg outline-none dark:border-zinc-50/10 dark:bg-zinc-800",
+//               "fixed z-50 overflow-hidden border border-zinc-950/10 bg-white shadow-lg outline-none  dark:bg-zinc-800",
 //               className
 //             )}
 //             style={{
@@ -893,7 +893,7 @@ export default {
 //   return (
 //     <motion.button
 //       className={cn(
-//         "relative ml-1 flex h-8 shrink-0 scale-100 select-none appearance-none items-center justify-center rounded-lg border border-zinc-950/10 bg-transparent px-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:ring-2 active:scale-[0.98] dark:border-zinc-50/10 dark:text-zinc-50 dark:hover:bg-zinc-800",
+//         "relative ml-1 flex h-8 shrink-0 scale-100 select-none appearance-none items-center justify-center rounded-lg border border-zinc-950/10 bg-transparent px-2 text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 focus-visible:ring-2 active:scale-[0.98]  dark:text-zinc-50 dark:hover:bg-zinc-800",
 //         className
 //       )}
 //       type="submit"
