@@ -1,5 +1,9 @@
 import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
+
+// Type for admin Supabase client (inferred from createAdminClient)
+type AdminSupabaseClient = ReturnType<typeof createAdminClient>
 
 export async function checkTopicDuplication(topic: string, userId: string) {
     const genAI = getGeminiClient()
@@ -48,7 +52,13 @@ export async function checkTopicDuplication(topic: string, userId: string) {
     }
 }
 
-export async function saveTopicMemory(articleId: string, topic: string) {
+/**
+ * Save topic memory (embedding) for an article.
+ * @param articleId - The article ID
+ * @param topic - The topic text to embed
+ * @param adminClient - Optional admin Supabase client (required for background jobs like Trigger.dev)
+ */
+export async function saveTopicMemory(articleId: string, topic: string, adminClient?: AdminSupabaseClient) {
     const genAI = getGeminiClient()
 
     try {
@@ -61,7 +71,8 @@ export async function saveTopicMemory(articleId: string, topic: string) {
 
         if (!embedding || embedding.length === 0) return
 
-        const supabase = await createClient()
+        // Use provided admin client for background jobs, otherwise create server client
+        const supabase = adminClient ?? await createClient()
         await supabase
             .from("articles")
             .update({ topic_embedding: embedding })

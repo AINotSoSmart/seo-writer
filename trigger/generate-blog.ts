@@ -325,11 +325,20 @@ const performDeepResearch = async (
     contents: [{ role: "user", parts: [{ text: criticPrompt }] }]
   })
 
-  const criticAnalysis = cleanAndParse(criticResp.text || '{"gap_analysis":"","targeted_queries":[]}')
+  let criticAnalysis: { gap_analysis?: string; targeted_queries?: string[] } = { gap_analysis: "", targeted_queries: [] }
+  try {
+    const parsed = cleanAndParse(criticResp.text || '{"gap_analysis":"","targeted_queries":[]}')
+    criticAnalysis = {
+      gap_analysis: parsed.gap_analysis || "No major gaps identified.",
+      targeted_queries: Array.isArray(parsed.targeted_queries) ? parsed.targeted_queries : []
+    }
+  } catch (parseError) {
+    console.warn(`[Deep Research] Failed to parse critic response, using defaults:`, parseError)
+  }
   const targetedQueries: string[] = criticAnalysis.targeted_queries || []
 
-  console.log(`[Deep Research] Critic identified gaps:`, criticAnalysis.gap_analysis)
-  console.log(`[Deep Research] Targeted queries:`, targetedQueries)
+  console.log(`[Deep Research] Critic identified gaps:`, criticAnalysis.gap_analysis || "None")
+  console.log(`[Deep Research] Targeted queries:`, targetedQueries.length > 0 ? targetedQueries : "None")
 
   // === STEP 3: SNIPER SEARCH (Fill the Gaps) ===
   let deepContext = ""
@@ -1130,7 +1139,8 @@ export const generateBlogPost = task({
         // ignore, stick to keyword
       }
 
-      await saveTopicMemory(articleId, topicSignal)
+      // Pass the admin client to saveTopicMemory for background job context
+      await saveTopicMemory(articleId, topicSignal, supabase)
 
       return { success: true, articleId }
 
