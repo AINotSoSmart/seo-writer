@@ -7,6 +7,7 @@ USING ivfflat (topic_embedding vector_cosine_ops)
 WITH (lists = 100);
 
 -- Function to check for topic duplication (Semantic Check)
+DROP FUNCTION IF EXISTS match_articles_topic(vector, float, int, uuid);
 CREATE OR REPLACE FUNCTION match_articles_topic (
   query_embedding vector(768),
   match_threshold float,

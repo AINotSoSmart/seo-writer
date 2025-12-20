@@ -12,13 +12,16 @@ export const BrandDetailsSchema = z.object({
     primary: z.string(),
     psychology: z.string(),
   }),
-  enemy: z.array(z.string()),
-  uvp: z.array(z.string()),
-  core_features: z.array(z.string()),
-  pricing: z.array(z.string()),
-  how_it_works: z.array(z.string()),
+  enemy: z.union([z.array(z.string()), z.string().transform(s => [s])]).default([]),
+  uvp: z.union([z.array(z.string()), z.string().transform(s => [s])]).default([]),
+  core_features: z.union([z.array(z.string()), z.string().transform(s => [s])]).default([]),
+  pricing: z.union([z.array(z.string()), z.string().transform(s => [s])]).default([]),
+  how_it_works: z.union([z.array(z.string()), z.string().transform(s => [s])]).default([]),
   image_style: z.string().optional().default("stock"),
-  style_dna: z.string().optional().default(""),
+  style_dna: z.union([
+    z.string(),
+    z.array(z.string()).transform((arr) => arr.join(" "))
+  ]).optional().default(""),
 })
 
 export type BrandDetails = z.infer<typeof BrandDetailsSchema>
