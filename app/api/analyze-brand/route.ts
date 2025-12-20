@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
+import { jsonrepair } from "jsonrepair"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -149,7 +150,18 @@ ${page.rawContent || page.markdown || page.content || ''}
 
     // Fix: response.text is a getter in newer SDKs, not a method
     const text = response.text || ""
-    const brandData = JSON.parse(text || "{}")
+    let brandData: any = {}
+    try {
+      brandData = JSON.parse(text || "{}")
+    } catch (e) {
+      console.warn("Brand analysis JSON parse failed, trying repair:", e)
+      try {
+        brandData = JSON.parse(jsonrepair(text || "{}"))
+      } catch (e2) {
+        console.error("Critical Brand Analysis JSON parse failure:", e2)
+        throw new Error("Failed to parse brand analysis results")
+      }
+    }
 
     return NextResponse.json(brandData)
 

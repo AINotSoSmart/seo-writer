@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
+import { jsonrepair } from "jsonrepair"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -77,7 +78,21 @@ Be specific about the category. Don't be generic like "SaaS" - use the actual pr
             }
         })
 
-        const categoryData = JSON.parse(categoryResponse.text || "{}")
+        let categoryData: any = {}
+        try {
+            const rawText = categoryResponse.text || "{}"
+            categoryData = JSON.parse(rawText)
+        } catch (e) {
+            console.warn("JSON parse failed, trying repair:", e)
+            try {
+                const rawText = categoryResponse.text || "{}"
+                categoryData = JSON.parse(jsonrepair(rawText))
+            } catch (e2) {
+                console.error("Critical JSON parse failure:", e2)
+                categoryData = {}
+            }
+        }
+
         const searchQueries = categoryData.searchQueries || [`best ${categoryData.category || "software"} tools 2024`]
 
         console.log("Generated search queries:", searchQueries)
@@ -170,7 +185,18 @@ Focus on actionable, specific topics relevant to the brand context. Be specific,
         })
 
         const text = response.text || "{}"
-        const extracted = JSON.parse(text)
+        let extracted: any = {}
+        try {
+            extracted = JSON.parse(text)
+        } catch (e) {
+            console.warn("Extraction JSON parse failed, trying repair:", e)
+            try {
+                extracted = JSON.parse(jsonrepair(text))
+            } catch (e2) {
+                console.error("Critical extraction JSON parse failure")
+                extracted = {}
+            }
+        }
 
         // Build competitors data
         const competitors = competitorResults.map((r: any) => ({
