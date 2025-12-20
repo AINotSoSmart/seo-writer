@@ -6,10 +6,10 @@ import { createHmac, timingSafeEqual } from 'crypto'
 export const runtime = 'nodejs'
 
 // Helpers
-function safeEquals(a: string, b: string): boolean {
+function safeEqualsBase64(aB64: string, bB64: string): boolean {
     try {
-        const aBuf = Buffer.from(a, 'hex')
-        const bBuf = Buffer.from(b, 'hex')
+        const aBuf = Buffer.from(aB64, 'base64')
+        const bBuf = Buffer.from(bB64, 'base64')
         if (aBuf.length !== bBuf.length) return false
         return timingSafeEqual(aBuf, bBuf)
     } catch {
@@ -22,17 +22,38 @@ function verifySignature({
     id,
     timestamp,
     payload,
-    signature,
+    signatureHeader,
 }: {
     secret: string
     id: string
     timestamp: string
     payload: string
-    signature: string
+    signatureHeader: string
 }): boolean {
     const message = `${id}.${timestamp}.${payload}`
-    const computed = createHmac('sha256', secret).update(message).digest('hex')
-    return safeEquals(computed, signature)
+    // Compute base64 HMAC per Standard Webhooks (Dodo headers provide base64 signatures)
+    const computedB64 = createHmac('sha256', secret).update(message).digest('base64')
+
+    const header = (signatureHeader || '').trim()
+    let providedB64: string | null = null
+
+    // Support formats: "v1=base64", "v1,base64", or raw "base64"
+    const eqMatch = header.match(/v1=([^,]+)/)
+    if (eqMatch && eqMatch[1]) {
+        providedB64 = eqMatch[1].trim()
+    } else if (header.includes(',')) {
+        const parts = header.split(',').map(s => s.trim())
+        if (parts[0] === 'v1' && parts[1]) {
+            providedB64 = parts[1]
+        } else {
+            providedB64 = parts.find(p => p && p !== 'v1') || null
+        }
+    } else {
+        providedB64 = header
+    }
+
+    if (!providedB64) return false
+    return safeEqualsBase64(computedB64, providedB64)
 }
 
 async function recordEventOnce(supabase: ReturnType<typeof createAdminClient>, params: {
@@ -234,7 +255,7 @@ export async function POST(req: NextRequest) {
         id: webhookId,
         timestamp: webhookTimestamp,
         payload: rawBody,
-        signature: webhookSignature,
+        signatureHeader: webhookSignature,
     })
 
     if (!valid) {
