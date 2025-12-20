@@ -7,7 +7,7 @@ import Link from "next/link"
 import { format } from "date-fns"
 import { GlobalCard } from "@/components/ui/global-card"
 import { Button } from "@/components/ui/button"
-import { FileText, FilePenLine, Plus, Loader2, ExternalLink, Send } from "lucide-react"
+import { FileText, FilePenLine, Plus, Loader2, ExternalLink, Send, Trash2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -47,6 +47,9 @@ export default function ArticlesPage() {
   const [connections, setConnections] = useState<Connection[]>([])
   const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
   const [pendingPublishId, setPendingPublishId] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+  const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set())
   const [selectedPlatform, setSelectedPlatform] = useState<'wordpress' | 'webflow' | 'shopify'>('wordpress')
 
   useEffect(() => {
@@ -202,6 +205,59 @@ export default function ArticlesPage() {
     return platforms
   }
 
+  const handleDelete = async (articleId: string) => {
+    setDeletingIds(prev => new Set(prev).add(articleId))
+    try {
+      const { error } = await supabase
+        .from("articles")
+        .delete()
+        .eq("id", articleId)
+
+      if (error) throw error
+
+      setArticles(prev => prev.filter(a => a.id !== articleId))
+      toast.success("Article deleted")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete article")
+    } finally {
+      setDeletingIds(prev => {
+        const next = new Set(prev)
+        next.delete(articleId)
+        return next
+      })
+      setPendingDeleteId(null)
+    }
+  }
+
+  const handleRegenerate = async (article: ArticleRow) => {
+    setRegeneratingIds(prev => new Set(prev).add(article.id))
+    try {
+      const response = await fetch("/api/generate-blog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articleId: article.id,
+          keyword: article.keyword,
+        })
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || "Failed to regenerate")
+      }
+
+      toast.success("Article regeneration started")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to regenerate article")
+    } finally {
+      setRegeneratingIds(prev => {
+        const next = new Set(prev)
+        next.delete(article.id)
+        return next
+      })
+    }
+  }
+
   const wpConnections = connections.filter(c => c.platform === 'wordpress')
   const wfConnections = connections.filter(c => c.platform === 'webflow')
   const spConnections = connections.filter(c => c.platform === 'shopify')
@@ -266,7 +322,6 @@ export default function ArticlesPage() {
                 <tr>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Keyword</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Status</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">Progress</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">Date</th>
                   <th className="
                     px-6 py-4 text-right font-medium sticky right-0 z-10
@@ -290,21 +345,16 @@ export default function ArticlesPage() {
                         <StatusBadge status={article.status} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {article.status === 'completed' ? (
-                          <span className="text-green-600 font-medium flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                            Done
+                        <div className="flex items-center gap-2 text-stone-700">
+                          <div className="w-5 h-5 rounded bg-stone-100 flex items-center justify-center">
+                            <span className="text-xs font-semibold text-stone-600">
+                              {format(new Date(article.created_at), "d")}
+                            </span>
+                          </div>
+                          <span className="text-xs">
+                            {format(new Date(article.created_at), "MMM yyyy")}
                           </span>
-                        ) : article.status === 'failed' ? (
-                          <span className="text-red-600 font-medium">Failed</span>
-                        ) : (
-                          <span className="text-blue-600">
-                            Step {article.current_step_index ?? 0}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-stone-500 tabular-nums whitespace-nowrap">
-                        {format(new Date(article.created_at), "MMM d, yyyy")}
+                        </div>
                       </td>
                       <td className="
                          px-6 py-4 text-right sticky right-0 z-10
@@ -312,7 +362,26 @@ export default function ArticlesPage() {
                          group-hover:bg-stone-50 transition-colors
                          border-l border-stone-100
                       ">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end sm:gap-2">
+                          {/* Failed article: Show Regenerate */}
+                          {article.status === 'failed' && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={regeneratingIds.has(article.id)}
+                              onClick={() => handleRegenerate(article)}
+                              className="h-7 px-2 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                            >
+                              {regeneratingIds.has(article.id) ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3 h-3" />
+                              )}
+                              Retry
+                            </Button>
+                          )}
+
+                          {/* Completed article: Show Publish & Edit */}
                           {article.status === 'completed' && article.final_html && (
                             <>
                               {/* Published badges */}
@@ -344,31 +413,53 @@ export default function ArticlesPage() {
                                 </div>
                               )}
 
-                              {/* Publish button - always show if any connection exists */}
+                              {/* Publish button */}
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 disabled={publishingIds.has(article.id) || !hasAnyConnection}
                                 onClick={() => setPendingPublishId(article.id)}
                                 className="h-7 px-2 text-xs gap-1"
+                                title="Publish"
                               >
                                 {publishingIds.has(article.id) ? (
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : (
                                   <Send className="w-3 h-3" />
                                 )}
-                                Publish
+                                <span className="hidden sm:inline">Publish</span>
                               </Button>
 
-                              <Link
-                                href={`/articles/${article.id}`}
-                                className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-900 font-medium transition-colors"
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                asChild
+                                className="h-7 px-2 text-xs gap-1"
+                                title="Edit"
                               >
-                                Edit
-                                <FilePenLine className="w-3 h-3" />
-                              </Link>
+                                <Link href={`/articles/${article.id}`}>
+                                  <FilePenLine className="w-3 h-3" />
+                                  <span className="hidden sm:inline">Edit</span>
+                                </Link>
+                              </Button>
                             </>
                           )}
+
+                          {/* Delete button - always show */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={deletingIds.has(article.id)}
+                            onClick={() => setPendingDeleteId(article.id)}
+                            className="h-7 w-7 p-0 hover:text-stone-400 text-red-600 hover:bg-red-50"
+                            title="Delete article"
+                          >
+                            {deletingIds.has(article.id) ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -391,52 +482,46 @@ export default function ArticlesPage() {
           </AlertDialogHeader>
 
           {/* Platform selector */}
-          <div className="flex gap-2 my-4">
+          <div className="flex gap-1.5 my-4">
             {wpConnections.length > 0 && (
               <button
                 onClick={() => setSelectedPlatform('wordpress')}
-                className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'wordpress'
+                className={`cursor-pointer flex-1 min-w-0 p-2 sm:p-2.5 rounded-lg border-2 transition-colors ${selectedPlatform === 'wordpress'
                   ? 'border-[#21759b] bg-[#21759b]/10'
-                  : 'border-stone-200'
+                  : 'border-stone-200 hover:border-stone-300'
                   }`}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded flex items-center justify-center">
-                    <Image src="/brands/wordpress.svg" alt="WordPress" width={24} height={24} />
-                  </div>
-                  <span className="font-medium text-sm">WordPress</span>
+                <div className="flex items-center justify-center gap-1.5">
+                  <Image src="/brands/wordpress.svg" alt="WordPress" width={18} height={18} className="shrink-0" />
+                  <span className="font-medium text-xs sm:text-sm truncate">WP</span>
                 </div>
               </button>
             )}
             {wfConnections.length > 0 && (
               <button
                 onClick={() => setSelectedPlatform('webflow')}
-                className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'webflow'
+                className={`cursor-pointer flex-1 min-w-0 p-2 sm:p-2.5 rounded-lg border-2 transition-colors ${selectedPlatform === 'webflow'
                   ? 'border-[#4353ff] bg-[#4353ff]/10'
-                  : 'border-stone-200'
+                  : 'border-stone-200 hover:border-stone-300'
                   }`}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded flex items-center justify-center">
-                    <Image src="/brands/webflow.svg" alt="Webflow" width={24} height={24} />
-                  </div>
-                  <span className="font-medium text-sm">Webflow</span>
+                <div className="flex items-center justify-center gap-1.5">
+                  <Image src="/brands/webflow.svg" alt="Webflow" width={18} height={18} className="shrink-0" />
+                  <span className="font-medium text-xs sm:text-sm truncate">WF</span>
                 </div>
               </button>
             )}
             {spConnections.length > 0 && (
               <button
                 onClick={() => setSelectedPlatform('shopify')}
-                className={`cursor-pointer flex-1 p-3 rounded-lg border-2 transition-colors ${selectedPlatform === 'shopify'
+                className={`cursor-pointer flex-1 min-w-0 p-2 sm:p-2.5 rounded-lg border-2 transition-colors ${selectedPlatform === 'shopify'
                   ? 'border-[#96bf48] bg-[#96bf48]/10'
-                  : 'border-stone-200'
+                  : 'border-stone-200 hover:border-stone-300'
                   }`}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded flex items-center justify-center">
-                    <Image src="/brands/shopify.svg" alt="Shopify" width={24} height={24} />
-                  </div>
-                  <span className="font-medium text-sm">Shopify</span>
+                <div className="flex items-center justify-center gap-1.5">
+                  <Image src="/brands/shopify.svg" alt="Shopify" width={18} height={18} className="shrink-0" />
+                  <span className="font-medium text-xs sm:text-sm truncate">SP</span>
                 </div>
               </button>
             )}
@@ -460,6 +545,31 @@ export default function ArticlesPage() {
               }}
             >
               Publish as Draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!pendingDeleteId} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Article</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this article? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (pendingDeleteId) {
+                  handleDelete(pendingDeleteId)
+                }
+              }}
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

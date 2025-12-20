@@ -454,7 +454,14 @@ Do not fluff the outline. Only include sections that are really necessary.
 INPUT CONTEXT:
 1. KEYWORD: "${keyword}"
 2. COMPETITOR & GAP DATA: ${JSON.stringify(competitorData)}
-${brandDetails ? `### BRAND DNA\n${JSON.stringify(brandDetails, null, 2)}` : ''}
+${brandDetails ? `### BRAND CONTEXT (Voice Reference Only)
+- Brand: ${brandDetails.product_name}
+- Type: ${brandDetails.product_identity?.literally || 'Product/Service'}
+- Audience: ${brandDetails.audience?.primary || 'Users seeking solutions'}
+
+NOTE: Use this for VOICE consistency. The article should primarily EDUCATE, not promote.
+Plan brand mentions sparingly - only where contextually valuable (intro, comparison, CTA).
+` : ''}
 ${internalLinks.length > 0 ? `### INTERNAL LINKS POOL (USE 1-2 MAX)\n${internalLinks.map(l => `- Title: ${l.title} | URL: ${l.url}`).join('\n')}` : ''}
 
 ### ARTICLE REQUIREMENT STRATEGY:
@@ -570,19 +577,81 @@ ${JSON.stringify(authorityLinks)}
 }
 
 
-const generateWritingSystemPrompt = (styleDNA: string, factSheet: any, brandDetails: any = null, internalLinks: any[] = []) => {
+const generateWritingSystemPrompt = (styleDNA: string, factSheet: any, brandDetails: any = null, internalLinks: any[] = [], articleType: string = 'informational') => {
   // styleDNA is now a paragraph describing the writing style
-  // Build brand context section
+  // Build brand context section with contextual guidelines
   let brandContextSection = ""
   if (brandDetails) {
     brandContextSection = `
-### 5. BRAND CONTEXT
-- We are writing as: ${brandDetails.product_name}.
-- Audience: ${JSON.stringify(brandDetails.audience)}
+### 5. BRAND MENTION GUIDELINES (USE JUDGMENT - NOT RIGID RULES)
 
-**Note:** When discussing ${brandDetails.product_name} (your product), follow the brand voice guidelines below.
+**Your brand:** ${brandDetails.product_name}
+**Audience:** ${brandDetails.audience?.primary || 'Users seeking solutions'}
+
+**THE PRINCIPLE:** Mention the brand only where it adds VALUE, not artificially.
+
+**WHEN TO MENTION BRAND (Natural contexts):**
+- When establishing authority in the intro (once)
+- When comparing to competitors in a features/comparison section
+- When the section is SPECIFICALLY about your product's approach
+- In a call-to-action at the end
+
+**WHEN NOT TO MENTION BRAND (Forced contexts):**
+- In purely educational/informational sections about general concepts
+- When explaining industry-standard processes or terminology
+- Multiple times in the same section or consecutive paragraphs
+- Just to "remind" the reader - they already know
+
+**THE GOOGLE TEST:**
+Ask: "If Google saw this, would it look like an informative article or a sales pitch?"
+Informative articles rank. Sales pitches don't.
+
+**USE ALTERNATIVES instead of repeating "${brandDetails.product_name}":**
+- "we" / "our tool" / "our platform" / "our approach"
+- "our team" (for agencies/companies)
+- Just describe the feature without naming the brand
+
+**CONTEXT CHECK (USE THE PREVIOUS SECTIONS):**
+Before mentioning the brand, check the CONTEXT section in your prompt.
+- If brand was already mentioned in the last 2 sections → DO NOT mention again
+- If brand hasn't been mentioned for 3+ sections and it's genuinely relevant → OK to mention
+
+**AUTHORITY POSITIONING:**
+- For YOUR product/brand: Use first-person plural ("We built...", "Our tool...")
+- For competitor products: Use third-party framing ("According to reviews...", "Users report...")
+- For general concepts: State facts confidently without fake personal claims
 `
   }
+
+  // Article-type-aware intro strategy
+  const introStrategy = `
+### 6. INTRO STRATEGY (ADAPT TO ARTICLE TYPE: ${articleType.toUpperCase()})
+
+${articleType === 'informational' ? `**INFORMATIONAL ARTICLE:**
+- Lead with the direct answer in sentences 1-2
+- Then provide brief context
+- Example: "A reunion hug video is created by uploading two photos to an AI generator. The process takes 2-3 minutes. Here's exactly how it works..."` : ''}
+
+${articleType === 'commercial' ? `**COMMERCIAL ARTICLE:**
+- Lead with the key insight or recommendation
+- Can include brief emotional context if relevant to the problem
+- Example: "After testing 7 AI video tools, [Product] offers the best balance of quality and privacy. Here's what I found..."` : ''}
+
+${articleType === 'comparison' ? `**COMPARISON ARTICLE:**
+- Lead with the key differentiator
+- Be fair and objective in tone
+- Example: "The main difference between X and Y is [key factor]. Here's a detailed breakdown..."` : ''}
+
+${articleType === 'how-to' ? `**HOW-TO/TUTORIAL ARTICLE:**
+- Lead with what they'll achieve
+- Brief setup of prerequisites
+- Example: "By the end of this guide, you'll be able to [outcome]. You'll need [prerequisites]..."` : ''}
+
+**AVOID IN ALL TYPES:**
+- ❌ "Imagine..." or "Picture this..." as openers
+- ❌ Rhetorical questions that delay the answer
+- ❌ Multiple paragraphs before getting to the point
+`
 
   return `
 You are an expert Blog Writer. You are NOT an AI assistant. You are a subject matter expert. ${getCurrentDateContext()}
@@ -597,8 +666,9 @@ ${styleDNA}
 ### 3. GOLDEN RULES (THE LAW)
 ${AUTHENTIC_WRITING_RULES}
 ${brandContextSection}
+${introStrategy}
 ${internalLinks.length > 0 ? `
-### 4. INTERNAL LINKING RULES (CRITICAL)
+### 7. INTERNAL LINKING RULES (CRITICAL)
 You have access to the following internal links from our site:
 ${internalLinks.map(l => `- Title: ${l.title} | URL: ${l.url}`).join('\n')}
 
@@ -609,10 +679,10 @@ Select and insert **exactly 1-2** of these internal links naturally into the art
 - Embed them where they add genuine value to the reader.
 ` : ''}
 
-### 4. KNOWLEDGE BASE (Facts to use)
+### 8. KNOWLEDGE BASE (Facts to use)
 ${JSON.stringify(factSheet)}
 
-### 5. OUTPUT FORMAT
+### 9. OUTPUT FORMAT
 Return **Markdown** formatted text. 
 - Make use of proper H2, H3, and H4 headers for SEO appropriately.
 - Do NOT include the main H2 Section Heading (system adds it).
@@ -635,6 +705,24 @@ You MUST include an external hyperlink in this section.
   }
 
   return `
+### BEFORE YOU WRITE - CHECK THE CONTEXT
+
+Read the CONTEXT section below carefully. Before writing this section:
+
+1. **BRAND CHECK:** Scan the context - how many times has the brand name been mentioned?
+   - If 0-1 times → OK to mention if contextually relevant
+   - If 2+ times → Use "we/our tool/our platform" instead of brand name
+   - If mentioned in the immediately previous section → DO NOT mention again
+
+2. **REPETITION CHECK:** Have similar points already been made?
+   - Don't repeat privacy/security claims if already covered
+   - Don't re-introduce features already explained
+   - Build on what's written, don't duplicate themes
+
+3. **FLOW CHECK:** Does this section connect naturally to the previous one?
+
+---
+
 ### CONTEXT (What you have written so far)
 ${previousFullText}
 
@@ -653,7 +741,7 @@ ${linkInstruction}
    - ✅ RIGHT: Jump straight into the answer, fact, or point.
 2. Read the last sentence of the Context. Ensure your first sentence flows naturally from it.
 3. **Apply the Golden Rules:** BOLD the key takeaways. Keep sentences short and varied.
-4. **Simulate Experience:** If the content note asks for a review/opinion, write confidently as if you have tested it.
+4. **Authority Positioning:** State facts confidently based on research. For YOUR product, use "We built..." or "Our tool...". For competitors, use "According to reviews..." or "Users report...".
 `
 }
 
@@ -688,16 +776,39 @@ ${styleDNA}.
 **CRITICAL:** Do NOT make it sound generic or "AI-generated". Preserve the unique flair, idioms, and formatting quirks.
 
 ${brandDetails ? `
-### 5. BRAND PERSPECTIVE CHECK (CRITICAL)
-You MUST remove any "cringe" self-reviews, check if the brand is overlay mentioned and can destroy brand reputation.
-- **When discussing Competitors:** It is OK to say "I tested X".
+### 5. BRAND FREQUENCY AUDIT (MANDATORY - READ THE FULL ARTICLE)
+
+**Brand Name:** ${brandDetails.product_name}
+
+**STEP 1: COUNT** - How many times does "${brandDetails.product_name}" appear in the draft?
+
+**STEP 2: EVALUATE**
+- **0-4 mentions:** Acceptable IF each is contextually justified (intro, comparison, CTA)
+- **5-7 mentions:** REVIEW each - keep only the most impactful ones
+- **8+ mentions:** CRITICAL - This reads like a sales pitch. REDUCE to 4-5 max.
+
+**STEP 3: REDUCE (if needed)**
+1. Keep the FIRST mention (intro/authority)
+2. Keep ONE mention in comparison/feature section (if exists)
+3. Keep the CTA mention at the end (if exists)
+4. Replace ALL others with "we/our tool/our platform/our approach"
+
+**STEP 4: CONSECUTIVE CHECK**
+If brand appears in back-to-back paragraphs or sections, REMOVE one occurrence.
+
+**THE SALES PITCH TEST:**
+Read the article aloud. Does it sound like an informative piece or a marketing brochure?
+If brochure → Reduce brand mentions. Add more educational value.
+
+### 6. BRAND PERSPECTIVE FIX
+- **When discussing Competitors:** It is OK to say "I tested X" or "Users report...".
 - **When discussing ${brandDetails.product_name} (Our Product):**
   - **BAD:** "I tested ${brandDetails.product_name} and it was fast." (Sounds fake/cringe).
   - **GOOD:** "We built ${brandDetails.product_name} to be fast." or "Our tool excels at..."
   - **FIX:** Change any "I tested [Our Product]" to "We designed [Our Product]" or "Our tool".
 ` : ""}
 
-### 6. OUTPUT
+### 7. OUTPUT
 Return the polished content in **Raw Markdown**. Do NOT use code blocks.
 `
 
@@ -872,7 +983,7 @@ export const generateBlogPost = task({
       // 4.1 Write Intro (The Hook) - Separately
       // Only write intro if not resuming (startIndex === 0)
       if (startIndex === 0 && outline.intro) {
-        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails, internalLinks)
+        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails, internalLinks, articleType)
         const introTemplate = getIntroTemplate(articleType)
         const userPrompt = generateWritingUserPrompt(currentDraft, {
           heading: "Introduction / Hook", // Context only
@@ -918,7 +1029,7 @@ export const generateBlogPost = task({
           .update({ current_step_index: i + 1, status: "writing" })
           .eq("id", articleId)
 
-        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails, internalLinks)
+        const systemPrompt = generateWritingSystemPrompt(styleDNA, factSheet, brandDetails, internalLinks, articleType)
         const userPrompt = generateWritingUserPrompt(currentDraft.slice(-3000), section) // Passing last 3000 chars for context to save tokens, or full draft if feasible. Blueprint says "Entire Draft", but context limits apply. Gemini 2.0 Flash has 1M context, so full draft is fine.
         // Actually, let's pass full draft if it's 1M context.
         const userPromptFull = generateWritingUserPrompt(currentDraft, section)
