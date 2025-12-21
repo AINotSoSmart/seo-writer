@@ -150,23 +150,23 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
               </div>
               <div className="flex gap-2">
                 <button
-                  className="px-3 py-2 text-sm bg-stone-900 text-white rounded hover:bg-stone-800 disabled:opacity-50"
+                  className=" cursor-pointer px-3 py-2 text-sm bg-stone-900 text-white rounded hover:bg-stone-800 disabled:opacity-50"
                   onClick={useCallback(async () => {
                     try {
-                      const { url } = await updatePaymentMethod(undefined, '/account')
+                      const { url } = await updatePaymentMethod(subscription?.subscription_id, '/account')
                       window.location.href = url
                     } catch (e) {
                       console.error('Failed to open payment method portal', e)
                       alert('Failed to open payment method portal')
                     }
-                  }, [])}
+                  }, [subscription?.subscription_id])}
                 >
                   Update payment method
                 </button>
 
                 {subscription.status === 'active' && !subscription.cancel_at_period_end && (
                   <button
-                    className="px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-500 disabled:opacity-50"
+                    className=" cursor-pointer px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-500 disabled:opacity-50"
                     onClick={useCallback(async () => {
                       try {
                         await cancelSubscription()
