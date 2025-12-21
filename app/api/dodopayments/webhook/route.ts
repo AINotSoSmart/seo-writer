@@ -318,6 +318,25 @@ async function updateSubscriptionServiceFields(
 ) {
     if (!dodo_subscription_id || !subscriptionObj) return;
 
+    // Helpers
+    const toBooleanish = (v: any): boolean => {
+        if (typeof v === 'boolean') return v;
+        if (v === null || v === undefined) return false;
+        const s = String(v).toLowerCase().trim();
+        return s === 'true' || s === '1' || s === 'yes';
+    };
+    const toISO = (raw: any): string | undefined => {
+        if (raw === null || raw === undefined) return undefined;
+        if (typeof raw === 'number') {
+            // If seconds (10 digits), convert to ms; if ms (13+), use as-is
+            const ms = raw < 1e12 ? raw * 1000 : raw;
+            const d = new Date(ms);
+            return isNaN(d.getTime()) ? undefined : d.toISOString();
+        }
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? undefined : d.toISOString();
+    };
+
     // Derive booleans/dates from various shapes
     const cancelAt =
         subscriptionObj?.cancel_at_next_billing_date ??
@@ -344,23 +363,18 @@ async function updateSubscriptionServiceFields(
     // cancellation event implies cancel_at_period_end is false and canceled_at is now if absent
     if (eventType && eventType.toLowerCase().includes('cancel')) {
         update.cancel_at_period_end = false;
-        update.canceled_at = canceledAtRaw
-            ? new Date(canceledAtRaw).toISOString()
-            : new Date().toISOString();
+        update.canceled_at = toISO(canceledAtRaw) || new Date().toISOString();
     } else {
-        if (typeof cancelAt === 'boolean') update.cancel_at_period_end = cancelAt;
-        if (canceledAtRaw) update.canceled_at = new Date(canceledAtRaw).toISOString();
+        if (cancelAt !== undefined) update.cancel_at_period_end = toBooleanish(cancelAt);
+        const isoCanceled = toISO(canceledAtRaw);
+        if (isoCanceled) update.canceled_at = isoCanceled;
     }
 
-    if (nextBillingRaw) {
-        const d = new Date(nextBillingRaw);
-        if (!isNaN(d.getTime())) update.next_billing_date = d.toISOString();
-    }
+    const isoNext = toISO(nextBillingRaw);
+    if (isoNext) update.next_billing_date = isoNext;
 
-    if (currentEndRaw) {
-        const d = new Date(currentEndRaw);
-        if (!isNaN(d.getTime())) update.current_period_end = d.toISOString();
-    }
+    const isoEnd = toISO(currentEndRaw);
+    if (isoEnd) update.current_period_end = isoEnd;
 
     if (Object.keys(update).length === 0) return;
 
