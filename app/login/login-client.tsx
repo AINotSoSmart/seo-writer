@@ -96,19 +96,17 @@ function LoginFormWithSearchParams() {
 
   return (
     <CSRFProvider>
-      <div className="min-h-screen flex flex-col bg-[#F7F5F3] font-sans">
+      <div className="landing-page min-h-screen flex flex-col font-sans">
         <Navbar />
 
         <main className="flex-1 flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8 relative z-10">
-          {/* Decorative Grid Background (matching Landing Page) */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
 
           <div className="w-full max-w-md relative z-20">
 
             {/* Header Text */}
             <div className="text-center mb-10">
-              <div className="inline-block bg-[#FAFA9D] border-2 border-black shadow-neo-sm px-4 py-1 mb-6 transform rotate-2">
-                <span className="font-display font-black text-xs uppercase tracking-widest">Autonomous Writer</span>
+              <div className="inline-block bg-brand-yellow border-2 border-black shadow-neo-sm px-4 py-1 mb-6 transform rotate-2">
+                <span className="font-display font-black text-xs uppercase tracking-widest text-black">Autonomous Writer</span>
               </div>
               <h2 className="font-display font-black text-3xl sm:text-4xl text-black mb-2 uppercase tracking-tight leading-none">
                 Welcome Back

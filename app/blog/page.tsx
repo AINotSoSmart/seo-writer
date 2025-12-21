@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
-import PublicHeader from '@/components/Header'
-import MainFooter from "@/components/MainFooter"
+import { Navbar } from '@/components/landing/Navbar'
+import { Footer } from "@/components/landing/Footer"
 import BlogCard from "@/components/blog-card"
 import { OfflineBanner } from "@/components/network-status"
 import { getAllPosts, formatDate, calculateReadingTime, extractExcerpt, type WordPressPost } from "@/lib/wordpress"
@@ -64,7 +64,7 @@ async function BlogContent() {
 function BlogPageContent({ blogPosts }: { blogPosts: any[] }) {
   return (
     <div className="min-h-screen bg-white">
-      <PublicHeader />
+      <Navbar />
 
       <main className="pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-4">
@@ -114,7 +114,7 @@ function BlogPageContent({ blogPosts }: { blogPosts: any[] }) {
 
       </main>
 
-      <MainFooter />
+      <Footer />
     </div>
   )
 }
@@ -123,7 +123,7 @@ export default function BlogPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-white">
-        <PublicHeader />
+        <Navbar />
         <main className="pt-24 pb-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
@@ -141,7 +141,7 @@ export default function BlogPage() {
             </div>
           </div>
         </main>
-        <MainFooter />
+        <Footer />
       </div>
     }>
       <BlogContent />

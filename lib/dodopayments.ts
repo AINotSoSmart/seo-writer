@@ -80,7 +80,7 @@ export async function cancelSubscription(
 export async function updatePaymentMethod(
     subscription_id?: string,
     return_url?: string,
-): Promise<{ url: string }> {
+): Promise<{ url?: string; emailed?: boolean; message?: string }> {
     const res = await fetch('/api/dodopayments/subscription/update-payment-method', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,7 +90,12 @@ export async function updatePaymentMethod(
     if (!res.ok) {
         throw new Error(data?.error || 'Failed to create customer portal session')
     }
-    return data
+    // API may return { url } OR { emailed: true, message }
+    return {
+        url: data?.url || data?.link,
+        emailed: Boolean(data?.emailed),
+        message: typeof data?.message === 'string' ? data.message : undefined,
+    }
 }
 
 /**
@@ -124,4 +129,49 @@ export async function createCustomer(_customer: any): Promise<never> {
 
 export async function updateCustomer(_customer_id: string, _customer: any): Promise<never> {
     throw new Error('updateCustomer is not implemented yet. Please implement a server route and wire it here.')
+}
+// ---- Additional helpers for Subscription management via API routes ----
+
+/**
+ * Restore a subscription (unset cancel_at_next_billing_date) using our API route.
+ */
+export async function restoreSubscription(
+    subscription_id?: string
+): Promise<{ ok: boolean; subscription_id: string }> {
+    const res = await fetch('/api/dodopayments/subscription/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription_id }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+        throw new Error(data?.error || 'Failed to restore subscription')
+    }
+    return data
+}
+
+/**
+ * Change plan for a subscription using our API route.
+ */
+export async function changeSubscriptionPlan(
+    subscription_id: string | undefined,
+    product_id: string,
+    proration_billing_mode: 'prorated_immediately' | 'none' = 'prorated_immediately',
+    quantity: number = 1
+): Promise<{ ok: boolean; subscription_id: string }> {
+    const res = await fetch('/api/dodopayments/subscription/change-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subscription_id,
+            product_id,
+            proration_billing_mode,
+            quantity,
+        }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+        throw new Error(data?.error || 'Failed to change subscription plan')
+    }
+    return data
 }

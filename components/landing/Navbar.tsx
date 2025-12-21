@@ -21,7 +21,7 @@ export const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <nav className="w-full max-w-7xl mx-auto px-4 py-6 flex items-center justify-between relative z-50">
+    <nav className="w-full max-w-7xl mx-auto px-4 py-6 flex items-center justify-between relative !z-50">
       {/* Logo */}
       <div className="flex-shrink-0">
         <Logo />
@@ -55,22 +55,40 @@ export const Navbar: React.FC = () => {
         {isMobileMenuOpen ? <X className="w-8 h-8" /> : <Menu className="w-8 h-8" />}
       </button>
 
-      {/* Mobile Nav Dropdown */}
+      {/* Mobile Nav Overlay */}
       {isMobileMenuOpen && (
-        <div className="absolute top-full left-0 right-0 bg-white border-b-2 border-black shadow-neo p-6 flex flex-col gap-4 md:hidden animate-in slide-in-from-top-5">
-          {links.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              className="font-sans font-bold text-xl text-black hover:text-brand-yellow transition-colors"
+        <div className="fixed inset-0 min-h-screen z-50 bg-white flex flex-col animate-in fade-in duration-200">
+          {/* Header with Logo and Close Button */}
+          <div className="w-full max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
+            <Logo />
+            <button
+              className="p-2"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              {link.label}
-            </a>
-          ))}
-          <Button variant="primary" fullWidth onClick={() => setIsMobileMenuOpen(false)}>
-            Start for free
-          </Button>
+              <X className="w-8 h-8" />
+            </button>
+          </div>
+
+          {/* Links Container */}
+          <div className="flex-1 flex flex-col items-center justify-center gap-8">
+            {links.map((link) => (
+              <a
+                key={link.label}
+                href={link.href}
+                className="font-display font-black text-4xl uppercase text-black hover:text-brand-yellow hover:scale-105 transition-all"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+
+          {/* Footer Button */}
+          <div className="p-8 pb-12 w-full max-w-md mx-auto">
+            <Button variant="primary" size="lg" fullWidth onClick={() => setIsMobileMenuOpen(false)} className="py-6 text-xl uppercase tracking-widest">
+              Start for free
+            </Button>
+          </div>
         </div>
       )}
     </nav>

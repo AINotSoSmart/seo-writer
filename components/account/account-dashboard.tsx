@@ -153,8 +153,17 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
                   className=" cursor-pointer px-3 py-2 text-sm bg-stone-900 text-white rounded hover:bg-stone-800 disabled:opacity-50"
                   onClick={useCallback(async () => {
                     try {
-                      const { url } = await updatePaymentMethod(subscription?.subscription_id, '/account')
-                      window.location.href = url
+                      const res = await updatePaymentMethod(
+                        subscription?.subscription_id,
+                        `${process.env.NEXT_PUBLIC_APP_URL}/account`
+                      )
+                      if (res?.url) {
+                        window.location.href = res.url
+                      } else if (res?.emailed) {
+                        alert(res?.message || 'We emailed you a secure link to update your payment method.')
+                      } else {
+                        alert('Unable to open payment method portal.')
+                      }
                     } catch (e) {
                       console.error('Failed to open payment method portal', e)
                       alert('Failed to open payment method portal')
@@ -169,14 +178,14 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
                     className=" cursor-pointer px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-500 disabled:opacity-50"
                     onClick={useCallback(async () => {
                       try {
-                        await cancelSubscription()
+                        await cancelSubscription(subscription?.subscription_id)
                         // Optimistic UX: reflect cancel-at-period-end immediately
                         window.location.reload()
                       } catch (e) {
                         console.error('Failed to cancel subscription', e)
                         alert('Failed to cancel subscription')
                       }
-                    }, [])}
+                    }, [subscription?.subscription_id])}
                   >
                     Cancel at period end
                   </button>

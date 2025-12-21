@@ -120,16 +120,36 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'No customer_id associated with subscription' }, { status: 400 })
         }
 
-        // Create Customer Portal session (SDK supports send_email param; return_url is managed by Dodo)
-        const portal = await client.customers.customerPortal.create(customer_id, {} as any)
+        // Create Customer Portal session.
+        // Note: SDK exposes `send_email` only; response type is CustomerPortalSession { link: string }
+        // https://github.com/dodopayments/dodopayments-node/blob/main/api.md
+        const portal = await client.customers.customerPortal.create(customer_id, { send_email: false } as any)
 
-        if (!portal?.url) {
-            // Add more context to help debug 500s in logs
-            console.error('Customer portal creation returned no URL', { customer_id, subscription_id, portalExists: Boolean(portal) })
-            return NextResponse.json({ error: 'Failed to create customer portal session' }, { status: 500 })
+        const link = (portal as any)?.link || (portal as any)?.url
+        if (!link) {
+            // Fallback: ask Dodo to email a secure link to the customer instead of returning a URL
+            try {
+                await client.customers.customerPortal.create(customer_id, { send_email: true } as any)
+                return NextResponse.json(
+                    {
+                        url: '',
+                        emailed: true,
+                        message: 'A secure payment method update link was emailed to you.',
+                    },
+                    { status: 200 },
+                )
+            } catch (e) {
+                console.error('Customer portal creation failed (no link, email fallback also failed)', {
+                    customer_id,
+                    subscription_id,
+                    error: (e as any)?.message || String(e),
+                })
+                return NextResponse.json({ error: 'Failed to create customer portal session' }, { status: 500 })
+            }
         }
 
-        return NextResponse.json({ url: portal.url }, { status: 200 })
+        // Success: return the portal link for client-side redirect
+        return NextResponse.json({ url: link }, { status: 200 })
     } catch (err: any) {
         // Surface more detail to client for quicker diagnosis (no secrets)
         const msg = (err?.message || err?.error || '').toString() || 'Failed to create payment method update session'
