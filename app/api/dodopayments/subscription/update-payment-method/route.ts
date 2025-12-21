@@ -97,58 +97,41 @@ export async function POST(req: NextRequest) {
 
         const client = getDodoClient()
 
-        // Prefer local metadata->raw to fetch customer_id (populated from webhook)
-        let customer_id: string | undefined
+        // Use Dodo's hosted payment method update (short flow) with a return_url back into the app
+        const effectiveReturnUrl =
+            return_url && typeof return_url === 'string' && return_url.length > 0
+                ? return_url
+                : `${process.env.NEXT_PUBLIC_APP_URL || ''}/account`
+
+        let response: any
         try {
-            const { data: localSub } = await supabase
-                .from('dodo_subscriptions')
-                .select('metadata')
-                .eq('dodo_subscription_id', subscription_id)
-                .maybeSingle()
-            customer_id =
-                (localSub as any)?.metadata?.raw?.customer?.customer_id ||
-                (localSub as any)?.metadata?.customer?.customer_id
-        } catch { /* ignore */ }
-
-        // Fallback: retrieve from Dodo if not present locally
-        if (!customer_id) {
-            const remoteSub: any = await client.subscriptions.retrieve(subscription_id)
-            customer_id = remoteSub?.customer_id || remoteSub?.customer?.customer_id
+            response = await client.subscriptions.updatePaymentMethod(
+                subscription_id,
+                { type: 'new', return_url: effectiveReturnUrl } as any,
+            )
+        } catch (e) {
+            console.error('updatePaymentMethod failed', {
+                subscription_id,
+                error: (e as any)?.message || String(e),
+            })
+            return NextResponse.json({ error: 'Failed to initiate payment method update' }, { status: 500 })
         }
 
-        if (!customer_id) {
-            return NextResponse.json({ error: 'No customer_id associated with subscription' }, { status: 400 })
-        }
-
-        // Create Customer Portal session.
-        // Note: SDK exposes `send_email` only; response type is CustomerPortalSession { link: string }
-        // https://github.com/dodopayments/dodopayments-node/blob/main/api.md
-        const portal = await client.customers.customerPortal.create(customer_id, { send_email: false } as any)
-
-        const link = (portal as any)?.link || (portal as any)?.url
+        const link = response?.payment_link || response?.url || response?.link
         if (!link) {
-            // Fallback: ask Dodo to email a secure link to the customer instead of returning a URL
-            try {
-                await client.customers.customerPortal.create(customer_id, { send_email: true } as any)
-                return NextResponse.json(
-                    {
-                        url: '',
-                        emailed: true,
-                        message: 'A secure payment method update link was emailed to you.',
-                    },
-                    { status: 200 },
-                )
-            } catch (e) {
-                console.error('Customer portal creation failed (no link, email fallback also failed)', {
-                    customer_id,
-                    subscription_id,
-                    error: (e as any)?.message || String(e),
-                })
-                return NextResponse.json({ error: 'Failed to create customer portal session' }, { status: 500 })
-            }
+            // Some gateways may return client_secret/payment_id to finish the flow; surface a generic message
+            return NextResponse.json(
+                {
+                    url: '',
+                    emailed: false,
+                    message:
+                        'Payment method update initiated. If no redirect link is shown, please try again shortly or check your email.',
+                },
+                { status: 200 },
+            )
         }
 
-        // Success: return the portal link for client-side redirect
+        // Success: return the hosted update link for client-side redirect
         return NextResponse.json({ url: link }, { status: 200 })
     } catch (err: any) {
         // Surface more detail to client for quicker diagnosis (no secrets)

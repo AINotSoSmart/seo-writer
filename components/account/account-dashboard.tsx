@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { User as UserIcon, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { cancelSubscription, updatePaymentMethod, restoreSubscription } from '@/lib/dodopayments'
+import { InvoiceHistory, type InvoiceItem } from '@/components/billingsdk/invoice-history'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 
 // Removed complex credit transaction service dependency
@@ -27,6 +28,7 @@ interface Payment {
     name: string
     price: number
   }
+  dodo_payment_id?: string
 }
 
 interface SubscriptionSummary {
@@ -62,6 +64,24 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
     `This will schedule your subscription to cancel at the end of the current billing period.` +
     (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
     ` You can restore anytime before that date.`
+
+  const mapStatusToInvoice = (status: string): 'paid' | 'refunded' | 'open' | 'void' => {
+    const s = (status || '').toLowerCase()
+    if (s === 'completed' || s === 'succeeded' || s === 'paid') return 'paid'
+    if (s === 'refunded') return 'refunded'
+    if (s === 'failed' || s === 'cancelled' || s === 'canceled' || s === 'void') return 'void'
+    return 'open'
+  }
+
+  const invoices: InvoiceItem[] = (payments || []).map((p) => ({
+    id: String(p.dodo_payment_id || p.id),
+    date: new Date(p.created_at).toISOString().slice(0, 10),
+    amount: formatCurrency(Number(p.amount ?? 0), p.currency || 'USD'),
+    status: mapStatusToInvoice(p.status),
+    invoiceUrl: p.dodo_payment_id ? `/api/dodopayments/invoices/${encodeURIComponent(p.dodo_payment_id)}` : undefined,
+    description: p?.pricing_plan?.name ? `Plan: ${p.pricing_plan.name}` : undefined,
+  }))
+
 
 
 
@@ -246,65 +266,27 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
         </CardContent>
       </Card>
 
-      {/* Credit Purchases */}
+      {/* Invoice History */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
-            Credit Purchases
+            Invoice History
           </CardTitle>
           <CardDescription>
-            View your credit purchase history
+            View and download your billing invoices
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {payments.length > 0 ? (
-            <div className="space-y-4">
-              {payments.slice(0, 20).map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={payment.status === 'completed' ? 'default' : payment.status === 'failed' ? 'destructive' : 'secondary'}>
-                        {payment.status}
-                      </Badge>
-                      <span className="text-sm font-medium">{payment.pricing_plan.name}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {formatCurrency(payment.amount, payment.currency)} for {payment.credits.toLocaleString()} credits
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(payment.created_at), { addSuffix: true })}
-                    </p>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <p className="font-medium text-green-600">
-                      +{payment.credits.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatCurrency(payment.amount, payment.currency)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {payments.length > 20 && (
-                <div className="text-center pt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Showing 20 of {payments.length} purchases
-                  </p>
-                </div>
-              )}
-            </div>
+          {invoices && invoices.length > 0 ? (
+            <InvoiceHistory invoices={invoices} />
           ) : (
-            <div className="text-center py-8">
-              <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No Transactions</h3>
-              <p className="text-muted-foreground">
-                Your credit transaction history will appear here.
-              </p>
-            </div>
+            <div className="text-sm text-muted-foreground">No invoices available yet.</div>
           )}
         </CardContent>
       </Card>
+
+
     </div>
   )
 }
