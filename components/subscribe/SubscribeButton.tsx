@@ -17,7 +17,7 @@ export default function SubscribeButton({ productId, isAuthenticated, className,
 
             setLoading(true)
             const origin = typeof window !== 'undefined' ? window.location.origin : ''
-            const return_url = `${origin}/account?subscribed=1`
+            const return_url = `${origin}/subscribe?subscribed=1`
 
             const { checkout_url } = await checkout(
                 [

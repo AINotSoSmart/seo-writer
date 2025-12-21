@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import Image from 'next/image'
 import { cookies } from 'next/headers'
 import SubscribeButton from '@/components/subscribe/SubscribeButton'
+import ManageSubscription from '@/components/subscribe/ManageSubscription'
 import { Check, ChevronUp, Loader2, Sparkles, Zap } from 'lucide-react'
 
 function formatPrice(value: number | string, currency: string) {
@@ -13,16 +14,25 @@ function formatPrice(value: number | string, currency: string) {
     }
 }
 
-async function getPlan() {
+type PlanRow = {
+    id: string
+    name: string
+    description: string | null
+    price: number
+    credits: number | null
+    currency: string | null
+    dodo_product_id: string
+}
+
+async function getPlans(): Promise<PlanRow[]> {
     const supabase = await createClient()
-    const { data: plan } = await supabase
+    const { data, error } = await supabase
         .from('dodo_pricing_plans')
         .select('id, name, description, price, credits, currency, dodo_product_id')
         .eq('is_active', true)
         .order('price', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-    return plan as any
+    if (error) return []
+    return (data || []) as PlanRow[]
 }
 
 async function getUser() {
@@ -31,10 +41,78 @@ async function getUser() {
     return user
 }
 
+async function getLatestSubscription(userId: string) {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+        .from('dodo_subscriptions')
+        .select('dodo_subscription_id, status, pricing_plan_id, next_billing_date, cancel_at_period_end, current_period_end, canceled_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    if (error) return null
+    return data
+}
+
 export default async function SubscribePage() {
     // Touch cookies to enable RSC auth context
     await cookies()
-    const [plan, user] = await Promise.all([getPlan(), getUser()])
+    const [plans, user] = await Promise.all([getPlans(), getUser()])
+
+    // If user is available, try pulling their latest subscription
+    let subscriptionSummary: {
+        subscription_id: string
+        status: 'pending' | 'active' | 'cancelled' | 'expired'
+        plan_name?: string
+        next_billing_date?: string
+        cancel_at_period_end?: boolean
+        current_period_end?: string
+        canceled_at?: string
+    } | null = null
+
+    if (user) {
+        const row = await getLatestSubscription(user.id)
+        if (row?.dodo_subscription_id) {
+            const planName = plans.find(p => p.id === (row as any).pricing_plan_id)?.name
+            // Normalize status
+            const rawStatus = String(row.status || '').toLowerCase()
+            const status = (rawStatus === 'active'
+                ? 'active'
+                : rawStatus === 'pending'
+                    ? 'pending'
+                    : rawStatus === 'cancelled' || rawStatus === 'canceled'
+                        ? 'cancelled'
+                        : 'expired') as 'pending' | 'active' | 'cancelled' | 'expired'
+
+            subscriptionSummary = {
+                subscription_id: row.dodo_subscription_id,
+                status,
+                plan_name: planName || undefined,
+                next_billing_date: row.next_billing_date || undefined,
+                cancel_at_period_end: !!row.cancel_at_period_end,
+                current_period_end: row.current_period_end || undefined,
+                canceled_at: row.canceled_at || undefined,
+            }
+        }
+    }
+
+    // If user has an active subscription, show management instead of checkout
+    if (subscriptionSummary?.status === 'active') {
+        return (
+            <main className="min-h-screen font-sans text-stone-900 flex flex-col items-center py-8 px-4 sm:px-6">
+                <div className="w-full max-w-5xl">
+                    <ManageSubscription
+                        subscription={subscriptionSummary}
+                        plans={plans}
+                        userEmail={user?.email || null}
+                    />
+                </div>
+            </main>
+        )
+    }
+
+    // Otherwise, render subscribe/checkout UI (marketing + CTA)
+    const plan = plans?.[0]
 
     return (
         <main className="min-h-screen font-sans text-stone-900 flex flex-col items-center justify-center py-12 px-4 sm:px-6">
@@ -84,7 +162,7 @@ export default async function SubscribePage() {
                                     <span className="text-stone-400 font-medium">/mo</span>
                                 </div>
                                 <p className="text-xs text-stone-400 mt-2 font-medium bg-stone-50 px-3 py-1 rounded-full border border-stone-100">
-                                    Include {plan.credits} article credits
+                                    Include {plan.credits ?? 0} article credits
                                 </p>
                             </div>
 
@@ -104,12 +182,12 @@ export default async function SubscribePage() {
                                     productId={plan.dodo_product_id}
                                     isAuthenticated={!!user}
                                     className="
-                                        cursor-pointer w-full sm:w-full h-12 rounded-xl text-base font-semibold text-white shadow-lg
-                                        bg-gradient-to-b from-stone-800 to-stone-950
-                                        hover:from-stone-700 hover:to-stone-900
-                                        shadow-[0_0_1px_1px_rgba(255,255,255,0.08)_inset,0_1px_1.5px_0_rgba(0,0,0,0.32)]
-                                        active:scale-[0.98] transition-all
-                                    "
+                    cursor-pointer w-full sm:w-full h-12 rounded-xl text-base font-semibold text-white shadow-lg
+                    bg-gradient-to-b from-stone-800 to-stone-950
+                    hover:from-stone-700 hover:to-stone-900
+                    shadow-[0_0_1px_1px_rgba(255,255,255,0.08)_inset,0_1px_1.5px_0_rgba(0,0,0,0.32)]
+                    active:scale-[0.98] transition-all
+                  "
                                 >
                                     <span className="flex items-center gap-2">
                                         <Zap className="w-4 h-4 fill-white/20" />
