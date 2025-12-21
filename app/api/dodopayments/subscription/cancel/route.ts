@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
         await supabase
             .from('dodo_subscriptions')
-            .update({ metadata: newMetadata })
+            .update({ metadata: newMetadata, cancel_at_period_end: true })
             .eq('dodo_subscription_id', subscription_id)
 
         // Audit row (non-blocking)

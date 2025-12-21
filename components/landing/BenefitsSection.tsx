@@ -10,7 +10,7 @@ export const BenefitsSection: React.FC = () => {
         <div className="inline-block bg-brand-orange border-2 border-black shadow-neo-sm px-4 py-1 mb-8 transform -rotate-1 hover:rotate-0 transition-transform">
           <span className="font-display font-black text-xs uppercase tracking-widest">The solution</span>
         </div>
-        <h2 className="font-display font-black text-4xl md:text-6xl leading-tight mb-6 uppercase">
+        <h2 className="font-display text-transparent bg-clip-text bg-gradient-to-br from-gray-600 to-black text-4xl md:text-6xl leading-tight mb-6 uppercase">
           We write for Humans and<br />Modern AI Search.
         </h2>
         <p className="font-sans text-gray-500 text-lg md:text-xl leading-relaxed">
@@ -19,7 +19,7 @@ export const BenefitsSection: React.FC = () => {
       </div>
 
       {/* Bento Grid */}
-      <div className="max-w-[1100px] w-full grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="max-w-6xl w-full grid grid-cols-1 md:grid-cols-3 gap-6">
 
         {/* Card 1: Real-Time Visibility (Yellow, Span 2) */}
         <div className="md:col-span-2 bg-[#FAFA9D] border-2 border-black p-8 shadow-neo flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden group hover:shadow-neo-hover transition-all duration-200">

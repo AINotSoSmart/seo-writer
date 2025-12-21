@@ -50,7 +50,7 @@ export const FAQSection: React.FC = () => {
         <div className="inline-block bg-[#FAFA9D] border-2 border-black shadow-neo-sm px-4 py-1 mb-8 transform rotate-2">
           <span className="font-display font-black text-xs uppercase tracking-widest">FAQ</span>
         </div>
-        <h2 className="font-display font-black text-4xl md:text-6xl leading-tight mb-6">
+        <h2 className="font-display text-transparent bg-clip-text bg-gradient-to-br from-gray-600 to-black text-4xl md:text-6xl leading-tight mb-6">
           DOUBTS ABOUT AI?<br />LET'S CLEAR THEM.
         </h2>
         <p className="font-sans text-gray-500 text-lg md:text-xl leading-relaxed max-w-2xl">

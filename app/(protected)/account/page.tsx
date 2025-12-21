@@ -36,7 +36,7 @@ export default async function AccountPage() {
   // Fetch user's active subscription summary
   const { data: activeSub } = await supabase
     .from('dodo_subscriptions')
-    .select('dodo_subscription_id, status, metadata, dodo_pricing_plans(name, credits)')
+    .select('dodo_subscription_id, status, cancel_at_period_end, next_billing_date, current_period_end, canceled_at, metadata, dodo_pricing_plans(name, credits)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -60,14 +60,22 @@ export default async function AccountPage() {
         status: normalizedStatus as 'pending' | 'active' | 'cancelled' | 'expired',
         plan_name: (activeSub as any)?.dodo_pricing_plans?.name as string | undefined,
         next_billing_date:
+          (activeSub as any)?.next_billing_date ||
           (activeSub as any)?.metadata?.raw?.next_billing_date ||
           (activeSub as any)?.metadata?.next_billing_date ||
           undefined,
-        cancel_at_period_end: Boolean(
-          (activeSub as any)?.metadata?.raw?.cancel_at_next_billing_date ??
-          (activeSub as any)?.metadata?.cancel_at_next_billing_date ??
-          false,
-        ),
+        cancel_at_period_end:
+          typeof (activeSub as any)?.cancel_at_period_end === 'boolean'
+            ? (activeSub as any).cancel_at_period_end
+            : Boolean(
+              (activeSub as any)?.metadata?.raw?.cancel_at_next_billing_date ??
+              (activeSub as any)?.metadata?.cancel_at_next_billing_date ??
+              false,
+            ),
+        current_period_end:
+          (activeSub as any)?.current_period_end || undefined,
+        canceled_at:
+          (activeSub as any)?.canceled_at || undefined,
       }
       : null
 

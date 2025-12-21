@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { User as UserIcon, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { cancelSubscription, updatePaymentMethod } from '@/lib/dodopayments'
+import { cancelSubscription, updatePaymentMethod, restoreSubscription } from '@/lib/dodopayments'
 
 // Removed complex credit transaction service dependency
 
@@ -34,6 +34,8 @@ interface SubscriptionSummary {
   plan_name?: string
   next_billing_date?: string
   cancel_at_period_end?: boolean
+  current_period_end?: string
+  canceled_at?: string
 }
 
 interface AccountDashboardProps {
@@ -141,12 +143,23 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
                     {new Date(subscription.next_billing_date).toLocaleString()}
                   </p>
                 )}
+                {subscription.current_period_end && (
+                  <p className="text-sm text-muted-foreground">
+                    Current period ends:{' '}
+                    {new Date(subscription.current_period_end).toLocaleString()}
+                  </p>
+                )}
                 {typeof subscription.cancel_at_period_end === 'boolean' &&
                   subscription.cancel_at_period_end && (
                     <p className="text-xs text-amber-600">
                       Cancellation scheduled at period end
                     </p>
                   )}
+                {subscription.status === 'cancelled' && (
+                  <p className="text-xs text-red-600">
+                    {`Cancelled${subscription.canceled_at ? ' on ' + new Date(subscription.canceled_at).toLocaleString() : ''}`}
+                  </p>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
@@ -188,6 +201,22 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
                     }, [subscription?.subscription_id])}
                   >
                     Cancel at period end
+                  </button>
+                )}
+                {subscription.status === 'active' && subscription.cancel_at_period_end && (
+                  <button
+                    className=" cursor-pointer px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-500 disabled:opacity-50"
+                    onClick={useCallback(async () => {
+                      try {
+                        await restoreSubscription(subscription?.subscription_id)
+                        window.location.reload()
+                      } catch (e) {
+                        console.error('Failed to restore subscription', e)
+                        alert('Failed to restore subscription')
+                      }
+                    }, [subscription?.subscription_id])}
+                  >
+                    Restore subscription
                   </button>
                 )}
               </div>

@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
         await supabase
             .from('dodo_subscriptions')
-            .update({ metadata: newMetadata })
+            .update({ metadata: newMetadata, cancel_at_period_end: false })
             .eq('dodo_subscription_id', subscription_id)
 
         return NextResponse.json({ ok: true, subscription_id }, { status: 200 })

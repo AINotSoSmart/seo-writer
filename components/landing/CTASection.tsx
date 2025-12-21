@@ -7,18 +7,18 @@ import { Button } from '@/components/landing/Button';
 export const CTASection: React.FC = () => {
   return (
     <section className="w-full py-12 px-4 flex justify-center mb-12">
-      <div className="w-full max-w-[1100px] bg-[#FAFA9D] border-2 border-black p-8 md:p-16 shadow-neo flex flex-col items-center text-center relative overflow-hidden">
+      <div className="w-full max-w-6xl bg-[#FAFA9D] border-2 border-black p-8 md:p-16 shadow-neo flex flex-col items-center text-center relative overflow-hidden">
 
         {/* Badge */}
         <div className="inline-flex items-center gap-2 bg-brand-orange border-2 border-black shadow-neo-sm px-4 py-1 mb-8 transform -rotate-1">
           <Sparkles className="w-3.5 h-3.5 text-white fill-white" />
-          <span className="font-display font-black text-xs uppercase tracking-widest text-white">Conversion Ready</span>
+          <span className="font-display font-black text-xs uppercase tracking-widest text-black">Conversion Ready</span>
         </div>
 
         {/* Headline */}
-        <h2 className="font-display font-black text-4xl md:text-6xl leading-[0.9] mb-8 uppercase tracking-tight">
+        <h2 className="font-display text-transparent bg-clip-text bg-gradient-to-br from-gray-600 to-black text-4xl md:text-6xl leading-[0.9] mb-8 uppercase tracking-tight">
           Stop Writing.<br />
-          Start <span className="text-white text-shadow-neo">Ranking.</span>
+          Start Ranking.
         </h2>
 
         {/* Description */}

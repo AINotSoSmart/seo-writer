@@ -175,7 +175,7 @@ export const ProblemSection: React.FC = () => {
       </div>
 
       {/* Headline */}
-      <h2 className="font-display font-black text-4xl md:text-6xl text-center leading-tight mb-6 uppercase">
+      <h2 className="font-display text-transparent bg-clip-text bg-gradient-to-br from-gray-600 to-black text-4xl md:text-6xl text-center leading-tight mb-6 uppercase">
         One-click AI content is<br />quietly killing your growth.
       </h2>
 

@@ -14,7 +14,7 @@ import {
 // --- VISUAL GRAPHICS COMPONENTS (Defined BEFORE usage to avoid hoisting errors) ---
 
 const VisibilityScanGraphic = () => (
-  <div className="w-full max-w-sm bg-white border-2 border-black shadow-neo rounded-xl overflow-hidden flex flex-col relative min-h-[300px]">
+  <div className="w-full max-w-sm bg-white border-2 border-black shadow-neo overflow-hidden flex flex-col relative min-h-[300px]">
     {/* Header */}
     <div className="h-10 border-b-2 border-black bg-gray-50 flex items-center justify-between px-4">
       <span className="font-mono text-[10px] font-bold text-gray-500 uppercase tracking-wider">Category_Intelligence.json</span>
@@ -367,17 +367,15 @@ export const FeaturesSection: React.FC = () => {
   ];
 
   return (
-    <section className="w-full py-24 px-4 flex flex-col items-center bg-white border-b-2 border-black relative overflow-hidden">
+    <section className="w-full py-24 px-4 flex flex-col items-center relative overflow-hidden">
 
-      {/* Decorative Grid Background */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
 
       {/* Header */}
       <div className="flex flex-col items-center text-center mb-20 md:mb-32 max-w-4xl mx-auto relative z-10">
         <div className="inline-block bg-white border-2 border-black shadow-neo-sm px-4 py-1 mb-6 transform rotate-1 hover:rotate-0 transition-transform">
           <span className="font-display font-black text-xs uppercase tracking-widest">Features</span>
         </div>
-        <h2 className="font-display font-black text-4xl md:text-6xl leading-tight mb-6 uppercase">
+        <h2 className="font-display text-transparent bg-clip-text bg-gradient-to-br from-gray-600 to-black text-4xl md:text-6xl leading-tight mb-6 uppercase">
           How we make you win<br />modern AI search
         </h2>
         <p className="font-sans text-gray-600 text-lg md:text-xl leading-relaxed max-w-2xl">
@@ -386,7 +384,7 @@ export const FeaturesSection: React.FC = () => {
       </div>
 
       {/* Features List - Zig Zag Layout */}
-      <div className="w-full max-w-7xl flex flex-col gap-24 md:gap-32 relative z-10">
+      <div className="w-full max-w-6xl flex flex-col gap-24 md:gap-32 relative z-10">
         {features.map((feature, index) => (
           <FeatureRow
             key={feature.id}
@@ -432,7 +430,7 @@ const FeatureRow: React.FC<FeatureRowProps> = ({ feature, isReversed }) => {
 
       {/* Graphic Side */}
       <div className="flex-1 w-full relative">
-        <div className={`relative w-full aspect-[4/3] md:aspect-square lg:aspect-[4/3] rounded-xl border-2 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex items-center justify-center group`}>
+        <div className={`relative w-full aspect-[4/3] md:aspect-square lg:aspect-[4/3] border-2 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex items-center justify-center group`}>
           {/* Background Pattern */}
           <div className={`absolute inset-0 ${feature.color} opacity-20 bg-dot-pattern`}></div>
 

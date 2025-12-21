@@ -11,7 +11,7 @@ export const HowItWorksSection: React.FC = () => {
         <div className="inline-block bg-[#D6F5F2] border-2 border-black shadow-neo-sm px-4 py-1 mb-6 transform -rotate-1 hover:rotate-0 transition-transform">
           <span className="font-display font-black text-xs uppercase tracking-widest">How it works</span>
         </div>
-        <h2 className="font-display font-black text-4xl md:text-6xl leading-tight mb-6 uppercase">
+        <h2 className="font-display text-transparent bg-clip-text bg-gradient-to-br from-gray-600 to-black text-4xl md:text-6xl leading-tight mb-6 uppercase">
           A focused system built for<br className="hidden md:block" /> modern AI search
         </h2>
         <p className="font-sans text-gray-600 text-lg md:text-xl leading-relaxed max-w-2xl">
@@ -20,7 +20,7 @@ export const HowItWorksSection: React.FC = () => {
       </div>
 
       {/* Steps Grid */}
-      <div className="max-w-[1200px] w-full grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10 mb-20">
+      <div className="max-w-6xl w-full grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10 mb-20">
 
         {/* Step 1 */}
         <StepCard

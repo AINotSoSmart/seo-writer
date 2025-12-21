@@ -306,6 +306,69 @@ async function upsertSubscriptionFromEvent(supabase: ReturnType<typeof createAdm
     return { pricing_plan_id: finalPricingPlanId, planCredits }
 }
 
+/**
+ * Persist service-management fields (cancel_at_period_end, next_billing_date, current_period_end, canceled_at).
+ * Only updates fields that can be confidently derived from the payload; leaves others untouched.
+ */
+async function updateSubscriptionServiceFields(
+    supabase: ReturnType<typeof createAdminClient>,
+    dodo_subscription_id: string,
+    subscriptionObj: any,
+    eventType?: string,
+) {
+    if (!dodo_subscription_id || !subscriptionObj) return;
+
+    // Derive booleans/dates from various shapes
+    const cancelAt =
+        subscriptionObj?.cancel_at_next_billing_date ??
+        subscriptionObj?.cancel_at_period_end ??
+        undefined;
+
+    const nextBillingRaw =
+        subscriptionObj?.next_billing_date ??
+        subscriptionObj?.next_renewal_date ??
+        undefined;
+
+    const currentEndRaw =
+        subscriptionObj?.current_period_end ??
+        subscriptionObj?.current_period_end_at ??
+        undefined;
+
+    const canceledAtRaw =
+        subscriptionObj?.canceled_at ??
+        subscriptionObj?.cancelled_at ??
+        undefined;
+
+    const update: Record<string, any> = {};
+
+    // cancellation event implies cancel_at_period_end is false and canceled_at is now if absent
+    if (eventType && eventType.toLowerCase().includes('cancel')) {
+        update.cancel_at_period_end = false;
+        update.canceled_at = canceledAtRaw
+            ? new Date(canceledAtRaw).toISOString()
+            : new Date().toISOString();
+    } else {
+        if (typeof cancelAt === 'boolean') update.cancel_at_period_end = cancelAt;
+        if (canceledAtRaw) update.canceled_at = new Date(canceledAtRaw).toISOString();
+    }
+
+    if (nextBillingRaw) {
+        const d = new Date(nextBillingRaw);
+        if (!isNaN(d.getTime())) update.next_billing_date = d.toISOString();
+    }
+
+    if (currentEndRaw) {
+        const d = new Date(currentEndRaw);
+        if (!isNaN(d.getTime())) update.current_period_end = d.toISOString();
+    }
+
+    if (Object.keys(update).length === 0) return;
+
+    await supabase
+        .from('dodo_subscriptions')
+        .update(update)
+        .eq('dodo_subscription_id', dodo_subscription_id);
+}
 async function setUserCreditsToPlanCredits(
     supabase: ReturnType<typeof createAdminClient>,
     user_id: string,
@@ -526,6 +589,8 @@ export async function POST(req: NextRequest) {
                 // Non-rollover: reset to plan credits
                 await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits ?? null)
             }
+            // Persist service-management fields for reporting/operations
+            await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
         } else if (eventType === 'payment.succeeded' || eventType === 'subscription.renewed' || eventType === 'invoice.paid') {
             // Credit provisioning on successful renewal/payment
             if (!effective_user_id) {
@@ -553,6 +618,10 @@ export async function POST(req: NextRequest) {
             try {
                 await completeLatestPendingChange(supabase, effective_user_id, null, { completed_by: eventType })
             } catch { }
+            // Persist next billing date if present
+            if (dodo_subscription_id) {
+                await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
+            }
         } else if (eventType === 'subscription.cancelled' || eventType === 'subscription.canceled') {
             // Handle cancellation
             if (!effective_user_id || !dodo_subscription_id) {
@@ -567,6 +636,7 @@ export async function POST(req: NextRequest) {
                 status: 'cancelled',
                 raw: subscriptionObj,
             })
+            await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
         } else if (eventType === 'subscription.plan_changed') {
             // Plan changed mid-cycle: update mapping/status, do not reset credits
             if (effective_user_id && dodo_subscription_id) {
@@ -596,6 +666,7 @@ export async function POST(req: NextRequest) {
                         )
                     } catch { }
                 }
+                await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
             }
         } else if (eventType === 'subscription.updated') {
             // Track status transitions; if cancel_at_period_end included in subscriptionObj, we may update local status
@@ -627,6 +698,7 @@ export async function POST(req: NextRequest) {
                         )
                     } catch { }
                 }
+                await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
             }
         } else {
             // Unknown or unhandled event; accept for now

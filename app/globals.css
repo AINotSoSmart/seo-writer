@@ -182,6 +182,12 @@
   --color-slate-10: var(--slate-10);
   --color-slate-11: var(--slate-11);
   --color-slate-12: var(--slate-12);
+
+  /* Brand Colors (Tailwind v4 - Auto-generates bg-brand-yellow, text-brand-orange, etc.) */
+  --color-brand-yellow: #FCD34D;
+  --color-brand-orange: #FFD8A8;
+  --color-brand-bg: #F9F9FA;
+
   --animate-shine: shine var(--duration) infinite linear;
 
 
@@ -191,6 +197,86 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  /* ... rest of base layer ... */
+
+  /* ============================================
+   NEO-BRUTALIST DESIGN SYSTEM (Global Utilities)
+   ============================================ */
+
+  /* Landing page base styling - Wrapper still used for specific layout/backgrounds */
+  .landing-page {
+    position: relative;
+    background-color: #FDFDFD;
+  }
+
+  /* Dot pattern overlay - STILL SCOPED or Opt-in via .bg-dot-pattern */
+  .landing-page::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+    background-size: 8px 8px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Ensure content is above the dot pattern */
+  .landing-page>* {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Also add bg-dot-pattern utility class */
+  .bg-dot-pattern {
+    background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+    background-size: 8px 8px;
+  }
+
+  /* 
+   GLOBAL UTILITIES 
+   These are now available everywhere.
+   Protected pages (dashboard) simply don't use these classes, so they remain unaffected.
+*/
+
+  /* 1. Typography */
+  .font-display {
+    font-family: var(--font-space-grotesk);
+    font-weight: 700;
+  }
+
+  /* NOTE: We only apply this font to headings INSIDE .landing-page to protect dashboard headings */
+  .landing-page h1,
+  .landing-page h2,
+  .landing-page h3,
+  .landing-page h4,
+  .landing-page h5,
+  .landing-page h6 {
+    font-family: var(--font-space-grotesk);
+    font-weight: 700;
+  }
+
+  /* 2. Neo-brutalist box shadows */
+  .shadow-neo {
+    box-shadow: 5px 5px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .shadow-neo-sm {
+    box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .shadow-neo-hover {
+    box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  .hover\:shadow-neo-hover:hover {
+    box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 1);
+  }
+
+  /* 3. Brand color utilities - REMOVED (Handled by @theme --color-brand-*) */
 
   body {
     @apply bg-background text-foreground;
@@ -987,7 +1073,7 @@ input[type="range"].slider::-moz-range-thumb {
   --brand-yellow: #FCD34D;
   --brand-orange: #FFD8A8;
   --brand-bg: #F9F9FA;
-  
+
   /* Font variables (ensure these are loaded/defined elsewhere or here) */
   --font-space-grotesk: 'Space Grotesk', sans-serif;
 }
