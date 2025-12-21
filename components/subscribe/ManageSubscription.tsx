@@ -10,6 +10,7 @@ import {
 } from '@/lib/dodopayments'
 import type { Plan as BSDKPlan, CurrentPlan as BSDKCurrentPlan } from '@/lib/billingsdk-config'
 import { Button } from '@/components/ui/button'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 
 type SubscriptionStatus = 'pending' | 'active' | 'cancelled' | 'expired'
 
@@ -73,6 +74,12 @@ function daysUntil(dateIso?: string): number {
 
 export default function ManageSubscription({ subscription, plans, userEmail }: ManageSubscriptionProps) {
     const [busy, setBusy] = useState(false)
+    const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
+    const cancelGuardDate = subscription?.current_period_end || subscription?.next_billing_date
+    const cancelDescription =
+        `This will schedule your subscription to cancel at the end of the current billing period.` +
+        (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
+        ` You can restore anytime before that date.`
 
     // Map pricing plans to BillingSDK Plan type
     const billingPlans = useMemo<BSDKPlan[]>(() => {
@@ -216,8 +223,50 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                         onPlanChange: (planId: string) => onPlanChange(planId),
                     }}
                     hideUpdatePlan={true}
+                    hideCancelDialog={true}
                 />
             </div>
+
+            {/* Actions: Cancel/Restore */}
+            <div className="flex gap-2">
+                {subscription.status === 'active' && !subscription.cancel_at_period_end && (
+                    <Button
+                        variant="destructive"
+                        onClick={() => setConfirmCancelOpen(true)}
+                        disabled={busy}
+                    >
+                        Cancel at period end
+                    </Button>
+                )}
+                {subscription.status === 'active' && subscription.cancel_at_period_end && (
+                    <Button
+                        variant="default"
+                        onClick={onRestore}
+                        disabled={busy}
+                    >
+                        Restore subscription
+                    </Button>
+                )}
+            </div>
+
+            <ConfirmationDialog
+                isOpen={confirmCancelOpen}
+                onClose={() => setConfirmCancelOpen(false)}
+                onConfirm={async () => {
+                    try {
+                        await apiCancelSubscription(subscription?.subscription_id)
+                        window.location.reload()
+                    } catch (e) {
+                        console.error('Failed to cancel subscription', e)
+                        alert('Failed to cancel subscription')
+                    }
+                }}
+                title="Confirm cancellation at period end"
+                description={cancelDescription}
+                confirmText="Confirm cancellation"
+                cancelText="Keep subscription"
+                variant="destructive"
+            />
 
             {/* Single action: Update payment method */}
             <div className="mt-4">

@@ -27,6 +27,7 @@ export interface SubscriptionManagementProps {
   cancelSubscription: CancelSubscriptionDialogProps;
   updatePlan: UpdatePlanDialogProps;
   hideUpdatePlan?: boolean;
+  hideCancelDialog?: boolean;
 }
 
 export function SubscriptionManagement({
@@ -35,6 +36,7 @@ export function SubscriptionManagement({
   cancelSubscription,
   updatePlan,
   hideUpdatePlan,
+  hideCancelDialog,
 }: SubscriptionManagementProps) {
   return (
     <div className={cn("w-full text-left", className)}>
@@ -135,10 +137,12 @@ export function SubscriptionManagement({
               />
             )}
 
-            <CancelSubscriptionDialog
-              className="mx-0 shadow-lg transition-all duration-200 hover:shadow-xl"
-              {...cancelSubscription}
-            />
+            {!hideCancelDialog && (
+              <CancelSubscriptionDialog
+                className="mx-0 shadow-lg transition-all duration-200 hover:shadow-xl"
+                {...cancelSubscription}
+              />
+            )}
           </div>
 
           <div className="pt-4 sm:pt-6">
