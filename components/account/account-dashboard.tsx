@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { User as UserIcon, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { cancelSubscription, updatePaymentMethod, restoreSubscription } from '@/lib/dodopayments'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 
 // Removed complex credit transaction service dependency
 
@@ -54,6 +55,13 @@ interface UsageStats {
 }
 
 export function AccountDashboard({ user, payments, currentCredits, totalCreditsPurchased, subscription }: AccountDashboardProps) {
+
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
+  const cancelGuardDate = subscription?.current_period_end || subscription?.next_billing_date
+  const cancelDescription =
+    `This will schedule your subscription to cancel at the end of the current billing period.` +
+    (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
+    ` You can restore anytime before that date.`
 
 
 
@@ -189,16 +197,7 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
                 {subscription.status === 'active' && !subscription.cancel_at_period_end && (
                   <button
                     className=" cursor-pointer px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-500 disabled:opacity-50"
-                    onClick={useCallback(async () => {
-                      try {
-                        await cancelSubscription(subscription?.subscription_id)
-                        // Optimistic UX: reflect cancel-at-period-end immediately
-                        window.location.reload()
-                      } catch (e) {
-                        console.error('Failed to cancel subscription', e)
-                        alert('Failed to cancel subscription')
-                      }
-                    }, [subscription?.subscription_id])}
+                    onClick={() => setConfirmCancelOpen(true)}
                   >
                     Cancel at period end
                   </button>
@@ -226,6 +225,24 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
               No active subscription found.
             </div>
           )}
+          <ConfirmationDialog
+            isOpen={confirmCancelOpen}
+            onClose={() => setConfirmCancelOpen(false)}
+            onConfirm={async () => {
+              try {
+                await cancelSubscription(subscription?.subscription_id)
+                window.location.reload()
+              } catch (e) {
+                console.error('Failed to cancel subscription', e)
+                alert('Failed to cancel subscription')
+              }
+            }}
+            title="Confirm cancellation at period end"
+            description={cancelDescription}
+            confirmText="Confirm cancellation"
+            cancelText="Keep subscription"
+            variant="destructive"
+          />
         </CardContent>
       </Card>
 
