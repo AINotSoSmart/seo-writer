@@ -1,9 +1,7 @@
 'use client'
 
 import React, { useCallback, useMemo, useState } from 'react'
-import { BillingScreen } from '@/components/billingsdk/billing-screen'
 import { SubscriptionManagement } from '@/components/billingsdk/subscription-management'
-import { UpcomingCharges, type ChargeItem } from '@/components/billingsdk/upcoming-charges'
 import {
     cancelSubscription as apiCancelSubscription,
     restoreSubscription as apiRestoreSubscription,
@@ -190,72 +188,12 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
         }
     }, [subscription.subscription_id])
 
-    const charges = useMemo<ChargeItem[]>(() => {
-        const sym = currentPlanDisplay?.currency || '$'
-        const amt = currentPlanDisplay ? `${sym}${currentPlanDisplay.monthlyPrice}` : '—'
-        return [
-            {
-                id: 'recurring-1',
-                description: `${currentPlanDisplay?.title || 'Subscription'} (recurring)`,
-                amount: amt,
-                date: nextBillingDateStr,
-                type: 'recurring',
-            },
-        ]
-    }, [currentPlanDisplay, nextBillingDateStr])
 
-    const planPriceForScreen = currentPlanDisplay
-        ? `${currentPlanDisplay.currency}${currentPlanDisplay.monthlyPrice}/mo`
-        : '—'
 
-    const resetDaysLeft = useMemo(() => {
-        return daysUntil(subscription.current_period_end || subscription.next_billing_date)
-    }, [subscription.current_period_end, subscription.next_billing_date])
 
     return (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-            {/* High-level Billing Overview */}
-            <BillingScreen
-                planName={currentPlanDisplay?.title || subscription.plan_name || 'Plan'}
-                planPrice={planPriceForScreen}
-                renewalDate={nextBillingDateStr}
-                totalBalance="—"
-                username={userEmail || 'Account'}
-                giftedCredits="—"
-                monthlyCredits="—"
-                monthlyCreditsLimit="—"
-                purchasedCredits="—"
-                resetDays={resetDaysLeft}
-                autoRechargeEnabled={false}
-                onViewPlans={() => {
-                    const el = document.getElementById('subscription-management-section')
-                    if (el) el.scrollIntoView({ behavior: 'smooth' })
-                }}
-                onCancelPlan={() => {
-                    const el = document.getElementById('subscription-management-section')
-                    if (el) el.scrollIntoView({ behavior: 'smooth' })
-                }}
-                onBuyCredits={() => console.log('Buy Credits clicked')}
-                onEnableAutoRecharge={() => console.log('Enable Auto-recharge clicked')}
-                className="w-full"
-            />
 
-            {/* Quick Actions */}
-            <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={onUpdatePaymentMethod} disabled={busy}>
-                    Update payment method
-                </Button>
-                {subscription.status === 'active' && !subscription.cancel_at_period_end && (
-                    <Button variant="destructive" onClick={onCancel} disabled={busy}>
-                        Cancel at period end
-                    </Button>
-                )}
-                {subscription.status === 'active' && subscription.cancel_at_period_end && (
-                    <Button variant="default" onClick={onRestore} disabled={busy}>
-                        Restore subscription
-                    </Button>
-                )}
-            </div>
 
             {/* Subscription Management (Plan change + Cancel dialog) */}
             <div id="subscription-management-section">
@@ -280,12 +218,12 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                 />
             </div>
 
-            {/* Upcoming charges */}
-            <UpcomingCharges
-                nextBillingDate={nextBillingDateStr}
-                totalAmount={currentPlanDisplay ? `${currentPlanDisplay.currency}${currentPlanDisplay.monthlyPrice}` : '—'}
-                charges={charges}
-            />
+            {/* Single action: Update payment method */}
+            <div className="mt-4">
+                <Button variant="outline" onClick={onUpdatePaymentMethod} disabled={busy}>
+                    Update payment method
+                </Button>
+            </div>
         </div>
     )
 }
