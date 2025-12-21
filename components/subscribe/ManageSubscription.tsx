@@ -224,30 +224,33 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                     }}
                     hideUpdatePlan={true}
                     hideCancelDialog={true}
-                />
+                >
+                    <>
+                        {subscription.status === 'active' && !subscription.cancel_at_period_end && (
+                            <Button
+                                variant="destructive"
+                                onClick={() => setConfirmCancelOpen(true)}
+                                disabled={busy}
+                            >
+                                Cancel at period end
+                            </Button>
+                        )}
+                        {subscription.status === 'active' && subscription.cancel_at_period_end && (
+                            <Button
+                                variant="default"
+                                onClick={onRestore}
+                                disabled={busy}
+                            >
+                                Restore subscription
+                            </Button>
+                        )}
+                        <Button variant="outline" onClick={onUpdatePaymentMethod} disabled={busy}>
+                            Update payment method
+                        </Button>
+                    </>
+                </SubscriptionManagement>
             </div>
 
-            {/* Actions: Cancel/Restore */}
-            <div className="flex gap-2">
-                {subscription.status === 'active' && !subscription.cancel_at_period_end && (
-                    <Button
-                        variant="destructive"
-                        onClick={() => setConfirmCancelOpen(true)}
-                        disabled={busy}
-                    >
-                        Cancel at period end
-                    </Button>
-                )}
-                {subscription.status === 'active' && subscription.cancel_at_period_end && (
-                    <Button
-                        variant="default"
-                        onClick={onRestore}
-                        disabled={busy}
-                    >
-                        Restore subscription
-                    </Button>
-                )}
-            </div>
 
             <ConfirmationDialog
                 isOpen={confirmCancelOpen}
@@ -268,12 +271,6 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                 variant="destructive"
             />
 
-            {/* Single action: Update payment method */}
-            <div className="mt-4">
-                <Button variant="outline" onClick={onUpdatePaymentMethod} disabled={busy}>
-                    Update payment method
-                </Button>
-            </div>
         </div>
     )
 }
