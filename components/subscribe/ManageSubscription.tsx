@@ -215,6 +215,7 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                         triggerText: 'Change Plan',
                         onPlanChange: (planId: string) => onPlanChange(planId),
                     }}
+                    hideUpdatePlan={true}
                 />
             </div>
 

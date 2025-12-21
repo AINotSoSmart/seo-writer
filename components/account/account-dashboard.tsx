@@ -10,9 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { User as UserIcon, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { cancelSubscription, updatePaymentMethod, restoreSubscription } from '@/lib/dodopayments'
+import Link from 'next/link'
 import { InvoiceHistory, type InvoiceItem } from '@/components/billingsdk/invoice-history'
-import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 
 // Removed complex credit transaction service dependency
 
@@ -58,12 +57,6 @@ interface UsageStats {
 
 export function AccountDashboard({ user, payments, currentCredits, totalCreditsPurchased, subscription }: AccountDashboardProps) {
 
-  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
-  const cancelGuardDate = subscription?.current_period_end || subscription?.next_billing_date
-  const cancelDescription =
-    `This will schedule your subscription to cancel at the end of the current billing period.` +
-    (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
-    ` You can restore anytime before that date.`
 
   const mapStatusToInvoice = (status: string): 'paid' | 'refunded' | 'open' | 'void' => {
     const s = (status || '').toLowerCase()
@@ -190,54 +183,12 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
                 )}
               </div>
               <div className="flex gap-2">
-                <button
-                  className=" cursor-pointer px-3 py-2 text-sm bg-stone-900 text-white rounded hover:bg-stone-800 disabled:opacity-50"
-                  onClick={useCallback(async () => {
-                    try {
-                      const res = await updatePaymentMethod(
-                        subscription?.subscription_id,
-                        `${process.env.NEXT_PUBLIC_APP_URL}/account`
-                      )
-                      if (res?.url) {
-                        window.location.href = res.url
-                      } else if (res?.emailed) {
-                        alert(res?.message || 'We emailed you a secure link to update your payment method.')
-                      } else {
-                        alert('Unable to open payment method portal.')
-                      }
-                    } catch (e) {
-                      console.error('Failed to open payment method portal', e)
-                      alert('Failed to open payment method portal')
-                    }
-                  }, [subscription?.subscription_id])}
+                <Link
+                  href="/subscribe"
+                  className="cursor-pointer px-3 py-2 text-sm bg-stone-900 text-white rounded hover:bg-stone-800"
                 >
-                  Update payment method
-                </button>
-
-                {subscription.status === 'active' && !subscription.cancel_at_period_end && (
-                  <button
-                    className=" cursor-pointer px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-500 disabled:opacity-50"
-                    onClick={() => setConfirmCancelOpen(true)}
-                  >
-                    Cancel at period end
-                  </button>
-                )}
-                {subscription.status === 'active' && subscription.cancel_at_period_end && (
-                  <button
-                    className=" cursor-pointer px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-500 disabled:opacity-50"
-                    onClick={useCallback(async () => {
-                      try {
-                        await restoreSubscription(subscription?.subscription_id)
-                        window.location.reload()
-                      } catch (e) {
-                        console.error('Failed to restore subscription', e)
-                        alert('Failed to restore subscription')
-                      }
-                    }, [subscription?.subscription_id])}
-                  >
-                    Restore subscription
-                  </button>
-                )}
+                  Open billing
+                </Link>
               </div>
             </div>
           ) : (
@@ -245,24 +196,6 @@ export function AccountDashboard({ user, payments, currentCredits, totalCreditsP
               No active subscription found.
             </div>
           )}
-          <ConfirmationDialog
-            isOpen={confirmCancelOpen}
-            onClose={() => setConfirmCancelOpen(false)}
-            onConfirm={async () => {
-              try {
-                await cancelSubscription(subscription?.subscription_id)
-                window.location.reload()
-              } catch (e) {
-                console.error('Failed to cancel subscription', e)
-                alert('Failed to cancel subscription')
-              }
-            }}
-            title="Confirm cancellation at period end"
-            description={cancelDescription}
-            confirmText="Confirm cancellation"
-            cancelText="Keep subscription"
-            variant="destructive"
-          />
         </CardContent>
       </Card>
 

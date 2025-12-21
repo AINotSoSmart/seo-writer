@@ -26,6 +26,7 @@ export interface SubscriptionManagementProps {
   currentPlan: CurrentPlan;
   cancelSubscription: CancelSubscriptionDialogProps;
   updatePlan: UpdatePlanDialogProps;
+  hideUpdatePlan?: boolean;
 }
 
 export function SubscriptionManagement({
@@ -33,6 +34,7 @@ export function SubscriptionManagement({
   currentPlan,
   cancelSubscription,
   updatePlan,
+  hideUpdatePlan,
 }: SubscriptionManagementProps) {
   return (
     <div className={cn("w-full text-left", className)}>
@@ -126,10 +128,12 @@ export function SubscriptionManagement({
           <Separator className="via-border my-4 bg-gradient-to-r from-transparent to-transparent sm:my-6" />
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <UpdatePlanDialog
-              className="mx-0 shadow-lg transition-all duration-200 hover:shadow-xl"
-              {...updatePlan}
-            />
+            {!hideUpdatePlan && (
+              <UpdatePlanDialog
+                className="mx-0 shadow-lg transition-all duration-200 hover:shadow-xl"
+                {...updatePlan}
+              />
+            )}
 
             <CancelSubscriptionDialog
               className="mx-0 shadow-lg transition-all duration-200 hover:shadow-xl"
