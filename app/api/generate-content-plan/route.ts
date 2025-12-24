@@ -8,42 +8,43 @@ import { getCoverageContext, summarizeCoverage, INTENT_ROLES } from "@/lib/cover
 
 export const maxDuration = 300 // 5 minute timeout
 
-// Intent Role Definitions with Weights
+// Intent Role Definitions - 6 Roles × 5 Articles = 30 Total
+// This structure guarantees: zero cannibalization, strategic depth, distinct articles
 const INTENT_ROLE_CONFIG = {
     "Core Answer": {
-        weight: 6,  // ~20% of plan
-        description: "What is X? How does X work? Basic explanatory content",
+        weight: 5,
+        description: "What is X? How does X work? Foundation of topical authority",
         examples: ["What is AI photo restoration", "How AI restores old photos"],
         articleType: "informational" as const
     },
-    "Decision": {
-        weight: 5,  // ~17% 
-        description: "Should I use X? Is X worth it? Trust-building content",
-        examples: ["Is AI restoration worth it in 2025", "AI vs professional restoration"],
-        articleType: "commercial" as const
-    },
-    "Comparison": {
-        weight: 6,  // ~20%
-        description: "X vs Y, Best tools. Commercial intent winners",
-        examples: ["BringBack vs MyHeritage", "Best photo restoration tools 2025"],
-        articleType: "commercial" as const
-    },
     "Problem-Specific": {
-        weight: 7,  // ~23% - Highest for long-tail coverage
-        description: "Fix [specific issue]. Expands coverage without overlap",
-        examples: ["Fix water damaged photos", "Restore blurry old photos"],
+        weight: 5,
+        description: "Fix [specific issue]. Long-tail coverage without overlap",
+        examples: ["Fix water damaged photos", "Restore blurry old photos", "Remove scratches from scanned images"],
         articleType: "howto" as const
     },
-    "Emotional/Use-Case": {
-        weight: 3,  // ~10% - Quality over quantity
-        description: "Human connection, emotional stories. Great for backlinks & AEO",
-        examples: ["Bringing grandparents photos back to life", "Restoring family history"],
+    "Comparison": {
+        weight: 5,
+        description: "X vs Y, Best tools. Commercial intent winners",
+        examples: ["BringBack vs MyHeritage", "Best photo restoration tools 2025", "AI vs professional restoration"],
+        articleType: "commercial" as const
+    },
+    "Decision": {
+        weight: 5,
+        description: "Should I use X? Is X worth it? Trust-building content",
+        examples: ["Is AI restoration worth it in 2025", "When to use AI vs manual restoration"],
+        articleType: "commercial" as const
+    },
+    "Emotional/Story": {
+        weight: 5,
+        description: "Human connection, emotional stories. Backlink magnets & AEO pickup",
+        examples: ["Bringing grandparents photos back to life", "Restoring family history before it's lost"],
         articleType: "informational" as const
     },
     "Authority/Edge": {
-        weight: 3,  // ~10% 
-        description: "Deep expertise, edge cases, why things fail",
-        examples: ["Why some photos can't be restored", "Common restoration mistakes"],
+        weight: 5,
+        description: "Deep expertise, edge cases, why things fail. Expert positioning",
+        examples: ["Why some photos can't be restored", "The science behind AI upscaling", "Common restoration mistakes"],
         articleType: "informational" as const
     }
 } as const
@@ -154,17 +155,19 @@ For each post provide:
 5. cluster: Topic cluster/category for organization
 6. intent_role: One of the 6 intent roles defined above
 
-## DISTRIBUTION REQUIREMENT
-- Core Answer: ~6 articles
-- Decision: ~5 articles
-- Comparison: ~6 articles
-- Problem-Specific: ~7 articles
-- Emotional/Use-Case: ~3 articles
-- Authority/Edge: ~3 articles
+## DISTRIBUTION REQUIREMENT (CRITICAL - EXACTLY 5 PER ROLE)
+- Core Answer: 5 articles (Foundation)
+- Problem-Specific: 5 articles (Long-tail)
+- Comparison: 5 articles (Commercial)
+- Decision: 5 articles (Trust)
+- Emotional/Story: 5 articles (Backlinks)
+- Authority/Edge: 5 articles (Expertise)
 
-Total = 30 articles
+Total = 30 articles (exactly 5 per role)
 
-DO NOT create 30 articles that all answer the same core question with slight rephrasing. Each article must serve a DISTINCT strategic purpose.
+This structure GUARANTEES: zero cannibalization, visible strategic depth, articles that feel different, better AEO pickup, better internal linking logic.
+
+DO NOT create 30 articles that all answer the same core question with slight rephrasing. Each article must serve a DISTINCT strategic purpose within its role.
 `
 
         const response = await client.models.generateContent({

@@ -26,13 +26,13 @@ export const ContentPlanItemSchema = z.object({
     // Strategic planning fields (from LLM analysis)
     reason: z.string().optional(), // Why this topic matters
     impact: z.enum(["Low", "Medium", "High"]).optional(), // Expected traffic impact
-    // Intent Role for strategic content coverage
+    // Intent Role for strategic content coverage (6 roles × 5 articles)
     intent_role: z.enum([
         "Core Answer",
-        "Decision",
-        "Comparison",
         "Problem-Specific",
-        "Emotional/Use-Case",
+        "Comparison",
+        "Decision",
+        "Emotional/Story",
         "Authority/Edge"
     ]).optional(),
 })

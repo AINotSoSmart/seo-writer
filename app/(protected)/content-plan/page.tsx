@@ -78,6 +78,58 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
     published: { label: "Published", icon: CheckCircle2, className: "text-stone-900" },
 }
 
+// Intent Role Configuration for Strategic Content Categories
+const INTENT_ROLE_CONFIG: Record<string, {
+    label: string;
+    icon: any;
+    tagline: string;
+    color: string;
+    bgColor: string;
+}> = {
+    "Core Answer": {
+        label: "Core Answer",
+        icon: BookOpen,
+        tagline: "Foundation of topical authority",
+        color: "text-blue-600",
+        bgColor: "bg-blue-50 border-blue-200"
+    },
+    "Problem-Specific": {
+        label: "Problem-Specific",
+        icon: Target,
+        tagline: "Long-tail coverage without overlap",
+        color: "text-amber-600",
+        bgColor: "bg-amber-50 border-amber-200"
+    },
+    "Comparison": {
+        label: "Comparison",
+        icon: BarChart3,
+        tagline: "Commercial intent winners",
+        color: "text-emerald-600",
+        bgColor: "bg-emerald-50 border-emerald-200"
+    },
+    "Decision": {
+        label: "Decision",
+        icon: Lightbulb,
+        tagline: "Trust-building content",
+        color: "text-purple-600",
+        bgColor: "bg-purple-50 border-purple-200"
+    },
+    "Emotional/Story": {
+        label: "Emotional/Story",
+        icon: Sparkles,
+        tagline: "Backlink magnets & AEO pickup",
+        color: "text-rose-600",
+        bgColor: "bg-rose-50 border-rose-200"
+    },
+    "Authority/Edge": {
+        label: "Authority/Edge",
+        icon: TrendingUp,
+        tagline: "Expert positioning",
+        color: "text-stone-700",
+        bgColor: "bg-stone-100 border-stone-300"
+    }
+}
+
 export default function ContentPlanPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
@@ -759,54 +811,88 @@ export default function ContentPlanPage() {
                         </div>
                     ) : (
                         <>
-                            {/* --- Stats/Filters Bar REMOVED --- */}
+                            {/* --- Strategic Content Grid by Intent Role --- */}
+                            <div className="space-y-8">
+                                {Object.entries(INTENT_ROLE_CONFIG).map(([roleKey, roleConfig]) => {
+                                    // Get items for this role
+                                    const roleItems = filteredPlan.filter(
+                                        item => item.intent_role === roleKey
+                                    )
 
-                            {/* --- Content Grid --- */}
-                            <div className="space-y-10">
+                                    // Skip empty sections when filtering by status
+                                    if (roleItems.length === 0 && filter !== 'all') return null
 
-                                {/* Priority Section */}
-                                {urgentItems.length > 0 && filter === 'all' && (
+                                    const RoleIcon = roleConfig.icon
+                                    const completedCount = roleItems.filter(i => i.status === 'published').length
+
+                                    return (
+                                        <section key={roleKey}>
+                                            {/* Section Header */}
+                                            <div className={cn(
+                                                "flex items-center justify-between gap-3 mb-4 p-3 rounded-lg border",
+                                                roleConfig.bgColor
+                                            )}>
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center bg-white/80 shadow-sm",
+                                                        roleConfig.color
+                                                    )}>
+                                                        <RoleIcon className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <h2 className="text-sm font-bold text-stone-900 tracking-tight">
+                                                            {roleConfig.label}
+                                                        </h2>
+                                                        <p className="text-[11px] text-stone-500">
+                                                            {roleConfig.tagline}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={cn(
+                                                        "text-xs font-semibold px-2 py-0.5 rounded-full",
+                                                        roleConfig.color,
+                                                        "bg-white/80"
+                                                    )}>
+                                                        {completedCount}/{roleItems.length}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Articles Grid */}
+                                            {roleItems.length > 0 ? (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                                                    {roleItems.map((item) => (
+                                                        <PlanCard key={item.id} item={item} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-6 text-stone-400 text-sm border border-dashed border-stone-200 rounded-lg">
+                                                    No {roleConfig.label} articles yet
+                                                </div>
+                                            )}
+                                        </section>
+                                    )
+                                })}
+
+                                {/* Uncategorized Section (for legacy plans) */}
+                                {filteredPlan.filter(item => !item.intent_role).length > 0 && (
                                     <section>
-                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100">
-                                            <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+                                        <div className="flex items-center gap-2 mb-4 pb-2 border-b border-stone-100">
+                                            <Layout className="w-4 h-4 text-stone-400" />
                                             <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
-                                                High Priority Opportunities
+                                                Uncategorized
                                             </h2>
                                         </div>
-                                        {/* Strict 3-column grid for consistency */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {urgentItems.map((item) => (
-                                                <PlanCard key={item.id} item={item} isUrgent={true} />
-                                            ))}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                                            {filteredPlan
+                                                .filter(item => !item.intent_role)
+                                                .map((item) => (
+                                                    <PlanCard key={item.id} item={item} />
+                                                ))}
                                         </div>
                                     </section>
                                 )}
-
-                                {/* Regular Section */}
-                                <section>
-                                    {urgentItems.length > 0 && filter === 'all' && regularItems.length > 0 && (
-                                        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-stone-100 border-dashed pt-4">
-                                            <Layout className="w-4 h-4 text-stone-400" />
-                                            <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
-                                                Scheduled Content
-                                            </h2>
-                                        </div>
-                                    )}
-
-                                    {regularItems.length > 0 ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {regularItems.map((item) => (
-                                                <PlanCard key={item.id} item={item} />
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        filter !== 'all' && (
-                                            <div className="text-center py-12 text-stone-400 italic text-sm">
-                                                No articles found with status "{STATUS_CONFIG[filter].label}"
-                                            </div>
-                                        )
-                                    )}
-                                </section>
                             </div>
                         </>
                     )}
