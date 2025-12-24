@@ -83,6 +83,23 @@ export default function OnboardingPage() {
         const urlStep = searchParams.get('step') // Keep as string for gsc-success handling
         const urlBrandId = searchParams.get('brandId')
 
+        // FRESH ENTRY CHECK: User visited /onboarding with NO query params
+        // This means they want to start a new onboarding flow, not resume
+        if (!urlStep && !urlBrandId) {
+            const savedBrandId = localStorage.getItem(STORAGE_KEYS.BRAND_ID)
+            if (savedBrandId) {
+                // Clear stale data from previous incomplete session
+                clearOnboardingStorage()
+            }
+            // Ensure we start at the brand step with clean state
+            setBrandId(null)
+            setUrl("")
+            setBrandData(null)
+            setStep("brand")
+            setIsHydrated(true)
+            return // Exit early, don't restore anything
+        }
+
         // Handle GSC callback success - this is critical!
         if (urlStep === 'gsc-success') {
             // GSC connected successfully - now show site selection
