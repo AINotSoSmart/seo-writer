@@ -1,6 +1,7 @@
 import { schedules } from "@trigger.dev/sdk/v3"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { generateBlogPost } from "./generate-blog"
+import { hasCredits, deductCredits, addCredits } from "@/lib/credits"
 
 /**
  * The Watchman - Daily Content Automation Scheduler
@@ -76,55 +77,86 @@ export const dailyContentWatchman = schedules.task({
             const itemsToProcess = catchUpMode === "gradual" ? [itemsDue[0]] : itemsDue
             console.log(`📋 Plan ${plan.id}: ${itemsDue.length} due, processing ${itemsToProcess.length} (mode: ${catchUpMode})`)
 
+            // Check credits for the user
+            const { hasCredits: userHasCredits } = await hasCredits(plan.user_id, itemsToProcess.length)
+
+            if (!userHasCredits) {
+                console.warn(`⚠️ User ${plan.user_id} has insufficient credits for plan ${plan.id}. Pausing automation.`)
+
+                // Pause the plan
+                await supabase
+                    .from("content_plans")
+                    .update({ automation_status: "paused" }) // Or 'paused_no_credits' if we add that enum state later
+                    .eq("id", plan.id)
+
+                // TODO: Notify user via email (future feature)
+                continue
+            }
+
             // Trigger the Writer for each item to process
             for (const item of itemsToProcess) {
                 console.log(`🚀 Triggering article: "${item.title}" (${item.main_keyword}) for Plan ${plan.id}`)
 
-                // If article_id doesn't exist, we need to create one first
-                let articleId = item.article_id
-                if (!articleId) {
-                    // Create article record on-the-fly
-                    const { data: newArticle, error: articleError } = await supabase
-                        .from("articles")
-                        .insert({
-                            brand_id: plan.brand_id,
-                            keyword: item.main_keyword,
-                            status: "queued",
-                            user_id: plan.user_id,
-                        })
-                        .select("id")
-                        .single()
-
-                    if (articleError || !newArticle) {
-                        console.error(`❌ Failed to create article for "${item.title}":`, articleError)
-                        continue
-                    }
-                    articleId = newArticle.id
+                // Deduct credit
+                const { success: deductionSuccess } = await deductCredits(plan.user_id, 1, `Automated article: ${item.main_keyword}`)
+                if (!deductionSuccess) {
+                    console.error(`❌ Failed to deduct credit for user ${plan.user_id}. Skipping item.`)
+                    continue
                 }
 
-                // Update plan_data with the article_id and status
-                const updatedPlanData = items.map((i: any) =>
-                    i.id === item.id ? { ...i, article_id: articleId, status: "writing" } : i
-                )
-                await supabase
-                    .from("content_plans")
-                    .update({ plan_data: updatedPlanData })
-                    .eq("id", plan.id)
+                try {
+                    // If article_id doesn't exist, we need to create one first
+                    let articleId = item.article_id
+                    if (!articleId) {
+                        // Create article record on-the-fly
+                        const { data: newArticle, error: articleError } = await supabase
+                            .from("articles")
+                            .insert({
+                                brand_id: plan.brand_id,
+                                keyword: item.main_keyword,
+                                status: "queued",
+                                user_id: plan.user_id,
+                            })
+                            .select("id")
+                            .single()
 
-                // Trigger the blog generation task
-                await generateBlogPost.trigger({
-                    articleId: articleId,
-                    keyword: item.main_keyword,
-                    brandId: plan.brand_id,
-                    title: item.title,
-                    articleType: item.article_type || "informational",
-                    supportingKeywords: item.supporting_keywords || [],
-                    cluster: item.cluster || "",
-                    planId: plan.id,
-                    itemId: item.id,
-                })
+                        if (articleError || !newArticle) {
+                            console.error(`❌ Failed to create article for "${item.title}":`, articleError)
+                            // Refund credit since we failed before triggering task
+                            await addCredits(plan.user_id, 1, "Refund: Failed to create article record")
+                            continue
+                        }
+                        articleId = newArticle.id
+                    }
 
-                triggeredCount++
+                    // Update plan_data with the article_id and status
+                    const updatedPlanData = items.map((i: any) =>
+                        i.id === item.id ? { ...i, article_id: articleId, status: "writing" } : i
+                    )
+                    await supabase
+                        .from("content_plans")
+                        .update({ plan_data: updatedPlanData })
+                        .eq("id", plan.id)
+
+                    // Trigger the blog generation task
+                    await generateBlogPost.trigger({
+                        articleId: articleId,
+                        keyword: item.main_keyword,
+                        brandId: plan.brand_id,
+                        title: item.title,
+                        articleType: item.article_type || "informational",
+                        supportingKeywords: item.supporting_keywords || [],
+                        cluster: item.cluster || "",
+                        planId: plan.id,
+                        itemId: item.id,
+                    })
+
+                    triggeredCount++
+                } catch (e) {
+                    // Catch trigger failures and refund
+                    console.error(`❌ Failed to trigger automation for item ${item.id}`, e)
+                    await addCredits(plan.user_id, 1, "Refund: Automation trigger failed")
+                }
             }
         }
 
