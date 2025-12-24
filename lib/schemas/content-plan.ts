@@ -26,6 +26,15 @@ export const ContentPlanItemSchema = z.object({
     // Strategic planning fields (from LLM analysis)
     reason: z.string().optional(), // Why this topic matters
     impact: z.enum(["Low", "Medium", "High"]).optional(), // Expected traffic impact
+    // Intent Role for strategic content coverage
+    intent_role: z.enum([
+        "Core Answer",
+        "Decision",
+        "Comparison",
+        "Problem-Specific",
+        "Emotional/Use-Case",
+        "Authority/Edge"
+    ]).optional(),
 })
 
 export type ContentPlanItem = z.infer<typeof ContentPlanItemSchema>

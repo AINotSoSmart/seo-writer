@@ -16,6 +16,7 @@ import { getFormalityDefinition, getPerspectiveDefinition } from "@/lib/prompts/
 import { getCurrentDateContext } from "@/lib/utils/date-context"
 import { getRelevantInternalLinks } from "@/lib/internal-linking"
 import { saveTopicMemory } from "@/lib/topic-memory"
+import { analyzeArticleCoverage } from "@/lib/coverage/analyzer"
 
 const cleanAndParse = (text: string) => {
   const clean = text.replace(/```json/g, "").replace(/```/g, "")
@@ -1294,6 +1295,28 @@ export const generateBlogPost = task({
 
       // Pass the admin client to saveTopicMemory for background job context
       await saveTopicMemory(articleId, topicSignal, supabase)
+
+      // --- PHASE 9: ANSWER COVERAGE INDEXING ---
+      // Analyze the completed article and extract "Answer Units" for strategic planning
+      if (userId) {
+        try {
+          // Use cluster from payload or derive from keyword prefix
+          const coverageCluster = cluster || keyword.split(" ").slice(0, 2).join(" ")
+          await analyzeArticleCoverage(
+            articleId,
+            finalMarkdown,
+            keyword,
+            coverageCluster,
+            userId,
+            brandId,
+            supabase
+          )
+          console.log(`✅ Coverage analysis complete for article ${articleId}`)
+        } catch (coverageError) {
+          console.error(`⚠️ Coverage analysis failed (non-blocking):`, coverageError)
+          // Non-blocking - coverage analysis failure should not fail the article
+        }
+      }
 
       return { success: true, articleId }
 
