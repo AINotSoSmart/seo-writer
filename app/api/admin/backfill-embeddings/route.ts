@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
             // Fetch all articles without topic_embedding for this user
             const { data: articles, error } = await supabase
                 .from("articles")
-                .select("id, keyword, title, status")
+                .select("id, keyword, outline, status")
                 .eq("user_id", user.id)
                 .is("topic_embedding", null)
 
@@ -52,8 +52,10 @@ export async function POST(req: NextRequest) {
             for (const article of (articles || [])) {
                 try {
                     // Build topic signal: Title + Keyword (same as generate-blog.ts)
-                    const topicSignal = article.title
-                        ? `${article.title} : ${article.keyword}`
+                    // Title is stored inside outline JSONB, not as a direct column
+                    const outline = article.outline as { title?: string } | null
+                    const topicSignal = outline?.title
+                        ? `${outline.title} : ${article.keyword}`
                         : article.keyword
 
                     if (!topicSignal) {
