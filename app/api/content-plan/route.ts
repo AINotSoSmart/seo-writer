@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
                     if (articleStatus) {
                         // Map article status to plan status
-                        let newStatus: "pending" | "writing" | "published" = item.status
+                        let newStatus: "pending" | "writing" | "published" | "skipped" = item.status
 
                         if (articleStatus === "completed" || articleStatus === "published") {
                             newStatus = "published"
