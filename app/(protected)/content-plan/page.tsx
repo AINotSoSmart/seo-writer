@@ -78,55 +78,46 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
     published: { label: "Published", icon: CheckCircle2, className: "text-stone-900" },
 }
 
-// Intent Role Configuration for Strategic Content Categories
-const INTENT_ROLE_CONFIG: Record<string, {
+// Article Category Configuration for Strategic 12-8-6-4 Distribution
+const ARTICLE_CATEGORY_CONFIG: Record<string, {
     label: string;
     icon: any;
     tagline: string;
     color: string;
     bgColor: string;
+    targetCount: number;
 }> = {
-    "Core Answer": {
-        label: "Core Answer",
+    "Core Answers": {
+        label: "Core Answers",
         icon: BookOpen,
         tagline: "Foundation of topical authority",
         color: "text-blue-600",
-        bgColor: "bg-blue-50 border-blue-200"
+        bgColor: "bg-blue-50 border-blue-200",
+        targetCount: 12
     },
-    "Problem-Specific": {
-        label: "Problem-Specific",
+    "Supporting Articles": {
+        label: "Supporting Articles",
         icon: Target,
-        tagline: "Long-tail coverage without overlap",
+        tagline: "Deepen coverage with how-tos",
         color: "text-amber-600",
-        bgColor: "bg-amber-50 border-amber-200"
+        bgColor: "bg-amber-50 border-amber-200",
+        targetCount: 8
     },
-    "Comparison": {
-        label: "Comparison",
-        icon: BarChart3,
+    "Conversion Pages": {
+        label: "Conversion Pages",
+        icon: TrendingUp,
         tagline: "Commercial intent winners",
         color: "text-emerald-600",
-        bgColor: "bg-emerald-50 border-emerald-200"
+        bgColor: "bg-emerald-50 border-emerald-200",
+        targetCount: 6
     },
-    "Decision": {
-        label: "Decision",
-        icon: Lightbulb,
-        tagline: "Trust-building content",
-        color: "text-purple-600",
-        bgColor: "bg-purple-50 border-purple-200"
-    },
-    "Emotional/Story": {
-        label: "Emotional/Story",
+    "Authority Plays": {
+        label: "Authority Plays",
         icon: Sparkles,
-        tagline: "Backlink magnets & AEO pickup",
-        color: "text-rose-600",
-        bgColor: "bg-rose-50 border-rose-200"
-    },
-    "Authority/Edge": {
-        label: "Authority/Edge",
-        icon: TrendingUp,
-        tagline: "Expert positioning",
-        color: "text-stone-700",
-        bgColor: "bg-stone-100 border-stone-300"
+        tagline: "Expert positioning & edge cases",
+        color: "text-purple-600",
+        bgColor: "bg-purple-50 border-purple-200",
+        targetCount: 4
     }
 }
 
@@ -811,82 +802,82 @@ export default function ContentPlanPage() {
                         </div>
                     ) : (
                         <>
-                            {/* --- Strategic Content Grid by Intent Role --- */}
+                            {/* --- Strategic Content Grid by Article Category --- */}
                             <div className="space-y-8">
-                                {Object.entries(INTENT_ROLE_CONFIG).map(([roleKey, roleConfig]) => {
-                                    // Get items for this role
-                                    const roleItems = filteredPlan.filter(
-                                        item => item.intent_role === roleKey
+                                {Object.entries(ARTICLE_CATEGORY_CONFIG).map(([categoryKey, categoryConfig]) => {
+                                    // Get items for this category
+                                    const categoryItems = filteredPlan.filter(
+                                        item => item.article_category === categoryKey
                                     )
 
                                     // Skip empty sections when filtering by status
-                                    if (roleItems.length === 0 && filter !== 'all') return null
+                                    if (categoryItems.length === 0 && filter !== 'all') return null
 
-                                    const RoleIcon = roleConfig.icon
-                                    const completedCount = roleItems.filter(i => i.status === 'published').length
+                                    const CategoryIcon = categoryConfig.icon
+                                    const completedCount = categoryItems.filter(i => i.status === 'published').length
 
                                     return (
-                                        <section key={roleKey}>
+                                        <section key={categoryKey}>
                                             {/* Section Header */}
                                             <div className={cn(
                                                 "flex items-center justify-between gap-3 mb-4 p-3 rounded-lg border",
-                                                roleConfig.bgColor
+                                                categoryConfig.bgColor
                                             )}>
                                                 <div className="flex items-center gap-3">
                                                     <div className={cn(
                                                         "w-8 h-8 rounded-lg flex items-center justify-center bg-white/80 shadow-sm",
-                                                        roleConfig.color
+                                                        categoryConfig.color
                                                     )}>
-                                                        <RoleIcon className="w-4 h-4" />
+                                                        <CategoryIcon className="w-4 h-4" />
                                                     </div>
                                                     <div>
                                                         <h2 className="text-sm font-bold text-stone-900 tracking-tight">
-                                                            {roleConfig.label}
+                                                            {categoryConfig.label}
                                                         </h2>
                                                         <p className="text-[11px] text-stone-500">
-                                                            {roleConfig.tagline}
+                                                            {categoryConfig.tagline}
                                                         </p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className={cn(
                                                         "text-xs font-semibold px-2 py-0.5 rounded-full",
-                                                        roleConfig.color,
+                                                        categoryConfig.color,
                                                         "bg-white/80"
                                                     )}>
-                                                        {completedCount}/{roleItems.length}
+                                                        {completedCount}/{categoryConfig.targetCount}
                                                     </span>
                                                 </div>
                                             </div>
 
                                             {/* Articles Grid */}
-                                            {roleItems.length > 0 ? (
+                                            {categoryItems.length > 0 ? (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                                                    {roleItems.map((item) => (
+                                                    {categoryItems.map((item) => (
                                                         <PlanCard key={item.id} item={item} />
                                                     ))}
                                                 </div>
                                             ) : (
                                                 <div className="text-center py-6 text-stone-400 text-sm border border-dashed border-stone-200 rounded-lg">
-                                                    No {roleConfig.label} articles yet
+                                                    No {categoryConfig.label} yet
                                                 </div>
                                             )}
                                         </section>
                                     )
                                 })}
 
-                                {/* Uncategorized Section (for legacy plans) */}
-                                {filteredPlan.filter(item => !item.intent_role).length > 0 && (
+                                {/* Uncategorized Section (for legacy plans without article_category) */}
+                                {filteredPlan.filter(item => !item.article_category).length > 0 && (
                                     <section>
                                         <div className="flex items-center gap-2 mb-4 pb-2 border-b border-stone-100">
                                             <Layout className="w-4 h-4 text-stone-400" />
                                             <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
-                                                Uncategorized
+                                                Legacy / Uncategorized
                                             </h2>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                                             {filteredPlan
-                                                .filter(item => !item.intent_role)
+                                                .filter(item => !item.article_category)
                                                 .map((item) => (
                                                     <PlanCard key={item.id} item={item} />
                                                 ))}

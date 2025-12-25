@@ -4,52 +4,43 @@ import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { checkTopicDuplication } from "@/lib/topic-memory"
-import { getCoverageContext, summarizeCoverage, INTENT_ROLES } from "@/lib/coverage/analyzer"
+import { getCoverageContext, summarizeCoverage } from "@/lib/coverage/analyzer"
 
 export const maxDuration = 300 // 5 minute timeout
 
-// Intent Role Definitions - 6 Roles × 5 Articles = 30 Total
-// This structure guarantees: zero cannibalization, strategic depth, distinct articles
-const INTENT_ROLE_CONFIG = {
-    "Core Answer": {
-        weight: 5,
-        description: "What is X? How does X work? Foundation of topical authority",
-        examples: ["What is AI photo restoration", "How AI restores old photos"],
-        articleType: "informational" as const
+// Strategic Article Category Distribution (30 = 12 + 8 + 6 + 4)
+const ARTICLE_CATEGORIES = {
+    "Core Answers": {
+        count: 12,
+        description: "Foundation articles that establish topical authority",
+        intentRoles: ["Core Answer", "Definition"],
+        articleType: "informational" as const,
+        prompt: "Answer fundamental 'What is X?' and 'How does X work?' questions"
     },
-    "Problem-Specific": {
-        weight: 5,
-        description: "Fix [specific issue]. Long-tail coverage without overlap",
-        examples: ["Fix water damaged photos", "Restore blurry old photos", "Remove scratches from scanned images"],
-        articleType: "howto" as const
+    "Supporting Articles": {
+        count: 8,
+        description: "Deepen existing coverage with specific problems and tutorials",
+        intentRoles: ["Problem-Specific", "How-To"],
+        articleType: "howto" as const,
+        prompt: "Create step-by-step guides and solve specific user problems"
     },
-    "Comparison": {
-        weight: 5,
-        description: "X vs Y, Best tools. Commercial intent winners",
-        examples: ["BringBack vs MyHeritage", "Best photo restoration tools 2025", "AI vs professional restoration"],
-        articleType: "commercial" as const
+    "Conversion Pages": {
+        count: 6,
+        description: "Commercial intent - comparisons and buying decisions",
+        intentRoles: ["Comparison", "Decision"],
+        articleType: "commercial" as const,
+        prompt: "Help users choose between options and make buying decisions"
     },
-    "Decision": {
-        weight: 5,
-        description: "Should I use X? Is X worth it? Trust-building content",
-        examples: ["Is AI restoration worth it in 2025", "When to use AI vs manual restoration"],
-        articleType: "commercial" as const
-    },
-    "Emotional/Story": {
-        weight: 5,
-        description: "Human connection, emotional stories. Backlink magnets & AEO pickup",
-        examples: ["Bringing grandparents photos back to life", "Restoring family history before it's lost"],
-        articleType: "informational" as const
-    },
-    "Authority/Edge": {
-        weight: 5,
-        description: "Deep expertise, edge cases, why things fail. Expert positioning",
-        examples: ["Why some photos can't be restored", "The science behind AI upscaling", "Common restoration mistakes"],
-        articleType: "informational" as const
+    "Authority Plays": {
+        count: 4,
+        description: "Edge cases, deep expertise, and emotional stories",
+        intentRoles: ["Authority/Edge", "Emotional/Story"],
+        articleType: "informational" as const,
+        prompt: "Establish expert positioning with edge cases and compelling stories"
     }
 } as const
 
-type IntentRoleKey = keyof typeof INTENT_ROLE_CONFIG
+type ArticleCategoryKey = keyof typeof ARTICLE_CATEGORIES
 
 export async function POST(req: NextRequest) {
     try {
@@ -60,10 +51,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const { seeds, brandData, brandId } = await req.json() as {
+        const { seeds, brandData, brandId, existingContent } = await req.json() as {
             seeds: string[],
             brandData: BrandDetails,
-            brandId?: string
+            brandId?: string,
+            existingContent?: string[] // Parent questions from sitemap
         }
 
         if (!seeds || !Array.isArray(seeds) || seeds.length === 0) {
@@ -81,35 +73,51 @@ export async function POST(req: NextRequest) {
         // --- STEP 1: FETCH EXISTING COVERAGE ---
         console.log("[Content Plan] Fetching existing coverage context...")
         const coverageData = await getCoverageContext(user.id, brandId || null)
-        const { stronglyAnswered, partiallyAnswered, totalCoverage } = summarizeCoverage(coverageData)
+        const { stronglyAnswered, partiallyAnswered } = summarizeCoverage(coverageData)
 
-        console.log(`[Content Plan] Coverage context: ${totalCoverage} total, ${stronglyAnswered.length} strong, ${partiallyAnswered.length} partial`)
+        // Combine database coverage with sitemap-provided existing content
+        const allCoveredQuestions = [
+            ...stronglyAnswered,
+            ...(existingContent || [])
+        ]
 
-        // Build coverage constraint for prompt
-        const coverageConstraint = stronglyAnswered.length > 0
+        console.log(`[Content Plan] Total covered questions: ${allCoveredQuestions.length}`)
+
+        // Build coverage clusters: SATURATED / PARTIAL / EMPTY
+        const coverageSection = allCoveredQuestions.length > 0
             ? `
-## ALREADY COVERED (DO NOT DUPLICATE UNLESS NEW ANGLE)
-The following questions are ALREADY strongly answered by existing content.
-Do NOT create articles that simply re-answer these. Only cover them if you bring:
-- A NEW audience angle (e.g., "for photographers" vs "for families")
-- A NEW comparison angle (e.g., adding a new tool comparison)
-- A NEW intent angle (e.g., from "what is" to "how to")
+## COVERAGE STATE (CRITICAL - READ CAREFULLY)
 
-Already Covered:
-${stronglyAnswered.map(q => `- ${q}`).join('\n')}
+The following parent questions are ALREADY COVERED on the user's site.
+DO NOT create articles that simply re-answer these questions.
+
+**SATURATED (DO NOT TARGET DIRECTLY):**
+${allCoveredQuestions.slice(0, 20).map(q => `- "${q}"`).join('\n')}
+${allCoveredQuestions.length > 20 ? `\n... and ${allCoveredQuestions.length - 20} more covered questions` : ''}
+
+**YOUR STRATEGY:**
+- For saturated topics: Only create EXPANSION articles (edge cases, comparisons, specific problems)
+- For new topics: Create Core Answers FIRST
+- DO NOT duplicate existing coverage
+
+**EXPANSION RULES (For saturated topics):**
+a) Expand the perimeter (new sub-question)
+b) Support internally (linking-focused article)
+c) Attack a comparison (X vs Y)
+d) Address edge cases (why X fails)
 `
             : ""
 
-        // --- STEP 2: BUILD INTENT-ROLE-BASED PROMPT ---
-        const intentRoleSection = Object.entries(INTENT_ROLE_CONFIG).map(([role, config]) => {
-            return `### ${role} (Target: ~${config.weight} articles)
-Description: ${config.description}
-Examples: ${config.examples.join(", ")}
-Article Type: ${config.articleType}`
+        // --- STEP 2: BUILD STRATEGIC PROMPT ---
+        const categorySection = Object.entries(ARTICLE_CATEGORIES).map(([category, config]) => {
+            return `### ${category} (${config.count} articles)
+Purpose: ${config.description}
+Intent Roles: ${config.intentRoles.join(", ")}
+Focus: ${config.prompt}`
         }).join('\n\n')
 
         const prompt = `
-You are a strategic content planner creating a 30-day content plan. [Current Date: ${currentDate}]
+You are an elite SEO strategist building a STRATEGIC content plan. [Current Date: ${currentDate}]
 
 ## BRAND CONTEXT
 - Product: ${brandData.product_name}
@@ -118,56 +126,65 @@ You are a strategic content planner creating a 30-day content plan. [Current Dat
 - Unique Value: ${brandData.uvp.join(", ")}
 - Voice/Style: ${brandData.style_dna || "Professional and informative"}
 
-## SEED KEYWORDS & TOPICS FROM COMPETITOR RESEARCH
+## SEED KEYWORDS & TOPICS
 ${seeds.join("\n")}
-${coverageConstraint}
+
+${coverageSection}
 
 ---
 
-## THE 6 INTENT ROLES (CRITICAL - FOLLOW THE WEIGHTS)
+## THE 4 STRATEGIC CATEGORIES (30 = 12 + 8 + 6 + 4)
 
-You MUST distribute articles across these 6 intent roles. This ensures strategic diversity and avoids content cannibalization.
+This is NOT a random list of keywords. This is a CONTENT ARCHITECTURE.
 
-${intentRoleSection}
+${categorySection}
 
 ---
 
-## MODERN TITLE RULES (FOLLOW THESE)
+## ANTI-CANNIBALIZATION RULES (CRITICAL)
 
-1. **Create curiosity, not clickbait** - Make the brain itch
-2. **Use numbers when possible** - Numbers catch the eye
-3. **Attack a pain point** - If reader feels pain, they click
-4. **Keep title under 60 characters** - Short titles punch harder
-5. **NO robotic words** - BANNED: "ultimate guide", "comprehensive", "definitive"
-6. **Speak like a human** - Conversational, not corporate
+Each article must answer a DIFFERENT parent question. Examples of SAME parent question (BAD):
+- "How to restore old photos" = "What is AI photo restoration" = "Does AI enhancement work"
+These all answer: "Can AI restore my photos?"
+
+Examples of DIFFERENT parent questions (GOOD):
+- "Can AI restore my photos?" (Core Answer)
+- "How much does restoration cost?" (Core Answer - DIFFERENT)
+- "AI vs professional restoration?" (Conversion)
+- "Why some photos can't be restored?" (Authority)
+
+---
+
+## TITLE RULES
+
+1. Create curiosity - make the brain itch
+2. Use numbers when possible
+3. Attack a pain point
+4. Keep under 60 characters
+5. BANNED: "ultimate guide", "comprehensive", "definitive", "everything you need"
+6. Speak like a human
 
 ---
 
 ## YOUR TASK
 
-Generate exactly 30 blog posts distributed across the 6 Intent Roles based on their weights.
+Generate EXACTLY 30 articles distributed as follows:
+- Core Answers: 12 articles (EMPTY parent questions only)
+- Supporting Articles: 8 articles (expand coverage with how-tos)
+- Conversion Pages: 6 articles (comparisons, decisions)
+- Authority Plays: 4 articles (edge cases, stories)
 
-For each post provide:
-1. title: A compelling blog post title
-2. main_keyword: The primary target keyword (2-4 words)
-3. supporting_keywords: 2-3 highly related keywords (array)
-4. article_type: One of "informational", "commercial", or "howto"
-5. cluster: Topic cluster/category for organization
-6. intent_role: One of the 6 intent roles defined above
+For each article provide:
+1. title: Compelling blog post title
+2. main_keyword: Primary target keyword (2-4 words)
+3. supporting_keywords: 2-3 related keywords (array)
+4. article_type: "informational" | "commercial" | "howto"
+5. cluster: Topic cluster for organization
+6. intent_role: The specific intent ("Core Answer", "Problem-Specific", "Comparison", "Decision", "Emotional/Story", "Authority/Edge")
+7. article_category: One of "Core Answers", "Supporting Articles", "Conversion Pages", "Authority Plays"
+8. parent_question: The ONE fundamental user question this article answers
 
-## DISTRIBUTION REQUIREMENT (CRITICAL - EXACTLY 5 PER ROLE)
-- Core Answer: 5 articles (Foundation)
-- Problem-Specific: 5 articles (Long-tail)
-- Comparison: 5 articles (Commercial)
-- Decision: 5 articles (Trust)
-- Emotional/Story: 5 articles (Backlinks)
-- Authority/Edge: 5 articles (Expertise)
-
-Total = 30 articles (exactly 5 per role)
-
-This structure GUARANTEES: zero cannibalization, visible strategic depth, articles that feel different, better AEO pickup, better internal linking logic.
-
-DO NOT create 30 articles that all answer the same core question with slight rephrasing. Each article must serve a DISTINCT strategic purpose within its role.
+## CRITICAL: Each article's parent_question must be UNIQUE across the plan.
 `
 
         const response = await client.models.generateContent({
@@ -191,9 +208,11 @@ DO NOT create 30 articles that all answer the same core question with slight rep
                                     },
                                     article_type: { type: "STRING" },
                                     cluster: { type: "STRING" },
-                                    intent_role: { type: "STRING" }
+                                    intent_role: { type: "STRING" },
+                                    article_category: { type: "STRING" },
+                                    parent_question: { type: "STRING" }
                                 },
-                                required: ["title", "main_keyword", "supporting_keywords", "article_type", "cluster", "intent_role"]
+                                required: ["title", "main_keyword", "supporting_keywords", "article_type", "cluster", "intent_role", "article_category", "parent_question"]
                             }
                         }
                     },
@@ -209,19 +228,36 @@ DO NOT create 30 articles that all answer the same core question with slight rep
         const validPosts: any[] = []
         const posts = result.posts || []
 
-        // Track intent role distribution
-        const roleDistribution: Record<string, number> = {}
+        // Track distribution
+        const categoryDistribution: Record<string, number> = {
+            "Core Answers": 0,
+            "Supporting Articles": 0,
+            "Conversion Pages": 0,
+            "Authority Plays": 0
+        }
+        const seenParentQuestions = new Set<string>()
 
         for (const post of posts) {
-            // Check duplication using Title + Keyword for stronger semantic match
+            // Skip if parent question already seen in this plan
+            const normalizedPQ = (post.parent_question || "").toLowerCase().trim()
+            if (seenParentQuestions.has(normalizedPQ)) {
+                console.log(`[Content Plan] Skipped duplicate parent question: ${post.parent_question}`)
+                continue
+            }
+
+            // Check duplication against existing articles
             const topicSignal = `${post.title || ""} : ${post.main_keyword || ""}`
-            const { isDuplicate } = await checkTopicDuplication(topicSignal, user.id)
+            const { isDuplicate } = await checkTopicDuplication(topicSignal, user.id, brandId)
 
             if (!isDuplicate) {
                 validPosts.push(post)
+                seenParentQuestions.add(normalizedPQ)
+
                 // Track distribution
-                const role = post.intent_role || "Unknown"
-                roleDistribution[role] = (roleDistribution[role] || 0) + 1
+                const category = post.article_category || "Core Answers"
+                if (category in categoryDistribution) {
+                    categoryDistribution[category]++
+                }
             } else {
                 console.log(`[Content Plan] Skipped duplicate topic: ${post.title}`)
             }
@@ -229,9 +265,24 @@ DO NOT create 30 articles that all answer the same core question with slight rep
             if (validPosts.length >= 30) break
         }
 
-        console.log(`[Content Plan] Intent Role Distribution:`, roleDistribution)
+        // Ensure minimum 30 posts - fallback if dedup too aggressive
+        if (validPosts.length < 20 && posts.length >= 30) {
+            console.warn("[Content Plan] Deduplication too aggressive, using additional posts")
+            for (const post of posts) {
+                if (validPosts.length >= 30) break
+                if (!validPosts.includes(post)) {
+                    validPosts.push(post)
+                    const category = post.article_category || "Core Answers"
+                    if (category in categoryDistribution) {
+                        categoryDistribution[category]++
+                    }
+                }
+            }
+        }
 
-        // Add IDs and dates to each post
+        console.log(`[Content Plan] Category Distribution:`, categoryDistribution)
+
+        // Add IDs, dates, and categories to each post
         const planItems: ContentPlanItem[] = validPosts.map((post: any, index: number) => {
             const scheduledDate = new Date(today)
             scheduledDate.setDate(today.getDate() + index)
@@ -239,6 +290,12 @@ DO NOT create 30 articles that all answer the same core question with slight rep
             // Validate article_type
             const validTypes = ["informational", "commercial", "howto"]
             const articleType = validTypes.includes(post.article_type) ? post.article_type : "informational"
+
+            // Validate article_category
+            const validCategories = ["Core Answers", "Supporting Articles", "Conversion Pages", "Authority Plays"]
+            const articleCategory = validCategories.includes(post.article_category)
+                ? post.article_category
+                : "Core Answers"
 
             return {
                 id: `plan-${Date.now()}-${index}`,
@@ -249,11 +306,12 @@ DO NOT create 30 articles that all answer the same core question with slight rep
                 cluster: post.cluster || "General",
                 scheduled_date: scheduledDate.toISOString().split("T")[0],
                 status: "pending" as const,
-                intent_role: post.intent_role || "Core Answer"
+                intent_role: post.intent_role || "Core Answer",
+                article_category: articleCategory as "Core Answers" | "Supporting Articles" | "Conversion Pages" | "Authority Plays"
             }
         })
 
-        return NextResponse.json({ plan: planItems, roleDistribution })
+        return NextResponse.json({ plan: planItems, categoryDistribution })
     } catch (error: any) {
         console.error("Content plan generation error:", error)
         return NextResponse.json(

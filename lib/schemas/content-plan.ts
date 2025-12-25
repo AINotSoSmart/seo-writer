@@ -35,6 +35,13 @@ export const ContentPlanItemSchema = z.object({
         "Emotional/Story",
         "Authority/Edge"
     ]).optional(),
+    // Article Category for 12-8-6-4 strategic distribution
+    article_category: z.enum([
+        "Core Answers",        // 12 articles - establish authority on parent questions
+        "Supporting Articles", // 8 articles - deepen existing coverage
+        "Conversion Pages",    // 6 articles - comparisons, decisions
+        "Authority Plays"      // 4 articles - edge cases, technical deep-dives
+    ]).optional(),
 })
 
 export type ContentPlanItem = z.infer<typeof ContentPlanItemSchema>
