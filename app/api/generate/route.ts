@@ -30,13 +30,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Store articleType along with other article data
+    // 1. Verify credits BEFORE creating article to prevent zombie records
+    const { hasCredits: userHasCredits } = await hasCredits(userId, 1)
+    if (!userHasCredits) {
+      return NextResponse.json({ error: "Insufficient credits" }, { status: 402 })
+    }
+
+    // 2. Deduct 1 credit
+    const { success: deductionSuccess, error: deductionError } = await deductCredits(userId, 1, `Article generation: ${keyword}`)
+    if (!deductionSuccess) {
+      console.error(`Failed to deduct credits for user ${userId}:`, deductionError)
+      return NextResponse.json({ error: "Failed to process credits" }, { status: 500 })
+    }
+
+    // 3. Create article record
     const { data: article, error } = await supabase
       .from("articles")
       .insert({
         user_id: userId,
         keyword,
-        brand_id: brandId, // Now using brand_id instead of voice_id
+        brand_id: brandId,
         status: "queued",
         article_type: articleType
       })
@@ -44,24 +57,12 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error || !article) {
-      return NextResponse.json({ error: "Failed to create article" }, { status: 500 })
+      // Refund if article creation fails
+      await addCredits(userId, 1, "Refund: Article creation failed")
+      return NextResponse.json({ error: "Failed to create article record" }, { status: 500 })
     }
 
-    // Verify and deduct credits
-    const { hasCredits: userHasCredits } = await hasCredits(userId, 1)
-
-    if (!userHasCredits) {
-      return NextResponse.json({ error: "Insufficient credits" }, { status: 402 })
-    }
-
-    // Deduct 1 credit for article generation
-    const { success: deductionSuccess, error: deductionError } = await deductCredits(userId, 1, `Article generation: ${keyword}`)
-
-    if (!deductionSuccess) {
-      console.error(`Failed to deduct credits for user ${userId}:`, deductionError)
-      return NextResponse.json({ error: "Failed to process credits" }, { status: 500 })
-    }
-
+    // 4. Trigger generation task
     try {
       const handle = await tasks.trigger("generate-blog-post", {
         articleId: article.id,
@@ -76,9 +77,9 @@ export async function POST(req: NextRequest) {
       })
       return NextResponse.json({ jobId: handle.id, articleId: article.id })
     } catch (err: unknown) {
-      // Refund credits if triggering fails
+      // Refund if trigger fails
       console.error("Trigger failed, refunding credits...", err)
-      await addCredits(userId, 1, "Refund: Article generation failed to start")
+      await addCredits(userId, 1, "Refund: Task trigger failed")
 
       const msg = err instanceof Error ? err.message : String(err)
       await supabase

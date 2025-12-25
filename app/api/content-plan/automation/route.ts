@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import { ContentPlanItem } from "@/lib/schemas/content-plan"
+import { creditService } from "@/lib/credits"
 
 /**
  * POST /api/content-plan/automation
@@ -14,6 +15,14 @@ export async function POST(request: NextRequest) {
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+
+        // 1. Strict Credit Gate: Must have at least 1 credit to ACTIVATE automation
+        const { hasCredits } = await creditService.hasCredits(user.id, 1)
+        if (!hasCredits) {
+            return NextResponse.json({
+                error: "Insufficient credits. Please top up to activate automation."
+            }, { status: 402 }) // 402 Payment Required
         }
 
         const body = await request.json().catch(() => ({}))

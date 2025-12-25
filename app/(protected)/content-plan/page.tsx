@@ -10,19 +10,14 @@ import {
     TrendingUp,
     Zap,
     Target,
+    Lock,
     PenTool,
     Edit2,
     CheckCircle2,
-    Clock,
     Loader2,
-    X,
-    Save,
     FileText,
     BookOpen,
-    Code,
     Layout,
-    MoreHorizontal,
-    ArrowRight,
     BarChart3,
     MousePointerClick,
     Search,
@@ -39,6 +34,7 @@ import { GlobalCard } from "@/components/ui/global-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AutomationModal } from "@/components/automation-modal"
 import { cn } from "@/lib/utils"
+import { useCredits } from "@/hooks/useCredits"
 
 // --- Minimal Design System Configuration ---
 
@@ -132,6 +128,9 @@ export default function ContentPlanPage() {
     const [automationLoading, setAutomationLoading] = useState(false)
     const [showAutomationModal, setShowAutomationModal] = useState(false)
     const [missedCount, setMissedCount] = useState(0)
+
+    // Credit gating
+    const { balance: creditBalance, hasCredits } = useCredits()
 
     useEffect(() => {
         fetchPlan()
@@ -643,13 +642,30 @@ export default function ContentPlanPage() {
                                     Published
                                 </span>
                             ) : (
-                                <Button
-                                    onClick={() => handleWriteArticle(item)}
-                                    size="sm"
-                                    className="h-8 text-xs font-semibold bg-stone-900 text-white hover:bg-stone-800 shadow-sm rounded-lg"
-                                >
-                                    Write Article
-                                </Button>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="inline-block">
+                                            <Button
+                                                onClick={() => handleWriteArticle(item)}
+                                                size="sm"
+                                                disabled={!hasCredits}
+                                                className={cn(
+                                                    "h-8 text-xs font-semibold shadow-sm rounded-lg",
+                                                    !hasCredits
+                                                        ? "bg-stone-100 text-stone-400 cursor-not-allowed hover:bg-stone-100"
+                                                        : "bg-stone-900 text-white hover:bg-stone-800"
+                                                )}
+                                            >
+                                                Write Article
+                                            </Button>
+                                        </span>
+                                    </TooltipTrigger>
+                                    {!hasCredits && (
+                                        <TooltipContent>
+                                            <p>Passes required. Please top up.</p>
+                                        </TooltipContent>
+                                    )}
+                                </Tooltip>
                             )}
                         </div>
                     </div>
@@ -695,7 +711,7 @@ export default function ContentPlanPage() {
                         {plan && (
                             <Button
                                 onClick={handleToggleAutomation}
-                                disabled={automationLoading}
+                                disabled={automationLoading || (!hasCredits && plan.automation_status !== "active")}
                                 size="sm"
                                 className={cn(
                                     "h-9 px-4 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 shadow-sm",
@@ -722,6 +738,14 @@ export default function ContentPlanPage() {
                                     </>
                                 )}
                             </Button>
+                        )}
+
+                        {!hasCredits && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 text-[10px] font-medium rounded-lg border border-red-100">
+                                <Lock className="w-3 h-3" />
+                                <span>0 Passes</span>
+                                <Link href="/pricing" className="underline hover:no-underline">Top up</Link>
+                            </div>
                         )}
 
                         {plan && (

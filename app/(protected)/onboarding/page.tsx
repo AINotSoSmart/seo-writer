@@ -311,10 +311,36 @@ export default function OnboardingPage() {
         setGeneratingPlan(true)
         setError("")
         try {
+            // Step 1: Fetch sitemap to identify existing content
+            let existingContent: string[] = []
+            if (url) {
+                try {
+                    const baseUrl = url.replace(/\/$/, '')
+                    const sitemapUrl = `${baseUrl}/sitemap.xml`
+                    console.log(`[Onboarding] Fetching sitemap from: ${sitemapUrl}`)
+
+                    // Use a simple approach - extract slugs from sitemap URLs
+                    const sitemapRes = await fetch(`/api/content-plan/sync-links`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ sitemapUrl, brandId, contextOnly: true })
+                    })
+
+                    if (sitemapRes.ok) {
+                        const sitemapData = await sitemapRes.json()
+                        existingContent = sitemapData.titles || []
+                        console.log(`[Onboarding] Found ${existingContent.length} existing articles`)
+                    }
+                } catch (e) {
+                    console.warn("[Onboarding] Sitemap fetch failed, continuing without:", e)
+                }
+            }
+
+            // Step 2: Generate content plan with existing content context
             const res = await fetch("/api/generate-content-plan", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ seeds, brandData }),
+                body: JSON.stringify({ seeds, brandData, brandId, existingContent }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || "Failed to generate plan")
