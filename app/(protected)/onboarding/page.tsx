@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "motion/react"
 import { Loader2, ChevronUp, ArrowRight, Globe, BadgeCheck, Calendar, TrendingUp, ExternalLink, Shield, CheckCircle2, Users, Sparkles, Zap, Target, Lock, Ban, Trash2 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { saveBrandAction } from "@/actions/brand"
-import { canAccessOnboarding, getExistingBrandForResume } from "@/actions/onboarding"
+import { canAccessOnboarding } from "@/actions/onboarding"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { ContentPlanItem, CompetitorData } from "@/lib/schemas/content-plan"
 import { Input } from "@/components/ui/input"
@@ -43,8 +43,7 @@ export default function OnboardingPage() {
     const [isCheckingAccess, setIsCheckingAccess] = useState(true)
     const [step, setStep] = useState<Step>("brand")
 
-    // Gate check: redirect if user already has a brand AND plan
-    // Also check for existing brand to resume onboarding
+    // Gate check: redirect if user already has a brand
     useEffect(() => {
         async function checkOnboardingAccess() {
             const { allowed, redirectTo } = await canAccessOnboarding()
@@ -52,19 +51,6 @@ export default function OnboardingPage() {
                 router.replace(redirectTo)
                 return
             }
-
-            // If allowed, check if user has existing brand to resume from
-            const { hasBrand, brandId: existingBrandId, brandUrl, brandData: existingBrandData } = await getExistingBrandForResume()
-
-            if (hasBrand && existingBrandId && existingBrandData) {
-                // User has brand but no plan - resume from competitors step
-                console.log("[Onboarding] Resuming with existing brand:", existingBrandId)
-                setBrandId(existingBrandId)
-                setUrl(brandUrl || "")
-                setBrandData(existingBrandData)
-                setStep("competitors")
-            }
-
             setIsCheckingAccess(false)
         }
         checkOnboardingAccess()
