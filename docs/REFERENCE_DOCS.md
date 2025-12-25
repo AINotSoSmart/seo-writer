@@ -446,6 +446,82 @@ Connects your Google Search Console data to enhance content planning with real s
 
 ---
 
+## 10. The Complete Content Pipeline (Detailed)
+
+This section details exactly what happens from the moment a user enters a Brand URL to the final polish of the 30th article.
+
+### Phase 1: Brand Analysis (The Foundation)
+*   **File:** `app/api/analyze-brand/route.ts`
+*   **Action:** The user enters a URL. We initiate a deep crawl using Tavily.
+*   **The Crawl:** `tvly.crawl(url, { limit: 10, extractDepth: "advanced" })`
+    *   This fetches the **Full Content** of up to 10 key pages (Homepage, About, Features, Pricing, Blog, etc.).
+*   **The Processor:** We feed all ~50,000 characters of this context into Gemini.
+*   **Output:** A massive JSON object containing:
+    *   **Brand DNA:** Mission, Audience, Enemies, UVPs.
+    *   **Style DNA:** A forensic analysis of their writing voice (tone, perspective, sentence structure).
+*   **Result:** This "DNA" is saved to the database and injected into *every single future prompt* to ensure consistency.
+
+### Phase 2: Competitor Discovery (The Seeds)
+*   **File:** `app/api/analyze-competitors/route.ts`
+*   **Action:** We ask the AI: "Who competes with this brand?" and generate search queries (e.g., "best AI writing tools").
+*   **The Search:** `tvly.search(query, { maxResults: 5, includeRawContent: true })`
+    *   We fetch the top 5 ranking pages for that category (not necessarily direct competitors, but *content* competitors).
+*   **The Extraction:** We feed these 5 full pages into Gemini.
+*   **The Prompt:** "Extract actionable topics and keywords... what are they writing about?"
+*   **Output:** A list of "Seed Keywords" (e.g., "How to write a blog post," "SEO best practices").
+*   **Result:** These seeds act as the raw material for the content plan. They are *topics*, not yet fully formed articles.
+
+### Phase 3: The Strategist (Content Plan)
+*   **File:** `lib/plans/generator.ts` (The Elite SEO Strategist Agent)
+*   **Action:** We take the "Seeds" from Phase 2 and the "Brand DNA" from Phase 1.
+*   **The Logic:** The Strategist Agent builds a 30-day calendar using a specific mix:
+    *   **Core Answers (40%):** Direct answers to customer questions.
+    *   **Authority Plays (20%):** Deep-dive thought leadership.
+    *   **Conversion Pages (20%):** "Best X for Y" commercial intent.
+    *   **Traffic Magnets (20%):** High-volume, broader appeal topics.
+*   **Output:** 30 Distinct Article Plans, each with a Title, Main Keyword, and Intent.
+
+### Phase 4: The Architect (Outlining)
+*   **File:** `trigger/generate-blog.ts` (Phase 2 & 3 of the Job)
+*   **Trigger:** When a user clicks "Write Article" (or auto-refill triggers), this job starts.
+*   **Step A: Deep Research (The Learning)**
+    *   We search formatting: `tvly.search(keyword)` to see current top results.
+    *   We scrape the top results to understand what's already out there.
+*   **Step B: The Critic (The Gap Analysis)**
+    *   *This is where we beat the competition.*
+    *   We ask a "Critic Agent" to compare the competitor content vs. what *could* be.
+    *   **The Prompt:** "What is missing? Where are the gaps? What are they failing to answer?"
+    *   **Output:** 3-5 specific "Missing Links" (e.g., "They lack real pricing examples," "No video tutorials").
+*   **Step C: The Outline**
+    *   The Architect Agent builds an outline (H2s -> H3s -> H4s) that covers the basics *PLUS* fills the gaps identified by The Critic.
+
+### Phase 5: The Writer (Drafting)
+*   **File:** `trigger/generate-blog.ts` (Phase 4 of the Job)
+*   **Action:** We write the article section-by-section (chunk-by-chunk).
+*   **The Brain:** We inject the **Brand DNA** and **Style DNA** into the writer prompt.
+    *   "Write this section in the voice of [Brand Name]. Use [Adjective] tone. Avoid these words: [Banned Words]."
+*   **Result:** A raw draft that is factually dense (thanks to Research) and structured (thanks to the Architect), but might be a bit "dry" or robotic.
+
+### Phase 6: The Copyeditor (Polishing)
+*   **File:** `trigger/generate-blog.ts` (Phase 5 of the Job)
+*   **Action:** The "Ruthless Direct-Response Copyeditor" takes the raw draft.
+*   **The Rules:** It applies strict "Authentic Writing Rules":
+    *   *Destroy strict "Intro/Body/Conclusion" structures.*
+    *   *Vary sentence length (Burstiness).*
+    *   *Remove "glue words" and fluff.*
+    *   *Insert internal links.*
+*   **Output:** The final, polished HTML that feels like a human wrote it.
+
+### Phase 7: The Finisher (Packaging)
+*   **File:** `trigger/generate-blog.ts` (Phase 6 & 7 of the Job)
+*   **Action:** Preparing for publication.
+    *   **Images:** Generates a relevant featured image using standard Flux/Stable Diffusion prompts tailored to the brand style.
+    *   **Meta:** Generates a click-worthy Meta Title and Description.
+    *   **Slug:** Creates a clean URL slug (e.g., `/my-article-title`).
+*   **Result:** A "Completed" article row in the database, ready to be pushed to WordPress/Webflow/Shopify with one click.
+
+---
+
 ## Database Tables Reference
 
 | Table | Primary Purpose |
