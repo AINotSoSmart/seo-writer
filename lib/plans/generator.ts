@@ -308,7 +308,111 @@ For each article provide:
         }
     }
 
-    console.log(`[Content Plan] Category Distribution:`, categoryDistribution)
+    // --- CATEGORY-AWARE TOP-UP LOOP ---
+    // If we have fewer than 30 articles, make a second call with specific category requirements
+    if (validPosts.length < 30 && validPosts.length >= 15) {
+        const targetDistribution = {
+            "Core Answers": 12,
+            "Supporting Articles": 8,
+            "Conversion Pages": 6,
+            "Authority Plays": 4
+        }
+
+        const neededByCategory = {
+            "Core Answers": Math.max(0, targetDistribution["Core Answers"] - categoryDistribution["Core Answers"]),
+            "Supporting Articles": Math.max(0, targetDistribution["Supporting Articles"] - categoryDistribution["Supporting Articles"]),
+            "Conversion Pages": Math.max(0, targetDistribution["Conversion Pages"] - categoryDistribution["Conversion Pages"]),
+            "Authority Plays": Math.max(0, targetDistribution["Authority Plays"] - categoryDistribution["Authority Plays"])
+        }
+
+        const totalNeeded = 30 - validPosts.length
+
+        console.log(`[Content Plan] Only ${validPosts.length} articles generated, requesting ${totalNeeded} more...`)
+        console.log(`[Content Plan] Needed by category:`, neededByCategory)
+
+        const existingTitles = validPosts.map(p => p.title).join('\n')
+
+        const topUpPrompt = `
+You must generate EXACTLY ${totalNeeded} more articles to complete a 30-day content plan.
+
+## CATEGORY REQUIREMENTS (MANDATORY)
+Generate articles in these specific categories:
+${neededByCategory["Core Answers"] > 0 ? `- Core Answers: ${neededByCategory["Core Answers"]} more needed` : ''}
+${neededByCategory["Supporting Articles"] > 0 ? `- Supporting Articles: ${neededByCategory["Supporting Articles"]} more needed` : ''}
+${neededByCategory["Conversion Pages"] > 0 ? `- Conversion Pages: ${neededByCategory["Conversion Pages"]} more needed` : ''}
+${neededByCategory["Authority Plays"] > 0 ? `- Authority Plays: ${neededByCategory["Authority Plays"]} more needed` : ''}
+
+## BRAND CONTEXT
+- Product: ${brandData.product_name}
+- Features: ${brandData.core_features?.join(", ") || "Not specified"}
+- Audience: ${brandData.audience.primary}
+
+## EXISTING ARTICLES (DO NOT DUPLICATE)
+${existingTitles}
+
+## YOUR TASK
+Generate EXACTLY ${totalNeeded} unique articles following the category requirements above.
+Each article needs: title, main_keyword, supporting_keywords, article_type, cluster, intent_role, article_category, parent_question
+`
+
+        try {
+            const topUpResponse = await client.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: [{ role: "user", parts: [{ text: topUpPrompt }] }],
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            posts: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        title: { type: "STRING" },
+                                        main_keyword: { type: "STRING" },
+                                        supporting_keywords: { type: "ARRAY", items: { type: "STRING" } },
+                                        article_type: { type: "STRING" },
+                                        cluster: { type: "STRING" },
+                                        intent_role: { type: "STRING" },
+                                        article_category: { type: "STRING" },
+                                        parent_question: { type: "STRING" }
+                                    },
+                                    required: ["title", "main_keyword", "article_type", "article_category"]
+                                }
+                            }
+                        },
+                        required: ["posts"]
+                    }
+                }
+            })
+
+            const topUpText = topUpResponse.text || "{}"
+            const topUpResult = JSON.parse(topUpText)
+            const additionalPosts = topUpResult.posts || []
+
+            console.log(`[Content Plan] Top-up generated ${additionalPosts.length} additional articles`)
+
+            for (const post of additionalPosts) {
+                if (validPosts.length >= 30) break
+                // Skip duplicates
+                const isDupe = validPosts.some(p => p.title === post.title || p.main_keyword === post.main_keyword)
+                if (!isDupe) {
+                    validPosts.push(post)
+                    const category = post.article_category || "Core Answers"
+                    if (category in categoryDistribution) {
+                        categoryDistribution[category]++
+                    }
+                }
+            }
+
+            console.log(`[Content Plan] After top-up: ${validPosts.length} total articles`)
+        } catch (topUpError) {
+            console.error("[Content Plan] Top-up failed:", topUpError)
+        }
+    }
+
+    console.log(`[Content Plan] Final Category Distribution:`, categoryDistribution)
 
     // Add IDs, dates, and categories to each post
     const planItems: ContentPlanItem[] = validPosts.map((post: any, index: number) => {

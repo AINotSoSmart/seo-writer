@@ -326,15 +326,26 @@ export default function OnboardingPage() {
         setGeneratingPlan(true)
         setError("")
         try {
-            // Step 1: Fetch sitemap to identify existing content
+            // Step 1: Sync sitemap to answer_coverage for deduplication
+            // This persists the existing content to database so future plans know what's already written
             let existingContent: string[] = []
-            if (url) {
+            if (url && brandId) {
                 try {
+                    console.log(`[Onboarding] Syncing sitemap to answer_coverage...`)
+
+                    // Import dynamically to avoid client/server boundary issues
+                    const { syncSitemapToCoverage } = await import("@/actions/sitemap")
+                    const syncResult = await syncSitemapToCoverage(url, brandId)
+
+                    if (syncResult.success) {
+                        console.log(`[Onboarding] Synced ${syncResult.count} entries to answer_coverage`)
+                    } else {
+                        console.warn(`[Onboarding] Sitemap sync failed: ${syncResult.error}`)
+                    }
+
+                    // Also fetch titles for immediate use in plan generation
                     const baseUrl = url.replace(/\/$/, '')
                     const sitemapUrl = `${baseUrl}/sitemap.xml`
-                    console.log(`[Onboarding] Fetching sitemap from: ${sitemapUrl}`)
-
-                    // Use a simple approach - extract slugs from sitemap URLs
                     const sitemapRes = await fetch(`/api/content-plan/sync-links`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -347,7 +358,7 @@ export default function OnboardingPage() {
                         console.log(`[Onboarding] Found ${existingContent.length} existing articles`)
                     }
                 } catch (e) {
-                    console.warn("[Onboarding] Sitemap fetch failed, continuing without:", e)
+                    console.warn("[Onboarding] Sitemap sync failed, continuing without:", e)
                 }
             }
 
