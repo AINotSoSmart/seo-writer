@@ -7,7 +7,7 @@ export const PLAN_LIMITS = {
 
 export async function getUserBrandLimit(userId: string): Promise<number> {
   const supabase = await createClient()
-  
+
   // 1. Get active subscription
   const { data: sub } = await supabase
     .from("dodo_subscriptions")
@@ -28,12 +28,13 @@ export async function getUserBrandLimit(userId: string): Promise<number> {
 
   // @ts-ignore - Join types can be tricky
   const planName = sub.dodo_pricing_plans.name
-  
+
   // Simple matching, case insensitive
   if (planName.toLowerCase().includes("starter")) return 1
   if (planName.toLowerCase().includes("growth")) return 3
-  
-  return 0
+
+  // Default: allow at least 1 brand (fallback for unknown plan names)
+  return 1
 }
 
 export async function getBrandCount(userId: string): Promise<number> {
@@ -42,6 +43,7 @@ export async function getBrandCount(userId: string): Promise<number> {
     .from("brand_details")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
-    
+    .is("deleted_at", null) // Exclude soft-deleted brands
+
   return count || 0
 }

@@ -103,7 +103,7 @@ export async function updateBrandAction(brandId: string, brandData: BrandDetails
     return { success: false, error: error.message }
   }
 
-  return { success: true }
+  return { success: true, brandId }
 }
 
 export async function getUserBrands() {
@@ -116,6 +116,7 @@ export async function getUserBrands() {
     .from("brand_details")
     .select("id, website_url, brand_data, created_at")
     .eq("user_id", user.id)
+    .is("deleted_at", null) // Exclude soft-deleted brands
     .order("created_at", { ascending: false })
 
   return data || []
@@ -147,9 +148,11 @@ export async function deleteBrandAction(brandId: string) {
     return { success: false, error: "Not authenticated" }
   }
 
+  // Soft delete: set deleted_at instead of actually deleting
+  // This prevents the delete-recreate abuse loop
   const { error } = await supabase
     .from("brand_details")
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq("id", brandId)
     .eq("user_id", user.id) // Security: Ensure user owns the brand
 
