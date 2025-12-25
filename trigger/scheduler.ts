@@ -61,14 +61,96 @@ export const dailyContentWatchman = schedules.task({
                 item.status === "published" || item.status === "skipped"
             )
             if (allDone && items.length > 0) {
-                // Mark plan as completed
-                await supabase
+                // Plan is complete. Check if we should auto-refill (Infinite Loop).
+                console.log(`🔄 Plan ${plan.id} finished. Checking for auto-refill...`)
+
+                // 1. Check for Active Subscription
+                const { data: subscription } = await supabase
+                    .from("dodo_subscriptions")
+                    .select("status")
+                    .eq("user_id", plan.user_id)
+                    .eq("status", "active")
+                    .maybeSingle()
+
+                if (!subscription) {
+                    console.log(`⏹️ User ${plan.user_id} has no active subscription. Stopping automation.`)
+                    await supabase.from("content_plans").update({ automation_status: "completed" }).eq("id", plan.id)
+                    completedPlans++
+                    continue
+                }
+
+                // 2. Fetch required data for generation (Seeds & Brand)
+                // We need to fetch the plan again with competitor_seeds if not selected initially
+                const { data: fullPlan } = await supabase
                     .from("content_plans")
-                    .update({ automation_status: "completed" })
+                    .select("competitor_seeds, brand_id")
                     .eq("id", plan.id)
-                completedPlans++
-                console.log(`✅ Plan ${plan.id} completed - all articles published/skipped`)
-                continue
+                    .single()
+
+                const { data: brand } = await supabase
+                    .from("brands")
+                    .select("*")
+                    .eq("id", plan.brand_id)
+                    .single()
+
+                if (!fullPlan?.competitor_seeds || !brand) {
+                    console.warn(`⚠️ Cannot auto-refill plan ${plan.id}: Missing seeds or brand data.`)
+                    await supabase.from("content_plans").update({ automation_status: "completed" }).eq("id", plan.id)
+                    completedPlans++
+                    continue
+                }
+
+                // 3. Generate NEW 30-Day Plan
+                console.log(`✨ Auto-generating new 30-day plan for User ${plan.user_id}...`)
+
+                // Dynamic import to avoid circular dep issues if any (though shared lib should be fine)
+                const { generateContentPlan } = await import("@/lib/plans/generator")
+
+                try {
+                    const { plan: newPlanItems } = await generateContentPlan({
+                        userId: plan.user_id,
+                        brandId: plan.brand_id,
+                        brandData: brand,
+                        seeds: fullPlan.competitor_seeds,
+                        existingContent: [] // We rely on DB coverage now
+                    })
+
+                    // 4. Save New Plan
+                    const { error: insertError } = await supabase
+                        .from("content_plans")
+                        .insert({
+                            user_id: plan.user_id,
+                            brand_id: plan.brand_id,
+                            plan_data: newPlanItems,
+                            competitor_seeds: fullPlan.competitor_seeds,
+                            automation_status: "active", // Immediately active
+                            catch_up_mode: plan.catch_up_mode || "gradual", // Inherit mode
+                            created_at: new Date().toISOString()
+                        })
+
+                    if (insertError) {
+                        console.error("❌ Failed to save auto-refilled plan:", insertError)
+                    } else {
+                        console.log(`✅ Successfully auto-refilled content plan for User ${plan.user_id}`)
+                    }
+
+                    // 5. Mark OLD plan as completed
+                    await supabase
+                        .from("content_plans")
+                        .update({ automation_status: "completed" })
+                        .eq("id", plan.id)
+
+                    completedPlans++
+
+                    // Note: The new plan will be picked up in the NEXT hourly run (or this one if we re-fetched, but better to wait)
+                    continue
+
+                } catch (err) {
+                    console.error("❌ Auto-refill generation failed:", err)
+                    // Mark as completed anyway to avoid loop? Or keep active to retry?
+                    // Better to mark completed to avoid infinite error loop, and log error.
+                    await supabase.from("content_plans").update({ automation_status: "completed" }).eq("id", plan.id)
+                }
             }
 
             if (itemsDue.length === 0) continue
