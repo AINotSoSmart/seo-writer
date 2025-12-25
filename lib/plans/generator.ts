@@ -117,9 +117,21 @@ You are an elite SEO strategist building a STRATEGIC content plan. [Current Date
 ## BRAND CONTEXT
 - Product: ${brandData.product_name}
 - What it is: ${brandData.product_identity.literally}
+- Core Features/Products: ${brandData.core_features?.join(", ") || "Not specified"}
 - Target Audience: ${brandData.audience.primary}
 - Unique Value: ${brandData.uvp.join(", ")}
 - Voice/Style: ${brandData.style_dna || "Professional and informative"}
+
+## FEATURE COVERAGE REQUIREMENT (CRITICAL)
+
+${brandData.core_features && brandData.core_features.length > 1 ? `
+This brand has MULTIPLE distinct features/products:
+${brandData.core_features.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}
+
+YOU MUST create articles covering ALL features proportionally.
+If there are ${brandData.core_features.length} features, distribute ~${Math.floor(30 / brandData.core_features.length)} articles per feature.
+DO NOT focus on just one feature. This is a multi-product brand.
+` : "Focus deeply on the core product offering."}
 
 ## SEED KEYWORDS & TOPICS
 ${seeds.join("\n")}
@@ -128,11 +140,13 @@ ${coverageSection}
 
 ---
 
-## THE 4 STRATEGIC CATEGORIES (30 = 12 + 8 + 6 + 4)
+## THE 4 STRATEGIC CATEGORIES (MANDATORY DISTRIBUTION: 30 = 12 + 8 + 6 + 4)
 
-This is NOT a random list of keywords. This is a CONTENT ARCHITECTURE.
+THIS IS A STRICT REQUIREMENT. You MUST generate EXACTLY this distribution:
 
 ${categorySection}
+
+FAILURE TO FOLLOW THIS DISTRIBUTION IS UNACCEPTABLE.
 
 ---
 
@@ -150,27 +164,43 @@ Examples of DIFFERENT parent questions (GOOD):
 
 ---
 
-## TITLE RULES
+## TITLE RULES (MODERN SEO - 2025)
 
-1. Create curiosity - make the brain itch
-2. Use numbers when possible
-3. Attack a pain point
-4. Keep under 60 characters
-5. BANNED: "ultimate guide", "comprehensive", "definitive", "everything you need"
-6. Speak like a human
+Create titles that DOMINATE in modern AI-powered search:
+
+1. Use SPECIFIC numbers: "7 Ways..." not "Ways..."
+2. Include YEAR when relevant: "...in 2025"
+3. Attack a PAIN POINT: "Why Your [X] Keeps Failing"
+4. Use POWER WORDS: "Proven", "Exact", "Secret", "Without", "Actually"
+5. Keep under 60 characters
+
+FORMAT PATTERNS (use variety):
+- How-To: "How to [X] Without [Pain Point]"
+- List: "[Number] [Adjective] Ways to [Benefit]"
+- Comparison: "[X] vs [Y]: Which [Benefit] Better?"
+- Question: "Is [X] Worth It? (Real Data Inside)"
+- Problem: "Why [Common Approach] Doesn't Work (And What Does)"
+- Contrarian: "[X] is Dead—Here's What Actually Works"
+
+BANNED PATTERNS (NEVER USE):
+- "What is X? (Explained)" - Too generic, boring
+- "Ultimate Guide to X" - Overused, ignored by searchers
+- "Everything You Need to Know About X" - Vague, no hook
+- "A Comprehensive Look at X" - Academic, not engaging
+- "The Complete Guide to X" - Same as ultimate guide
 
 ---
 
 ## YOUR TASK
 
-Generate EXACTLY 30 articles distributed as follows:
+Generate EXACTLY 30 articles distributed as follows (NO EXCEPTIONS):
 - Core Answers: 12 articles (EMPTY parent questions only)
 - Supporting Articles: 8 articles (expand coverage with how-tos)
 - Conversion Pages: 6 articles (comparisons, decisions)
 - Authority Plays: 4 articles (edge cases, stories)
 
 For each article provide:
-1. title: Compelling blog post title
+1. title: Compelling blog post title (follow MODERN SEO rules above)
 2. main_keyword: Primary target keyword (2-4 words)
 3. supporting_keywords: 2-3 related keywords (array)
 4. article_type: "informational" | "commercial" | "howto"
@@ -179,7 +209,10 @@ For each article provide:
 7. article_category: One of "Core Answers", "Supporting Articles", "Conversion Pages", "Authority Plays"
 8. parent_question: The ONE fundamental user question this article answers
 
-## CRITICAL: Each article's parent_question must be UNIQUE across the plan.
+## CRITICAL REQUIREMENTS:
+1. Each article's parent_question must be UNIQUE across the plan.
+2. If the brand has multiple features, articles must be distributed across ALL features.
+3. You MUST generate EXACTLY 30 articles with the 12-8-6-4 distribution.
 `
 
     const response = await client.models.generateContent({

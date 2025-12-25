@@ -41,22 +41,27 @@ export async function POST(req: NextRequest) {
         const tvly = tavily({ apiKey })
         const client = getGeminiClient()
 
-        // STEP 1: Use AI to extract the product category/niche from brandContext
-        // This is the key fix - instead of searching for "brand competitors",
-        // we search for "best [category] tools" which works for ANY brand
+        // STEP 1: Use AI to extract ALL product features and generate queries for each
+        // This ensures multi-feature products get comprehensive coverage
         const categoryPrompt = `
-Given this brand description, extract the product category/niche for finding competitors.
+Given this brand description, extract ALL distinct product features and generate search queries.
 
 Brand Context: ${brandContext || "A software business"}
 
-Return a JSON object with:
-1. category: The product category (e.g., "photo restoration software", "AI writing assistant", "project management tool", "email marketing platform")
-2. searchQueries: Array of 3 search queries to find competitors in this space. Use phrases like:
-   - "best [category] tools 2025"
-   - "top [category] software alternatives"
-   - "[category] comparison reviews"
+CRITICAL: Many products have MULTIPLE features (e.g., a photo tool might do restoration, animation, AND portrait generation).
+You MUST identify ALL distinct features, not just the primary one.
 
-Be specific about the category. Don't be generic like "SaaS" - use the actual product type.
+Return a JSON object with:
+1. category: The overall product category
+2. distinctFeatures: Array of ALL distinct features/products this brand offers (e.g., ["photo restoration", "photo animation", "family portrait generation", "hug video creation"])
+3. searchQueries: Array of 6-9 search queries covering ALL features. Generate 2-3 queries per distinct feature.
+   Example for a multi-feature product:
+   - "best AI photo restoration tools"
+   - "AI photo animation software"
+   - "family portrait generator AI"
+   - "nostalgic hug video maker"
+
+Be exhaustive. Miss nothing.
 `
 
         const categoryResponse = await client.models.generateContent({
@@ -68,12 +73,16 @@ Be specific about the category. Don't be generic like "SaaS" - use the actual pr
                     type: "OBJECT",
                     properties: {
                         category: { type: "STRING" },
+                        distinctFeatures: {
+                            type: "ARRAY",
+                            items: { type: "STRING" }
+                        },
                         searchQueries: {
                             type: "ARRAY",
                             items: { type: "STRING" }
                         }
                     },
-                    required: ["category", "searchQueries"]
+                    required: ["category", "distinctFeatures", "searchQueries"]
                 }
             }
         })
@@ -94,14 +103,16 @@ Be specific about the category. Don't be generic like "SaaS" - use the actual pr
         }
 
         const searchQueries = categoryData.searchQueries || [`best ${categoryData.category || "software"} tools 2024`]
+        const distinctFeatures = categoryData.distinctFeatures || []
 
+        console.log("Detected features:", distinctFeatures)
         console.log("Generated search queries:", searchQueries)
 
-        // STEP 2: Search using category-based queries (not brand name)
-        // This finds actual competitors even for completely new/unknown brands
+        // STEP 2: Execute multiple queries to cover ALL features
+        // Cost: ~$0.003 per query, executing 3 queries = ~$0.009 total (very cheap)
         let allResults: any[] = []
 
-        for (const query of searchQueries.slice(0, 1)) { // Use top 2 queries
+        for (const query of searchQueries.slice(0, 3)) { // Execute top 3 queries for broader coverage
             try {
                 const searchResponse = await tvly.search(query, {
                     searchDepth: "advanced",
