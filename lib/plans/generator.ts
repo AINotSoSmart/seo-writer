@@ -4,6 +4,7 @@ import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { checkTopicDuplication } from "@/lib/topic-memory"
 import { getCoverageContext, summarizeCoverage } from "@/lib/coverage/analyzer"
+import { formatIdeaUniverseWithCoverage } from "@/lib/plans/idea-expansion"
 
 // Strategic Article Category Distribution (30 = 12 + 8 + 6 + 4)
 export const ARTICLE_CATEGORIES = {
@@ -42,6 +43,8 @@ interface GeneratePlanParams {
     brandId: string
     brandData: BrandDetails
     seeds: string[]
+    ideaUniverse?: string[] // Phase A: Expanded problem domains
+    ideaCoverageMap?: Record<string, "heavy" | "light" | "none"> // Phase B: Competitor coverage
     existingContent?: string[] // Parent questions from sitemap
 }
 
@@ -59,6 +62,8 @@ export async function generateContentPlan({
     brandId,
     brandData,
     seeds,
+    ideaUniverse = [],
+    ideaCoverageMap = {},
     existingContent = []
 }: GeneratePlanParams): Promise<GeneratePlanResult> {
     const today = new Date()
@@ -105,11 +110,32 @@ d) Address edge cases (why X fails)
 
     // --- STEP 2: BUILD STRATEGIC PROMPT ---
     const categorySection = Object.entries(ARTICLE_CATEGORIES).map(([category, config]) => {
-        return `### ${category} (${config.count} articles)
+        return `### ${category} (~${config.count} articles)
 Purpose: ${config.description}
 Intent Roles: ${config.intentRoles.join(", ")}
 Focus: ${config.prompt}`
     }).join('\n\n')
+
+    // Format idea universe with coverage if available
+    const ideaUniverseSection = ideaUniverse.length > 0
+        ? `
+## IDEA UNIVERSE WITH COMPETITOR VALIDATION (READ FIRST - CRITICAL)
+
+These represent the broader problem spaces the audience lives in.
+Competitor coverage indicates saturation level:
+- 🟢 [NONE] = Untapped opportunity, PRIORITIZE these
+- 🟡 [LIGHT] = Partial coverage, good opportunity
+- 🔴 [HEAVY] = Crowded, only for comparisons/edge cases
+
+${formatIdeaUniverseWithCoverage(ideaUniverse, ideaCoverageMap)}
+
+**RULES:**
+- PRIORITIZE domains marked NONE or LIGHT
+- AVOID creating core articles in HEAVY domains
+- Heavy domains allowed ONLY for: comparisons, edge cases, contrarian angles, expansions
+- Think BEYOND the product — what else does this audience care about?
+`
+        : ""
 
     const prompt = `
 You are an elite SEO strategist building a STRATEGIC content plan. [Current Date: ${currentDate}]
@@ -122,31 +148,34 @@ You are an elite SEO strategist building a STRATEGIC content plan. [Current Date
 - Unique Value: ${brandData.uvp.join(", ")}
 - Voice/Style: ${brandData.style_dna || "Professional and informative"}
 
-## FEATURE COVERAGE REQUIREMENT (CRITICAL)
+${ideaUniverseSection}
+
+## FEATURE COVERAGE REQUIREMENT
 
 ${brandData.core_features && brandData.core_features.length > 1 ? `
 This brand has MULTIPLE distinct features/products:
 ${brandData.core_features.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}
 
-YOU MUST create articles covering ALL features proportionally.
-If there are ${brandData.core_features.length} features, distribute ~${Math.floor(30 / brandData.core_features.length)} articles per feature.
-DO NOT focus on just one feature. This is a multi-product brand.
+Distribute articles across ALL features proportionally.
 ` : "Focus deeply on the core product offering."}
 
-## SEED KEYWORDS & TOPICS
+## SEED KEYWORDS (SECONDARY INPUT)
+Use these ONLY to validate demand and phrasing.
+Do NOT let them restrict idea selection — the IDEA UNIVERSE above is your primary creative source.
+
 ${seeds.join("\n")}
 
 ${coverageSection}
 
 ---
 
-## THE 4 STRATEGIC CATEGORIES (MANDATORY DISTRIBUTION: 30 = 12 + 8 + 6 + 4)
+## THE 4 STRATEGIC CATEGORIES (TARGET DISTRIBUTION: ~12 + ~8 + ~6 + ~4 = 30)
 
-THIS IS A STRICT REQUIREMENT. You MUST generate EXACTLY this distribution:
+Aim for this distribution, but prioritize QUALITY over exact counts:
 
 ${categorySection}
 
-FAILURE TO FOLLOW THIS DISTRIBUTION IS UNACCEPTABLE.
+If you have strong ideas that don't fit the exact count, adjust slightly. Quality > rigid quotas.
 
 ---
 

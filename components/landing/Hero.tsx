@@ -26,7 +26,7 @@ export const Hero: React.FC = () => {
 
       {/* Subtext */}
       <p className="font-sans text-gray-600 text-lg md:text-2xl max-w-3xl mb-12 leading-relaxed font-medium px-4">
-        The first <span className="font-bold text-black border-b-[3px] border-brand-orange/30">Autonomous Strategy Engine</span>. designed for Generative Engine Optimization (GEO). We research, plan, draft, refine, and publish articles that humans love and AI models cite as authority.
+        FlipAEO is an <span className="font-bold text-black border-b-[3px] border-brand-orange/30">Strategic Content Engine</span> designed for Generative Engine Optimization (GEO). We analyze your brand, competitors, and visibility gaps to decide what content should exist, what should come next, and what actually moves authority forward before it ever writes a word.
       </p>
 
       {/* Actions */}
