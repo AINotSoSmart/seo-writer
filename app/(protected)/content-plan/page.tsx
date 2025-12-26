@@ -819,7 +819,7 @@ export default function ContentPlanPage() {
                             <p className="text-stone-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
                                 Generate a data-driven 30-day content plan based on your competitors and search trends.
                             </p>
-                            <Button onClick={() => router.push("/blog-writer")} className="h-10 px-6 font-semibold shadow-md active:scale-95 transition-transform">
+                            <Button onClick={() => router.push("/onboarding")} className="h-10 px-6 font-semibold shadow-md active:scale-95 transition-transform">
                                 <Sparkles className="w-4 h-4 mr-2" />
                                 Create First Plan
                             </Button>

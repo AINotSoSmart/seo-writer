@@ -85,22 +85,22 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem asChild className="cursor-pointer">
                 <Link href="/buy-credits" className="flex items-center">
-              <Sparkles className="mr-2 h-4 w-4" />
-              Buy Credits
-            </Link>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Buy Credits
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-             <DropdownMenuGroup>
-           <DropdownMenuItem className="cursor-pointer">
-            <Home className="mr-2 h-4 w-4" />
-            <Link href="/blog-writer">Dashboard</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="cursor-pointer">
-            <BadgeCheck className="mr-2 h-4 w-4" />
-            <Link href="/account">Account</Link>  
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
+            <DropdownMenuGroup>
+              <DropdownMenuItem className="cursor-pointer">
+                <Home className="mr-2 h-4 w-4" />
+                <Link href="/content-plan">Dashboard</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer">
+                <BadgeCheck className="mr-2 h-4 w-4" />
+                <Link href="/account">Account</Link>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={async () => {

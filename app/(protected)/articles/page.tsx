@@ -287,7 +287,7 @@ export default function ArticlesPage() {
           </div>
 
           <Link
-            href="/blog-writer"
+            href="/content-plan"
             className="
               flex h-8 items-center gap-1.5 overflow-hidden rounded-lg px-3 text-xs font-semibold text-white transition-all
               active:scale-[0.98] cursor-pointer
@@ -310,7 +310,7 @@ export default function ArticlesPage() {
               <h3 className="text-lg font-medium text-stone-900 mb-2">No articles yet</h3>
               <p className="text-stone-500 mb-6">Start generating premium content for your blog today.</p>
               <Link
-                href="/blog-writer"
+                href="/content-plan"
                 className="text-stone-900 font-medium hover:underline decoration-stone-300 underline-offset-4"
               >
                 Create your first article &rarr;

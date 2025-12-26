@@ -49,13 +49,13 @@ export function NavActions() {
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel className="truncate">Your Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <Link href="/blog-writer" className="w-full">
+          <Link href="/content-plan" className="w-full">
             <DropdownMenuItem className="cursor-pointer">
               <LayoutDashboard className="mr-2 h-4 w-4" />
               <span>Dashboard</span>
             </DropdownMenuItem>
           </Link>
-          <Link href="/blog-writer/settings" className="w-full">
+          <Link href="/settings" className="w-full">
             <DropdownMenuItem className="cursor-pointer">
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>

@@ -94,7 +94,7 @@ export function AppSidebar({
   const navItems = React.useMemo(() => [
     {
       title: "Dashboard",
-      url: "/blog-writer",
+      url: "/content-plan",
       icon: NotebookPen,
       isActive: true,
     },

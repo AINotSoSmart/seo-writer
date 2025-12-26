@@ -8,11 +8,11 @@ export async function GET(request: NextRequest) {
   if (isRateLimitingEnabled()) {
     const clientIP = getClientIP(request)
     const rateLimitResult = await checkRateLimit(clientIP, authRateLimit)
-    
+
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: 'Too many authentication attempts. Please try again later.' },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Limit': rateLimitResult.limit?.toString() || '5',
@@ -27,19 +27,19 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const type = (searchParams.get('type') || 'email').toLowerCase()
-  const next = searchParams.get('next') ?? '/blog-writer'
+  const next = searchParams.get('next') ?? '/content-plan'
 
   if (code) {
     try {
       const supabase = await createClient()
       const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-      
+
       if (error) {
         // Log error for debugging without exposing details
         console.error('Auth exchange failed:', error.code || 'UNKNOWN_ERROR')
         return NextResponse.redirect(`${origin}/login?error=Authentication failed`)
       }
-      
+
       if (data?.user) {
         // Log successful auth without user details
         return NextResponse.redirect(`${origin}${next}`)
