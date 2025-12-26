@@ -5,6 +5,7 @@ import { BrandDetails } from "@/lib/schemas/brand"
 import { checkTopicDuplication } from "@/lib/topic-memory"
 import { getCoverageContext, summarizeCoverage } from "@/lib/coverage/analyzer"
 import { formatIdeaUniverseWithCoverage } from "@/lib/plans/idea-expansion"
+import { detectContentStage, getStrategyPrompt } from "@/lib/plans/strategy-detector"
 
 // Strategic Article Category Distribution (30 = 12 + 8 + 6 + 4)
 export const ARTICLE_CATEGORIES = {
@@ -108,7 +109,13 @@ d) Address edge cases (why X fails)
 `
         : ""
 
-    // --- STEP 2: BUILD STRATEGIC PROMPT ---
+    // --- STEP 2: DETECT CONTENT STAGE (GSC-ONLY) ---
+    console.log("[Content Plan] Detecting content stage...")
+    const { stage, hasGSC } = await detectContentStage(userId)
+    const strategySection = getStrategyPrompt(stage, hasGSC)
+    console.log(`[Content Plan] Stage: ${stage}, GSC Connected: ${hasGSC}`)
+
+    // --- STEP 3: BUILD STRATEGIC PROMPT ---
     const categorySection = Object.entries(ARTICLE_CATEGORIES).map(([category, config]) => {
         return `### ${category} (~${config.count} articles)
 Purpose: ${config.description}
@@ -139,6 +146,8 @@ ${formatIdeaUniverseWithCoverage(ideaUniverse, ideaCoverageMap)}
 
     const prompt = `
 You are an elite SEO strategist building a STRATEGIC content plan. [Current Date: ${currentDate}]
+
+${strategySection}
 
 ## BRAND CONTEXT
 - Product: ${brandData.product_name}
