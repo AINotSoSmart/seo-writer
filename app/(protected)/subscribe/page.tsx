@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import SubscribeButton from '@/components/subscribe/SubscribeButton'
 import ManageSubscription from '@/components/subscribe/ManageSubscription'
 import { Check, ChevronUp, Loader2, Sparkles, Zap } from 'lucide-react'
+import { CustomSpinner } from "@/components/CustomSpinner"
 
 function formatPrice(value: number | string, currency: string) {
     const n = typeof value === 'number' ? value : Number(value || 0)
@@ -202,7 +203,7 @@ export default async function SubscribePage() {
                         </div>
                     ) : (
                         <div className="p-12 text-center text-stone-500">
-                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 opacity-50" />
+                            <CustomSpinner className="w-10 h-10 mx-auto mb-2" />
                             <p>Loading plan...</p>
                         </div>
                     )}

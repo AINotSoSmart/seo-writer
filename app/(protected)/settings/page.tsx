@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { GlobalCard } from "@/components/ui/global-card"
+import { CustomSpinner } from "@/components/CustomSpinner"
 
 type BrandInfo = { id: string; website_url: string; created_at: string; brand_data: BrandDetails }
 
@@ -106,7 +107,7 @@ export default function SettingsPage() {
     return (
       <div className="w-full min-h-screen flex items-center justify-center font-sans">
         <div className="flex flex-col items-center gap-3 text-stone-500">
-          <Loader2 className="w-6 h-6 animate-spin" />
+          <CustomSpinner className="w-10 h-10" />
           <span className="text-sm font-medium">Loading settings...</span>
         </div>
       </div>

@@ -30,6 +30,8 @@ import { useCreditManager } from "@/lib/credit-manager"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { createClient } from "@/utils/supabase/client"
+import { CustomSpinner } from "@/components/CustomSpinner"
+
 
 const navSecondary = [
   {
@@ -48,7 +50,9 @@ function CreditsCard({ userId }: { userId?: string }) {
       <Card className="mb-4 py-2">
         <CardContent className="p-3">
           <div className="text-sm font-medium mb-1">Plan Usage</div>
-          <div className="text-xs text-muted-foreground mb-3 justify-between">Loading...</div>
+          <div className="w-full min-h-screen flex items-center justify-center">
+            <CustomSpinner className="w-10 h-10" />
+          </div>
           <div className="w-full h-8 bg-muted rounded animate-pulse" />
         </CardContent>
       </Card>

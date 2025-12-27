@@ -8,6 +8,7 @@ import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Save, Calendar, User, FileText, Image as ImageIcon, Link as LinkIcon, Activity, ArrowLeft, Loader2, Menu, Info, LayoutTemplate, PenTool, Share2, MoreVertical, CheckCircle2, AlertCircle, Clock, Download, Copy, Check } from "lucide-react"
 import { OutputData } from "@editorjs/editorjs"
+import { CustomSpinner } from "@/components/CustomSpinner"
 import { toast } from "sonner"
 import { editorJsToMarkdown } from "@/lib/editorjs-to-markdown"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -279,7 +280,7 @@ export default function ArticleDetailPage() {
         return (
             <div className="flex h-screen items-center justify-center bg-gray-50">
                 <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <CustomSpinner className="w-10 h-10" />
                     <p className="text-gray-500 font-medium">Loading Editor...</p>
                 </div>
             </div>

@@ -35,6 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AutomationModal } from "@/components/automation-modal"
 import { cn } from "@/lib/utils"
 import { useCredits } from "@/hooks/useCredits"
+import { CustomSpinner } from "@/components/CustomSpinner"
 
 // --- Minimal Design System Configuration ---
 
@@ -353,7 +354,7 @@ export default function ContentPlanPage() {
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-stone-400" />
+                <CustomSpinner className="w-10 h-10" />
             </div>
         )
     }
@@ -800,7 +801,7 @@ export default function ContentPlanPage() {
                 <div className="p-4 space-y-8">
                     {loading ? (
                         <div className="h-64 flex flex-col items-center justify-center gap-3">
-                            <Loader2 className="w-8 h-8 animate-spin text-stone-300" />
+                            <CustomSpinner className="w-10 h-10" />
                             <p className="text-sm text-stone-500 font-medium animate-pulse">Loading content plan...</p>
                         </div>
                     ) : error ? (

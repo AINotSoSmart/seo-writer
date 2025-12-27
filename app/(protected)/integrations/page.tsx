@@ -28,6 +28,7 @@ import {
 } from "@/actions/shopify"
 import { toast } from "sonner"
 import { Plus, Trash2, ExternalLink, Check, Loader2, Globe, Lock, User, Key, ChevronDown, Store } from "lucide-react"
+import { CustomSpinner } from "@/components/CustomSpinner"
 
 // Types
 interface WordPressConnection {
@@ -331,7 +332,7 @@ export default function IntegrationsPage() {
     if (loading) {
         return (
             <div className="w-full min-h-screen flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-stone-400" />
+                <CustomSpinner className="w-10 h-10" />
             </div>
         )
     }

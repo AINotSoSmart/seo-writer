@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { CustomSpinner } from "@/components/CustomSpinner"
 
 type ArticleRow = {
   id: string
@@ -265,9 +266,8 @@ export default function ArticlesPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-8">My Articles</h1>
-        <div className="text-center py-12">Loading articles...</div>
+      <div className="w-full min-h-screen flex items-center justify-center">
+        <CustomSpinner className="w-10 h-10" />
       </div>
     )
   }

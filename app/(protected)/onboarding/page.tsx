@@ -13,6 +13,7 @@ import { ContentPlanItem, CompetitorData } from "@/lib/schemas/content-plan"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { CustomSpinner } from "@/components/CustomSpinner"
 
 // localStorage keys for persistence
 const STORAGE_KEYS = {
@@ -73,6 +74,29 @@ export default function OnboardingPage() {
     const [contentPlan, setContentPlan] = useState<ContentPlanItem[]>([])
     const [planId, setPlanId] = useState<string | null>(null)
     const [savingPlan, setSavingPlan] = useState(false)
+    const [planLoadingMessage, setPlanLoadingMessage] = useState(0)
+
+    // Rotating trust-building messages during plan generation
+    const planLoadingMessages = [
+        { title: "Discovering your content opportunities...", subtitle: "Finding topics your audience is actively searching for" },
+        { title: "Analyzing what competitors miss...", subtitle: "Identifying gaps where your brand can dominate" },
+        { title: "Building your strategic advantage...", subtitle: "Crafting topics that position you as the authority" },
+        { title: "Creating your content roadmap...", subtitle: "30 days of high-impact articles tailored to your brand" },
+        { title: "Optimizing for AI search visibility...", subtitle: "Topics designed to get you featured in AI answers" },
+        { title: "Ensuring topic diversity...", subtitle: "A balanced mix of foundational and conversion content" },
+    ]
+
+    // Rotate loading messages every 4 seconds during plan generation
+    useEffect(() => {
+        if (!generatingPlan) {
+            setPlanLoadingMessage(0)
+            return
+        }
+        const interval = setInterval(() => {
+            setPlanLoadingMessage(prev => (prev + 1) % planLoadingMessages.length)
+        }, 4000)
+        return () => clearInterval(interval)
+    }, [generatingPlan, planLoadingMessages.length])
 
     // GSC State
     const [hasGSC, setHasGSC] = useState(false)
@@ -329,39 +353,28 @@ export default function OnboardingPage() {
         setGeneratingPlan(true)
         setError("")
         try {
-            // Step 1: Sync sitemap to internal_links table (for internal linking + deduplication)
-            // This triggers the background job to populate internal_links with embeddings
+            // Step 1: Sync sitemap to internal_links table (SYNCHRONOUS)
+            // This waits for completion before proceeding to plan generation
             let existingContent: string[] = []
             if (url && brandId) {
                 try {
-                    const baseUrl = url.replace(/\/$/, '')
-                    const sitemapUrl = `${baseUrl}/sitemap.xml`
+                    console.log(`[Onboarding] Syncing sitemap to internal_links...`)
 
-                    // Trigger full sync to internal_links table (background job)
-                    // This populates the table with URLs, titles, and embeddings for future use
-                    console.log(`[Onboarding] Triggering internal_links sync...`)
-                    await fetch(`/api/content-plan/sync-links`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ sitemapUrl, brandId })
-                    })
+                    // Import and call the synchronous server action
+                    const { syncSitemapToInternalLinksAction } = await import("@/actions/sync-internal-links")
+                    const syncResult = await syncSitemapToInternalLinksAction(url, brandId)
 
-                    // Also fetch titles immediately for use in plan generation (no LLM needed)
-                    const sitemapRes = await fetch(`/api/content-plan/sync-links`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ sitemapUrl, brandId, contextOnly: true })
-                    })
-
-                    if (sitemapRes.ok) {
-                        const sitemapData = await sitemapRes.json()
-                        existingContent = sitemapData.titles || []
-                        console.log(`[Onboarding] Found ${existingContent.length} existing articles`)
+                    if (syncResult.success) {
+                        existingContent = syncResult.titles
+                        console.log(`[Onboarding] Synced ${syncResult.count} links, found ${syncResult.titles.length} existing articles`)
+                    } else {
+                        console.warn(`[Onboarding] Sitemap sync failed: ${syncResult.error}`)
                     }
                 } catch (e) {
                     console.warn("[Onboarding] Sitemap sync failed, continuing without:", e)
                 }
             }
+
 
             // Step 2: Generate content plan with existing content context
             const res = await fetch("/api/generate-content-plan", {
@@ -888,32 +901,42 @@ export default function OnboardingPage() {
                                         className="p-4 space-y-6"
                                     >
                                         {(analyzingCompetitors || generatingPlan) ? (
-                                            // Loading State
+                                            // Loading State with rotating trust-building messages
                                             <div className="text-center space-y-6 py-8">
-                                                <div className="relative w-16 h-16 mx-auto">
-                                                    <div className={`absolute inset-0 rounded-full border-4 border-stone-200`} />
-                                                    <div className={`absolute inset-0 rounded-full border-4 border-t-stone-600 animate-spin`} />
+                                                <div className="flex justify-center">
+                                                    <CustomSpinner className="w-12 h-12" />
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <h2 className={`text-lg font-bold text-stone-900`}>
-                                                        {analyzingCompetitors ? "Analyzing competitors..." : "Generating your 30-day content plan..."}
-                                                    </h2>
-                                                    <p className={`text-sm text-stone-500`}>
-                                                        {analyzingCompetitors
-                                                            ? "Finding competitor content and extracting keywords"
-                                                            : "Creating personalized blog topics for your brand"}
-                                                    </p>
-                                                </div>
+                                                <AnimatePresence mode="wait">
+                                                    <motion.div
+                                                        key={analyzingCompetitors ? "competitors" : planLoadingMessage}
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0, y: -10 }}
+                                                        transition={{ duration: 0.3 }}
+                                                        className="space-y-2"
+                                                    >
+                                                        <h2 className={`text-lg font-bold text-stone-900`}>
+                                                            {analyzingCompetitors
+                                                                ? "Researching your market..."
+                                                                : planLoadingMessages[planLoadingMessage].title}
+                                                        </h2>
+                                                        <p className={`text-sm text-stone-500`}>
+                                                            {analyzingCompetitors
+                                                                ? "Understanding what works in your industry"
+                                                                : planLoadingMessages[planLoadingMessage].subtitle}
+                                                        </p>
+                                                    </motion.div>
+                                                </AnimatePresence>
                                                 <div className="flex items-center justify-center gap-2">
                                                     {analyzingCompetitors ? (
                                                         <>
                                                             <Users className={`w-4 h-4 text-stone-500`} />
-                                                            <span className={`text-xs text-stone-500`}>Researching competitor keywords</span>
+                                                            <span className={`text-xs text-stone-500`}>Analyzing top performers in your niche</span>
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <Calendar className={`w-4 h-4 text-stone-500`} />
-                                                            <span className={`text-xs text-stone-500`}>Building your content calendar</span>
+                                                            <Target className={`w-4 h-4 text-stone-500`} />
+                                                            <span className={`text-xs text-stone-500`}>Building a plan that wins in AI search</span>
                                                         </>
                                                     )}
                                                 </div>
