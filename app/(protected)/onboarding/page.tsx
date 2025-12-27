@@ -329,26 +329,24 @@ export default function OnboardingPage() {
         setGeneratingPlan(true)
         setError("")
         try {
-            // Step 1: Sync sitemap to answer_coverage for deduplication
-            // This persists the existing content to database so future plans know what's already written
+            // Step 1: Sync sitemap to internal_links table (for internal linking + deduplication)
+            // This triggers the background job to populate internal_links with embeddings
             let existingContent: string[] = []
             if (url && brandId) {
                 try {
-                    console.log(`[Onboarding] Syncing sitemap to answer_coverage...`)
-
-                    // Import dynamically to avoid client/server boundary issues
-                    const { syncSitemapToCoverage } = await import("@/actions/sitemap")
-                    const syncResult = await syncSitemapToCoverage(url, brandId)
-
-                    if (syncResult.success) {
-                        console.log(`[Onboarding] Synced ${syncResult.count} entries to answer_coverage`)
-                    } else {
-                        console.warn(`[Onboarding] Sitemap sync failed: ${syncResult.error}`)
-                    }
-
-                    // Also fetch titles for immediate use in plan generation
                     const baseUrl = url.replace(/\/$/, '')
                     const sitemapUrl = `${baseUrl}/sitemap.xml`
+
+                    // Trigger full sync to internal_links table (background job)
+                    // This populates the table with URLs, titles, and embeddings for future use
+                    console.log(`[Onboarding] Triggering internal_links sync...`)
+                    await fetch(`/api/content-plan/sync-links`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ sitemapUrl, brandId })
+                    })
+
+                    // Also fetch titles immediately for use in plan generation (no LLM needed)
                     const sitemapRes = await fetch(`/api/content-plan/sync-links`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
