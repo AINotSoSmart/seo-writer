@@ -266,8 +266,11 @@ export default function OnboardingPage() {
         try {
             // Save brand data (style_dna is already included in brandData)
             const res = await saveBrandAction(url, brandData)
-            if (!res.success || !res.brandId) {
-                throw new Error(res.error || "Failed to save brand")
+            if (!res.success) {
+                throw new Error('error' in res ? res.error : "Failed to save brand")
+            }
+            if (!res.brandId) {
+                throw new Error("Failed to save brand - no brandId returned")
             }
             setBrandId(res.brandId)
 
