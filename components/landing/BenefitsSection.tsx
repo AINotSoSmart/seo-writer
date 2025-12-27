@@ -105,7 +105,7 @@ export const BenefitsSection: React.FC = () => {
           <div className="flex-1 z-10">
             <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">Turning near-rankings into real traffic</h3>
             <p className="font-sans font-medium text-black/80 leading-relaxed text-lg">
-              Visibility without clicks stops being a dead end. We focus on intent and clarity so impressions turn into engagement and growth.
+              Ranking without clicks is a dead end. We focus on intent clarity, structure, and depth so impressions turn into engagement and growth.
             </p>
           </div>
           {/* Graphic: Traffic Chart */}

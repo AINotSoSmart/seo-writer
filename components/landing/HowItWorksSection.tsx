@@ -15,8 +15,7 @@ export const HowItWorksSection: React.FC = () => {
           A focused system built for<br className="hidden md:block" /> modern AI search
         </h2>
         <p className="font-sans text-gray-600 text-lg md:text-xl leading-relaxed max-w-2xl">
-          Clear answers, real authority, and content that compounds — designed for modern AI search and human readers.
-        </p>
+          Clear answers, real authority, and content that compounds designed for modern AI search and human readers.     </p>
       </div>
 
       {/* Steps Grid */}
@@ -25,11 +24,10 @@ export const HowItWorksSection: React.FC = () => {
         {/* Step 1 */}
         <StepCard
           number="01"
-          title="We Map Your Category & Gaps"
+          title="WE MAP THE QUESTIONS THAT MATTER"
           content={
             <>
-              <p className="mb-4">You start with your site. We analyze the actual answers being surfaced in your category and identify exactly where your brand is absent or invisible.</p>
-              <p className="mb-4">This intelligence becomes the foundation for everything that follows—targeting the conversations you're currently missing.</p>
+              <p className="mb-4">We start by understanding your category the way AI systems and real users do. What questions already exist. What’s over-covered. What’s missing entirely. This becomes the foundation for every decision that follows.</p>
             </>
           }
           accentColor="bg-[#FAFA9D]" // Yellow
@@ -39,11 +37,10 @@ export const HowItWorksSection: React.FC = () => {
         {/* Step 2 */}
         <StepCard
           number="02"
-          title="We build a strategy that compounds"
+          title="WE BUILD A STRATEGY THAT COMPOUNDS"
           content={
             <>
-              <p className="mb-4">Using your brand context, category signals, and competitor data, we create a focused 30-day content strategy.</p>
-              <p className="mb-4">Each topic is chosen to strengthen authority and build on the previous article — not to chase random keywords or publish filler content.</p>
+              <p className="mb-4">Not everything should be written now. We decide what comes first, what supports it, and what unlocks authority later. Each topic earns the right for the next one to exist.</p>
             </>
           }
           accentColor="bg-[#FFD8A8]" // Orange
@@ -53,11 +50,10 @@ export const HowItWorksSection: React.FC = () => {
         {/* Step 3 */}
         <StepCard
           number="03"
-          title="We deliver answer-first content"
+          title="WE DELIVER ANSWER-FIRST CONTENT"
           content={
             <>
-              <p className="mb-4">Articles are written to explain clearly, completely, and credibly — the way humans read and AI systems trust.</p>
-              <p className="mb-4">Content is delivered clean and ready to publish, with your unique brand voice baked in, so you build authority without the friction.</p>
+              <p className="mb-4">Once the strategy is clear, execution becomes simple. Articles are written to fully resolve the question, match your brand voice, and publish cleanly without friction.</p>
             </>
           }
           accentColor="bg-[#D6F5F2]" // Teal
