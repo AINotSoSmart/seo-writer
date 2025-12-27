@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState, useEffect } from 'react'
 import { SubscriptionManagement } from '@/components/billingsdk/subscription-management'
 import {
     cancelSubscription as apiCancelSubscription,
@@ -11,6 +11,8 @@ import {
 import type { Plan as BSDKPlan, CurrentPlan as BSDKCurrentPlan } from '@/lib/billingsdk-config'
 import { Button } from '@/components/ui/button'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { useRouter } from 'next/navigation'
+import { createClient as createSupabaseClient } from '@/utils/supabase/client'
 
 type SubscriptionStatus = 'pending' | 'active' | 'cancelled' | 'expired'
 
@@ -75,11 +77,21 @@ function daysUntil(dateIso?: string): number {
 export default function ManageSubscription({ subscription, plans, userEmail }: ManageSubscriptionProps) {
     const [busy, setBusy] = useState(false)
     const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
-    const cancelGuardDate = subscription?.current_period_end || subscription?.next_billing_date
-    const cancelDescription =
-        `This will schedule your subscription to cancel at the end of the current billing period.` +
-        (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
-        ` You can restore anytime before that date.`
+    const router = useRouter()
+    const [localCancelAtPeriodEnd, setLocalCancelAtPeriodEnd] = useState(!!subscription.cancel_at_period_end)
+    const [localNextBillingDate, setLocalNextBillingDate] = useState<string | undefined>(subscription.next_billing_date)
+    const [localCurrentPeriodEnd, setLocalCurrentPeriodEnd] = useState<string | undefined>(subscription.current_period_end)
+    const cancelGuardDate = useMemo(
+        () => localCurrentPeriodEnd ?? localNextBillingDate,
+        [localCurrentPeriodEnd, localNextBillingDate]
+    )
+    const cancelDescription = useMemo(() => {
+        return (
+            `This will schedule your subscription to cancel at the end of the current billing period.` +
+            (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
+            ` You can restore anytime before that date.`
+        )
+    }, [cancelGuardDate])
 
     // Map pricing plans to BillingSDK Plan type
     const billingPlans = useMemo<BSDKPlan[]>(() => {
@@ -105,8 +117,16 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
     }, [billingPlans, subscription.plan_name])
 
     const nextBillingDateStr = useMemo(() => {
-        return subscription.next_billing_date ? new Date(subscription.next_billing_date).toLocaleDateString() : '—'
-    }, [subscription.next_billing_date])
+        return localNextBillingDate ? new Date(localNextBillingDate).toLocaleDateString() : '—'
+    }, [localNextBillingDate])
+
+    const planEndsDateStr = useMemo(() => {
+        return localCurrentPeriodEnd
+            ? new Date(localCurrentPeriodEnd).toLocaleDateString()
+            : (localNextBillingDate ? new Date(localNextBillingDate).toLocaleDateString() : '—')
+    }, [localCurrentPeriodEnd, localNextBillingDate])
+
+    const dateLabel = localCancelAtPeriodEnd ? 'Plan ends on' : 'Next billing date'
 
     const currentPlanInfo = useMemo<BSDKCurrentPlan>(() => {
         const sym = currentPlanDisplay?.currency || '$'
@@ -133,33 +153,42 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
             },
             type: 'monthly',
             price: priceStr,
-            nextBillingDate: nextBillingDateStr,
+            nextBillingDate: localCancelAtPeriodEnd ? planEndsDateStr : nextBillingDateStr,
             paymentMethod: 'Card on file',
             status,
         }
-    }, [currentPlanDisplay, subscription.status, nextBillingDateStr, subscription.plan_name])
+    }, [currentPlanDisplay, subscription.status, nextBillingDateStr, planEndsDateStr, localCancelAtPeriodEnd, subscription.plan_name])
 
     const onCancel = useCallback(async () => {
         if (!subscription.subscription_id) return
         try {
             setBusy(true)
-            await apiCancelSubscription(subscription.subscription_id)
-            window.location.reload()
+            const res = await apiCancelSubscription(subscription.subscription_id)
+            setLocalCancelAtPeriodEnd(true)
+            if (res?.remote?.current_period_end) {
+                setLocalCurrentPeriodEnd(res.remote.current_period_end as any)
+            }
+            if (res?.remote?.next_billing_date) {
+                setLocalNextBillingDate(res.remote.next_billing_date as any)
+            }
+            setConfirmCancelOpen(false)
+            router.refresh()
         } finally {
             setBusy(false)
         }
-    }, [subscription.subscription_id])
+    }, [subscription.subscription_id, router])
 
     const onRestore = useCallback(async () => {
         if (!subscription.subscription_id) return
         try {
             setBusy(true)
             await apiRestoreSubscription(subscription.subscription_id)
-            window.location.reload()
+            setLocalCancelAtPeriodEnd(false)
+            router.refresh()
         } finally {
             setBusy(false)
         }
-    }, [subscription.subscription_id])
+    }, [subscription.subscription_id, router])
 
     const onPlanChange = useCallback(async (planId: string) => {
         const chosen = plans.find((p) => p.id === planId)
@@ -167,18 +196,18 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
         try {
             setBusy(true)
             await apiChangePlan(subscription.subscription_id, chosen.dodo_product_id, 'prorated_immediately', 1)
-            // Webhook will update local state; reload to reflect
-            window.location.reload()
+            // Webhook will update local state; reflect without hard reload
+            router.refresh()
         } finally {
             setBusy(false)
         }
-    }, [plans, subscription.subscription_id])
+    }, [plans, subscription.subscription_id, router])
 
     const onUpdatePaymentMethod = useCallback(async () => {
         try {
             setBusy(true)
             const origin = typeof window !== 'undefined' ? window.location.origin : ''
-            const return_url = `${origin}/subscribe`
+            const return_url = `${origin}/subscribe?pm_updated=1`
             const res = await apiUpdatePaymentMethod(subscription.subscription_id, return_url)
             if (res?.url) {
                 window.location.href = res.url
@@ -194,6 +223,41 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
             setBusy(false)
         }
     }, [subscription.subscription_id])
+
+    // Realtime: reflect webhook updates without hard refresh
+    useEffect(() => {
+        if (!subscription.subscription_id) return
+        const supabase = createSupabaseClient()
+        const channel = supabase
+            .channel(`dodo_subscriptions:${subscription.subscription_id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'dodo_subscriptions',
+                    filter: `dodo_subscription_id=eq.${subscription.subscription_id}`,
+                } as any,
+                (payload: any) => {
+                    const row = (payload?.new ?? {}) as any
+                    if (typeof row.cancel_at_period_end !== 'undefined') {
+                        setLocalCancelAtPeriodEnd(!!row.cancel_at_period_end)
+                    }
+                    if ('next_billing_date' in row) {
+                        setLocalNextBillingDate(row.next_billing_date || undefined)
+                    }
+                    if ('current_period_end' in row) {
+                        setLocalCurrentPeriodEnd(row.current_period_end || undefined)
+                    }
+                    router.refresh()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            try { supabase.removeChannel(channel) } catch (_) { }
+        }
+    }, [subscription.subscription_id, router])
 
 
 
@@ -224,9 +288,10 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                     }}
                     hideUpdatePlan={true}
                     hideCancelDialog={true}
+                    dateLabel={dateLabel}
                 >
                     <>
-                        {subscription.status === 'active' && !subscription.cancel_at_period_end && (
+                        {subscription.status === 'active' && !localCancelAtPeriodEnd && (
                             <Button
                                 variant="destructive"
                                 onClick={() => setConfirmCancelOpen(true)}
@@ -235,7 +300,7 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                                 Cancel at period end
                             </Button>
                         )}
-                        {subscription.status === 'active' && subscription.cancel_at_period_end && (
+                        {subscription.status === 'active' && localCancelAtPeriodEnd && (
                             <Button
                                 variant="default"
                                 onClick={onRestore}
@@ -257,8 +322,7 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                 onClose={() => setConfirmCancelOpen(false)}
                 onConfirm={async () => {
                     try {
-                        await apiCancelSubscription(subscription?.subscription_id)
-                        window.location.reload()
+                        await onCancel()
                     } catch (e) {
                         console.error('Failed to cancel subscription', e)
                         alert('Failed to cancel subscription')

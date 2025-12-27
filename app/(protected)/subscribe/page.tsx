@@ -3,6 +3,7 @@ import Image from 'next/image'
 import { cookies } from 'next/headers'
 import SubscribeButton from '@/components/subscribe/SubscribeButton'
 import ManageSubscription from '@/components/subscribe/ManageSubscription'
+import RealtimeSubscriptionSync from '@/components/subscribe/RealtimeSubscriptionSync'
 import { Check, ChevronUp, Loader2, Sparkles, Zap } from 'lucide-react'
 import { CustomSpinner } from "@/components/CustomSpinner"
 
@@ -101,6 +102,8 @@ export default async function SubscribePage() {
     if (subscriptionSummary?.status === 'active') {
         return (
             <main className="min-h-screen font-sans text-stone-900 flex flex-col items-center py-8 px-4 sm:px-6">
+                {/* Live updates for webhook-driven lifecycle changes */}
+                <RealtimeSubscriptionSync userId={user?.id} />
                 <div className="w-full max-w-5xl">
                     <ManageSubscription
                         subscription={subscriptionSummary}
@@ -117,6 +120,8 @@ export default async function SubscribePage() {
 
     return (
         <main className="min-h-screen font-sans text-stone-900 flex flex-col items-center justify-center py-12 px-4 sm:px-6">
+            {/* After returning from hosted checkout (?subscribed=1), auto-refresh and poll until active */}
+            <RealtimeSubscriptionSync userId={user?.id} />
 
             {/* ISLAND CARD CONTAINER */}
             <div className={`

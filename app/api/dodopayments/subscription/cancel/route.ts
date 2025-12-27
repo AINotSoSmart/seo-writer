@@ -71,9 +71,17 @@ export async function POST(req: NextRequest) {
             cancel_at_next_billing_date: true,
         }
 
+        const localUpdate: any = { metadata: newMetadata, cancel_at_period_end: true }
+        if (updated?.current_period_end) {
+            localUpdate.current_period_end = updated.current_period_end
+        }
+        if (updated?.next_billing_date) {
+            localUpdate.next_billing_date = updated.next_billing_date
+        }
+
         await supabase
             .from('dodo_subscriptions')
-            .update({ metadata: newMetadata, cancel_at_period_end: true })
+            .update(localUpdate)
             .eq('dodo_subscription_id', subscription_id)
 
         // Audit row (non-blocking)

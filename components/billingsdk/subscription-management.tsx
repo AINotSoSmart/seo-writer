@@ -29,6 +29,7 @@ export interface SubscriptionManagementProps {
   updatePlan: UpdatePlanDialogProps;
   hideUpdatePlan?: boolean;
   hideCancelDialog?: boolean;
+  dateLabel?: string;
   children?: ReactNode;
 }
 
@@ -39,6 +40,7 @@ export function SubscriptionManagement({
   updatePlan,
   hideUpdatePlan,
   hideCancelDialog,
+  dateLabel,
   children,
 }: SubscriptionManagementProps) {
   return (
@@ -113,7 +115,7 @@ export function SubscriptionManagement({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-6">
               <div className="group from-muted to-background/10 border-border/30 hover:border-border/60 rounded-lg border bg-gradient-to-b p-2.5 transition-all duration-200 sm:p-3 md:bg-gradient-to-tl">
                 <span className="text-muted-foreground mb-1 block text-xs sm:text-sm">
-                  Next billing date
+                  {dateLabel ?? "Next billing date"}
                 </span>
                 <div className="group-hover:text-primary text-sm font-medium transition-colors duration-200 sm:text-base">
                   {currentPlan.nextBillingDate}

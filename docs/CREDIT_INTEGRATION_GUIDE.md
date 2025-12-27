@@ -764,7 +764,7 @@ export function CreditBalanceWidget({
           <div className="animate-pulse">
             <div className="h-4 bg-muted rounded w-24 mb-2"></div>
             <div className="h-8 bg-muted rounded w-16"></div>
-          </div>
+          </div>1
         </CardContent>
       </Card>
     )
