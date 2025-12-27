@@ -24,9 +24,10 @@ export const BenefitsSection: React.FC = () => {
         {/* Card 1: Real-Time Visibility (Yellow, Span 2) */}
         <div className="md:col-span-2 bg-[#FAFA9D] border-2 border-black p-8 shadow-neo flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden group hover:shadow-neo-hover transition-all duration-200">
           <div className="flex-1 z-10">
-            <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">Clear visibility into where you need to win</h3>
+            <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">CLEAR VISIBILITY INTO WHERE YOU NEED TO WIN</h3>
             <p className="font-sans font-medium text-black/80 leading-relaxed text-lg">
-              We analyze how AI search engines answer questions in your category and where your brand is missing from those answers.            </p>
+              We analyze how AI search engines answer questions in your category and build the strategy to fill the gaps where your brand is missing from those answers.
+            </p>
           </div>
           {/* Graphic: AI Citation Mockup */}
           <div className="bg-white border-2 border-black rounded-xl p-4 w-64 shadow-sm transform rotate-2 group-hover:rotate-0 transition-transform duration-300 shrink-0">
@@ -59,7 +60,7 @@ export const BenefitsSection: React.FC = () => {
           </div>
           <h3 className="font-display font-black text-xl mb-3 uppercase leading-tight">Competitor Gap Domination</h3>
           <p className="font-sans text-gray-600 leading-relaxed text-sm font-medium">
-            Your competitors are winning because they answered the question better. We analyze their content to find the "Gaps" they missed—and we exploit them.
+            Your competitors aren’t winning by publishing more. They’re winning by answering better questions. We analyze what they cover, what they miss, where authority is still unclaimed and we exploit it.
           </p>
         </div>
 
@@ -68,18 +69,17 @@ export const BenefitsSection: React.FC = () => {
           <div className="w-12 h-12 bg-[#D6F5F2] border-2 border-black rounded-full flex items-center justify-center mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <FileText className="w-6 h-6 text-black" />
           </div>
-          <h3 className="font-display font-black text-xl mb-3 uppercase leading-tight">Authority-Building Strategy</h3>
+          <h3 className="font-display font-black text-xl mb-3 uppercase leading-tight">Authority-Building Content Strategy</h3>
           <p className="font-sans text-gray-600 leading-relaxed text-sm font-medium">
-            Every article is part of a connected plan designed to build topical authority over time, not isolated posts that go nowhere.
-          </p>
+            Every article is part of a connected system. Topics are ordered intentionally to compound trust, coverage, and credibility over time. Nothing random. Nothing isolated.        </p>
         </div>
 
         {/* Card 4: Quality Articles (Teal, Span 2) */}
         <div className="md:col-span-2 bg-[#D6F5F2] border-2 border-black p-8 shadow-neo flex flex-col md:flex-row items-center gap-8 hover:shadow-neo-hover transition-all duration-200">
           <div className="flex-1">
-            <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">Quality Articles That Beat the Noise</h3>
+            <h3 className="font-display font-black text-2xl md:text-3xl mb-4 uppercase">ARTICLES THAT ACTUALLY ANSWER QUESTIONS</h3>
             <p className="font-sans font-medium text-black/80 leading-relaxed text-lg">
-              Most AI content reads like a Wikipedia summary. Ours reads like a field report. We validate every claim to ensure your content is technically accurate and impossible to ignore.
+              Most AI content reads like a Wikipedia summary. Ours explains. Each article is built to fully resolve a real user question with clarity humans trust and AI systems recognize as authority.
             </p>
           </div>
 

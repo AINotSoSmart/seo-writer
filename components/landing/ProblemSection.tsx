@@ -188,17 +188,17 @@ export const ProblemSection: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full">
         <ProblemCard
           title="AI SEARCH IGNORES YOU"
-          description="You write 100 blogs, but ChatGPT, Gemini and Claude don’t know who you are. When peoples search in your category, the AI recommends your competitors - not YOU."
+          description="You publish dozens of articles. AI search still doesn’t recognize your brand. When people ask real questions in your category, AI recommends competitors - not YOU."
           graphic={<AiSearchGraphic />}
         />
         <ProblemCard
           title="YOU SOUND LIKE A BOT"
-          description="Google smells 'Default GPT-4' content in 3 seconds. It has no brand voice, no unique data, and no soul. It doesn't build authority; it just adds to the noise."
+          description="Modern AI Search engines & LLMs spot generic AI content in 3 seconds. It has no brand voice, no unique data, and no soul. It doesn't build authority; it just adds to the noise."
           graphic={<BotVoiceGraphic />}
         />
         <ProblemCard
-          title="IMPRESSIONS BUT ZERO CLICKS"
-          description="You are ranking for keywords that don't convert. Without GSC data dictating your roadmap, you are just guessing while competitors win the real answers."
+          title="IMPRESSIONS, ZERO CLICKS"
+          description="You rank for keywords that don’t move the business. Without real visibility data guiding the roadmap, you’re guessing while competitors own the answers."
           graphic={<ZeroClicksGraphic />}
         />
       </div>
