@@ -325,28 +325,28 @@ export const FeaturesSection: React.FC = () => {
     {
       id: "03",
       title: "Multi-Stage 'Expert' Research",
-      description: "Most tools guess. Ours digs deep. We uncover the specific details, expert nuances, and data points that make your content genuinely helpful—and impossible for generic AI to replicate.",
+      description: "We do not summarize the internet. We verify claims, Surface missing data and fill the gaps competitors avoid. This is what turns content into something AI systems trust enough to cite.",
       color: "bg-[#FFC8C8]", // Soft Red
       Graphic: ResearchGraphic
     },
     {
       id: "04",
       title: "Semantic Internal Linking",
-      description: "We automatically weave your new articles into your existing content ecosystem. No orphan pages, just a perfectly interconnected site structure that Google loves.",
+      description: "Every article knows why it exists and what it supports. We connect content by intent and meaning, Not random links or SEO templates. Nothing published stands alone.",
       color: "bg-[#E8C8FF]", // Soft Purple
       Graphic: InternalLinkGraphic
     },
     {
       id: "05",
       title: "Instant Credibility & Trust",
-      description: "We validate our content with real-time links to authoritative sources. Your articles come pre-loaded with the trust signals needed to rank and convert.",
+      description: "Every important claim is backed by real sources. Not after publishing, Not manually. Authority is part of the content, not an afterthought.",
       color: "bg-[#C8D6FF]", // Soft Blue
       Graphic: CitationsGraphic
     },
     {
       id: "06",
       title: "30-Day Authority-Driven Content Plan",
-      description: "A structured plan where each article supports the next. Designed to build topical authority instead of publishing disconnected posts.",
+      description: "We do not ask “What should we write this month?” We decide What comes first, What unlocks the next article and what should wait. This is how authority compounds instead of stalling.",
       color: "bg-[#D6F5F2]", // Teal
       Graphic: AuthorityPlanGraphic
     },
@@ -359,8 +359,8 @@ export const FeaturesSection: React.FC = () => {
     },
     {
       id: "08",
-      title: "WordPress & Webflow Publishing",
-      description: "Publish directly or export clean markdown. No formatting fixes. No workflow friction.",
+      title: "Automated CMS Publishing",
+      description: "Automatically publish to Wordpress, Webflow, Shopify or export clean markdown. No formatting fixes. No workflow friction. Strategy stays the hard part, execution disappears.",
       color: "bg-gray-100", // Gray
       Graphic: CMSGraphic
     }
@@ -379,7 +379,7 @@ export const FeaturesSection: React.FC = () => {
           How we make you win<br />modern AI search
         </h2>
         <p className="font-sans text-gray-600 text-lg md:text-xl leading-relaxed max-w-2xl">
-          A focused set of capabilities designed around clarity, authority, and compounding growth. No bloated SEO suite. No distractions.
+          A focused system that removes guesswork from growth. Every feature exists to answer one question “What should exist next for this brand to win”
         </p>
       </div>
 
