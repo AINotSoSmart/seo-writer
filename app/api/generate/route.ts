@@ -3,6 +3,7 @@ import { tasks } from "@trigger.dev/sdk/v3"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
 import { ArticleType } from "@/lib/prompts/article-types"
+import { ArticleLength } from "@/lib/prompts/article-length"
 import { hasCredits, deductCredits, addCredits } from "@/lib/credits"
 
 export async function POST(req: NextRequest) {
@@ -12,6 +13,7 @@ export async function POST(req: NextRequest) {
       brandId,
       title,
       articleType = 'informational',
+      articleLength = 'long',
       supportingKeywords = [],
       cluster = '',
       planId,
@@ -70,6 +72,7 @@ export async function POST(req: NextRequest) {
         brandId,
         title,
         articleType: articleType as ArticleType,
+        articleLength: articleLength as ArticleLength,
         supportingKeywords,
         cluster,
         planId,

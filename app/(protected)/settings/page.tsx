@@ -6,13 +6,14 @@ import { getUserBrandStatus } from "@/actions/brand"
 import { getUserDefaults, setDefaultBrand } from "@/actions/preferences"
 import { createClient } from "@/utils/supabase/client"
 import { getBrandLinkCountAction } from "@/actions/internal-linking"
-import { Check, Globe, Plus, Edit, Settings2, Loader2, Link2, RefreshCcw, ExternalLink, AlertCircle } from "lucide-react"
+import { Check, Globe, Plus, Edit, Settings2, Loader2, Link2, RefreshCcw, ExternalLink, AlertCircle, FileText, Search } from "lucide-react"
 import BrandOnboarding from "@/components/brand-onboarding"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { GlobalCard } from "@/components/ui/global-card"
 import { CustomSpinner } from "@/components/CustomSpinner"
+import { ARTICLE_LENGTHS } from "@/lib/prompts/article-length"
 
 type BrandInfo = { id: string; website_url: string; created_at: string; brand_data: BrandDetails }
 
@@ -115,7 +116,7 @@ export default function SettingsPage() {
     }
   }
 
-  const handleUpdateSearchPrefs = async (brandId: string, field: 'search_country' | 'search_topic', value: string) => {
+  const handleUpdateSearchPrefs = async (brandId: string, field: 'search_country' | 'search_topic' | 'article_length', value: string) => {
     const brand = brands.find(b => b.id === brandId)
     if (!brand) return
     const updatedBrandData = { ...brand.brand_data, [field]: value }
@@ -148,7 +149,7 @@ export default function SettingsPage() {
 
   return (
     <div className="w-full min-h-screen font-sans bg-stone-50/30 rounded-t-xl">
-      <GlobalCard className="w-full shadow-sm rounded-xl overflow-hidden bg-white  border border-stone-100 ">
+      <GlobalCard className="w-full rounded-lg overflow-hidden bg-white  border border-stone-100 ">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b border-stone-100  bg-white/50 /50 backdrop-blur-sm rounded-t-xl">
           <div className="flex items-center gap-3">
@@ -201,66 +202,84 @@ export default function SettingsPage() {
                       className={`
                         w-full rounded-xl border transition-all duration-200 overflow-hidden
                         ${isSelected
-                          ? 'bg-stone-50 /30 border-stone-300 ring-1 ring-stone-300 shadow-sm'
+                          ? 'bg-stone-50 /30 border-stone-300 ring-1 ring-stone-300'
                           : 'bg-white border-stone-200  hover:border-stone-300'
                         }
                       `}
                     >
-                      <div className="flex items-center justify-between p-4 group">
-                        <div className="flex items-center gap-4 overflow-hidden">
-                          <button
-                            onClick={async () => {
-                              setSaving(true)
-                              try {
-                                const res = await setDefaultBrand(b.id)
-                                if (res.success) setDefaultBrandId(b.id)
-                              } finally {
-                                setSaving(false)
-                              }
-                            }}
-                            className={`
-                              w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer
-                              ${isSelected
-                                ? 'bg-stone-900 border-stone-900 text-white'
-                                : 'border-stone-300 text-transparent hover:border-stone-400'
-                              }
-                            `}
-                          >
-                            <Check className="w-3 h-3" />
-                          </button>
+                      {/* Brand Configuration Panels */}
+                      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                          <div className="flex flex-col min-w-0">
-                            <span className={`text-sm font-bold truncate ${isSelected ? 'text-stone-900 ' : 'text-stone-700'}`}>
-                              {b.brand_data?.product_name || b.website_url}
-                            </span>
-                            <span className="text-[10px] text-stone-400 truncate flex items-center gap-1">
-                              <Globe className="w-2.5 h-2.5" />
-                              {b.website_url}
-                            </span>
+                        {/* Panel: Brand Identity */}
+                        <div className="p-4 bg-stone-50 rounded-lg border border-stone-200 md:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start sm:items-center gap-3">
+                            <div className="w-8 h-8 flex-shrink-0 rounded-md border border-stone-200 overflow-hidden bg-white shadow-sm">
+                              <img 
+                                src={`https://www.google.com/s2/favicons?domain=${b.website_url}&sz=128`} 
+                                alt="Favicon" 
+                                className="w-full h-full object-cover"
+                                onError={(e) => { e.currentTarget.src = "https://www.google.com/s2/favicons?domain=example.com&sz=128" }}
+                              />
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-bold text-stone-900 uppercase tracking-wider mb-0.5">{b.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</div>
+                              <div className="text-xs text-stone-500 font-medium">
+                                Update your brand's audience, mission, core features, and tone of voice.
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-9 text-xs gap-2 px-4 font-bold w-full sm:w-auto bg-stone-900 text-white hover:bg-stone-800"
+                            onClick={() => setEditingBrand(b)}
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            EDIT BRAND DATA
+                          </Button>
+                        </div>
+
+                        {/* Panel: Content Strategy */}
+                        <div className="p-4 bg-white rounded-lg border border-stone-100 flex flex-col hover:border-stone-200 transition-colors">
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="p-1.5 bg-indigo-50 text-indigo-500 rounded-md">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <h3 className="text-[10px] font-bold text-stone-900 uppercase tracking-wider">Content Strategy</h3>
+                          </div>
+                          <div className="flex-1 select-none">
+                            <label className="block text-xs font-medium text-stone-500 mb-1.5">Default Article Length</label>
+                            <select
+                              className="w-full h-9 rounded-md border px-3 text-xs bg-white border-stone-200 text-stone-900 focus:ring-1 focus:ring-stone-500 focus:border-stone-500 outline-none transition-all"
+                              value={b.brand_data?.article_length || 'long'}
+                              onChange={e => handleUpdateSearchPrefs(b.id, 'article_length', e.target.value)}
+                            >
+                              {ARTICLE_LENGTHS.map(len => (
+                                <option key={len.value} value={len.value}>{len.label} ({len.wordRange} words)</option>
+                              ))}
+                            </select>
+                            <p className="text-[10px] text-stone-400 mt-2">Applied to all new articles by default.</p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-400 hover:text-stone-700" onClick={() => setEditingBrand(b)}>
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Internal Linking Sync Section */}
-                      <div className="px-4 pb-4 space-y-3">
-                        {/* Research Settings */}
-                        <div className="p-3 bg-white rounded-lg border border-stone-100 shadow-sm">
-                          <div className="text-[9px] font-bold text-stone-400 uppercase tracking-wider mb-2">Research Sources</div>
-                          <div className="grid grid-cols-2 gap-2">
+                        {/* Panel: Research Context */}
+                        <div className="p-4 bg-white rounded-xl border border-stone-100 flex flex-col hover:border-stone-200 transition-colors">
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="p-1.5 bg-emerald-50 text-emerald-500 rounded-md">
+                              <Search className="w-4 h-4" />
+                            </div>
+                            <h3 className="text-[10px] font-bold text-stone-900 uppercase tracking-wider">Research Context</h3>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 flex-1 select-none">
                             <div>
-                              <label className="block text-[10px] text-stone-500 mb-0.5">Country</label>
+                              <label className="block text-xs font-medium text-stone-500 mb-1.5">Target Country</label>
                               <select
-                                className="w-full h-8 rounded-md border px-2 text-xs bg-white border-stone-200 text-stone-900"
+                                className="w-full h-9 rounded-md border px-2 text-xs bg-white border-stone-200 text-stone-900 outline-none focus:ring-1 focus:ring-stone-500 focus:border-stone-500 transition-all"
                                 value={b.brand_data?.search_country || ''}
                                 onChange={e => handleUpdateSearchPrefs(b.id, 'search_country', e.target.value)}
                               >
-                                <option value="">Global (No filter)</option>
+                                <option value="">Global</option>
                                 <option value="australia">Australia</option>
                                 <option value="united states">United States</option>
                                 <option value="united kingdom">United Kingdom</option>
@@ -292,9 +311,9 @@ export default function SettingsPage() {
                               </select>
                             </div>
                             <div>
-                              <label className="block text-[10px] text-stone-500 mb-0.5">Source</label>
+                              <label className="block text-xs font-medium text-stone-500 mb-1.5">News Source</label>
                               <select
-                                className="w-full h-8 rounded-md border px-2 text-xs bg-white border-stone-200 text-stone-900"
+                                className="w-full h-9 rounded-md border px-2 text-xs bg-white border-stone-200 text-stone-900 outline-none focus:ring-1 focus:ring-stone-500 focus:border-stone-500 transition-all"
                                 value={b.brand_data?.search_topic || 'general'}
                                 onChange={e => handleUpdateSearchPrefs(b.id, 'search_topic', e.target.value)}
                               >
@@ -307,16 +326,23 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        {/* Internal Linking */}
-                        <div className="p-3 bg-white  rounded-lg border border-stone-100  flex items-center justify-between shadow-sm">
+                        {/* Panel: Internal Linking */}
+                        <div className="p-4 bg-white rounded-xl border border-stone-100 md:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-stone-200 transition-colors">
                           <div className="flex items-center gap-3">
-                            <div className="p-1.5 bg-stone-50  rounded-md border border-stone-100 ">
-                              <Link2 className="w-3.5 h-3.5 text-stone-500" />
+                            <div className="p-2 bg-blue-50 text-blue-500 rounded-md border border-blue-100">
+                              <Link2 className="w-4 h-4" />
                             </div>
                             <div>
-                              <div className="text-[9px] font-bold text-stone-400 uppercase tracking-wider">Internal Linking</div>
-                              <div className="text-[11px] text-stone-600 font-medium leading-tight">
-                                {linkCounts[b.id] !== undefined ? `${linkCounts[b.id]} links indexed` : 'Index your site for semantic link suggestions'}
+                              <div className="text-[10px] font-bold text-stone-900 uppercase tracking-wider mb-0.5">Internal Linking Engine</div>
+                              <div className="text-xs text-stone-500 font-medium flex items-center gap-2">
+                                {linkCounts[b.id] !== undefined ? (
+                                  <>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                    {linkCounts[b.id]} links indexed and ready
+                                  </>
+                                ) : (
+                                  'Index your site for semantic link suggestions'
+                                )}
                               </div>
                             </div>
                           </div>
@@ -324,15 +350,11 @@ export default function SettingsPage() {
                           <Button
                             variant="secondary"
                             size="sm"
-                            className="h-8 text-[10px] gap-1.5 px-3 font-bold bg-stone-100  hover:bg-stone-200 text-stone-900 border-none"
+                            className="h-9 text-xs gap-2 px-4 font-bold bg-stone-100 hover:bg-stone-200 text-stone-900 border-none transition-colors w-full sm:w-auto"
                             onClick={() => handleSyncLinks(b.id, b.website_url)}
                             disabled={syncingId === b.id}
                           >
-                            {syncingId === b.id ? (
-                              <RefreshCcw className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <RefreshCcw className="w-3 h-3" />
-                            )}
+                            <RefreshCcw className={`w-3.5 h-3.5 ${syncingId === b.id ? 'animate-spin' : ''}`} />
                             {syncingId === b.id ? 'SYNCING...' : 'SYNC SITE'}
                           </Button>
                         </div>

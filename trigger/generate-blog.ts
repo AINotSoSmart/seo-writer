@@ -12,6 +12,7 @@ import { putR2Object } from "@/lib/r2"
 import { randomUUID } from "crypto"
 import { jsonrepair } from "jsonrepair"
 import { ArticleType } from "@/lib/prompts/article-types"
+import { ArticleLength, getArticleLengthConfig } from "@/lib/prompts/article-length"
 import { getArticleStrategy } from "@/lib/prompts/strategies"
 import { getCurrentDateContext } from "@/lib/utils/date-context"
 import { getRelevantInternalLinks, generateEmbedding } from "@/lib/internal-linking"
@@ -878,7 +879,7 @@ ${criticAnalysis.gap_analysis || "No major gaps identified."}
   return cleanParseAndValidate(synthesisText, CompetitorDataSchema, genAI)
 }
 
-const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = []) => {
+const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long') => {
   const strategy = getArticleStrategy(articleType)
 
   // Extract authority links from competitor data for external linking
@@ -919,23 +920,20 @@ ${internalLinks.length > 0 ? `### INTERNAL LINKS POOL (USE 1-3 MAX NATURALLY WHE
 "${strategy.outline_instruction}" 
 
 ---
-## ARTICLE SCOPE (DETERMINED BY ARTICLE TYPE: ${articleType.toUpperCase()})
+## ARTICLE SCOPE (DETERMINED BY LENGTH: ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.label.toUpperCase(); })()})
 
-${articleType === 'informational' ? `
-**YOUR SCOPE: "Quick Answer" (MANDATORY for informational articles)**
-- Structure: Short, direct with inverted pyramid delivery (answers first, theory later).
-- Depth: 3-5 H2s max. Heavy use of H3s for details.
-- Total Sections: **STRICT LIMIT: 7-10 sections. DO NOT exceed 10.**
-- Target Article Length: ~1,800-2,500 words total.
-- GOAL: Speed to solution (snippet baits immediately under H2s).
-` : `
-**YOUR SCOPE: "Comprehensive Guide" (MANDATORY for ${articleType} articles)**
-- Structure: Deep, nested with high-value formatting signals.
-- Depth: Heavy use of H3s and H4s. (60-70% of all headings MUST be H3/H4).
-- Total Sections: **STRICT LIMIT: 10-16 sections. DO NOT exceed 16.** 4-7 H2s MAX. The rest must be H3/H4.
-- Target Article Length: ~2,500-4,000 words total.
-- GOAL: Exhaustive coverage without section bloat.
-`}
+${(() => {
+  const lc = getArticleLengthConfig(articleLength)
+  return `
+**YOUR SCOPE: "${lc.label}" Article (~${lc.wordRange} words)**
+- Structure: ${articleLength === 'short' || articleLength === 'medium' ? 'Short, direct with inverted pyramid delivery (answers first, theory later).' : 'Deep, nested with high-value formatting signals.'}
+- Depth: ${articleLength === 'short' || articleLength === 'medium' ? `${lc.h2Limit} H2s max. Use H3s for important details.` : `Heavy use of H3s and H4s. (60-70% of all headings MUST be H3/H4).`}
+- Total Sections: **STRICT LIMIT: ${lc.sections.min}-${lc.sections.max} sections. DO NOT exceed ${lc.sections.max}.**${articleLength !== 'short' && articleLength !== 'medium' ? ` ${lc.h2Limit} H2s MAX. The rest must be H3/H4.` : ''}
+- Target Article Length: ~${lc.wordRange} words total.
+- GOAL: ${articleLength === 'short' || articleLength === 'medium' ? 'Speed to solution (snippet baits immediately under H2s).' : 'Exhaustive coverage without section bloat.'}
+`
+})()
+}
 
 ** SECTION CONSOLIDATION RULE (CRITICAL):**
 - Prefer fewer, richer sections over many thin ones.
@@ -1083,7 +1081,7 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
 }
 
 **FINAL CHECK:** Before outputting, verify that:
-- Your TOTAL section count does NOT exceed the limit for the chosen scope (10 for Quick Answer, 16 for Comprehensive Guide). COUNT THEM.
+- Your TOTAL section count does NOT exceed the limit for the chosen scope (${(() => { const lc = getArticleLengthConfig(articleLength); return `${lc.sections.max} sections max for ${lc.label} length`; })()}). COUNT THEM.
 - You have NOT created thin H3/H4 sections that could be merged into their parent section.
 - You have adhered to the 60-70% rule (majority of sections are H3/H4)
 - You have kept the total H2 count strictly between 5 and 8.
@@ -1301,7 +1299,7 @@ Return **Markdown** formatted text.
 `
 }
 
-const generateWritingUserPrompt = (previousFullText: string, currentSection: any) => {
+const generateWritingUserPrompt = (previousFullText: string, currentSection: any, wordsPerSection: string = '200–320') => {
   // Build the Link Instruction Block if section has an assigned external link
   let linkInstruction = ""
 
@@ -1367,9 +1365,9 @@ You MUST include an internal link to our own content in this section.
 **GOAL:** High-density, skimmable, "human" content.
 
 **LENGTH GUIDANCE (not a hard limit — use judgment):**
-- Aim for 150-300 words. Some data-heavy sections may need more — that's fine if every sentence earns its place.
-- If you find yourself exceeding ~400 words, consider whether the content is too broad for a single section.
-- A tight 200-word section with a table or bullet list beats a 400-word wall of text.
+- Aim for ${wordsPerSection} words. Some data-heavy sections may need more — that's fine if every sentence earns its place.
+- If you find yourself exceeding ~${parseInt(wordsPerSection.split('–')[1] || '400') + 50} words, consider whether the content is too broad for a single section.
+- A tight ${wordsPerSection.split('–')[0]}-word section with a table or bullet list beats a ${wordsPerSection.split('–')[1] || '400'}-word wall of text.
 
 **CONTENT REQUIREMENTS:**
 ${currentSection.instruction_note}
@@ -1432,6 +1430,7 @@ export const generateBlogPost = task({
     brandId: string;
     title?: string;
     articleType?: ArticleType;
+    articleLength?: ArticleLength;
     supportingKeywords?: string[];
     cluster?: string;
     planId?: string;
@@ -1443,6 +1442,7 @@ export const generateBlogPost = task({
       brandId,
       title,
       articleType = 'informational',
+      articleLength = 'long',
       supportingKeywords = [],
       cluster = '',
       planId,
@@ -1467,6 +1467,8 @@ export const generateBlogPost = task({
 
       if (!brandRec) throw new Error("Brand not found")
       const brandDetails = BrandDetailsSchema.parse(brandRec.brand_data)
+
+      const effectiveArticleLength = brandDetails.article_length || articleLength || 'long'
 
       // style_dna is now a paragraph from brand_details, not a separate brand_voices lookup
       const styleDNA = brandDetails.style_dna || "Write in a professional yet conversational tone. Use active voice and be direct. Address the reader as 'you'. Keep sentences varied for natural rhythm. Avoid corporate jargon and be specific with examples and data."
@@ -1553,7 +1555,7 @@ export const generateBlogPost = task({
         console.log(`🔗 [DEBUG] No external authority links available for outline`)
       }
 
-      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks, supportingKeywords)
+      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks, supportingKeywords, effectiveArticleLength)
       const outlineConfig = {}
       const outlineContents = [
         {
@@ -1649,7 +1651,7 @@ CRITICAL EXECUTION RULES:
 4. ${outline.intro.instruction_note}
 `,
           keywords_to_include: outline.intro.keywords_to_include
-        })
+        }, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
 
         const writeConfig = {}
         const writeContents = [
@@ -1696,7 +1698,7 @@ CRITICAL EXECUTION RULES:
         // THE BRIDGE: Pass last 500 chars for sentence-level flow (semantic context is now in system prompt)
         // FIX: Clean context to prevent LLM from hallucinating placeholders
         const cleanContext = currentDraft.slice(-500).replace(/<!--IMAGE_PLACEHOLDER_\d+-->/g, '')
-        const userPrompt = generateWritingUserPrompt(cleanContext, section)
+        const userPrompt = generateWritingUserPrompt(cleanContext, section, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
 
         // Using Gemini 2.5 Flash for Speed & Context
         const writeConfig = {}

@@ -166,9 +166,12 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                             image_style: "stock",
                             style_dna: "",
                             brand_keywords: [], // Added to fix type error
+                            search_country: "",
+                            search_topic: "general",
+                            article_length: "long",
                         })}
                     >
-                        Or enter details manually
+                        Skip and fill manually
                     </button>
                 </div>
 
