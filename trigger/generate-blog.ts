@@ -172,70 +172,35 @@ Make sure all required fields are present and have the correct types.
 const AUTHENTIC_WRITING_RULES = `
 ### 1. CRITICAL: NEGATIVE CONSTRAINTS (THE "ANTI-AI" FILTER)
 *Violation of these rules results in immediate failure.*
+- **Banned Vocabulary:** NEVER use fluff words (Unleash, Unlock, Elevate, Harness, Empower, Revolutionize, Navigate, Foster, Delve, Dive, Seamless, Robust, Cutting-edge, Game-changing, Vital, Crucial, Unparalleled, Tapestry, Realm, Literally). Use simple, punchy synonyms (e.g., "use" instead of "utilize").
+- **Banned Phrasing:** NEVER use cliché starters ("In today's digital landscape," "Let's dive in," "Imagine a world where") or rhetorical AI tics ("The catch?", "The bigger issue?"). State points directly using strong, standalone sentences.
+- **Concrete Analogies:** Ban generic corporate metaphors (e.g., "digital butler"). Replace them with specific, visceral, and gritty analogies grounded in exact reality.
 
-- **VOCABULARY BLACKLIST:** These are the words that sounds ai fluff when you use them every start of a paragraph. we have to get rid of them and use natural talk. 
-  - **Verbs:** Unleash, Unlock, Elevate, Harness, Empower, Revolutionize, Navigate, Foster, Delve, Dive.
-  - **Adjectives:** Seamless, Robust, Cutting-edge, Game-changing, Revolutionary, Vital, Crucial, Unparalleled, Tapestry, Realm, Literal/Literally.
-- **Correction Protocol:** If you need these words, use simple, punchy words. (e.g., instead of "utilize", use "use"; instead of "facilitate", use "help").
-- **BANNED STARTERS (NO FLUFF):** Never start with: "In today's digital landscape", "Let's dive in", "Let's explore", "Let's be honest", "Imagine a world where", "In this comprehensive guide", "It is worth noting."
-  - **Rule:** Never start a section with "In this section, we will..." Start immediately with the core insight.
-- **LOW PRIORITY TRANSITIONS (THE "AI TIC" LIST):** if you use them again and again... it sounds spammy.. use only when you think this makes sense and will improve redability.
-  - "The bigger issue?", "The catch?", "So, what's the fix?" 
-  - "It's not just X, it's Y." (Unless you have a specific data point).
-  - Make the statement directly. 
-    - *Bad:* "The bigger issue? It's about visibility."
-    - *Good:* "Crucially, this is a visibility problem." (use single standalone sentence for this)
-- **CORPORATE METAPHOR BAN:**
-  - **Replace:** "It's like a digital butler." -> **Use:** "It's a 24/7 ping-machine that emails when the server drops."
-  - **Rule:** Use visceral, specific, or slightly "gritty" analogies.
+### 2. SCANNABLE STRUCTURE (FORMATTING)
+- **Answer-First:** The very first sentence under any H2 must directly answer the header's premise (e.g., H2: "What is CAC?", Sentence 1: "CAC is...").
+- **Micro-Paragraphs:** Never exceed 3 lines of text per paragraph.
+- **Strategic Bolding:** You MUST bold at least one key phrase per section (stats, key terms, or warnings). NEVER bold whole sentences, and NEVER bold links.
 
-### 2. STRUCTURAL ARCHITECTURE (VISUAL PHYSICS)
-*These rules ensure the content is scannable and citation-ready. LLM prefers rich data, not heavy walls of text*
+### 3. ACTIVE & DENSE SYNTAX
+- **Subject-First Active Voice:** The target entity must be the grammatical subject performing the action (e.g., "[Tool] improves X," not "X is improved by [Tool]").
+- **Lexical Density:** Minimize filler/function words. Maximize concrete content words (nouns, verbs, numbers).
 
-- **THE "ANSWER-FIRST" PROTOCOL:** The FIRST sentence under the H2 header must be a direct, standalone answer to the header's premise. (e.g., If H2 is "What is CAC?", Sentence 1 must be "CAC is...").
-- **MAXIMUM PARAGRAPH HEIGHT:** No paragraph can exceed 3 lines of text. If it does, hit "Enter" and split it.
-- **BOLDING FREQUENCY (MANDATORY):** You MUST bold at least **one key phrase per section** using **double asterisks**. Bold: statistics (e.g., **47% faster**), key terms (e.g., **token limits**), or warnings (e.g., **do not skip this step**). Never bold an entire sentence, never bold a link.
+### 4. HUMAN RHYTHM & CADENCE
+*   **Sentence Variance:** NEVER write three sentences of the same length consecutively. Mix staccato sentences (3-5 words) with flowing ones (15+ words). Occasionally start sentences with "And," "But," or "Because."
+*   **Paragraph Burstiness:** Break up complex 3-line paragraphs with occasional single-sentence fragments. 
+*   **Conversational Asides:** Include brief, realistic, expert-to-expert digressions in parentheses (e.g., "which implies you have the API key").
 
-### 4. ENTITY SALIENCE (SUBJECT-FIRST SYNTAX)
-- **ACTIVE VOICE ONLY:** The Target Entity must be the **Grammatical Subject**.
-  - *Bad:* "Efficiency is improved by [Tool]..."
-  - *Good:* "**[Tool]** improves efficiency by..."
-- **LEXICAL DENSITY:** Minimize "Function Words". Maximize "Content Words" (Nouns, Verbs, Numbers).
+### 5. INFORMATION GAIN & AUTHORITY
+*   **Entity Density:** Use specific Named Entities over general nouns (e.g., use "**Next.js 16**" instead of "a fast JS framework").
+*   **Definition Syntax:** Always format definitions as: *"[Term] is[Definition] that helps [Audience] achieve [Outcome]."*
+*   **The "Hard Truth":** Build trust by explicitly stating the limitations of any tool or competitor you mention (e.g., "Tool X is great for Y, but struggles with Z").
 
-### 5. CITATION AUTHORITY (PERPLEXITY REDUCTION)
-- **"ACCORDING TO" SYNTAX:** Explicitly name sources. "According to the **2025 State of AI Report**..."
-- **Constraint:** Do NOT cite competitors. Cite Neutral Super-Authorities.
+### 6. PERSPECTIVE & ENGAGEMENT
+*   **Subjective POV:** Maintain a consistent persona (Founder = "I/My team"; Agency = "We/Our clients"). Use subjective opinions ("I found this tool snappy...") rather than robotic facts ("The tool is effective"). 
+*   **No Passive Recommendations:** NEVER say "It is recommended that..." Say "You should..." or "I recommend...".
+*   **Action-Driven Closings:** NEVER write a summary at the end. Tell the reader exactly what step to take next.
 
-### 6. RHYTHM & VOICE (THE HUMAN PULSE)
-*These rules break the "robotic" cadence of AI generation. so follow them at all cost.*
-- **SENTENCE VARIANCE (THE MIX):**
-  - **Constraint:** Do not write three sentences of the same length in a row.
-  - **The Pattern:** Mix "Staccato" (3-5 words) with "Flow" (15+ words).
-- **NATURAL DIGRESSIONS:** Include brief asides in parentheses. "(This implies you have access to the API key, which isn't always given.)"
-- **BURSTINESS (Paragraph VARIANCE):**
-  - **Constraint:** You generally write long paragraphs. Stop it.
-  - **The Mix:** For every "complex" paragraph 3-4+ lines, you must write a "fragment" sentence.
-- **NON-STANDARD SYNTAX:** Occasionally start a sentence with "And," "But," or "Because" to create a conversational, expert-to-expert tone.
-
-### 7. SUBSTANCE & AUTHORITY (THE "INFORMATION GAIN" SIGNAL)
-*These rules ensure the content ranks in AI Search (AEO).*
-
-- **ENTITY DENSITY:** Prioritize specific Named Entities over general nouns.
-- *Bad:* "Use a fast Javascript framework." -> *Good:* "Use **Next.js 14** or **Astro**."
-- **DEFINITION OWNERSHIP:** When defining a term, use this syntax: *"[Term] is [Definition] that helps [Audience] achieve [Outcome]."*
-- **ADMIT LIMITATIONS (THE "HARD TRUTH"):** while referencing competitors and user's own brands, always mention the limitations of the tool. 
-- *Example:* "This doesn't work for Google SGE yet, but it’s a beast for Perplexity." "i.e. this x tool is good for this, but we handle this better in this 'xyz' manner." (This builds massive E-E-A-T).
-
-
-### 8. PERSPECTIVE & ENGAGEMENT
-*These rules create trust and drive action.*
-
-- **OWN THE PERSPECTIVE:** - If writing as a Founder, use "I" and "My team."
-  - If writing as an Agency, use "We" and "Our clients."
-- **SUBJECTIVE OPINION:** Instead of "The tool is effective," use "I found the tool surprisingly snappy during high-traffic tests, but it struggled with [X]."
-- **AVOID PASSIVE VOICE:** Never say "It is recommended that..." Say "You should..." or "I recommend...".
-- **THE "NEXT STEP" CLOSING:** AI summarizes. Humans give orders. Don't summarize; tell the reader exactly what to do next.
-**Note** If you fail to follow the 'Answer-First' or 'Vocabulary Blacklist' rules, the output is considered a failure.
+**⚠️ CRITICAL DIRECTIVE:** Failure to follow the **"Vocabulary Blacklist"** or the **"Answer-First"** formatting rules overrides all other instructions and will result in an immediate rejection of the output.
 `
 
 // Type-specific intro templates (V3: The "Golden HTML Stack" Edition)
@@ -363,162 +328,26 @@ const getIntroTemplate = (articleType: ArticleType): string => {
 
 // --- IN-CONTENT IMAGE PROMPT FIREWALL & LOGIC ---
 
-const IMAGE_PROMPT_FIREWALL = `
-### GOAL
-Create clean in-article infographic images with minimal text and no hallucinated or broken typography using a text-to-image model with weak layout control.
+const IMAGE_PROMPT_FIREWALL = `### IMAGE PROMPT FIREWALL (ANTI-HALLUCINATION PROTOCOL)
+*Text-to-image models fail at complex layouts and long text. These rules are non-negotiable to prevent broken imagery.*
 
----
+**1. EXTREME TEXT LIMITS & TYPOGRAPHY**
+*   **Hard Cap:** Maximum **6 total text elements** per image. Max 2 lines per element. NO paragraphs. NO repeated labels.
+*   **Banned Content:** NEVER use statistics, percentages, meaningful numbers, or instructional verbs (e.g., "Optimize," "Improve"). 
+*   **Concrete Nouns Only:** Labels must be tangible (e.g., "Location," "Business Category")—never abstract concepts (e.g., "Accurate Details").
+*   **Titles:** Use either "Title Only" or "Title + explicitly defined Subtitle." Captions must be exactly 1 line at the bottom.
 
-## HARD CONSTRAINTS (NON-NEGOTIABLE)
+**2. BANNED COMPLEX STRUCTURES**
+*   NEVER prompt for: Tables, grids, columns, rows, pipelines, architectures, layers, stages, frameworks, dashboards, step-by-step processes, or circular layouts with text. 
 
-### 1. TEXT LIMITS
-* Maximum **6 total text elements** in the entire image
-* Each text element max **2 lines**
-* No paragraphs
-* No repeated labels anywhere in the image
+**3. SAFE LAYOUTS & ANCHORING**
+*   **Allowed Structures:** Use simple horizontal cards, side-by-side comparisons, or a central text-labeled icon surrounded by *unlabeled* supporting icons. Max 2 vertical levels. 
+*   **Focal Limit:** Maximum **one** labeled focal object.
+*   **Visual Anchoring:** Every single text label MUST be visually anchored to an icon, card, or shape to stabilize placement and reduce hallucination.
 
----
-
-### 2. TITLE HANDLING
-* Every image must either
-  a) have **only a title**
-  OR
-  b) have **a title and an explicitly defined subtitle**
-* Never leave space under a title without instruction
-* If no subtitle is desired, explicitly state
-  “No subtitle text appears below the title”
-
----
-
-### 3. FORBIDDEN STRUCTURES
-The prompt MUST NOT include or imply:
-* Tables
-* Grids
-* Columns
-* Rows
-* Pipelines
-* Architectures
-* Layers
-* Stages
-* Frameworks
-* Dashboards
-* Step-by-step processes
-* Vertical stacked systems
-* Circular layouts with text
-
----
-
-### 4. FORBIDDEN TEXT PATTERNS
-The prompt MUST NOT include:
-* Statistics
-* Percentages
-* Numeric metrics with meaning
-* Repeated concepts
-* Instructional verbs as labels
-
-Examples to avoid:
-* Optimize
-* Evaluate
-* Improve
-* Measure
-* Rank
-* Retrieve
-* Generate
-* Authority
-* Accuracy
-* Completeness
-
----
-
-### 5. SAFE TEXT TYPES ONLY
-Allowed text types:
-* Titles
-* Short labels
-* Captions
-
-Labels must be **concrete nouns**, not abstract concepts
-
-Good:
-* Business Category
-* Location
-* Photos
-* Reviews
-* Contact Info
-
-Bad:
-* Accurate Details
-* Complete Profile
-* Listing Optimization
-
----
-
-### 6. LAYOUT RULES
-* Maximum **one labeled focal object**
-* Any additional elements must be:
-  * Icons without text
-  * Decorative shapes
-* If multiple labels are needed:
-  * Use **horizontal cards** or **simple rows**
-  * Never radial or circular with text
-* Avoid vertical hierarchy beyond 2 levels
-
----
-
-### 7. NUMBER HANDLING
-* Numbers may only be used if they are:
-  * Decorative badges
-  * Step numbers with **no explanation**
-* Never use numbers with meaning or context
-
----
-
-### 8. ICON USAGE
-* Every text label should be visually anchored to:
-  * An icon
-  * A card
-  * A shape
-* Icons stabilize text placement and reduce hallucination
-
----
-
-### 9. CAPTION RULE
-* Captions must be:
-  * One line only
-  * Placed at the bottom
-* Captions must not explain data or metrics
-
----
-
-### 10. WHAT THE IMAGE SHOULD DO
-* Reinforce the **idea**, not explain the section
-* Visualize outcomes, not instructions
-* Support the article, not replace it
-
----
-
-## SAFE IMAGE PATTERNS (ALWAYS ALLOWED)
-* Title + central icon + unlabeled supporting icons
-* Horizontal cards with one label each
-* Side-by-side comparisons with one label per side
-* Abstract concept visuals with a single caption
-* Metric-free highlight visuals
-
----
-
-## INTERNAL MENTAL MODEL FOR THE LLM
-Do NOT think:
-“I need to explain this section visually”
-
-Think:
-“I need to give the reader a visual anchor they’ll remember”
-
----
-
-## FINAL INSTRUCTION TO THE PROMPT-WRITING LLM
-> When generating image prompts, prioritize visual clarity over completeness.
-> Avoid structure, hierarchy, repetition, and explanation.
-> Use minimal text, concrete nouns, and explicit layout constraints.
-> If unsure, remove text rather than add it.
+**4. THE MENTAL MODEL**
+*   **Goal:** Provide a visual anchor, not an explanation. Visualize the outcome, do not explain the section. 
+*   **Golden Rule:** Prioritize visual clarity over completeness. When in doubt, remove text.
 `
 
 const IMAGE_PROMPT_EXAMPLE_LIBRARY: Record<string, string[]> = {
@@ -620,7 +449,7 @@ ${examplesText}
 
 ---
 
-### CURRENT TASK:
+### DATA WE AHVE FOR A CONTEXTUAL IMAGE PROMPT:
 - **Article Title:** "${articleTitle}"
 - **Section Heading:** "${section.heading}"
 - **What is being wirtten in this section:** "${section.instruction_note || 'Visualize the core concept of this section.'}"
@@ -651,7 +480,7 @@ const getCriticGapPrompt = (keyword: string, articleType: ArticleType, broadCont
   return `
 You are a ruthless Research Critic. today date is ${getCurrentDateContext()} (just for context, so that you dont hallucinate).
 
-I have gathered initial search results for the keyword from the serp from teh rankign compititors: "${keyword}"
+We have gathered initial search results for the keyword from the serp from the ranking compititors: "${keyword}"
 
 ${instructions ? `
 ### EDITORIAL BRIEF (FROM USER):
@@ -665,7 +494,7 @@ The <user_context> block contains thematic preferences. You must specifically lo
 
 YOUR TASK:
 Analyze this research data and identify EXACTLY what is MISSING that we need to write a winning article.
-You MUST find at least 3-5 gaps - there are ALWAYS gaps in any research (but no fluff, it should be accurate and meaningful).
+You MUST find at least 3-5 gaps - there are ALWAYS meaningful gaps in any research.
 
 ** ARTICLE TYPE: ${articleType.toUpperCase()}**
  This is our research focus, follow this: ${strategy.research_focus}
@@ -685,7 +514,7 @@ THINK LIKE A CRITIC - Always find gaps:
 IMPORTANT RULES:
 1. You MUST return exact 3 targeted queries - NEVER return an empty array
 2. If the data mentions ANY product / tool names, include queries about those specific products
-3. Be SPECIFIC - not "best CRM" but "Salesforce pricing 2026" or "HubSpot vs Pipedrive user reviews reddit"
+3. Be SPECIFIC - not "best CRM pricing" but "Salesforce pricing 2026" or "HubSpot vs Pipedrive user reviews reddit"
 4. Include at least one query for "[keyword] reddit" or "[keyword] reviews" for real user opinions
 
 OUTPUT(Strict JSON):
@@ -705,22 +534,18 @@ const getSynthesisPrompt = (articleType: ArticleType, keyword: string) => {
 You are an expert SEO Strategist and Data Analyst.${getCurrentDateContext()}
 
 I will provide you with TWO sets of research data:
-1. BROAD LANDSCAPE DATA - General information from top search results
-2. DEEP DIVE DATA - Specific gap - filling information we hunted down based on first BROAD LANDSCAPE DATA for missing data
+1. BROAD LANDSCAPE DATA - General information from top search results.
+2. DEEP DIVE DATA - Specific gap - filling information we hunted down based on first BROAD LANDSCAPE DATA.
 
 YOUR GOAL:
 Combine these into ONE comprehensive "Detailed Research Brief" that allows us to write a better article than all competitors combined to dominate modern ai search for answer first intent.
 
-** KEYWORD: "${keyword}" **
+** OUR TARGET KEYWORD: "${keyword}" **
 ** ARTICLE TYPE: ${articleType.toUpperCase()}**
 
-This si our research focus: "${strategy.research_focus}"
+This is our research focus: "${strategy.research_focus}"
 
-DATA CLEANING RULES:
-1. Ignore UI elements like "Login", "Sign Up", "Footer", "Cookie Policy", "Alt tags".
-2. Focus ONLY on educational content, tutorials, facts and any other data that can improve our article.
-3. PRIORITIZE the Deep Dive data - it contains the specific facts that competitors miss.
-4. This both data was fetched from web using tavily, somtime it may miss and can get some wrong results... if you think something is out of the context, drop it form the final answer, becuase it willl make the article writer confused.
+DATA CLEANING RULES: Focus ONLY on educational content, tutorials, facts and any other data that can improve our article. PRIORITIZE the Deep Dive data - it contains the specific facts that competitors miss. This both data was fetched from web using tavily, somtime it may miss and can get some wrong results... if you think something is out of the context, drop it form the final answer, becuase it will make the article writer confused.
 
 OUTPUT REQUIREMENTS(Return strict JSON):
 1. "fact_sheet": Extract hard facts, statistics, dates, and specific steps. MUST include fresh data from Deep Dive.
@@ -915,7 +740,7 @@ The <user_context> block above contains thematic preferences. It is STRICTLY FOR
   INPUT CONTEXT:
 1. MAIN KEYWORD: "${keyword}"
 2. ARTICLE TITLE: "${title || 'To be generated'}"
-3. SUPPORTING KEYWORDS (Include these naturally): ${supportingKeywords.length ? supportingKeywords.join(", ") : "None provided"}
+3. SUPPORTING KEYWORDS (Must include these naturally in the article): ${supportingKeywords.length ? supportingKeywords.join(", ") : "None provided"}
 4. COMPETITOR & GAP DATA: "${JSON.stringify(competitorData)}"
 5. ${brandDetails ? `### BRAND CONTEXT (Strategic Integration)
 - Brand: ${brandDetails.product_name}
@@ -927,7 +752,7 @@ The <user_context> block above contains thematic preferences. It is STRICTLY FOR
 - How It Works: ${brandDetails.how_it_works || 'N/A'}
 NOTE: Use this brand data as source of supporting context, never write anything which is not in brand data, Never assume our brand might be offering this and that.
 
-"IF There is a "How-To" section in the outline, then it is a CRITICAL INSTRUCTION FOR "HOW-TO" SECTIONS in terms of use of brand data:
+"IF There is a "How-To" section in the outline, then it is a CRITICAL INSTRUCTION FOR "HOW-TO" SECTIONS for use of brand data:
 If the user intent is to solve a problem that OUR product actually solves which you can know from brand data above, the "How-To" section of the outline MUST instruct the writer to use OUR product's process.
 - In the 'instruction_note' for that section, you MUST specifically write: "Explain how to solve this using ${brandDetails.product_name}. Steps: [write in new words, relevant steps from 'How It Works' above]."
 - DO NOT suggest competitors or generic tools as the primary solution if we offer a direct one.
@@ -944,8 +769,8 @@ ${internalLinks.length > 0 ? `### INTERNAL LINKS POOL (USE 1-3 MAX NATURALLY WHE
 ## ARTICLE SCOPE (DETERMINED BY LENGTH: ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.label.toUpperCase(); })()})
 
 ${(() => {
-  const lc = getArticleLengthConfig(articleLength)
-  return `
+      const lc = getArticleLengthConfig(articleLength)
+      return `
 **YOUR SCOPE: "${lc.label}" Article (~${lc.wordRange} words)**
 - Structure: ${articleLength === 'short' || articleLength === 'medium' ? 'Short, direct with inverted pyramid delivery (answers first, theory later).' : 'Deep, nested with high-value formatting signals.'}
 - Depth: ${articleLength === 'short' || articleLength === 'medium' ? `${lc.h2Limit} H2s max. Use H3s for important details.` : `Heavy use of H3s and H4s. (60-70% of all headings MUST be H3/H4).`}
@@ -953,8 +778,8 @@ ${(() => {
 - Target Article Length: ~${lc.wordRange} words total.
 - GOAL: ${articleLength === 'short' || articleLength === 'medium' ? 'Speed to solution (snippet baits immediately under H2s).' : 'Exhaustive coverage without section bloat.'}
 `
-})()
-}
+    })()
+    }
 
 ** SECTION CONSOLIDATION RULE (CRITICAL):**
 - Prefer fewer, richer sections over many thin ones.
@@ -979,10 +804,6 @@ You must write headers that are written for both humans and search engines, i me
 - Direct Contextual Questions, Direct real Statements, Vs / Comparison, Action Oriented, Listicles, Outcome Based
 - subheaidngs should be contextual to their parent heading.
 
-** THE LITMUS TEST:**
-If the header sounds like a "Chapter Title" in a fantasy novel, delete it.
-If it sounds like a user might be searching for or a Google Search Query, keep it.
-
 ## HEADING HIERARCHY RULES (CRITICAL FOR SEO - MUST FOLLOW)
 
 **LEVEL DEFINITIONS:**
@@ -990,25 +811,9 @@ If it sounds like a user might be searching for or a Google Search Query, keep i
 - **level: 3 (H3)** = Specific sub-concepts. Narrower scope. (Where the real substance lives)
 - **level: 4 (H4)** = Granular details, lists, steps, specific features. Deep scope.
 
-** STRUCTURE PATTERN(FOLLOW THIS EXAMPLE EXACTLY):**
-\`\`\`
-H2: What Are X and Why Do They Matter for SEO?
-  [Instruction: 40-word definition paragraph — snippet bait -> Quick comparison table: X vs Y]
-H2: 6 Ways to Achieve Z Without Doing W
-  [Instruction: Numbered summary list — list snippet bait]
-  H3: 1. Find and Fix Broken Links
-    H4: How to Find Opportunities
-    H4: Writing Outreach Emails
-  H3: 2. Pitch Yourself as an Expert
-H2: How to Measure If Your Strategy Is Working
-  [Instruction: KPI table with metrics, what they mean, tools to track]
-H2: Common Mistakes That Kill Results
-  [Instruction: Quick list format — scannable]
-\`\`\`
-
 **HIERARCHY REQUIREMENTS (STRICT):**
 1. **The 60-70% Rule:** 60-70% of your sections MUST be level 3 or 4.
-2. **H2 Limit:** NEVER exceed 5-8 H2s total for any article length. H2s are chapters, H3s/H4s are the actual content.
+2. **H2 Limit:** USe as few H2s as possible.
 3. **Snippet Baits:** Immediately under each H2, the instruction MUST demand a specific format (e.g., 40-word definition, comparison table, numbered summary list) for AI citations.
 4. **The H4 Mandate:** You MUST use H4s for specific steps, detailed features, pros/cons, comparisons, and deep dives.
 5. **Formatting Directives:** Every instruction MUST dictate formatting (tables, bullet lists, callouts, bolded entities).
@@ -1019,12 +824,12 @@ H2: Common Mistakes That Kill Results
 
 ## EXTERNAL LINKING STRATEGY (CRITICAL FOR SEO & E-E-A-T)
 
-I have provided a list of "Authority Links" from our research:
+I have also provided a list of "Authority Links" from our research:
 ${JSON.stringify(authorityLinks)}
 
 **YOUR TASK:** 
 - Select **EXACTLY A TOTAL OF 2 LINKS** (if available) for the entire article.
-- Assign "external_link" to the 2 most relevant sections, where you are makign any claim. No hard claim is to be made without a citation.
+- Assign "external_link" to the 2 most relevant sections, where you are making any claim. No hard claim is to be made without a citation.
 - **Rule:** If the authority links list is empty or irrelevant, you may skip this. But if valid links exist, you MUST use 2.
 
 **EXTERNAL LINKING RULES:**
@@ -1056,11 +861,11 @@ ${internalLinks.length > 0 ? internalLinks.map(l => `- Title: ${l.title} | URL: 
 4. **Fact Sheet Notes (THE DATA DISTRIBUTION RULE):**
    - You have a "Fact Sheet" in the input. You must DISTRIBUTE these facts into the most relevant sections. tell the writer to use this data in their own words.
    - **Constraint:** Do not be vague. Do not say "Include data."
-   - **Requirement:** You must COPY the specific number/stat from the Fact Sheet into the instruction_note (dont forget anything important, the fact sheet is curated data from the research).
+   - **Requirement:** You must COPY all the specific number/stat from the Fact Sheet into the instruction_note for each section(dont forget anything important, the fact sheet is curated data from the research).
    - **Rule:** Do not reuse the same fact in multiple sections. Assign it to the ONE best spot.
    - **DO NOT** write style instructions. Only focus on the **Substance**.
-5. Keep the instructions note as detailed as possible to avoid any hallucination or misinterpretation by the writer.
-6. Instructions notes must also include the instructions for use of tables, bullet lists, callouts, etc in approx 50% sections, avoid only walls of text.
+5. Keep the instructions note as detailed and specific as possible to avoid any hallucination or misinterpretation by the writer.
+6. Instructions notes must also include the instructions for use of tables, bullet lists, callouts, etc in approx 50% sections, avoid walls of text.
 ## IN-CONTENT IMAGE SELECTION (IMPORTANT):
 For EACH H2 section, decide if an image would ADD VALUE to the content:
 - Set "needs_image": true if the section would benefit from a visual
@@ -1111,7 +916,7 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
 - Does this outline solve the specific intent of "${keyword}"?
 - Have you instructed the writer to remove unnecessary fluff?
 - Have you assigned 1-2 external links to relevant sections?
-- Have you marked 2-3 H2 sections with needs_image: true?
+- Have you marked 3 H2 sections with needs_image: true?
 `
 }
 
@@ -1938,8 +1743,8 @@ VISUAL ELEMENTS:
 - Choose a harmonious 2-3 color palette
 
 COMPOSITION:
-- LEFT SIDE: The main headline/title text in BIG, BOLD letters - this is where the title goes!
-- RIGHT SIDE: 1-2 vector icons, objects, or simple illustrations
+- LEFT SIDE: A small, clean title text - this is where the title goes!
+- RIGHT SIDE: 1-2 clean vector icons, objects, or simple illustrations
 - Plenty of white space - do NOT overcrowd
 
 CONSTRAINTS:
@@ -1965,8 +1770,8 @@ VISUAL ELEMENTS:
 - Objects appear to float or sit on the white surface
 
 COMPOSITION:
-- LEFT SIDE: The main headline/title text in BIG, BOLD letters - this is where the title goes!
-- RIGHT SIDE: 1-2 relevant realistic objects or product-style photography
+- LEFT SIDE: A small, clean title text - this is where the title goes!
+- RIGHT SIDE: 1-2 clean realistic vector visual objects or product-style photography
 - Professional product photography aesthetic
 
 CONSTRAINTS:
@@ -1988,8 +1793,8 @@ VISUAL ELEMENTS:
 - Abstract or symbolic representation of the topic
 
 COMPOSITION:
-- LEFT SIDE: The main headline/title text in BIG, BOLD letters - this is where the title goes!
-- RIGHT SIDE: One simple, bold visual element
+- LEFT SIDE: A small, clean title text - this is where the title goes!
+- RIGHT SIDE: One simple, clean vector visual element
 - Lots of breathing room
 
 CONSTRAINTS:
@@ -2011,8 +1816,8 @@ VISUAL ELEMENTS:
 - Professional, modern aesthetic
 
 COMPOSITION:
-- LEFT SIDE: The main headline/title text in BIG, BOLD letters - this is where the title goes!
-- RIGHT SIDE: visual elements
+- LEFT SIDE: A small, clean title text - this is where the title goes!
+- RIGHT SIDE: clean vector visual elements
 
 CONSTRAINTS:
 - Professional and premium aesthetic
@@ -2028,42 +1833,19 @@ CONSTRAINTS:
 ARTICLE CONTEXT:
 Title: ${finalTitle}
 Main Keyword: ${keyword}
-Topics Covered: ${outline.sections.map(s => s.heading).join(", ")}
 Image Style Preference: ${imageStyle}
 
 ${styleTemplate}
 
-TEXT PROCESSING RULES (CRITICAL):
-1.  **MAIN HEADING:** Use "${keyword.toUpperCase()}" on the LEFT SIDE.
-    - HEADLINE TOKEN RULE (CRITICAL):
-      - The main heading must contain EXACTLY 2 or 3 words
-      - Each word may appear ONLY ONCE
-      - Repeating any word in the main heading is STRICTLY FORBIDDEN
-      - Do not emphasize or stylize text by repetition
-    - Style: Big, Bold, Handwritten/Marker.
-2.  **SECONDARY TEXT:**
-    - Allowed: Small 1-2 word tags (e.g., "Guide", "Review", "2026").
-    - Max 3 tags total.
-3.  **VISUAL ABSTRACTION (MANDATORY):**
-    - **RULE:** If the topic involves "AI Overviews", "Search Results", or "Text Content", visualize it as "Glowing Data Blocks" or "Geometric Flow".
-    - **NEVER** include "Lorem Ipsum", "Fake Text", or "Blurry Paragraphs".
-    - **NEVER** use words like "Summary", "Snippet", or "Log" as visual elements.
-4.  **BANNED:**
-    - NO Sentences. NO Paragraphs. NO Checklists.
-    - Avoid complex financial/technical terms if possible - use icons instead.
-    - NO "Wall of text".
-
-5.  TEXT VALIDATION RULE:
-    - Before finalizing the heading, verify that no word or character sequence is duplicated
-    - If duplication is detected, rewrite the heading using different words
-
-      (Note:  As my ai model is not able to print text properly, it make ssilly mistakes in text, like if you ask it to add a heaidng,,, it will hallucinate at 3rd or 4th word and repeats that word in the headline. So force a kind of weighted instrcutions in the end like "do not duplicate a text in the image, no extra text in the image which is not asked to add."
-
 YOUR TASK:
-Create a descriptive, scene-based prompt. Focus on visual composition.
-Ensure the text is MINIMAL and legible.
+Create a simple, descriptive prompt for an AI image generator to create the featured image.
+The generated prompt MUST instruct the image model to follow the composition above:
+- A small, clean title text on the left (using the keyword or a 2-3 word short summary).
+- Clean visuals on the right as described in the style template. Must be contextual to the articel content
+- Keep the overall design minimal and professional to avoid wasting generation credits.
+- Do not include extra text, paragraphs, or complex layouts.
 
-OUTPUT: Return ONLY the image prompt. No explanations.`
+OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. No explanations.`
 
         const imagePromptConfig = { responseMimeType: "text/plain" }
         const imagePromptContents = [{ role: "user", parts: [{ text: imagePromptSystem }] }]
@@ -2113,6 +1895,7 @@ OUTPUT: Return ONLY the image prompt. No explanations.`
 
           console.log(`🖼️ Featured image available at: ${featured_image_url}`)
         }
+
 
       } catch (e) {
         console.error("Image Generation failed", e)
