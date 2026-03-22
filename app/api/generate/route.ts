@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
       supportingKeywords = [],
       cluster = '',
       planId,
-      itemId
+      itemId,
+      instructions
     } = await req.json()
 
     if (!keyword || !brandId) {
@@ -76,7 +77,8 @@ export async function POST(req: NextRequest) {
         supportingKeywords,
         cluster,
         planId,
-        itemId
+        itemId,
+        instructions
       })
       return NextResponse.json({ jobId: handle.id, articleId: article.id })
     } catch (err: unknown) {

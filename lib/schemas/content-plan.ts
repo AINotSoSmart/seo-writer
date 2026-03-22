@@ -25,6 +25,7 @@ export const ContentPlanItemSchema = z.object({
     gsc_ctr: z.number().optional(),
     // Strategic planning fields (from LLM analysis)
     reason: z.string().optional(), // Why this topic matters
+    user_instructions: z.string().optional(), // Editorial Brief / Custom Instructions
     impact: z.enum(["Low", "Medium", "High"]).optional(), // Expected traffic impact
     // Article Category for 12-8-6-4 strategic distribution
     article_category: z.enum([

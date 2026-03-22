@@ -86,6 +86,7 @@ const EditForm = memo(function EditForm({
         article_type: item.article_type || "informational",
         // Store as raw string for better typing experience
         supporting_keywords_raw: (item.supporting_keywords || []).join(", "),
+        user_instructions: item.user_instructions || "",
     })
 
     const handleSave = () => {
@@ -100,6 +101,7 @@ const EditForm = memo(function EditForm({
             main_keyword: localForm.main_keyword,
             article_type: localForm.article_type,
             supporting_keywords: keywords,
+            user_instructions: localForm.user_instructions,
         })
     }
 
@@ -153,6 +155,19 @@ const EditForm = memo(function EditForm({
                     rows={2}
                 />
                 <p className="text-[10px] text-stone-400 mt-1">Separate keywords with commas</p>
+            </div>
+            <div>
+                <label className="text-[10px] text-stone-400 font-medium uppercase flex items-center gap-1 mb-1">
+                    Editorial Instructions
+                    <span className="text-stone-300 font-normal lowercase tracking-normal">(optional)</span>
+                </label>
+                <textarea
+                    value={localForm.user_instructions}
+                    onChange={(e) => setLocalForm(prev => ({ ...prev, user_instructions: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs bg-stone-50 border border-stone-200 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-stone-400"
+                    placeholder="E.g. Focus on pricing comparison, use a casual tone, avoid mentioning Competitor X..."
+                    rows={3}
+                />
             </div>
             <div className="flex justify-end gap-2 pt-2">
                 <Button size="sm" variant="ghost" onClick={onCancel} className="h-8 text-xs">
@@ -268,6 +283,15 @@ export const PlanCard = memo(function PlanCard({
                                 <span className="font-bold text-stone-900 mr-1.5 underline decoration-amber-500/30">Why:</span>
                                 {item.reason}
                             </p>
+                        )}
+                        {item.user_instructions && (
+                            <div className="mt-2 text-[11px] text-stone-600 leading-normal p-2.5 rounded-lg border border-emerald-100 bg-emerald-50/50">
+                                <p className="font-bold text-emerald-800 flex items-center gap-1.5 mb-1">
+                                    <PenTool className="w-3 h-3" />
+                                    Editorial Instructions:
+                                </p>
+                                <p className="text-emerald-900/80 whitespace-pre-wrap">{item.user_instructions}</p>
+                            </div>
                         )}
                     </div>
 

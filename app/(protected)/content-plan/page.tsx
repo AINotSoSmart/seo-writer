@@ -234,6 +234,7 @@ export default function ContentPlanPage() {
                     cluster: item.cluster || "",
                     planId: plan?.id,
                     itemId: item.id,
+                    instructions: item.user_instructions,
                 }),
             })
 
