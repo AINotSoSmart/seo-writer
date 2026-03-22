@@ -100,7 +100,7 @@ export function PillarPagesSection({ pillars, brandId, onPillarUpdated }: Pillar
                             "text-xs font-bold uppercase tracking-wide transition-colors",
                             isOpen ? "text-violet-900" : "text-stone-500 group-hover:text-violet-900"
                         )}>
-                            Foundation Pages
+                            Pillar Pages
                         </h3>
                         <span className={cn(
                             "text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors",
