@@ -15,11 +15,11 @@ export const ARTICLE_LENGTH_CONFIG: Record<ArticleLength, {
   wordsPerSection: string
   h2Limit: string
 }> = {
-  short: { label: 'Short', wordRange: '800–1,200', sections: { min: 4, max: 5 }, wordsPerSection: '150–250', h2Limit: '2-3' },
-  medium: { label: 'Medium', wordRange: '1,200–1,800', sections: { min: 5, max: 8 }, wordsPerSection: '180–280', h2Limit: '3-5' },
-  long: { label: 'Long', wordRange: '1,800–2,400', sections: { min: 8, max: 11 }, wordsPerSection: '200–320', h2Limit: '4-6' },
-  very_long: { label: 'Very Long', wordRange: '2,400–3,000', sections: { min: 10, max: 13 }, wordsPerSection: '220–360', h2Limit: '5-7' },
-  extra_long: { label: 'Extra Long', wordRange: '3,000–4,000', sections: { min: 13, max: 16 }, wordsPerSection: '250–400', h2Limit: '6-8' },
+  short: { label: 'Short', wordRange: '800–1,200', sections: { min: 3, max: 5 }, wordsPerSection: '150–250', h2Limit: '2-3' },
+  medium: { label: 'Medium', wordRange: '1,200–1,800', sections: { min: 5, max: 7 }, wordsPerSection: '180–280', h2Limit: '3-4' },
+  long: { label: 'Long', wordRange: '1,800–2,400', sections: { min: 7, max: 11 }, wordsPerSection: '200–320', h2Limit: '4-6' },
+  very_long: { label: 'Very Long', wordRange: '2,400–3,000', sections: { min: 9, max: 13 }, wordsPerSection: '220–360', h2Limit: '5-7' },
+  extra_long: { label: 'Extra Long', wordRange: '3,000–4,000', sections: { min: 11, max: 16 }, wordsPerSection: '250–400', h2Limit: '6-8' },
 }
 
 export const getArticleLengthConfig = (length: ArticleLength) => ARTICLE_LENGTH_CONFIG[length]

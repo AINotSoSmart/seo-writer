@@ -773,10 +773,12 @@ ${(() => {
       return `
 **YOUR SCOPE: "${lc.label}" Article (~${lc.wordRange} words)**
 - Structure: ${articleLength === 'short' || articleLength === 'medium' ? 'Short, direct with inverted pyramid delivery (answers first, theory later).' : 'Deep, nested with high-value formatting signals.'}
-- Depth: ${articleLength === 'short' || articleLength === 'medium' ? `${lc.h2Limit} H2s max. Use H3s for important details.` : `Heavy use of H3s and H4s. (60-70% of all headings MUST be H3/H4).`}
-- Total Sections: **STRICT LIMIT: ${lc.sections.min}-${lc.sections.max} sections. DO NOT exceed ${lc.sections.max}.**${articleLength !== 'short' && articleLength !== 'medium' ? ` ${lc.h2Limit} H2s MAX. The rest must be H3/H4.` : ''}
+- H2 Limit: **EXACTLY ${lc.h2Limit} H2s.** No more.
+- Total Sections (H2 + H3 + H4 COMBINED): **STRICT LIMIT: ${lc.sections.min}–${lc.sections.max} sections total. DO NOT exceed ${lc.sections.max}.**
+  - "Total sections" means EVERY entry in your sections array — H2s, H3s, and H4s ALL count toward this limit.
+- Words Per Section: ~${lc.wordsPerSection} words each.
 - Target Article Length: ~${lc.wordRange} words total.
-- GOAL: ${articleLength === 'short' || articleLength === 'medium' ? 'Speed to solution (snippet baits immediately under H2s).' : 'Exhaustive coverage without section bloat.'}
+- GOAL: ${articleLength === 'short' || articleLength === 'medium' ? 'Speed to solution (snippet baits immediately under H2s). Fewer, denser sections.' : 'Exhaustive coverage without section bloat.'}
 `
     })()
     }
@@ -786,8 +788,9 @@ ${(() => {
 - If two H3 sub-topics can be covered together (e.g., with a comparison table or a combined list), MERGE them into one section.
 - A 300-word section with a table + context is BETTER than three separate 100-word H4 sections.
 - Before adding a new section, ask: "Can this be folded into an existing section?"
+- **COUNT YOUR SECTIONS.** If you have more than ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.sections.max; })()}, you MUST merge or remove sections until you are within the limit.
 
-** INSTRUCTION:** Stay within the section count and word budget above. Do not force a 12-section outline for an 8-section topic, but NEVER use flat H2s.
+** INSTRUCTION:** Stay within the section count and word budget above. Do not force a 12-section outline for a 7-section topic, but NEVER use flat H2s.
 
 ## HEADING STYLE PROTOCOL(MANDATORY - READ CAREFULLY)
 
@@ -807,13 +810,13 @@ You must write headers that are written for both humans and search engines, i me
 ## HEADING HIERARCHY RULES (CRITICAL FOR SEO - MUST FOLLOW)
 
 **LEVEL DEFINITIONS:**
-- **level: 2 (H2)** = Main topic pillars. Wide scope. (Max 5-8 per article)
+- **level: 2 (H2)** = Main topic pillars. Wide scope. (Max ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.h2Limit; })() } for this article length)
 - **level: 3 (H3)** = Specific sub-concepts. Narrower scope. (Where the real substance lives)
 - **level: 4 (H4)** = Granular details, lists, steps, specific features. Deep scope.
 
 **HIERARCHY REQUIREMENTS (STRICT):**
 1. **The 60-70% Rule:** 60-70% of your sections MUST be level 3 or 4.
-2. **H2 Limit:** USe as few H2s as possible.
+2. **H2 Limit:** Use EXACTLY ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.h2Limit; })()} H2s. Not more.
 3. **Snippet Baits:** Immediately under each H2, the instruction MUST demand a specific format (e.g., 40-word definition, comparison table, numbered summary list) for AI citations.
 4. **The H4 Mandate:** You MUST use H4s for specific steps, detailed features, pros/cons, comparisons, and deep dives.
 5. **Formatting Directives:** Every instruction MUST dictate formatting (tables, bullet lists, callouts, bolded entities).
@@ -906,11 +909,11 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
   ]
 }
 
-**FINAL CHECK:** Before outputting, verify that:
-- Your TOTAL section count does NOT exceed the limit for the chosen scope (${(() => { const lc = getArticleLengthConfig(articleLength); return `${lc.sections.max} sections max for ${lc.label} length`; })()}). COUNT THEM.
+**FINAL CHECK (DO NOT SKIP — COUNT BEFORE SUBMITTING):** Before outputting, verify that:
+- COUNT your sections array length. It MUST be ≤ ${(() => { const lc = getArticleLengthConfig(articleLength); return `${lc.sections.max} (${lc.label} length limit)`; })()}. If it's over, MERGE sections until compliant.
+- Your H2 count is EXACTLY ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.h2Limit; })()} — not more.
 - You have NOT created thin H3/H4 sections that could be merged into their parent section.
-- You have adhered to the 60-70% rule (majority of sections are H3/H4)
-- You have kept the total H2 count strictly between 5 and 8.
+- You have adhered to the 60-70% rule (majority of sections are H3/H4).
 - You have added Snippet Bait formatting instructions immediately under every single H2.
 - You have strictly instructed the writer to break down complex topics into LISTICLES, TABLES, CODE EXAMPLES, QUOTES, etc.
 - Does this outline solve the specific intent of "${keyword}"?
@@ -1200,10 +1203,12 @@ You MUST include an internal link to our own content in this section.
 ### YOUR TASK: WRITE SECTION "${currentSection.heading}"
 **GOAL:** High-density, skimmable, "human" content.
 
-**LENGTH GUIDANCE (not a hard limit — use judgment):**
-- Aim for ${wordsPerSection} words. Some data-heavy sections may need more — that's fine if every sentence earns its place.
-- If you find yourself exceeding ~${parseInt(wordsPerSection.split('–')[1] || '400') + 50} words, consider whether the content is too broad for a single section.
-- A tight ${wordsPerSection.split('–')[0]}-word section with a table or bullet list beats a ${wordsPerSection.split('–')[1] || '400'}-word wall of text.
+**SECTION LENGTH (STRICT — RESPECT THE BUDGET):**
+- Write ${wordsPerSection} words for this section. This is a FIRM target.
+- Going 10-15% over is acceptable ONLY if the content is genuinely dense with facts, tables, or data that cannot be cut.
+- Going 50%+ over means the section is too broad — the content should have been split in the outline.
+- A tight ${wordsPerSection.split('–')[0]}-word section with a table or bullet list is ALWAYS better than a bloated ${parseInt(wordsPerSection.split('–')[1] || '400') + 100}-word wall of text.
+- When the core point of the section is delivered, STOP. Do not pad.
 
 **CONTENT REQUIREMENTS:**
 ${currentSection.instruction_note}
@@ -1415,7 +1420,56 @@ export const generateBlogPost = task({
       }
 
       // Use self-correcting parser for Zod validation with retry
-      const outline = await cleanParseAndValidate(outlineText, ArticleOutlineSchema, genAI)
+      let outline = await cleanParseAndValidate(outlineText, ArticleOutlineSchema, genAI)
+
+      // --- LENGTH CONTROL: Outline section count validation ---
+      const lengthConfig = getArticleLengthConfig(effectiveArticleLength)
+      const maxSections = lengthConfig.sections.max
+      if (outline.sections.length > maxSections) {
+        console.warn(`[Length Control] Outline has ${outline.sections.length} sections, max is ${maxSections} for "${lengthConfig.label}". Requesting consolidation...`)
+        
+        const consolidationPrompt = `You previously generated an article outline with ${outline.sections.length} sections, but the article length setting is "${lengthConfig.label}" which allows a MAXIMUM of ${maxSections} total sections (H2 + H3 + H4 combined).
+
+Your task: Consolidate this outline to have AT MOST ${maxSections} sections by:
+1. Merging closely related H3/H4 sub-sections into their parent H2 — combine their instruction_notes.
+2. Combining thin sections that cover overlapping topics into a single, richer section.
+3. Keeping the most SEO-valuable sections. Prefer sections with external_link or internal_link assignments.
+4. Do NOT drop important facts — merge instruction_notes together so the writing phase still gets all the detail.
+
+RULES:
+- Keep the SAME JSON schema structure.
+- Preserve ALL external_link and internal_link assignments (move them if you merge their section).
+- Preserve needs_image assignments (keep the best 3).
+- Re-number the "id" fields sequentially (1, 2, 3...).
+- Keep the title and intro unchanged.
+
+Return ONLY valid JSON matching the original schema.
+
+Original outline:
+${JSON.stringify(outline)}`
+
+        const consolidationStream = await genAI.models.generateContentStream({
+          model: "gemini-2.5-flash",
+          config: {},
+          contents: [{ role: "user", parts: [{ text: consolidationPrompt }] }]
+        })
+
+        let consolidationText = ""
+        for await (const c of consolidationStream) {
+          consolidationText += (c as any).text || ""
+        }
+
+        try {
+          const consolidatedOutline = await cleanParseAndValidate(consolidationText, ArticleOutlineSchema, genAI)
+          console.log(`[Length Control] ✅ Consolidated: ${outline.sections.length} → ${consolidatedOutline.sections.length} sections`)
+          outline = consolidatedOutline
+        } catch (consolidationError) {
+          console.warn(`[Length Control] ⚠️ Consolidation failed, using original outline (${outline.sections.length} sections):`, consolidationError)
+          // Non-blocking: proceed with the original outline
+        }
+      } else {
+        console.log(`[Length Control] ✅ Outline section count OK: ${outline.sections.length} sections (max: ${maxSections} for ${lengthConfig.label})`)
+      }
 
       // DEBUG: Check if LLM assigned external links to sections
       const sectionsWithExternalLinks = outline.sections.filter((s: any) => s.external_link)
@@ -1594,6 +1648,14 @@ CRITICAL EXECUTION RULES:
 
         // Tiny delay to be safe
         await new Promise(r => setTimeout(r, 500))
+      }
+
+      // --- LENGTH CONTROL: Post-write word count monitoring ---
+      const finalWordCount = currentDraft.split(/\s+/).filter(w => w.length > 0).length
+      const maxTargetWords = parseInt(lengthConfig.wordRange.split('–')[1].replace(/,/g, ''))
+      console.log(`[Length Control] 📊 Final word count: ${finalWordCount} words (target: ${lengthConfig.wordRange}, sections written: ${outline.sections.length})`)
+      if (finalWordCount > maxTargetWords * 1.25) {
+        console.warn(`[Length Control] ⚠️ Article exceeded target by ${Math.round((finalWordCount / maxTargetWords - 1) * 100)}% — outline may need tighter section limits`)
       }
 
       // --- PHASE 4.5: PARALLEL IN-CONTENT IMAGE GENERATION ---
