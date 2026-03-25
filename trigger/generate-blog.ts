@@ -792,6 +792,18 @@ ${(() => {
 
 ** INSTRUCTION:** Stay within the section count and word budget above. Do not force a 12-section outline for a 7-section topic, but NEVER use flat H2s.
 
+## ANTI-FLUFF & AUDIENCE ANCHORING (CRITICAL - DO NOT INVENT)
+
+You must act as a ruthless editor. Every single section MUST directly serve the specific reader's day-to-day intent.
+
+1. **NO HISTORY LESSONS:** Never include background history (e.g., "The Evolution of...", "A Brief History of..."). Start immediately with actionable, present-day insights.
+2. **NO PHILOSOPHY OR FAKE ANECDOTES:** Do not invent synthetic anecdotes, generic case studies, or theoretical philosophy. Stick strictly to facts and direct, practical advice.
+3. **STAY IN LANE (AUDIENCE ANCHORING):** The target audience is: "${brandDetails?.audience?.primary || 'Users seeking solutions'}". 
+   - Ensure every section speaks DIRECTLY to their specific, ground-level needs. 
+   - 🚫 BANNED: Do NOT include high-level B2B industry trends, "AI revolutions," or broad market analysis unless the audience is specifically C-suite executives asking for it. 
+   - 🚫 BANNED: If the audience is a practitioner (e.g., a nurse, a developer, a marketer), everything must be purely tactical to their daily job.
+4. **NO FLUFF TO MEET LENGTH:** A tighter outline that perfectly answers the intent is vastly superior to a bloated outline padded with irrelevant "Deep Dives" into unrelated tech or history. NEVER invent filler sections.
+
 ## HEADING STYLE PROTOCOL(MANDATORY - READ CAREFULLY)
 
 You must write headers that are written for both humans and search engines, i mean intent driven.
@@ -914,6 +926,8 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
 - Your H2 count is EXACTLY ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.h2Limit; })()} — not more.
 - You have NOT created thin H3/H4 sections that could be merged into their parent section.
 - You have adhered to the 60-70% rule (majority of sections are H3/H4).
+- **Have you verified that NO sections contain history lessons, philosophical tangents, or irrelevant B2B industry deep dives that don't serve the specific audience?**
+- **Is every section fiercely practical and anchored to the daily reality of the target audience?**
 - You have added Snippet Bait formatting instructions immediately under every single H2.
 - You have strictly instructed the writer to break down complex topics into LISTICLES, TABLES, CODE EXAMPLES, QUOTES, etc.
 - Does this outline solve the specific intent of "${keyword}"?
