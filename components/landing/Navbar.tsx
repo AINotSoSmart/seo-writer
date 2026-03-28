@@ -107,7 +107,7 @@ export const Navbar: React.FC = () => {
               className="
                           cursor-pointer lg:hidden
                           flex items-center justify-center
-                          px-1.5 pt-1.5 pb-2
+                          px-2 pt-1.5 pb-2 
                           bg-white
                           border border-gray-300
                           shadow-tactile-gray
@@ -118,7 +118,7 @@ export const Navbar: React.FC = () => {
                       "
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
-              {isMobileMenuOpen ? <X size={13} /> : <Menu size={13} />}
+              {isMobileMenuOpen ? <X size={15} /> : <Menu size={15} />}
             </button>
           </div>
         </div>

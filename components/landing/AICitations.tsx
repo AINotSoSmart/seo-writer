@@ -7,7 +7,6 @@ import { CornerSquare } from './CornerSquare';
 const PROOF_POINTS = [
     {
         title: "1,300% Organic Growth",
-        tag: "Traffic",
         description: "We started from zero. In 90-100 days, we reached 1.3k+ consistent monthly clicks without spending a dollar on ads.",
         image: "/case-study/proof-1.webp",
         alt: "Google Search Console performance graph showing 1,300% growth in organic clicks for BringBack.pro over 90 days",
@@ -15,7 +14,6 @@ const PROOF_POINTS = [
     },
     {
         title: "Ranking on Google page #1",
-        tag: "SERP Dominance",
         description: "We don't just write; we rank. FlipAEO content is outranking major competitors for high-volume, high-intent keywords.",
         image: "/case-study/proof-2.webp",
         alt: "Google Rankings showing BringBack.pro claiming the #1 spot for high-intent keywords like 'combine photos', outranking major competitors",
@@ -24,7 +22,6 @@ const PROOF_POINTS = [
     },
     {
         title: "Real AI Traffic",
-        tag: "Analytics Proof",
         description: "The proof is in the data. See ChatGPT referral traffic driving real, high-intent users directly to our site.",
         image: "/case-study/proof-3.webp",
         alt: "Google Analytics data proving significant referral traffic coming directly from ChatGPT to BringBack.pro",
@@ -32,7 +29,6 @@ const PROOF_POINTS = [
     },
     {
         title: "Cited by Gemini",
-        tag: "AI Consensus",
         description: "Not just ChatGPT. Google's own AI model, Gemini, puts BringBack in the Top recommendation when we asked a natural user query.",
         image: "/case-study/proof-4.webp",
         alt: "Google Gemini AI response recommending BringBack.pro as the 'Best All-Around AI Tool' for photo restoration in response to a user query",
@@ -41,7 +37,6 @@ const PROOF_POINTS = [
     },
     {
         title: "Cited by ChatGPT ",
-        tag: "AI Authority",
         description: "The ultimate proof of quality: ChatGPT mentions bringback ai in their answers to user.",
         image: "/case-study/proof-5.webp",
         alt: "ChatGPT conversation citing BringBack.pro as a verified source in its answer to a user query about photo tools",
@@ -97,34 +92,32 @@ export const AICitations: React.FC = () => {
 
 
                     {PROOF_POINTS.map((item, i) => (
-                        <div key={i} className={`flex flex-col p-6 md:p-10 group border-b border-stone-200 ${item.span || "md:col-span-2"} ${i === 2 || i === 4 ? '' : 'md:border-r'} relative`}>
-                            
+                        <div key={i} className={`flex flex-col group border-b border-stone-200 ${item.span || "md:col-span-2"} ${i === 2 || i === 4 ? '' : 'md:border-r'} relative`}>
+
                             {/* Corner Markers for dynamic intersections */}
-                            {i === 0 && <CornerSquare className="-left-[5px] -bottom-[5px] hidden md:block" />} { /* Left Edge Mid */ }
+                            {i === 0 && <CornerSquare className="-left-[5px] -bottom-[5px] hidden md:block" />} { /* Left Edge Mid */}
                             {i === 0 && <CornerSquare className="-right-[5px] -bottom-[5px] hidden md:block" />}
                             {i === 1 && <CornerSquare className="-right-[5px] -bottom-[5px] hidden md:block" />}
-                            {i === 2 && <CornerSquare className="-right-[5px] -bottom-[5px] hidden md:block" />} { /* Right Edge Mid */ }
+                            {i === 2 && <CornerSquare className="-right-[5px] -bottom-[5px] hidden md:block" />} { /* Right Edge Mid */}
                             {i === 3 && <CornerSquare className="-right-[5px] -top-[5px] hidden md:block" />}
 
                             {/* Image Container */}
-                            <div className={`relative w-full aspect-[16/10] overflow-hidden mb-6`}>
+                            <div className={`relative w-full aspect-[16/10] overflow-hidden`}>
                                 <Image
                                     src={item.image}
                                     alt={item.alt || item.title}
                                     fill
-                                    className={`object-contain p-2 ${item.align || "object-center"} transition-transform duration-700 group-hover:scale-[1.01]`}
+                                    className={`object-contain ${item.align || "object-center"} transition-transform duration-700 group-hover:scale-[1.01]`}
                                 />
                             </div>
 
                             {/* Content */}
-                            <div className="space-y-3 mt-auto">
+                            <div className="space-y-3 p-6 md:p-10 mt-auto border-t border-stone-200">
                                 <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-2 sm:gap-0">
                                     <h3 className="font-serif text-xl text-stone-900 tracking-tight">
                                         {item.title}
                                     </h3>
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 border border-stone-200 px-2 py-0.5 rounded-full whitespace-nowrap bg-stone-50">
-                                        {item.tag}
-                                    </span>
+
                                 </div>
                                 <p className="text-stone-500 leading-relaxed text-sm">
                                     {item.description}
