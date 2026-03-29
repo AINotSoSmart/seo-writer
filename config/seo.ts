@@ -56,12 +56,12 @@ export interface OrganizationSchema {
 
 // Default SEO Configuration
 export const defaultSEO: SEOConfig = {
-  title: 'FlipAEO - Strategic Content Engine for AI Search Domination',
-  description: 'FlipAEO is your AI-powered Strategic Content Engine for Generative Engine Optimization (GEO). Generate authority-building articles that AI search engines cite and recommend. 30 articles/month with automated content strategy.',
+  title: 'FlipAEO - The First Answer Engine Optimization (AEO) Writer',
+  description: 'FlipAEO is the only automated AEO platform that builds topical authority and forces structured data to get your brand cited by Perplexity, ChatGPT, and AI Search. 30 articles/month on autopilot.',
   keywords: [
-    'GEO',
-    'generative engine optimization',
-    'AI search optimization',
+    'Answer Engine Optimization tool',
+    'GEO Content Writer',
+    'Optimize for Perplexity AI',
     'AI content engine',
     'AI article generator',
     'authority content',
@@ -118,9 +118,9 @@ export const organizationSchema: OrganizationSchema = {
 // --- Page-specific SEO configurations ---
 export const pageSEO = {
   home: {
-    title: 'FlipAEO - Strategic Content Engine for AI Search Domination',
-    description: 'Generate authority-building articles that AI search engines cite and recommend. 30 AI-researched articles/month with automated content strategy.',
-    keywords: ['AEO', 'GEO', 'generative engine optimization', 'Answer Engine Optimization', 'AI search optimization', 'AI content engine', 'content strategy', 'AI SEO blog writer'],
+    title: 'FlipAEO - The First Answer Engine Optimization (AEO) Writer | Get Cited by AI',
+    description: 'Stop fighting for Google\'s blue links. FlipAEO is the only automated AEO platform that builds topical authority, forces structured data, and guarantees E-E-A-T to get your brand cited by Perplexity, ChatGPT, and Google AI Overviews.',
+    keywords: ['Answer Engine Optimization tool', 'GEO Content Writer', 'Optimize for Perplexity AI', 'AI Citation Builder', 'Automated AEO Writer', 'content strategy'],
   },
   login: {
     title: 'Sign In - FlipAEO',
