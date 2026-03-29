@@ -1,52 +1,64 @@
 import React from 'react';
-import { Search, Link2, CheckCircle2, ShoppingBag } from 'lucide-react';
+import { Search, Link2, CheckCircle2, ShoppingBag, Database, Sparkles, FileText, MousePointer2 } from 'lucide-react';
 
 import { CornerSquare } from './CornerSquare';
 
 // --- Visual 1: Broad Landscape Search ---
 const BroadSearchVisual = () => (
-  <div className="w-full h-full flex items-center justify-center p-6">
-    <div className="w-full max-w-[240px] bg-white border border-stone-100 rounded-xl p-4 flex flex-col gap-4">
-      <div className="flex justify-between items-center border-b border-stone-50 pb-2">
-        <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wider">Broad Scrape</span>
-        <span className="text-[10px] font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded animate-pulse">FETCHING</span>
-      </div>
+  <div className="w-full h-full relative flex items-center justify-center overflow-hidden pointer-events-none">
 
-      <div className="flex items-end gap-1">
-        <span className="text-4xl font-serif text-stone-900 leading-none">24k</span>
-        <span className="text-sm text-stone-400 font-medium mb-1">words</span>
-      </div>
+    {/* Very subtle glow underneath just for ambient contrast */}
+    <div className="absolute top-[80%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-48 h-32 bg-[#A78BFA]/10 blur-2xl z-0"></div>
 
-      <div className="space-y-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between text-[9px] font-medium text-stone-500">
-            <span>Competitor 1</span>
-            <span>4,200/w</span>
-          </div>
-          <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
-            <div className="w-[85%] h-full bg-stone-300"></div>
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between text-[9px] font-medium text-stone-500">
-            <span>Competitor 2</span>
-            <span>3,100/w</span>
-          </div>
-          <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
-            <div className="w-[60%] h-full bg-stone-300"></div>
-          </div>
-        </div>
-      </div>
+    {/* Connecting SVG Lines (Strict geometric mapping) */}
+    <svg className="absolute inset-0 w-full h-full z-0" viewBox="0 0 100 100" preserveAspectRatio="none">
+      {/* Top flow */}
+      <line x1="50" y1="20" x2="25" y2="50" stroke="#e7e5e4" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+      <line x1="50" y1="20" x2="50" y2="50" stroke="#e7e5e4" strokeWidth="1.5" vectorEffect="non-scaling-stroke" className="opacity-60" />
+      <line x1="50" y1="20" x2="75" y2="50" stroke="#e7e5e4" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
 
-      <div className="flex gap-2 items-start mt-1">
-        <div className="w-3 h-3 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <div className="w-1 h-1 bg-brand-500 rounded-full"></div>
-        </div>
-        <p className="text-[8px] text-stone-500 leading-snug">
-          Ingesting massive real-time SERP context before writing.
-        </p>
+      {/* Bottom flow */}
+      <line x1="25" y1="50" x2="50" y2="80" stroke="#e7e5e4" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" className="opacity-80" />
+      <line x1="50" y1="50" x2="50" y2="80" stroke="#e7e5e4" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <line x1="75" y1="50" x2="50" y2="80" stroke="#e7e5e4" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" className="opacity-80" />
+    </svg>
+
+    {/* Step 1: Target Keyword Search Bar (Recessed) */}
+    <div className="absolute top-[20%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[140px] bg-stone-50 border border-stone-200/50 rounded-md shadow-inner flex items-center px-3 py-1.5 gap-2 z-10">
+      <Search size={11} className="text-stone-400 font-bold" strokeWidth={3} />
+      <div className="flex-1 flex items-center border-l border-stone-200 pl-2">
+        <span className="text-[10px] font-bold text-stone-700 tracking-wide pt-[1px]">Target Keyword</span>
+        <span className="w-[1.5px] h-3 bg-stone-400 ml-1 block animate-pulse"></span>
       </div>
     </div>
+
+    {/* Step 2: Top Ranking Competitor Articles */}
+    {/* Rank #1 */}
+    <div className="absolute top-[50%] left-[25%] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-[#1C1C1C] border border-[#2A2A2A] rounded-md shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] px-2.5 py-1.5 z-10 transform -rotate-[4deg]">
+      <FileText size={9} className="text-stone-400" strokeWidth={2.5} />
+      <span className="text-[10px] font-bold text-stone-300 tracking-wide leading-none pt-[1px] pr-0.5">Rank #1</span>
+    </div>
+
+    {/* Rank #2 */}
+    <div className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-indigo-50 border border-indigo-200/50 rounded-md shadow-[inset_0_2px_4px_rgba(99,102,241,0.1)] px-2.5 py-1.5 z-10 transform rotate-[2deg]">
+      <FileText size={9} className="text-indigo-500" strokeWidth={2.5} />
+      <span className="text-[10px] font-bold text-indigo-800 tracking-wide leading-none pt-[1px] pr-0.5">Rank #2</span>
+    </div>
+
+    {/* Rank #3 */}
+    <div className="absolute top-[50%] left-[75%] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-stone-50 border border-stone-200/50 rounded-md shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] px-2.5 py-1.5 z-10 transform -rotate-[3deg]">
+      <FileText size={9} className="text-stone-400" strokeWidth={2.5} />
+      <span className="text-[10px] font-bold text-stone-600 tracking-wide leading-none pt-[1px] pr-0.5">Rank #3</span>
+    </div>
+
+    {/* Step 3: Raw Context Extractor */}
+    <div className="absolute top-[80%] left-[50%] -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-2 bg-[#A78BFA] border border-[#8B5CF6] rounded-md shadow-[inset_0_3px_6px_rgba(0,0,0,0.2)] px-3.5 py-2 z-10">
+      <Database size={11} className="text-white" strokeWidth={2.5} />
+      <span className="text-[10px] font-bold text-white tracking-wide leading-none pt-[1px]">Raw Content Extracted</span>
+
+
+    </div>
+
   </div>
 );
 
@@ -157,10 +169,10 @@ const AntiFluffVisual = () => (
             <span className="text-[7px] font-bold text-stone-800 border-b border-brand-300 pb-0.5">FORMATTING: TABLE</span>
           </div>
           <div className="w-full border border-stone-200 rounded grid grid-cols-2 text-[6px] font-mono overflow-hidden">
-             <div className="bg-stone-100 p-1 border-b border-r border-stone-200 text-stone-600 font-bold">Feature</div>
-             <div className="bg-stone-100 p-1 border-b border-stone-200 text-stone-600 font-bold">Value</div>
-             <div className="p-1 border-r border-stone-200 text-stone-500">Speed</div>
-             <div className="p-1 text-stone-500">10ms</div>
+            <div className="bg-stone-100 p-1 border-b border-r border-stone-200 text-stone-600 font-bold">Feature</div>
+            <div className="bg-stone-100 p-1 border-b border-stone-200 text-stone-600 font-bold">Value</div>
+            <div className="p-1 border-r border-stone-200 text-stone-500">Speed</div>
+            <div className="p-1 text-stone-500">10ms</div>
           </div>
         </div>
 
@@ -265,15 +277,15 @@ const FEATURES = [
 ];
 
 const FeatureCard: React.FC<{ feature: typeof FEATURES[0]; index: number }> = ({ feature, index }) => (
-  <div className={`flex flex-col p-8 md:p-12 border-b border-stone-200 group transition-colors hover:bg-stone-50/50 ${index % 2 === 0 ? 'md:border-r' : ''}`}>
+  <div className={`flex flex-col p-4 md:p-6 border-b border-stone-200 group transition-colors hover:bg-stone-50/50 ${index % 2 === 0 ? 'md:border-r' : ''}`}>
 
     {/* Visual Area */}
-    <div className="h-64 w-full relative flex items-center justify-center bg-white border border-stone-100 rounded-lg overflow-hidden mb-8">
+    <div className="h-80 w-full relative flex items-center justify-center bg-white border border-stone-100 rounded-lg overflow-hidden mb-8">
       {/* Subtle active grid pattern on hover */}
       <div className="absolute inset-0 opacity-[0.05] transition-opacity duration-500"
         style={{ backgroundImage: 'radial-gradient(#e7e5e4 1px, transparent 1px)', backgroundSize: '16px 16px' }}>
       </div>
-      <div className="scale-90 transform transition-transform duration-500 group-hover:scale-100 z-10 w-full h-full flex items-center justify-center">
+      <div className="z-10 w-full h-full flex items-center justify-center">
         {feature.visual && <feature.visual />}
       </div>
     </div>
