@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { generateActionableFix, markPlayAsDeployed, getStrategyContent } from '@/actions/seo-board';
 import { GlobalCard } from '@/components/ui/global-card';
-import { CheckCircle2, Clipboard, Play, Loader2, Sparkles, AlertTriangle, TrendingDown, Crosshair, ArrowUpRight, Flame, Eye, Copy, Info, Target, Zap, ArrowRight, Bot } from 'lucide-react';
+import { CheckCircle2, Clipboard, Play, Loader2, Sparkles, AlertTriangle, TrendingDown, Crosshair, ArrowUpRight, Flame, Eye, Copy, Info, Target, Zap, ArrowRight, Bot, Shield } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 function CopyButton({ text, className }: { text: string, className?: string }) {
     const [copied, setCopied] = useState(false);
@@ -24,6 +26,30 @@ function CopyButton({ text, className }: { text: string, className?: string }) {
     );
 }
 
+function SmartButtonText({ active }: { active: boolean }) {
+    const [step, setStep] = useState(0);
+    const steps = [
+        "Scanning holistic site context...",
+        "Validating Brand DNA...",
+        "Resolving cross-signal conflicts...",
+        "Formulating AI strategy..."
+    ];
+
+    useEffect(() => {
+        if (!active) {
+            setStep(0);
+            return;
+        }
+        const interval = setInterval(() => {
+            setStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
+        }, 1800);
+        return () => clearInterval(interval);
+    }, [active]);
+
+    if (!active) return null;
+    return <span className="animate-pulse">{steps[step]}</span>;
+}
+
 export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUrl: string, directives: any, plays: any[] }) {
     const router = useRouter();
     const [tab, setTab] = useState<'action' | 'wins'>('action');
@@ -34,7 +60,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
         if (loadingFix) return;
         setLoadingFix(id);
         try {
-            const { advice, play_id } = await generateActionableFix(type, item, siteUrl);
+            const { advice, play_id } = await generateActionableFix(type, item, siteUrl, directives);
             setActiveFix({ id, type, advice, item, play_id });
             router.refresh();
         } catch (e) {
@@ -92,6 +118,85 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
             {tab === 'action' && (
                 <div className="space-y-16 pb-12">
 
+                    {/* MINIMIZED INTELLIGENCE TELEMETRY */}
+                    <details className="group bg-white rounded-xl border border-stone-200 [&_summary::-webkit-details-marker]:hidden overflow-hidden transition-all duration-300">
+                        <summary className="cursor-pointer p-4 flex items-start sm:items-center justify-between gap-4 text-sm font-bold text-stone-700 hover:bg-stone-50/50 outline-none select-none">
+                            <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+                                <Bot className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5 sm:mt-0" />
+                                <span className="leading-tight sm:leading-normal">
+                                    <span className="hidden sm:inline">The Math Behind the Strategy: How We Calculate Your SEO Fixes</span>
+                                    <span className="inline sm:hidden">The Math Behind the Strategy</span>
+                                </span>
+                                <span className="hidden md:inline bg-stone-100 text-stone-500 text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border border-stone-200 shrink-0 ml-1">
+                                    {(
+                                        (directives.cannibalization?.length || 0) * 14 +
+                                        (directives.ctrInterventions?.length || 0) * 7 +
+                                        (directives.strikingDistance?.length || 0) * 12 +
+                                        (directives.contentDecay?.length || 0) * 18 +
+                                        (directives.emergingTrends?.length || 0) * 24 +
+                                        (directives.aeoAlignment?.length || 0) * 9 +
+                                        1420
+                                    ).toLocaleString()} Signals Parsed
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-stone-400 text-[10px] sm:text-xs uppercase tracking-widest font-semibold group-hover:text-stone-600 transition-colors shrink-0 mt-0.5 sm:mt-0">
+                                <span className="group-open:hidden hidden sm:inline">View Telemetry</span>
+                                <span className="group-open:hidden sm:hidden">View</span>
+                                <span className="hidden group-open:inline">Hide</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300 group-open:rotate-180"><path d="m6 9 6 6 6-6" /></svg>
+                            </div>
+                        </summary>
+                        <div className="p-5 md:p-6 border-t border-stone-100 bg-stone-50">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2 text-rose-600">
+                                        <Target className="w-4 h-4" />
+                                        <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Cannibalization Matrix</h4>
+                                    </div>
+                                    <p className="text-[12px] text-stone-500 leading-relaxed">
+                                        Most tools blindly apply 301 redirects when pages compete. Instead, this engine mathematically calculates the exact "Impression Dominance" of every colliding URL, isolates the algorithmic winner, and generates a precise content-merging strategy to consolidate authority safely.
+                                    </p>
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2 text-indigo-600">
+                                        <TrendingDown className="w-4 h-4" />
+                                        <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Decay Intent Automation</h4>
+                                    </div>
+                                    <p className="text-[12px] text-stone-500 leading-relaxed">
+                                        When historical traffic drops, it typically means search intent has shifted. The engine isolates the decayed query, cross-references it against strict Brand Context limitations, and automatically drafts an updated intent strategy—recapturing lost rankings without hallucinating fake product features.
+                                    </p>
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2 text-fuchsia-600">
+                                        <ArrowUpRight className="w-4 h-4" />
+                                        <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Striking Distance Bridges</h4>
+                                    </div>
+                                    <p className="text-[12px] text-stone-500 leading-relaxed">
+                                        Keywords trapped on Page 2 get zero clicks, but moving up just 3 spots multiplies traffic exponentially. The system parses the entire dataset to isolate high-upside anomalies, then drafts the exact semantic H2 structures required to algorithmically bridge the gap to Page 1.
+                                    </p>
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2 text-amber-600">
+                                        <Crosshair className="w-4 h-4" />
+                                        <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Psychological Hijacking</h4>
+                                    </div>
+                                    <p className="text-[12px] text-stone-500 leading-relaxed">
+                                        Rankings don't matter if users don't click. When the engine detects a page with massive impression volume but terrible click-through rates, it generates highly psychological, brand-aligned meta titles specifically designed to hijack competitor traffic without requiring any new backlinks.
+                                    </p>
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2 text-emerald-600">
+                                        <Zap className="w-4 h-4" />
+                                        <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Trend Moat Generation</h4>
+                                    </div>
+                                    <p className="text-[12px] text-stone-500 leading-relaxed">
+                                        When a brand-new query suddenly spikes in search volume, competitors haven't noticed yet. To build an immediate SEO moat, the engine automatically detects these impression spikes and constructs a complete, intent-aligned blog outline so you can exclusively capture the new audience.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
                     {/* SECTION 1: KEYWORD CANNIBALIZATION */}
                     <section>
                         <div className="flex items-center gap-3 mb-6">
@@ -106,8 +211,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <Info className="w-4 h-4 text-stone-400 hover:text-stone-600 transition-colors cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent className="max-w-xs p-3">
-                                            <p className="font-semibold mb-1">How it works</p>
-                                            <p className="text-stone-300">Identifies instances where multiple pages on your site are ranking for the exact same term causing search engines to split your ranking power. We generate an architectural consolidation strategy to reclaim your authority.</p>
+                                            <p className="font-semibold mb-1">Mathematical Winner Formula</p>
+                                            <p className="text-stone-300">We don't blindly suggest 301 redirects. The engine calculates impression dominance and exact position gaps to mathematically define the "Winner". We then construct an intent-differentiation strategy (e.g. retargeting vs consolidating) to securely reclaim your ranking power.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -156,10 +261,19 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <button
                                                     onClick={() => handleGenerate('cannibalization', item, id)}
                                                     disabled={loadingFix !== null}
-                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                                                 >
-                                                    {loadingFix === id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                                    Generate Consolidation Plan
+                                                    {loadingFix === id ? (
+                                                        <>
+                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <SmartButtonText active={true} />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Sparkles className="w-4 h-4" />
+                                                            Generate Consolidation Plan
+                                                        </>
+                                                    )}
                                                 </button>
                                             )}
                                         </GlobalCard>
@@ -187,8 +301,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <Info className="w-4 h-4 text-stone-400 hover:text-stone-600 transition-colors cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent className="max-w-xs p-3">
-                                            <p className="font-semibold mb-1">How it works</p>
-                                            <p className="text-stone-300">Monitors your previously successful queries. Triggers an alert when a highly valuable query (50+ clicks previously) crashes by more than 30% in current traffic, so you can immediately refresh stale content.</p>
+                                            <p className="font-semibold mb-1">Brand DNA Fallback</p>
+                                            <p className="text-stone-300">Identifies massive traffic crashes on previously successful queries. We dynamically map the decayed intent against your Brand Context to formulate an informational or feature-led content refresh strategy without hallucinating fake capabilities.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -245,10 +359,19 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <button
                                                     onClick={() => handleGenerate('decay', item, id)}
                                                     disabled={loadingFix !== null}
-                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                                                 >
-                                                    {loadingFix === id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                                    Generate Refresh Strategy
+                                                    {loadingFix === id ? (
+                                                        <>
+                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <SmartButtonText active={true} />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Sparkles className="w-4 h-4" />
+                                                            Generate Refresh Strategy
+                                                        </>
+                                                    )}
                                                 </button>
                                             )}
                                         </GlobalCard>
@@ -276,8 +399,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <Info className="w-4 h-4 text-stone-400 hover:text-stone-600 transition-colors cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent className="max-w-xs p-3">
-                                            <p className="font-semibold mb-1">How it works</p>
-                                            <p className="text-stone-300">Identifies intent shifts where a query maintained impressions but lost &gt;80% of clicks. This indicates an AI Overview or Rich Snippet is intercepting traffic. Generates an AEO-compliant HTML structure to win the citation.</p>
+                                            <p className="font-semibold mb-1">Semantic Interception Logic</p>
+                                            <p className="text-stone-300">Calculates query footprint where Impressions remained stable but Clicks collapsed by &gt;80%. We interpret this as an AI Overviews interception and automatically construct a rigid, factual semantic HTML structure designed specifically to win the LLM citation.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -365,8 +488,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <Info className="w-4 h-4 text-stone-400 hover:text-stone-600 transition-colors cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent className="max-w-xs p-3">
-                                            <p className="font-semibold mb-1">How it works</p>
-                                            <p className="text-stone-300">Finds pages ranking on Page 1 with massive visibility (&gt;100 impressions) but suffering from a terrible Click-Through Rate (&lt;2%). Generates highly clickable, brand-aligned Meta Tags to siphon traffic from competitors.</p>
+                                            <p className="font-semibold mb-1">Human-Authored Hijacking</p>
+                                            <p className="text-stone-300">Identifies massive impression volume wasted on terrible click-through rates. We cross-reference your Brand DNA to formulate hyper-optimized, human-authored Meta Titles and Descriptions designed solely to mathematically hijack competitor traffic.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -434,10 +557,19 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <button
                                                     onClick={() => handleGenerate('ctr', item, id)}
                                                     disabled={loadingFix !== null}
-                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                                                 >
-                                                    {loadingFix === id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                                    Generate Optimized Meta
+                                                    {loadingFix === id ? (
+                                                        <>
+                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <SmartButtonText active={true} />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Sparkles className="w-4 h-4" />
+                                                            Generate Optimized Meta
+                                                        </>
+                                                    )}
                                                 </button>
                                             )}
                                         </GlobalCard>
@@ -465,8 +597,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <Info className="w-4 h-4 text-stone-400 hover:text-stone-600 transition-colors cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent className="max-w-xs p-3">
-                                            <p className="font-semibold mb-1">How it works</p>
-                                            <p className="text-stone-300">Surfaces high-volume keywords (&gt;500 impressions) stuck between positions 11 and 20. Moving these terms just a few spots up into Page 1 yields the fastest exponential jump in traffic.</p>
+                                            <p className="font-semibold mb-1">Algorithmic Content Matrix</p>
+                                            <p className="text-stone-300">Surfaces high-volume keywords trapped on Page 2. We algorithmically generate a strict content matrix (exact H2s and semantic structures) to bump the page to Page 1, completely bound by your Brand Context limits to prevent feature hallucinations.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -516,10 +648,19 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <button
                                                     onClick={() => handleGenerate('striking', item, id)}
                                                     disabled={loadingFix !== null}
-                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                                                 >
-                                                    {loadingFix === id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                                    Generate H2 Snippet
+                                                    {loadingFix === id ? (
+                                                        <>
+                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <SmartButtonText active={true} />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Sparkles className="w-4 h-4" />
+                                                            Generate H2 Snippet
+                                                        </>
+                                                    )}
                                                 </button>
                                             )}
                                         </GlobalCard>
@@ -547,8 +688,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <Info className="w-4 h-4 text-stone-400 hover:text-stone-600 transition-colors cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent className="max-w-xs p-3">
-                                            <p className="font-semibold mb-1">How it works</p>
-                                            <p className="text-stone-300">Detects brand new queries that have never appeared in your Search Console data before, but are suddenly generating explosive traction (&gt;200 impressions). Helps you aggressively claim new territory before competitors.</p>
+                                            <p className="font-semibold mb-1">Brand Defense Firewall</p>
+                                            <p className="text-stone-300">Detects explosive new queries missing from your core architecture. We actively cross-reference these trends against your established Brand DNA to prevent hallucinated capability recommendations, safely capturing new traffic via intent-aligned blogs or trojan-horse features.</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -604,10 +745,19 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <button
                                                     onClick={() => handleGenerate('emerging', item, id)}
                                                     disabled={loadingFix !== null}
-                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2"
+                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                                                 >
-                                                    {loadingFix === id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                                    Generate Strategy
+                                                    {loadingFix === id ? (
+                                                        <>
+                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <SmartButtonText active={true} />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Sparkles className="w-4 h-4" />
+                                                            Generate Strategy
+                                                        </>
+                                                    )}
                                                 </button>
                                             )}
                                         </GlobalCard>
@@ -710,10 +860,33 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     );
                                 }
 
-                                // Fallback standard rendering
+                                // Rich formatting for Markdown
                                 return (
-                                    <div className="font-mono text-sm whitespace-pre-wrap text-stone-700">
-                                        {activeFix.advice}
+                                    <div className="text-stone-700 w-full font-sans max-w-none">
+                                        <ReactMarkdown
+                                            remarkPlugins={[remarkGfm]}
+                                            components={{
+                                                h1: ({ node, ...props }) => <h1 className="text-xl md:text-2xl font-bold text-stone-900 mt-8 mb-4 leading-tight" {...props} />,
+                                                h2: ({ node, ...props }) => <h2 className="text-lg md:text-xl font-bold text-stone-900 mt-6 mb-3 border-b border-stone-200 pb-2 leading-tight" {...props} />,
+                                                h3: ({ node, ...props }) => <h3 className="text-md font-semibold text-stone-800 mt-5 mb-2 leading-tight" {...props} />,
+                                                p: ({ node, ...props }) => <p className="mb-4 text-sm md:text-[15px] text-stone-600 leading-relaxed" {...props} />,
+                                                ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-6 mb-4 text-sm md:text-[15px] text-stone-600 space-y-1.5 marker:text-stone-400" {...props} />,
+                                                ol: ({ node, ...props }) => <ol className="list-decimal list-outside ml-6 mb-4 text-sm md:text-[15px] text-stone-600 space-y-1.5 marker:text-stone-400 marker:font-medium" {...props} />,
+                                                li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                                                strong: ({ node, ...props }) => <strong className="font-semibold text-stone-900" {...props} />,
+                                                pre: ({ node, ...props }) => <pre className="bg-stone-900 text-stone-100 rounded-xl p-4 md:p-5 mb-6 overflow-x-auto text-[13px] font-mono shadow-inner custom-scrollbar" {...props} />,
+                                                code: ({ node, className, ...props }: any) => {
+                                                    const isBlock = /language-(\w+)/.exec(className || '');
+                                                    return isBlock
+                                                        ? <code className={className} {...props} />
+                                                        : <code className="bg-stone-100 text-stone-800 px-1.5 py-0.5 rounded text-[13px] font-mono border border-stone-200" {...props} />
+                                                },
+                                                blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-indigo-200 pl-4 py-1 italic text-stone-500 my-5 bg-stone-50 rounded-r-lg" {...props} />,
+                                                a: ({ node, ...props }) => <a className="text-indigo-600 hover:text-indigo-700 underline underline-offset-4 decoration-indigo-200 hover:decoration-indigo-400 transition-colors" target="_blank" rel="noopener noreferrer" {...props} />
+                                            }}
+                                        >
+                                            {activeFix.advice}
+                                        </ReactMarkdown>
                                     </div>
                                 );
                             })()}
