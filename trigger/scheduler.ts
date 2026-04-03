@@ -486,3 +486,75 @@ export const sitemapSyncScheduler = schedules.task({
         }
     }
 })
+
+/**
+ * GSC Data Strict 30-Day Auto-Refresh Scheduler
+ * 
+ * Runs daily to check the chronological lock (last_fetched_at) on all GSC connections.
+ * If 30 days have passed (or it's null), it triggers the sync task in the background.
+ */
+export const gscDailyAutoRefresh = schedules.task({
+    id: "gsc-daily-auto-refresh",
+    cron: "0 4 * * *", // At 04:00 AM UTC every day
+    run: async () => {
+        console.log("🔍 GSC Auto-Refresh: Checking for connections exceeding 30-day chronological lock...")
+
+        const supabase = createAdminClient() as any
+        
+        // Find 30 days ago
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        const cutoffString = thirtyDaysAgo.toISOString()
+
+        // Fetch connections where last_fetched is null or older than 30 days
+        const { data: staleConnections, error } = await supabase
+            .from("gsc_connections")
+            .select("id, user_id, site_url, last_fetched_at")
+            .or(`last_fetched_at.is.null,last_fetched_at.lt.${cutoffString}`)
+
+        if (error) {
+            console.error("❌ GSC Auto-Refresh DB Error:", error)
+            return { result: "Failed to fetch stale GSC connections", error: error.message }
+        }
+
+        if (!staleConnections || staleConnections.length === 0) {
+            console.log("✅ GSC Auto-Refresh: All connections are safely within their 30-day lock period!")
+            return { result: "No stale connections found", triggeredCount: 0 }
+        }
+
+        console.log(`📊 GSC Auto-Refresh: Found ${staleConnections.length} stale connections to renew`)
+
+        // Import task dynamically
+        const { syncGscDataTask } = await import("./gsc-sync")
+
+        let triggeredCount = 0
+
+        for (const conn of staleConnections) {
+            try {
+                // Trigger the background sync task
+                await syncGscDataTask.trigger({
+                    userId: conn.user_id,
+                    connectionId: conn.id,
+                    siteUrl: conn.site_url,
+                    isInitialSync: !conn.last_fetched_at
+                })
+
+                console.log(`🔄 Triggered GSC sync for ${conn.site_url}`)
+                triggeredCount++
+
+                // Small delay to prevent queue flooding
+                await new Promise(r => setTimeout(r, 1000))
+
+            } catch (err) {
+                console.error(`Failed to dispatch GSC sync for ${conn.site_url}:`, err)
+            }
+        }
+
+        console.log(`✅ GSC Auto-Refresh: Triggered ${triggeredCount} full data extractions.`)
+        return {
+            result: "GSC auto-refresh scheduling completed",
+            triggeredCount,
+            totalStale: staleConnections.length
+        }
+    }
+})

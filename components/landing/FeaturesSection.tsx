@@ -280,7 +280,7 @@ const FeatureCard: React.FC<{ feature: typeof FEATURES[0]; index: number }> = ({
   <div className={`flex flex-col p-4 md:p-6 border-b border-stone-200 group transition-colors hover:bg-stone-50/50 ${index % 2 === 0 ? 'md:border-r' : ''}`}>
 
     {/* Visual Area */}
-    <div className="h-80 w-full relative flex items-center justify-center bg-white border border-stone-100 rounded-lg overflow-hidden mb-8">
+    <div className="h-80 w-full relative flex items-center justify-center bg-stone-100 border border-stone-200/40 rounded-lg overflow-hidden mb-8">
       {/* Subtle active grid pattern on hover */}
       <div className="absolute inset-0 opacity-[0.05] transition-opacity duration-500"
         style={{ backgroundImage: 'radial-gradient(#e7e5e4 1px, transparent 1px)', backgroundSize: '16px 16px' }}>

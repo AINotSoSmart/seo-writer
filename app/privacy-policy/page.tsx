@@ -57,7 +57,12 @@ export default function PrivacyPolicy() {
                 <li><strong>Competitor URLs</strong> (for competitive analysis and content strategy).</li>
                 <li><strong>Payment Information</strong> (processed securely via third-party payment providers).</li>
               </ul>
-              <h3 className="text-lg font-semibold mb-2">1.2 Automatically Collected Data</h3>
+              <h3 className="text-lg font-semibold mb-2">1.2 Data Obtained via Third-Party Integrations</h3>
+              <ul className="list-disc list-inside pl-5 mb-4">
+                <li><strong>Google Search Console Data</strong> — When you connect your Google Search Console account, we access and store aggregated search performance metrics including search queries, page URLs, click counts, impression counts, average position, and click-through rates. This data is retrieved via the Google Search Console API and stored in our database to power the ROI Action Board analytics features.</li>
+                <li><strong>Google OAuth Tokens</strong> — We securely store your OAuth 2.0 refresh token, encrypted at rest using AES-256-GCM authenticated encryption, to maintain authorized access to your Google Search Console data for automated background synchronization (see Section 6.3).</li>
+              </ul>
+              <h3 className="text-lg font-semibold mb-2">1.3 Automatically Collected Data</h3>
               <ul className="list-disc list-inside pl-5">
                 <li><strong>Device Information</strong> (browser type, operating system, and device details).</li>
                 <li><strong>IP Address & Location Data</strong> (to ensure service functionality and security).</li>
@@ -71,6 +76,8 @@ export default function PrivacyPolicy() {
               <p className="mb-4">We process your data for the following purposes:</p>
               <ul className="list-disc list-inside pl-5">
                 <li>✅ <strong>Content Generation:</strong> To analyze your brand, competitors, and create strategic content.</li>
+                <li>✅ <strong>SEO Performance Analysis:</strong> To process your Google Search Console data and generate actionable insights including keyword cannibalization detection, content decay monitoring, CTR interventions, striking distance opportunities, emerging trend identification, and Answer Engine Optimization (AEO) alignment.</li>
+                <li>✅ <strong>Automated Data Synchronization:</strong> To periodically refresh your search performance data via background processing to ensure your analytics dashboard reflects current performance metrics without requiring manual intervention.</li>
                 <li>✅ <strong>Account Management:</strong> To enable login, profile settings, and service customization.</li>
                 <li>✅ <strong>Payment Processing:</strong> To process subscription payments securely.</li>
                 <li>✅ <strong>Customer Support:</strong> To address inquiries and technical issues.</li>
@@ -86,10 +93,12 @@ export default function PrivacyPolicy() {
                 <li>📌 <strong>Account Data:</strong> Stored in <strong>Supabase</strong> until account deletion.</li>
                 <li>📌 <strong>Brand Profiles:</strong> Retained to improve content consistency across articles.</li>
                 <li>📌 <strong>Generated Articles:</strong> Retained for <strong>30 days</strong> after creation for access and revisions.</li>
+                <li>📌 <strong>Google Search Console Data:</strong> Cached in our database for up to <strong>60 days</strong> of rolling historical data. This cache is automatically refreshed every <strong>30 days</strong> via background synchronization. Upon account deletion or disconnection of your Google Search Console, all cached search data is permanently deleted.</li>
+                <li>📌 <strong>OAuth Tokens:</strong> Your Google OAuth refresh tokens are encrypted at rest using <strong>AES-256-GCM</strong> authenticated encryption before being stored in our database. Plaintext tokens are never written to persistent storage. Tokens are immediately revoked and permanently deleted upon account deletion or when you disconnect the integration.</li>
                 <li>📌 <strong>Payment Data:</strong> Not stored by us; processed by <strong>secure third-party payment providers</strong>.</li>
                 <li>📌 <strong>Logs & Analytics:</strong> Retained for performance monitoring but anonymized after 30 days.</li>
               </ul>
-              <p className="mt-4">If you request deletion of your account, we will permanently erase all stored personal data.</p>
+              <p className="mt-4">If you request deletion of your account, we will permanently erase all stored personal data, including any cached Google Search Console data and associated OAuth tokens.</p>
             </div>
 
             <div className="">
@@ -143,18 +152,81 @@ export default function PrivacyPolicy() {
                 We do not receive or store your Google password. Google authentication is handled securely through Google's OAuth 2.0 protocol.
               </p>
 
-              <h3 className="text-lg font-semibold mb-2">6.2 Google API Services User Data Policy Compliance</h3>
+              <h3 className="text-lg font-semibold mb-2">6.2 Google Search Console Integration</h3>
               <p className="mb-4">
-                FlipAEO's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" className="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.
+                When you connect your Google Search Console account to FlipAEO, you explicitly grant us permission to access your search performance data through the <strong>Google Search Console API</strong> (SearchAnalytics endpoint). This integration is essential to power our ROI Action Board and requires the following OAuth scope: <code className="bg-stone-100 px-1.5 py-0.5 rounded text-sm">https://www.googleapis.com/auth/webmasters.readonly</code> (read-only access).
               </p>
+
+              <h4 className="text-base font-semibold mb-2">6.2.1 Data We Access</h4>
+              <p className="mb-2">Through the Google Search Console API, we retrieve the following <strong>aggregated, non-personally-identifiable</strong> search metrics for your verified web properties:</p>
+              <ul className="list-disc list-inside pl-5 mb-4">
+                <li><strong>Search Queries</strong> — The keywords users searched for that triggered your pages.</li>
+                <li><strong>Page URLs</strong> — The specific pages on your site that appeared in search results.</li>
+                <li><strong>Clicks</strong> — The number of times users clicked through to your site.</li>
+                <li><strong>Impressions</strong> — The number of times your pages appeared in search results.</li>
+                <li><strong>Average Position</strong> — Your average ranking position for each query.</li>
+                <li><strong>Click-Through Rate (CTR)</strong> — The ratio of clicks to impressions.</li>
+              </ul>
+              <p className="mb-4">
+                We do <strong>not</strong> access personal data about your website visitors, crawl errors, security issues, sitemaps, or any data outside the SearchAnalytics scope.
+              </p>
+
+              <h4 className="text-base font-semibold mb-2">6.2.2 How We Store This Data</h4>
+              <p className="mb-4">
+                Your search performance data is cached in our secure <strong>Supabase</strong> database (encrypted at rest and in transit). We store up to <strong>60 days</strong> of rolling historical search data per connected property. This cached data is used exclusively to compute the SEO insights displayed on your ROI Action Board, including keyword cannibalization detection, content decay monitoring, CTR interventions, striking distance analysis, emerging trend identification, and Answer Engine Optimization (AEO) alignment.
+              </p>
+
+              <h4 className="text-base font-semibold mb-2">6.2.3 Automated Background Synchronization</h4>
+              <p className="mb-4">
+                To ensure your analytics remain current without requiring manual action, FlipAEO employs an <strong>automated background synchronization process</strong>. This process runs on a <strong>30-day cycle</strong> and operates as follows:
+              </p>
+              <ul className="list-disc list-inside pl-5 mb-4">
+                <li>Every 30 days, our system automatically uses your stored <strong>OAuth refresh token</strong> to obtain a temporary access token from Google.</li>
+                <li>Using this temporary token, we fetch the latest 60 days of search performance data from the Google Search Console API.</li>
+                <li>The fetched data is upserted (inserted or updated) into your cached dataset, and the synchronization timestamp is recorded.</li>
+                <li>The temporary access token is discarded immediately after use and is <strong>never stored</strong>.</li>
+              </ul>
+              <p className="mb-4">
+                This process is fully automated and does not require your intervention. You may disconnect your Google Search Console at any time from your account settings, which will immediately halt all background synchronization and delete your cached search data.
+              </p>
+
+              <h4 className="text-base font-semibold mb-2">6.2.4 Token Security & Encryption</h4>
+              <p className="mb-4">
+                All Google OAuth tokens (both access tokens and refresh tokens) are encrypted at rest using <strong>AES-256-GCM (Galois/Counter Mode)</strong> authenticated encryption before being written to our database. This is the same encryption standard recommended by <strong>NIST (National Institute of Standards and Technology)</strong> and used by financial institutions worldwide. Key highlights of our token security architecture:
+              </p>
+              <ul className="list-disc list-inside pl-5 mb-4">
+                <li><strong>256-bit Encryption Keys:</strong> Tokens are encrypted with a cryptographically random 256-bit key that is stored separately from the database, never in source code.</li>
+                <li><strong>Unique Initialization Vectors:</strong> Each encryption operation generates a cryptographically random 128-bit IV, ensuring that even identical tokens produce completely different ciphertexts.</li>
+                <li><strong>Authenticated Encryption:</strong> GCM mode includes a 128-bit authentication tag that detects any unauthorized tampering with the encrypted data.</li>
+                <li><strong>Zero Plaintext Storage:</strong> Plaintext tokens are never persisted to disk or database. They exist in memory only for the duration of an API request.</li>
+                <li><strong>Ephemeral Access Tokens:</strong> Access tokens generated from the refresh token are valid for approximately 1 hour and are discarded from memory after each synchronization cycle — they are never stored in the database.</li>
+              </ul>
+              <p className="mb-4">
+                We <strong>never</strong> use your tokens to access any other Google services, modify your Search Console settings, or perform any write operations on your Google account.
+              </p>
+
+              <h3 className="text-lg font-semibold mb-2">6.3 Google API Services User Data Policy Compliance</h3>
+              <p className="mb-4">
+                FlipAEO's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" className="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. Specifically:
+              </p>
+              <ul className="list-disc list-inside pl-5 mb-4">
+                <li>We <strong>limit our use</strong> of Google user data to providing and improving the features described in this Privacy Policy.</li>
+                <li>We do <strong>not</strong> transfer Google user data to third parties except as necessary to provide our service, comply with applicable laws, or as part of a merger or acquisition with adequate data protection commitments.</li>
+                <li>We do <strong>not</strong> use Google user data for serving advertisements.</li>
+                <li>We do <strong>not</strong> allow humans to read Google user data unless we have your affirmative consent, it is necessary for security purposes or to comply with applicable law, or our use is limited to internal operations and the data has been aggregated and anonymized.</li>
+              </ul>
             </div>
 
             <div className="">
               <h2 className="text-2xl font-bold mb-2 font-[var(--font-inter-tight)]">7. Data Security Measures</h2>
+              <p className="mb-4">FlipAEO implements industry-leading security measures that align with <strong>OWASP</strong>, <strong>SOC 2</strong>, and <strong>GDPR Article 32</strong> requirements for the protection of personal data:</p>
               <ul className="list-disc list-inside pl-5">
-                <li>🔒 <strong>Encryption:</strong> Data is encrypted in transit and at rest.</li>
-                <li>🔒 <strong>Access Control:</strong> Limited access to authorized personnel only.</li>
-                <li>🔒 <strong>Regular Security Audits:</strong> To prevent unauthorized data access.</li>
+                <li>🔒 <strong>Encryption in Transit:</strong> All data transmitted between your browser and our servers is protected using <strong>TLS 1.2+</strong> encryption.</li>
+                <li>🔒 <strong>Encryption at Rest:</strong> Sensitive credentials (including OAuth tokens) are encrypted at rest using <strong>AES-256-GCM</strong> authenticated encryption with unique per-record initialization vectors, the same standard used by banks and government agencies.</li>
+                <li>🔒 <strong>Key Management:</strong> Encryption keys are stored in environment-level secrets, isolated from the application database, and are never committed to source code repositories.</li>
+                <li>🔒 <strong>Access Control:</strong> Database access follows the <strong>principle of least privilege</strong>. Row Level Security (RLS) policies ensure users can only access their own data.</li>
+                <li>🔒 <strong>Tamper Detection:</strong> GCM authentication tags provide cryptographic proof that stored data has not been altered or corrupted.</li>
+                <li>🔒 <strong>Regular Security Audits:</strong> We perform routine security reviews to prevent unauthorized data access and to identify potential vulnerabilities.</li>
               </ul>
               <p className="mt-4">However, no system is <strong>100% secure</strong>, and we encourage users to take necessary precautions.</p>
             </div>

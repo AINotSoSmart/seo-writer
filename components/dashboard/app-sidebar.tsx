@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   Send,
   Sparkles,
+  Target,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -117,6 +118,11 @@ export function AppSidebar({
       title: "SEO Health",
       url: "/seo-health",
       icon: SyringeIcon,
+    },
+    {
+      title: "Action Board",
+      url: "/action-board",
+      icon: Target,
     },
     {
       title: "Settings",

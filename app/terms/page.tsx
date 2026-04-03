@@ -87,6 +87,49 @@ export default function TermsOfService() {
               </p>
             </div>
 
+            <div className="">
+              <h2 className="text-2xl font-bold mb-2 font-[var(--font-inter-tight)]">8. Google Search Console Integration & Data Authorization</h2>
+              <p className="mb-4">
+                FlipAEO offers optional integration with <strong>Google Search Console</strong> to power the ROI Action Board. By connecting your Google Search Console account, you expressly authorize and agree to the following:
+              </p>
+
+              <h3 className="text-lg font-semibold mb-2">8.1 Scope of Authorization</h3>
+              <p className="mb-4">
+                You grant FlipAEO permission to access your Google Search Console data via read-only API access (<code className="bg-stone-100 px-1.5 py-0.5 rounded text-sm">webmasters.readonly</code> scope). This access is limited exclusively to retrieving aggregated search performance metrics (queries, clicks, impressions, position, CTR) for the web properties you select. FlipAEO cannot and will not modify your Search Console settings, submit URLs, or access any data beyond search analytics.
+              </p>
+
+              <h3 className="text-lg font-semibold mb-2">8.2 Data Processing & Automated Synchronization</h3>
+              <p className="mb-4">
+                You acknowledge and agree that FlipAEO will:
+              </p>
+              <ul className="list-disc list-inside pl-5 mb-4">
+                <li>Store up to 60 days of rolling search performance data in our database to compute SEO insights.</li>
+                <li>Automatically synchronize your search data on a <strong>30-day cycle</strong> using your stored OAuth refresh token (encrypted at rest via AES-256-GCM), without requiring manual action from you.</li>
+                <li>Process this data through our proprietary algorithms to generate actionable SEO recommendations, including but not limited to: keyword cannibalization detection, content decay alerts, CTR optimization suggestions, striking distance analysis, emerging trend identification, and Answer Engine Optimization (AEO) alignment.</li>
+                <li>Encrypt all OAuth credentials at rest using <strong>AES-256-GCM authenticated encryption</strong> with unique initialization vectors per record. Plaintext tokens are never written to persistent storage.</li>
+              </ul>
+
+              <h3 className="text-lg font-semibold mb-2">8.3 Your Responsibilities</h3>
+              <p className="mb-4">
+                You represent and warrant that you have the authority to grant FlipAEO access to the Google Search Console properties you connect. You are solely responsible for ensuring that sharing this data with FlipAEO does not violate any agreements you may have with third parties or your organization's data governance policies.
+              </p>
+
+              <h3 className="text-lg font-semibold mb-2">8.4 Disconnection & Data Removal</h3>
+              <p className="mb-4">
+                You may disconnect your Google Search Console integration at any time. Upon disconnection, FlipAEO will immediately cease all background data synchronization and permanently delete all cached search data and encrypted OAuth tokens associated with your account. The deletion process is irreversible.
+              </p>
+
+              <h3 className="text-lg font-semibold mb-2">8.5 Data Ownership</h3>
+              <p className="mb-4">
+                Your Google Search Console data remains your property at all times. FlipAEO does not claim ownership of any data retrieved from your Google Search Console account. The data is used exclusively to provide the analytics services described herein and is never sold, licensed, or shared with third parties for commercial purposes.
+              </p>
+
+              <h3 className="text-lg font-semibold mb-2">8.6 Credential Security</h3>
+              <p>
+                FlipAEO commits to protecting your OAuth credentials using encryption standards aligned with <strong>NIST SP 800-38D</strong> (AES-GCM) and <strong>GDPR Article 32</strong> (security of processing). All tokens are encrypted at rest using <strong>AES-256-GCM</strong> with cryptographically random 128-bit initialization vectors and 128-bit authentication tags. Encryption keys are managed separately from the application database and are never exposed in client-side code. FlipAEO does not log, display, or transmit plaintext tokens outside of the secure server-side execution context required to communicate with Google APIs.
+              </p>
+            </div>
+
 
             <div className="">
               <h2 className="text-2xl font-bold mb-2 font-[var(--font-inter-tight)]">9. Limitation of Liability</h2>

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server"
 import { GSCConnection } from "@/lib/schemas/content-plan"
+import { encryptToken, decryptToken } from "@/lib/encryption"
 
 export async function saveGSCConnection(
     siteUrl: string,
@@ -16,14 +17,14 @@ export async function saveGSCConnection(
         return { success: false, error: "Not authenticated" }
     }
 
-    // Upsert - update if exists, insert if not
+    // Upsert - update if exists, insert if not (tokens encrypted at rest)
     const { data, error } = await supabase
         .from("gsc_connections")
         .upsert({
             user_id: user.id,
             site_url: siteUrl,
-            access_token: accessToken,
-            refresh_token: refreshToken,
+            access_token: encryptToken(accessToken),
+            refresh_token: encryptToken(refreshToken),
             expires_at: expiresAt.toISOString(),
             updated_at: new Date().toISOString(),
         }, {
@@ -100,13 +101,14 @@ export async function refreshGSCToken(connectionId: string) {
     }
 
     // Refresh the token using Google's token endpoint
+    const decryptedRefreshToken = decryptToken(connection.refresh_token)
     const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
             client_id: process.env.GOOGLE_CLIENT_ID!,
             client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-            refresh_token: connection.refresh_token,
+            refresh_token: decryptedRefreshToken,
             grant_type: "refresh_token",
         }),
     })
@@ -118,11 +120,11 @@ export async function refreshGSCToken(connectionId: string) {
     const tokens = await response.json()
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
-    // Update stored tokens
+    // Update stored tokens (encrypt the new access token)
     const { error: updateError } = await supabase
         .from("gsc_connections")
         .update({
-            access_token: tokens.access_token,
+            access_token: encryptToken(tokens.access_token),
             expires_at: expiresAt.toISOString(),
             updated_at: new Date().toISOString(),
         })

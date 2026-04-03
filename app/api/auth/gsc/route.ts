@@ -18,9 +18,13 @@ export async function GET(req: NextRequest) {
     // Get the callback URL
     const callbackUrl = new URL("/api/auth/gsc/callback", req.url).toString()
 
-    // Generate state token for CSRF protection
+    // Capture the 'next' URL parameter to redirect back specifically where the user started
+    const nextUrl = req.nextUrl.searchParams.get("next") || "/settings"
+
+    // Generate state token for CSRF protection and nextUrl routing
     const state = Buffer.from(JSON.stringify({
         userId: user.id,
+        next: nextUrl,
         timestamp: Date.now(),
         nonce: Math.random().toString(36).substring(7)
     })).toString("base64")

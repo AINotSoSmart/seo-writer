@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
+import { encryptToken } from "@/lib/encryption"
 
 export async function GET(req: NextRequest) {
     const supabase = await createClient()
@@ -62,32 +63,28 @@ export async function GET(req: NextRequest) {
 
         const tokens = await tokenResponse.json()
 
-        // Get the list of sites from GSC to find the user's site
-        const sitesResponse = await fetch(
-            "https://www.googleapis.com/webmasters/v3/sites",
-            {
-                headers: { Authorization: `Bearer ${tokens.access_token}` },
+        // Decode state to find nextUrl
+        let nextUrl = "/settings?gsc=connected"
+        try {
+            const decodedState = JSON.parse(Buffer.from(state, "base64").toString("utf-8"))
+            if (decodedState.next) {
+                nextUrl = decodedState.next
             }
-        )
-
-        let siteUrl = ""
-        if (sitesResponse.ok) {
-            const sitesData = await sitesResponse.json()
-            // Use the first verified site, or empty string if none
-            siteUrl = sitesData.siteEntry?.[0]?.siteUrl || ""
+        } catch (e) {
+            console.error("Failed to decode state for nextUrl")
         }
 
         // Calculate expiry time
         const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
-        // Store connection in database
+        // Store connection in database (tokens encrypted at rest)
         const { error: dbError } = await supabase
             .from("gsc_connections")
             .upsert({
                 user_id: user.id,
-                site_url: siteUrl,
-                access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token,
+                site_url: "", // Leave blank to force explicit selection later
+                access_token: encryptToken(tokens.access_token),
+                refresh_token: encryptToken(tokens.refresh_token),
                 expires_at: expiresAt.toISOString(),
                 updated_at: new Date().toISOString(),
             }, {
@@ -101,9 +98,9 @@ export async function GET(req: NextRequest) {
             )
         }
 
-        // Clear state cookie and redirect to settings with success
+        // Clear state cookie and redirect directly to next URL
         const response = NextResponse.redirect(
-            new URL("/settings?gsc=connected", req.url)
+            new URL(nextUrl, req.url)
         )
         response.cookies.delete("gsc_oauth_state")
 
