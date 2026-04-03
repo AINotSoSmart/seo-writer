@@ -312,7 +312,11 @@ export async function setGscSite(siteUrl: string) {
 
   const { data: connection, error } = await supabase
     .from("gsc_connections")
-    .update({ site_url: siteUrl })
+    // Stamp the lock immediately on the first standalone fetch
+    .update({ 
+        site_url: siteUrl,
+        last_fetched_at: new Date().toISOString()
+    })
     .eq("user_id", user.id)
     .select("id")
     .single();

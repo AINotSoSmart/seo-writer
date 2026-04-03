@@ -18,10 +18,10 @@ function CopyButton({ text, className }: { text: string, className?: string }) {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
             }}
-            className={className || "absolute right-3 md:right-4 top-1/2 -translate-y-1/2 p-1.5 md:p-2 bg-white border border-stone-200 rounded-md md:rounded-lg text-stone-500 hover:text-indigo-600 hover:border-indigo-200 transition-all cursor-pointer"}
+            className={className || "absolute right-3 md:right-4 top-1/2 -translate-y-1/2 p-1.5 md:p-2 bg-white border border-stone-200 rounded-md md:rounded-lg text-stone-500 hover:text-stone-600 hover:border-stone-200 transition-all cursor-pointer"}
             title="Copy Text"
         >
-            {copied ? <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-500" /> : <Clipboard className="w-3.5 h-3.5 md:w-4 md:h-4 cursor-pointer" />}
+            {copied ? <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-stone-500" /> : <Clipboard className="w-3.5 h-3.5 md:w-4 md:h-4 cursor-pointer" />}
         </button>
     );
 }
@@ -122,7 +122,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                     <details className="group bg-white rounded-xl border border-stone-200 [&_summary::-webkit-details-marker]:hidden overflow-hidden transition-all duration-300">
                         <summary className="cursor-pointer p-4 flex items-start sm:items-center justify-between gap-4 text-sm font-bold text-stone-700 hover:bg-stone-50/50 outline-none select-none">
                             <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
-                                <Bot className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5 sm:mt-0" />
+                                <Bot className="w-4 h-4 text-stone-600 shrink-0 mt-0.5 sm:mt-0" />
                                 <span className="leading-tight sm:leading-normal">
                                     <span className="hidden sm:inline">The Math Behind the Strategy: How We Calculate Your SEO Fixes</span>
                                     <span className="inline sm:hidden">The Math Behind the Strategy</span>
@@ -149,7 +149,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                         <div className="p-5 md:p-6 border-t border-stone-100 bg-stone-50">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-2 text-rose-600">
+                                    <div className="flex items-center gap-2 mb-2 text-stone-600">
                                         <Target className="w-4 h-4" />
                                         <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Cannibalization Matrix</h4>
                                     </div>
@@ -158,7 +158,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     </p>
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-2 mb-2 text-indigo-600">
+                                    <div className="flex items-center gap-2 mb-2 text-stone-600">
                                         <TrendingDown className="w-4 h-4" />
                                         <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Decay Intent Automation</h4>
                                     </div>
@@ -167,7 +167,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     </p>
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-2 mb-2 text-fuchsia-600">
+                                    <div className="flex items-center gap-2 mb-2 text-stone-600">
                                         <ArrowUpRight className="w-4 h-4" />
                                         <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Striking Distance Bridges</h4>
                                     </div>
@@ -176,7 +176,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     </p>
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-2 mb-2 text-amber-600">
+                                    <div className="flex items-center gap-2 mb-2 text-stone-600">
                                         <Crosshair className="w-4 h-4" />
                                         <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Psychological Hijacking</h4>
                                     </div>
@@ -185,7 +185,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     </p>
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-2 mb-2 text-emerald-600">
+                                    <div className="flex items-center gap-2 mb-2 text-stone-600">
                                         <Zap className="w-4 h-4" />
                                         <h4 className="font-bold text-[13px] text-stone-900 leading-tight">Trend Moat Generation</h4>
                                     </div>
@@ -200,8 +200,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                     {/* SECTION 1: KEYWORD CANNIBALIZATION */}
                     <section>
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-rose-100/50 rounded-xl border border-rose-100">
-                                <Target className="w-5 h-5 text-rose-600" />
+                            <div className="p-2 bg-stone-100/50 rounded-xl border border-stone-100">
+                                <Target className="w-5 h-5 text-stone-600" />
                             </div>
                             <div className="flex items-center gap-2">
                                 <h3 className="text-xl font-bold text-stone-900 tracking-tight">Keyword Cannibalization</h3>
@@ -229,16 +229,16 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     return (
                                         <GlobalCard key={id} contentClassName="p-6 flex flex-col justify-between">
                                             <div>
-                                                <p className="text-[10px] text-rose-600 font-bold uppercase tracking-widest mb-1">Cannibalized Query</p>
-                                                <p className="text-xl font-bold text-stone-900 tracking-tight mb-5">"{item.query}"</p>
+                                                <p className="text-[10px] text-stone-600 font-bold uppercase tracking-widest mb-1">Cannibalized Query</p>
+                                                <p className="text-xl font-bold text-stone-900 tracking-tight mb-5">{item.query}</p>
 
-                                                <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-3 before:w-px before:bg-rose-200/60 pl-8 mb-6">
+                                                <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-3 before:w-px before:bg-stone-200/60 pl-8 mb-6">
                                                     {item.pages.map((p: any, j: number) => (
                                                         <div key={j} className="relative">
-                                                            <div className="absolute -left-[38px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-rose-100 border-2 border-rose-400 z-10" />
+                                                            <div className="absolute -left-[38px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-stone-100 border-2 border-stone-400 z-10" />
                                                             <div className="bg-stone-50 p-3 rounded-xl border border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                                <span className="text-xs text-stone-700 truncate font-medium max-w-[180px]">{p.url}</span>
-                                                                <div className="flex items-center gap-3 text-xs bg-white px-2 py-1 rounded border border-stone-200">
+                                                                <span className="text-xs text-stone-700 font-medium break-all">{('/' + p.url.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}</span>
+                                                                <div className="w-fit flex items-center gap-3 text-xs bg-white px-2 py-1 rounded border border-stone-200 mt-2 sm:mt-0">
                                                                     <div className="flex gap-1"><span className="text-stone-400">Pos</span><span className="font-bold text-stone-700">{(p.position || 0).toFixed(1)}</span></div>
                                                                     <div className="w-px h-3 bg-stone-200" />
                                                                     <div className="flex gap-1"><span className="text-stone-400">Imp</span><span className="font-bold text-stone-700">{p.impressions}</span></div>
@@ -265,7 +265,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 >
                                                     {loadingFix === id ? (
                                                         <>
-                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
                                                             <SmartButtonText active={true} />
                                                         </>
                                                     ) : (
@@ -322,16 +322,16 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <div className="flex items-start justify-between gap-4 mb-4">
                                                     <div>
                                                         <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1">Decaying Query</p>
-                                                        <p className="text-xl font-bold text-stone-900 tracking-tight">"{item.query}"</p>
+                                                        <p className="text-xl font-bold text-stone-900 tracking-tight">{item.query}</p>
                                                     </div>
-                                                    <div className="bg-rose-50 text-rose-700 px-3 py-1 rounded-lg text-xs font-bold border border-rose-100">
+                                                    <div className="bg-stone-50 text-stone-700 px-3 py-1 rounded-lg text-xs font-bold border border-stone-100">
                                                         -{item.prevClicks - item.currentClicks} clicks
                                                     </div>
                                                 </div>
 
                                                 <div className="bg-stone-50 p-3 rounded-xl border border-stone-100 mb-4">
                                                     <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest block mb-1">Target Page</span>
-                                                    <p className="text-xs text-stone-700 truncate font-medium">{item.page}</p>
+                                                    <p className="text-xs text-stone-700 font-medium break-all">{('/' + item.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}</p>
                                                 </div>
 
                                                 <div className="flex items-center justify-between bg-stone-50/50 p-3 rounded-xl border border-stone-100 mb-6">
@@ -341,7 +341,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                     </div>
                                                     <div className="flex flex-col items-center flex-1">
                                                         <span className="text-[10px] text-stone-400 font-bold uppercase mb-1">Current Pos</span>
-                                                        <span className="text-lg font-bold text-rose-600">{(item.currentPos || 0).toFixed(1)}</span>
+                                                        <span className="text-lg font-bold text-stone-600">{(item.currentPos || 0).toFixed(1)}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -363,7 +363,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 >
                                                     {loadingFix === id ? (
                                                         <>
-                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
                                                             <SmartButtonText active={true} />
                                                         </>
                                                     ) : (
@@ -388,8 +388,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                     {/* SECTION 2.5: AEO ALIGNMENT */}
                     <section>
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-100">
-                                <Bot className="w-5 h-5 text-emerald-600" />
+                            <div className="p-2 bg-stone-50 rounded-xl border border-stone-100">
+                                <Bot className="w-5 h-5 text-stone-600" />
                             </div>
                             <div className="flex items-center gap-2">
                                 <h3 className="text-xl font-bold text-stone-900 tracking-tight">Answer Engine Optimization</h3>
@@ -419,27 +419,27 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <div>
                                                 <div className="flex items-start justify-between gap-4 mb-4">
                                                     <div>
-                                                        <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-1">Stolen Intent</p>
-                                                        <p className="text-xl font-bold text-stone-900 tracking-tight">"{item.query}"</p>
+                                                        <p className="text-[10px] text-stone-600 font-bold uppercase tracking-widest mb-1">Stolen Intent</p>
+                                                        <p className="text-xl font-bold text-stone-900 tracking-tight">{item.query}</p>
                                                     </div>
-                                                    <div className="bg-rose-50 text-rose-700 px-3 py-1 rounded-lg text-xs font-bold border border-rose-100 shrink-0">
+                                                    <div className="w-fit bg-stone-50 text-stone-700 px-3 py-1 rounded-lg text-xs font-bold border border-stone-100 shrink-0 mt-2 sm:mt-0">
                                                         -{Math.round(((item.prevClicks - item.currentClicks) / item.prevClicks) * 100)}% Clicks
                                                     </div>
                                                 </div>
 
                                                 <div className="bg-stone-50 p-3 rounded-xl border border-stone-100 mb-4">
                                                     <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest block mb-1">Target Page</span>
-                                                    <p className="text-xs text-stone-700 truncate font-medium">{item.page}</p>
+                                                    <p className="text-xs text-stone-700 font-medium break-all">{('/' + item.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}</p>
                                                 </div>
 
                                                 <div className="flex items-center justify-between bg-stone-50/50 p-3 rounded-xl border border-stone-100 mb-6">
                                                     <div className="flex flex-col items-center flex-1 border-r border-stone-200">
                                                         <span className="text-[10px] text-stone-400 font-bold uppercase mb-1">Impressions</span>
-                                                        <span className="text-lg font-bold text-emerald-600">{item.currentImps}</span>
+                                                        <span className="text-lg font-bold text-stone-600">{item.currentImps}</span>
                                                     </div>
                                                     <div className="flex flex-col items-center flex-1">
                                                         <span className="text-[10px] text-stone-400 font-bold uppercase mb-1">Current Clicks</span>
-                                                        <span className="text-lg font-bold text-rose-600">{item.currentClicks}</span>
+                                                        <span className="text-lg font-bold text-stone-600">{item.currentClicks}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -448,9 +448,9 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <button
                                                     onClick={() => handleViewDraft(draftMatch, item, id)}
                                                     disabled={loadingFix !== null}
-                                                    className="cursor-pointer w-full h-10 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-sm font-semibold flex items-center justify-center gap-2 border border-emerald-200 transition-colors"
+                                                    className="cursor-pointer w-full h-10 rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-800 text-sm font-semibold flex items-center justify-center gap-2 border border-stone-200 transition-colors"
                                                 >
-                                                    {loadingFix === id ? <Loader2 className="w-4 h-4 animate-spin text-emerald-500" /> : <Eye className="w-4 h-4 text-emerald-500" />}
+                                                    {loadingFix === id ? <Loader2 className="w-4 h-4 animate-spin text-stone-500" /> : <Eye className="w-4 h-4 text-stone-500" />}
                                                     View Drafted Strategy
                                                 </button>
                                             ) : (
@@ -477,8 +477,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                     {/* SECTION 3: CTR INTERVENTIONS */}
                     <section>
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-amber-100/50 rounded-xl border border-amber-100">
-                                <Crosshair className="w-5 h-5 text-amber-600" />
+                            <div className="p-2 bg-stone-100/50 rounded-xl border border-stone-100">
+                                <Crosshair className="w-5 h-5 text-stone-600" />
                             </div>
                             <div className="flex items-center gap-2">
                                 <h3 className="text-xl font-bold text-stone-900 tracking-tight">CTR Interventions</h3>
@@ -508,10 +508,10 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                             <div>
                                                 <div className="flex items-start justify-between gap-4 mb-4">
                                                     <div className="flex">
-                                                        <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest mr-2">Page URL:</p>
-                                                        <p className="text-xs text-stone-700 font-medium break-all">{item.page}</p>
+                                                        <p className="text-[10px] text-stone-600 font-bold uppercase tracking-widest mr-2">Page URL:</p>
+                                                        <p className="text-xs text-stone-700 font-medium break-all">{('/' + item.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}</p>
                                                     </div>
-                                                    <div className="flex items-center gap-1 bg-amber-50 px-2 py-1.5 rounded-lg border border-amber-100 text-amber-800 font-bold text-xs shrink-0">
+                                                    <div className="w-fit flex items-center gap-1 bg-stone-50 px-2 py-1.5 rounded-lg border border-stone-100 text-stone-800 font-bold text-xs shrink-0 mt-2 sm:mt-0">
                                                         <TrendingDown className="w-3 h-3" /> Avg {(item.avgCtr * 100).toFixed(1)}%
                                                     </div>
                                                 </div>
@@ -521,11 +521,11 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                     <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                                                         {item.queries.map((q: any, j: number) => (
                                                             <div key={j} className="flex items-center justify-between bg-stone-50 p-2.5 rounded-lg border border-stone-100 text-xs">
-                                                                <span className="text-stone-800 font-medium truncate max-w-[55%]">"{q.query}"</span>
+                                                                <span className="text-stone-800 font-medium truncate max-w-[55%]">{q.query}</span>
                                                                 <div className="flex items-center gap-2 text-stone-500 shrink-0">
                                                                     <span>Pos <strong className="text-stone-700">{q.position?.toFixed(1)}</strong></span>
                                                                     <span className="w-px h-3 bg-stone-200" />
-                                                                    <span>CTR <strong className="text-amber-700">{(q.ctr * 100).toFixed(1)}%</strong></span>
+                                                                    <span>CTR <strong className="text-stone-700">{(q.ctr * 100).toFixed(1)}%</strong></span>
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -561,7 +561,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 >
                                                     {loadingFix === id ? (
                                                         <>
-                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
                                                             <SmartButtonText active={true} />
                                                         </>
                                                     ) : (
@@ -586,8 +586,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                     {/* SECTION 4: STRIKING DISTANCE */}
                     <section>
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-indigo-50 rounded-xl border border-indigo-100">
-                                <ArrowRight className="w-5 h-5 text-indigo-600 -rotate-45" />
+                            <div className="p-2 bg-stone-50 rounded-xl border border-stone-100">
+                                <ArrowRight className="w-5 h-5 text-stone-600 -rotate-45" />
                             </div>
                             <div className="flex items-center gap-2">
                                 <h3 className="text-xl font-bold text-stone-900 tracking-tight">Striking Distance (Page 2)</h3>
@@ -615,22 +615,22 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     return (
                                         <GlobalCard key={id} contentClassName="p-6 flex flex-col justify-between">
                                             <div>
-                                                <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest mb-1">Opportunity</p>
-                                                <p className="text-lg font-bold text-stone-900 tracking-tight leading-tight mb-4">"{item.query}"</p>
+                                                <p className="text-[10px] text-stone-600 font-bold uppercase tracking-widest mb-1">Opportunity</p>
+                                                <p className="text-lg font-bold text-stone-900 tracking-tight leading-tight mb-4">{item.query}</p>
 
                                                 <div className="bg-stone-50 p-3 rounded-xl border border-stone-100 mb-4">
                                                     <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest block mb-1">Target Page</span>
-                                                    <p className="text-xs text-stone-700 truncate font-medium">{item.page}</p>
+                                                    <p className="text-xs text-stone-700 font-medium break-all">{('/' + item.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}</p>
                                                 </div>
 
                                                 <div className="flex items-center justify-between mb-6">
-                                                    <div className="flex flex-col items-center flex-1 bg-indigo-50/50 rounded-xl border border-indigo-100/50 p-2 mr-2">
-                                                        <span className="text-[10px] text-indigo-600/70 font-bold uppercase">Position</span>
-                                                        <span className="font-bold text-indigo-900">{(item.position || 0).toFixed(1)}</span>
+                                                    <div className="flex flex-col items-center flex-1 bg-stone-50/50 rounded-xl border border-stone-100/50 p-2 mr-2">
+                                                        <span className="text-[10px] text-stone-600/70 font-bold uppercase">Position</span>
+                                                        <span className="font-bold text-stone-900">{(item.position || 0).toFixed(1)}</span>
                                                     </div>
-                                                    <div className="flex flex-col items-center flex-1 bg-indigo-50/50 rounded-xl border border-indigo-100/50 p-2 ml-2">
-                                                        <span className="text-[10px] text-indigo-600/70 font-bold uppercase">Imp</span>
-                                                        <span className="font-bold text-indigo-900">{item.impressions}</span>
+                                                    <div className="flex flex-col items-center flex-1 bg-stone-50/50 rounded-xl border border-stone-100/50 p-2 ml-2">
+                                                        <span className="text-[10px] text-stone-600/70 font-bold uppercase">Imp</span>
+                                                        <span className="font-bold text-stone-900">{item.impressions}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -652,7 +652,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 >
                                                     {loadingFix === id ? (
                                                         <>
-                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
                                                             <SmartButtonText active={true} />
                                                         </>
                                                     ) : (
@@ -677,8 +677,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                     {/* SECTION 5: EMERGING TRENDS */}
                     <section>
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-fuchsia-50 rounded-xl border border-fuchsia-100">
-                                <Zap className="w-5 h-5 text-fuchsia-600" />
+                            <div className="p-2 bg-stone-50 rounded-xl border border-stone-100">
+                                <Zap className="w-5 h-5 text-stone-600" />
                             </div>
                             <div className="flex items-center gap-2">
                                 <h3 className="text-xl font-bold text-stone-900 tracking-tight">Emerging Trends</h3>
@@ -706,27 +706,27 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     return (
                                         <GlobalCard key={id} contentClassName="p-6 flex flex-col justify-between">
                                             <div>
-                                                <p className="text-[10px] text-fuchsia-600 font-bold uppercase tracking-widest mb-1">New Topic</p>
-                                                <p className="text-lg font-bold text-stone-900 tracking-tight leading-tight mb-4">"{item.query}"</p>
+                                                <p className="text-[10px] text-stone-600 font-bold uppercase tracking-widest mb-1">New Topic</p>
+                                                <p className="text-lg font-bold text-stone-900 tracking-tight leading-tight mb-4">{item.query}</p>
 
                                                 <div className="bg-stone-50 p-3 rounded-xl border border-stone-100 mb-4">
                                                     <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest block mb-1">Ranking Page</span>
-                                                    <p className="text-xs text-stone-700 truncate font-medium">{item.page}</p>
+                                                    <p className="text-xs text-stone-700 font-medium break-all">{('/' + item.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}</p>
                                                 </div>
 
-                                                <div className="flex items-center justify-between bg-fuchsia-50/50 p-3 rounded-xl border border-fuchsia-100/50 mb-6">
-                                                    <div className="flex flex-col items-center flex-1 border-r border-fuchsia-200/50">
-                                                        <span className="text-[10px] text-fuchsia-600/70 font-bold uppercase mb-1">Prev Month</span>
+                                                <div className="flex items-center justify-between bg-stone-50/50 p-3 rounded-xl border border-stone-100/50 mb-6">
+                                                    <div className="flex flex-col items-center flex-1 border-r border-stone-200/50">
+                                                        <span className="text-[10px] text-stone-600/70 font-bold uppercase mb-1">Prev Month</span>
                                                         <div className="flex items-baseline gap-1">
-                                                            <span className="text-lg font-bold text-fuchsia-900/40">0</span>
-                                                            <span className="text-[9px] font-bold text-fuchsia-900/30 uppercase tracking-widest">Imps</span>
+                                                            <span className="text-lg font-bold text-stone-900/40">0</span>
+                                                            <span className="text-[9px] font-bold text-stone-900/30 uppercase tracking-widest">Imps</span>
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-col items-center flex-1">
-                                                        <span className="text-[10px] text-fuchsia-600/70 font-bold uppercase mb-1">This Month</span>
+                                                        <span className="text-[10px] text-stone-600/70 font-bold uppercase mb-1">This Month</span>
                                                         <div className="flex items-baseline gap-1">
-                                                            <span className="text-lg font-bold text-fuchsia-700">{item.impressions}</span>
-                                                            <span className="text-[9px] font-bold text-fuchsia-700/60 uppercase tracking-widest">Imps</span>
+                                                            <span className="text-lg font-bold text-stone-700">{item.impressions}</span>
+                                                            <span className="text-[9px] font-bold text-stone-700/60 uppercase tracking-widest">Imps</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -749,7 +749,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 >
                                                     {loadingFix === id ? (
                                                         <>
-                                                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <Loader2 className="w-4 h-4 animate-spin text-stone-400" />
                                                             <SmartButtonText active={true} />
                                                         </>
                                                     ) : (
@@ -776,22 +776,24 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
             {tab === 'wins' && (
                 <div className="space-y-4">
                     {plays.filter(p => p.status === 'deployed').map((play: any) => (
-                        <div key={play.id} className="p-5 border border-stone-200 rounded-xl bg-white flex items-center justify-between">
-                            <div>
-                                <div className="flex items-center gap-2 mb-1.5">
-                                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                                    <span className="font-bold text-sm tracking-tight text-stone-900">"{play.query}"</span>
-                                    <span className="text-[10px] uppercase tracking-wider font-bold bg-stone-100 px-2 py-0.5 rounded border border-stone-200 text-stone-600">{play.play_type}</span>
+                        <div key={play.id} className="p-4 md:p-5 border border-stone-200 rounded-xl bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div className="flex-1 min-w-0 w-full">
+                                <div className="flex items-start sm:items-center gap-2 mb-1.5 flex-wrap">
+                                    <CheckCircle2 className="w-5 h-5 text-stone-500 shrink-0 mt-0.5 sm:mt-0" />
+                                    <span className="font-bold text-sm sm:text-base tracking-tight text-stone-900 leading-tight break-words">{play.query}</span>
+                                    <span className="text-[10px] uppercase tracking-wider font-bold bg-stone-100 px-2 py-0.5 rounded border border-stone-200 text-stone-600 shrink-0">{play.play_type}</span>
                                 </div>
-                                <p className="text-xs text-stone-500 font-medium">Deployed on: {new Date(play.deployed_at).toLocaleDateString()} &middot; {play.page}</p>
+                                <p className="text-xs text-stone-500 font-medium break-all mt-2 sm:mt-0 leading-relaxed max-w-xl pl-7 sm:pl-0">
+                                    Deployed on: {new Date(play.deployed_at).toLocaleDateString()} &middot; {('/' + play.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}
+                                </p>
                             </div>
-                            <div className="text-right">
-                                <div className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-1">ROI Tracking</div>
+                            <div className="text-left sm:text-right shrink-0 w-full sm:w-auto bg-stone-50 sm:bg-transparent p-3 sm:p-0 rounded-lg sm:rounded-none border border-stone-100 sm:border-transparent mt-2 sm:mt-0">
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1.5">ROI Tracking</div>
                                 {(() => {
                                     const daysSince = Math.floor((new Date().getTime() - new Date(play.deployed_at).getTime()) / (1000 * 3600 * 24));
-                                    const daysLeft = Math.max(0, 14 - Math.max(0, daysSince));
+                                    const daysLeft = Math.max(0, 30 - Math.max(0, daysSince));
                                     return (
-                                        <div className="text-xs text-stone-500 font-medium bg-stone-50 px-2 py-1 rounded inline-block border border-stone-200">
+                                        <div className="text-xs text-stone-700 font-medium bg-white sm:bg-stone-50 px-2.5 py-1 rounded-md inline-block border border-stone-200 shadow-sm sm:shadow-none">
                                             {daysLeft > 0 ? `Gathering baseline (${daysLeft}d left)` : 'Ready for extraction'}
                                         </div>
                                     );
@@ -853,7 +855,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                 <div className="group relative p-3 md:p-4 rounded-xl bg-stone-50 border border-stone-200 hover:border-stone-200 hover:bg-stone-100/30 transition-colors">
                                                     <p className="text-xs md:text-sm font-medium text-stone-700 pr-10">{parsedJson.metaDescription}</p>
                                                     <p className="text-[9px] md:text-[10px] text-stone-500 font-medium mt-1.5 md:mt-2">{parsedJson.metaDescription.length} characters</p>
-                                                    <CopyButton text={parsedJson.metaDescription} className="absolute right-3 md:right-4 top-3 md:top-4 p-1.5 md:p-2 bg-white border border-stone-200 rounded-md md:rounded-lg text-stone-500 hover:text-indigo-600 hover:border-indigo-200 transition-all cursor-pointer" />
+                                                    <CopyButton text={parsedJson.metaDescription} className="absolute right-3 md:right-4 top-3 md:top-4 p-1.5 md:p-2 bg-white border border-stone-200 rounded-md md:rounded-lg text-stone-500 hover:text-stone-600 hover:border-stone-200 transition-all cursor-pointer" />
                                                 </div>
                                             </div>
                                         </div>
@@ -881,8 +883,8 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                                         ? <code className={className} {...props} />
                                                         : <code className="bg-stone-100 text-stone-800 px-1.5 py-0.5 rounded text-[13px] font-mono border border-stone-200" {...props} />
                                                 },
-                                                blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-indigo-200 pl-4 py-1 italic text-stone-500 my-5 bg-stone-50 rounded-r-lg" {...props} />,
-                                                a: ({ node, ...props }) => <a className="text-indigo-600 hover:text-indigo-700 underline underline-offset-4 decoration-indigo-200 hover:decoration-indigo-400 transition-colors" target="_blank" rel="noopener noreferrer" {...props} />
+                                                blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-stone-200 pl-4 py-1 italic text-stone-500 my-5 bg-stone-50 rounded-r-lg" {...props} />,
+                                                a: ({ node, ...props }) => <a className="text-stone-600 hover:text-stone-700 underline underline-offset-4 decoration-stone-200 hover:decoration-stone-400 transition-colors" target="_blank" rel="noopener noreferrer" {...props} />
                                             }}
                                         >
                                             {activeFix.advice}
