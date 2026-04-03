@@ -776,29 +776,55 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
             {tab === 'wins' && (
                 <div className="space-y-4">
                     {plays.filter(p => p.status === 'deployed').map((play: any) => (
-                        <div key={play.id} className="p-4 md:p-5 border border-stone-200 rounded-xl bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <div className="flex-1 min-w-0 w-full">
-                                <div className="flex items-start sm:items-center gap-2 mb-1.5 flex-wrap">
-                                    <CheckCircle2 className="w-5 h-5 text-stone-500 shrink-0 mt-0.5 sm:mt-0" />
-                                    <span className="font-bold text-sm sm:text-base tracking-tight text-stone-900 leading-tight break-words">{play.query}</span>
-                                    <span className="text-[10px] uppercase tracking-wider font-bold bg-stone-100 px-2 py-0.5 rounded border border-stone-200 text-stone-600 shrink-0">{play.play_type}</span>
+                        <div key={play.id} className="p-4 md:p-5 border border-stone-200 rounded-xl bg-white hover:border-stone-300/50 transition-colors flex flex-col gap-3">
+                            
+                            {/* Top Row: Details & Date */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] uppercase tracking-wider font-bold bg-stone-100 px-2 py-0.5 rounded border border-stone-200 text-stone-600">
+                                    {play.play_type}
+                                </span>
+                                <span className="text-xs text-stone-400 font-medium">
+                                    Deployed {new Date(play.deployed_at).toLocaleDateString()}
+                                </span>
+                            </div>
+
+                            {/* Middle Row: Content */}
+                            <div className="flex items-start gap-3 mt-1">
+                                <CheckCircle2 className="w-5 h-5 text-stone-300 shrink-0 mt-0.5 hidden sm:block" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-sm md:text-base tracking-tight text-stone-900 leading-snug break-words flex items-start gap-2">
+                                        <CheckCircle2 className="w-5 h-5 text-stone-300 shrink-0 mt-0.5 sm:hidden" />
+                                        {play.query}
+                                    </div>
+                                    <div className="text-xs text-stone-500 font-medium leading-relaxed break-all mt-1 pl-7 sm:pl-0">
+                                        {('/' + play.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}
+                                    </div>
                                 </div>
-                                <p className="text-xs text-stone-500 font-medium break-all mt-2 sm:mt-0 leading-relaxed max-w-xl pl-7 sm:pl-0">
-                                    Deployed on: {new Date(play.deployed_at).toLocaleDateString()} &middot; {('/' + play.page.replace(siteUrl, '')).replace(/^\/\/+/g, '/')}
-                                </p>
                             </div>
-                            <div className="text-left sm:text-right shrink-0 w-full sm:w-auto bg-stone-50 sm:bg-transparent p-3 sm:p-0 rounded-lg sm:rounded-none border border-stone-100 sm:border-transparent mt-2 sm:mt-0">
-                                <div className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1.5">ROI Tracking</div>
-                                {(() => {
-                                    const daysSince = Math.floor((new Date().getTime() - new Date(play.deployed_at).getTime()) / (1000 * 3600 * 24));
-                                    const daysLeft = Math.max(0, 30 - Math.max(0, daysSince));
-                                    return (
-                                        <div className="text-xs text-stone-700 font-medium bg-white sm:bg-stone-50 px-2.5 py-1 rounded-md inline-block border border-stone-200 shadow-sm sm:shadow-none">
-                                            {daysLeft > 0 ? `Gathering baseline (${daysLeft}d left)` : 'Ready for extraction'}
-                                        </div>
-                                    );
-                                })()}
+
+                            {/* Bottom Row: ROI Tracker */}
+                            <div className="pt-3 mt-1 border-t border-stone-100 flex items-center justify-between">
+                                <div className="flex items-center flex-wrap gap-2">
+                                    <div className="text-[10px] font-bold uppercase tracking-widest text-stone-400">ROI Tracker:</div>
+                                    {(() => {
+                                        const daysSince = Math.floor((new Date().getTime() - new Date(play.deployed_at).getTime()) / (1000 * 3600 * 24));
+                                        const daysLeft = Math.max(0, 30 - Math.max(0, daysSince));
+                                        
+                                        return daysLeft > 0 ? (
+                                            <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-600 bg-stone-50 px-2 py-0.5 rounded border border-stone-200 hover:bg-stone-100 transition-colors">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-pulse"></div>
+                                                Gathering baseline
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-stone-900 px-2 py-0.5 rounded border border-stone-900 hover:bg-stone-800 transition-colors">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                                                Ready for Extraction
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
                             </div>
+                            
                         </div>
                     ))}
                     {plays.filter(p => p.status === 'deployed').length === 0 && (
