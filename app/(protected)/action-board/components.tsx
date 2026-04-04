@@ -9,7 +9,7 @@ export function ActionBoardLoader() {
         <GlobalCard className="w-full flex-1" contentClassName="flex items-center justify-center p-12">
             <div className="flex flex-col items-center gap-4 text-stone-400">
                 <Loader2 className="w-8 h-8 animate-spin" />
-                <p>Analyzing millions of GSC rows and preparing strategy...</p>
+                <p>Analyzing Your last 60 days GSC data and preparing strategy...</p>
             </div>
         </GlobalCard>
     )

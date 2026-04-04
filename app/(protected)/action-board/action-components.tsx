@@ -3,13 +3,15 @@ import { createClient } from "@/utils/supabase/server"
 import { ActionTrackingDashboard } from "@/components/action-tracking-dashboard"
 import { GlobalCard } from "@/components/ui/global-card"
 import { Loader2, ArrowRight } from "lucide-react"
+import { GscSubmitButton } from "@/components/gsc-submit-button"
+import { GscSyncScreen } from "@/components/gsc-sync-screen"
 
 export function ActionBoardLoader() {
     return (
         <GlobalCard className="w-full flex-1" contentClassName="flex items-center justify-center p-12">
             <div className="flex flex-col items-center gap-4 text-stone-400">
                 <Loader2 className="w-8 h-8 animate-spin" />
-                <p>Analyzing millions of GSC rows and preparing strategy...</p>
+                <p>Analyzing Your last 60 days GSC data and preparing strategy...</p>
             </div>
         </GlobalCard>
     )
@@ -17,11 +19,23 @@ export function ActionBoardLoader() {
 
 export async function ActionBoardClient({ siteUrl, userId }: { siteUrl: string, userId: string }) {
     try {
+        const supabase = await createClient()
+
+        // 0. Check Sync Status
+        const { data: conn } = await supabase
+            .from("gsc_connections")
+            .select("sync_status")
+            .eq("user_id", userId)
+            .single()
+
+        if (conn?.sync_status === "running" || conn?.sync_status === "pending") {
+            return <GscSyncScreen siteUrl={siteUrl} userId={userId} />
+        }
+
         // 1. Get strategic directives 
         const directives = await getDashboardDirectives(siteUrl, 30)
 
         // 2. Fetch deployed plays from Postgres to track ROI
-        const supabase = await createClient()
         const { data: plays } = await supabase
             .from('seo_plays')
             .select('*')
@@ -92,9 +106,7 @@ export async function GscSiteSelector({ accessToken }: { accessToken: string }) 
                             <div key={site.siteUrl} className="flex items-center justify-between p-4 border border-stone-200 rounded-xl hover:border-stone-300 hover:bg-stone-50/30 transition-colors group">
                                 <span className="font-medium text-stone-800 truncate pr-4">{site.siteUrl}</span>
                                 <form action={setGscSite.bind(null, site.siteUrl)}>
-                                    <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-black text-stone-700 hover:text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer">
-                                        Select <ArrowRight className="w-3.5 h-3.5" />
-                                    </button>
+                                    <GscSubmitButton />
                                 </form>
                             </div>
                         ))}

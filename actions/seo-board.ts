@@ -217,9 +217,9 @@ ${crossSignalAlert}
     generateConfig.responseSchema = {
       type: Type.OBJECT,
       properties: {
-        markdownStrategy: { 
-            type: Type.STRING, 
-            description: "The pure, beautifully formatted Markdown strategy. No conversational intro/outro. Use ## Headers and bullet points." 
+        markdownStrategy: {
+          type: Type.STRING,
+          description: "The pure, beautifully formatted Markdown strategy. No conversational intro/outro. Use ## Headers and bullet points."
         }
       },
       required: ["markdownStrategy"]
@@ -238,12 +238,12 @@ ${crossSignalAlert}
   // For cannibalization, extract the pure markdown 
   if (type === 'cannibalization') {
     try {
-        const parsed = JSON.parse(adviceText);
-        if (parsed.markdownStrategy) {
-            adviceText = parsed.markdownStrategy;
-        }
+      const parsed = JSON.parse(adviceText);
+      if (parsed.markdownStrategy) {
+        adviceText = parsed.markdownStrategy;
+      }
     } catch (parseError) {
-        console.error("Failed to parse markdownStrategy JSON from LLM response");
+      console.error("Failed to parse markdownStrategy JSON from LLM response");
     }
   }
 
@@ -251,7 +251,7 @@ ${crossSignalAlert}
   const timestamp = new Date().getTime();
   const cleanSiteName = siteUrl.replace(/^sc-[a-z]+:/, '').replace(/^https?:\/\//, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
   const storagePath = `${userId}/${cleanSiteName}/${type}-${timestamp}.md`;
-  
+
   const { error: storageError } = await supabase.storage.from('seo-strategies').upload(storagePath, adviceText, { contentType: 'text/markdown' });
   if (storageError) console.error("Storage upload failed:", storageError);
 
@@ -294,7 +294,7 @@ export async function markPlayAsDeployed(playId: string) {
 
   const { error } = await supabase
     .from('seo_plays')
-    .update({ 
+    .update({
       status: 'deployed',
       deployed_at: new Date().toISOString()
     })
@@ -313,9 +313,10 @@ export async function setGscSite(siteUrl: string) {
   const { data: connection, error } = await supabase
     .from("gsc_connections")
     // Stamp the lock immediately on the first standalone fetch
-    .update({ 
-        site_url: siteUrl,
-        last_fetched_at: new Date().toISOString()
+    .update({
+      site_url: siteUrl,
+      last_fetched_at: new Date().toISOString(),
+      sync_status: 'running'
     })
     .eq("user_id", user.id)
     .select("id")
@@ -329,10 +330,10 @@ export async function setGscSite(siteUrl: string) {
   try {
     const { syncGscDataTask } = await import("@/trigger/gsc-sync");
     await syncGscDataTask.trigger({
-        userId: user.id,
-        connectionId: connection.id,
-        siteUrl: siteUrl,
-        isInitialSync: true
+      userId: user.id,
+      connectionId: connection.id,
+      siteUrl: siteUrl,
+      isInitialSync: true
     });
     console.log(`[seo-board action] Initial GSC sync triggered for ${siteUrl}`);
   } catch (syncError) {

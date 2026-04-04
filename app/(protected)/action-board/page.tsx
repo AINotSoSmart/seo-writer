@@ -70,7 +70,7 @@ export default async function ActionBoardPage() {
                             </div>
                         </div>
 
-                        <Link href="/billing" className="block">
+                        <Link href="/subscribe" className="block">
                             <button
                                 className="w-full h-12 rounded-lg inline-flex items-center justify-center gap-2 bg-stone-900 hover:bg-stone-800 text-white font-semibold text-sm border border-stone-700 transition-all duration-150 ease-out cursor-pointer select-none active:translate-y-[2px] active:shadow-[0_2px_0_0_#1c1917]"
                             >

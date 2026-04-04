@@ -127,17 +127,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     <span className="hidden sm:inline">The Math Behind the Strategy: How We Calculate Your SEO Fixes</span>
                                     <span className="inline sm:hidden">The Math Behind the Strategy</span>
                                 </span>
-                                <span className="hidden md:inline bg-stone-100 text-stone-500 text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border border-stone-200 shrink-0 ml-1">
-                                    {(
-                                        (directives.cannibalization?.length || 0) * 14 +
-                                        (directives.ctrInterventions?.length || 0) * 7 +
-                                        (directives.strikingDistance?.length || 0) * 12 +
-                                        (directives.contentDecay?.length || 0) * 18 +
-                                        (directives.emergingTrends?.length || 0) * 24 +
-                                        (directives.aeoAlignment?.length || 0) * 9 +
-                                        1420
-                                    ).toLocaleString()} Signals Parsed
-                                </span>
+
                             </div>
                             <div className="flex items-center gap-2 text-stone-400 text-[10px] sm:text-xs uppercase tracking-widest font-semibold group-hover:text-stone-600 transition-colors shrink-0 mt-0.5 sm:mt-0">
                                 <span className="group-open:hidden hidden sm:inline">View Telemetry</span>
@@ -777,7 +767,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                 <div className="space-y-4">
                     {plays.filter(p => p.status === 'deployed').map((play: any) => (
                         <div key={play.id} className="p-4 md:p-5 border border-stone-200 rounded-xl bg-white hover:border-stone-300/50 transition-colors flex flex-col gap-3">
-                            
+
                             {/* Top Row: Details & Date */}
                             <div className="flex items-center justify-between">
                                 <span className="text-[10px] uppercase tracking-wider font-bold bg-stone-100 px-2 py-0.5 rounded border border-stone-200 text-stone-600">
@@ -809,7 +799,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     {(() => {
                                         const daysSince = Math.floor((new Date().getTime() - new Date(play.deployed_at).getTime()) / (1000 * 3600 * 24));
                                         const daysLeft = Math.max(0, 30 - Math.max(0, daysSince));
-                                        
+
                                         return daysLeft > 0 ? (
                                             <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-600 bg-stone-50 px-2 py-0.5 rounded border border-stone-200 hover:bg-stone-100 transition-colors">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-pulse"></div>
@@ -824,7 +814,7 @@ export function ActionTrackingDashboard({ siteUrl, directives, plays }: { siteUr
                                     })()}
                                 </div>
                             </div>
-                            
+
                         </div>
                     ))}
                     {plays.filter(p => p.status === 'deployed').length === 0 && (

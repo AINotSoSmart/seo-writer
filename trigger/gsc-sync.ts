@@ -146,7 +146,7 @@ export const syncGscDataTask = task({
             // Update last_fetched_at to act as the 30-day unmodifiable chronological lock
             const { error: lockError } = await supabase
                 .from("gsc_connections")
-                .update({ last_fetched_at: new Date().toISOString() })
+                .update({ last_fetched_at: new Date().toISOString(), sync_status: 'completed' })
                 .eq("id", payload.connectionId)
                 
             if (lockError) {
@@ -163,6 +163,9 @@ export const syncGscDataTask = task({
 
         } catch (error: any) {
             console.error(`[GSC Sync Worker] GSC API Fetch failed:`, error)
+            // Attempt to mark as failed
+            await supabase.from("gsc_connections").update({ sync_status: 'failed' }).eq("id", payload.connectionId)
+            
             return { success: false, error: error.message || "GSC API failed" }
         }
     }

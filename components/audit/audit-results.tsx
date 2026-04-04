@@ -117,6 +117,7 @@ export function AuditResults({
     isGeneratingPlan = false
 }: AuditResultsProps) {
     const [expandedPillar, setExpandedPillar] = useState<string | null>(null)
+    const [showAllCriticalGaps, setShowAllCriticalGaps] = useState(false)
 
     const {
         authority_score,
@@ -273,7 +274,7 @@ export function AuditResults({
                     <p className="text-xs text-stone-500 mb-4">High-impact topics you're missing.</p>
 
                     <div className="flex-1 overflow-y-auto pr-2 space-y-2 max-h-[340px]">
-                        {criticalGaps.slice(0, 8).map((gap, i) => (
+                        {(showAllCriticalGaps ? criticalGaps : criticalGaps.slice(0, 8)).map((gap, i) => (
                             <div key={i} className="group p-3 rounded-lg border border-transparent hover:border-rose-100 hover:bg-rose-50/50 transition-all">
                                 <div className="flex justify-between items-start gap-2">
                                     <span className="text-sm font-medium text-stone-800 group-hover:text-rose-900 leading-snug">
@@ -301,8 +302,11 @@ export function AuditResults({
                     </div>
                     {criticalGaps.length > 8 && (
                         <div className="pt-4 mt-auto border-t border-stone-100 text-center">
-                            <button className="text-xs font-medium text-stone-500 hover:text-stone-900">
-                                View all {criticalGaps.length} critical gaps
+                            <button 
+                                onClick={() => setShowAllCriticalGaps(!showAllCriticalGaps)}
+                                className="text-xs font-medium text-stone-500 hover:text-stone-900"
+                            >
+                                {showAllCriticalGaps ? "View fewer critical gaps" : `View all ${criticalGaps.length} critical gaps`}
                             </button>
                         </div>
                     )}

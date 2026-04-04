@@ -37,7 +37,7 @@ interface PhaseState {
 const PHASE_LABELS: Record<AuditPhase, string> = {
     niche_mapping: "Mapping Niche Topics",
     user_scanning: "Analyzing Your Content",
-    competitor_scanning: "scanning Competitive Landscape",
+    competitor_scanning: "Scanning Competitive Landscape",
     scoring: "Calculating Authority Score"
 }
 
