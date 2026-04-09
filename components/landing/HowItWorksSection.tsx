@@ -184,7 +184,7 @@ const HowItWorksSection: React.FC = () => {
         <div className="flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end mb-16 w-full px-4 md:px-8">
           <div className="flex-1">
             <span className="font-sans text-xs font-bold tracking-widest text-brand-500 uppercase mb-4 block">
-              Phase 1
+              HOW WE SOLVE IT
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1.1]">
               The Topical <br /><span className='italic text-stone-500'>Authority Engine</span>

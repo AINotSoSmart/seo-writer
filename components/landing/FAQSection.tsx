@@ -121,7 +121,7 @@ export const FAQSection: React.FC = () => {
           </div>
 
           {/* FAQ List wrapped in the wireframe border */}
-          <div className="w-full border-x border-stone-200  p-8 md:p-16 relative">
+          <div className="w-full border-x border-stone-200  p-4 md:p-8 relative">
             <CornerSquare className="-left-[5px] -top-[5px]" />
             <CornerSquare className="-right-[5px] -top-[5px]" />
             <CornerSquare className="-left-[5px] -bottom-[5px]" />

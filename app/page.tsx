@@ -5,7 +5,6 @@ import { StructuredData } from '@/components/seo/StructuredData'
 import { Navbar } from '@/components/landing/Navbar';
 import Hero from '@/components/landing/Hero';
 import ProblemSection from '@/components/landing/ProblemSection';
-import BenefitsSection from '@/components/landing/BenefitsSection';
 import HowItWorksSection from '@/components/landing/HowItWorksSection';
 import FeaturesSection from '@/components/landing/FeaturesSection';
 import PricingSection from '@/components/landing/PricingSection';
@@ -13,9 +12,7 @@ import { FAQSection } from '@/components/landing/FAQSection';
 import CTASection from '@/components/landing/CTASection';
 import { Footer } from '@/components/landing/Footer';
 import { GridBackground } from "@/components/landing/GridBackground"
-import BlogCarousel from '@/components/landing/BlogCarousel';
 import FounderNote from '@/components/landing/FounderNote';
-import { AICitations } from '@/components/landing/AICitations';
 
 
 export const metadata: Metadata = commonPageMetadata.home()
@@ -33,9 +30,7 @@ export default function Home() {
 
         {/* Hero Section */}
         <Hero />
-        <AICitations />
         <ProblemSection />
-        <BenefitsSection />
         <HowItWorksSection />
         <FeaturesSection />
         <FounderNote />

@@ -23,7 +23,7 @@ const ProblemSection: React.FC = () => {
       <div className="w-full max-w-[1250px] mx-auto px-3 sm:px-5">
 
         {/* Header - Left/Right Premium Setup */}
-        <div className="flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end py-16 w-full px-4 md:px-8">
+        <div className="border-t border-stone-200 flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end py-16 w-full px-4 md:px-8">
           <div className="flex-1">
             <span className="font-sans text-xs font-bold tracking-widest text-stone-400 uppercase mb-4 block">
               The Hard Reality
@@ -65,7 +65,7 @@ const ProblemSection: React.FC = () => {
           </div>
 
           {/* Item 1 */}
-          <div className="flex flex-col group p-8 md:p-12 md:border-r border-b border-stone-200 transition-colors hover:bg-stone-50/50">
+          <div className="flex flex-col group p-4 md:p-8 md:border-r border-b border-stone-200 transition-colors hover:bg-stone-50/50">
             <div className="mb-8">
               <DotGridIcon />
             </div>
@@ -80,7 +80,7 @@ const ProblemSection: React.FC = () => {
           </div>
 
           {/* Item 2 */}
-          <div className="flex flex-col group p-8 md:p-12 md:border-r border-b border-stone-200 transition-colors hover:bg-stone-50/50">
+          <div className="flex flex-col group p-4 md:p-8 md:border-r border-b border-stone-200 transition-colors hover:bg-stone-50/50">
             <div className="mb-8">
               <DotGridIcon />
             </div>
@@ -95,7 +95,7 @@ const ProblemSection: React.FC = () => {
           </div>
 
           {/* Item 3 */}
-          <div className="flex flex-col group p-8 md:p-12 border-b border-stone-200 transition-colors hover:bg-stone-50/50">
+          <div className="flex flex-col group p-4 md:p-8 border-b border-stone-200 transition-colors hover:bg-stone-50/50">
             <div className="mb-8">
               <DotGridIcon />
             </div>

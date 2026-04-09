@@ -1,12 +1,12 @@
 import React from 'react';
-import { Bot, Zap, Globe, Image as ImageIcon, Link2, ShieldCheck } from 'lucide-react';
+import { Bot, Zap, Globe, Image as ImageIcon, Link2, ShieldCheck, Target } from 'lucide-react';
 import Button from './Button';
 import Link from 'next/link';
 import { CornerSquare } from './CornerSquare';
 
 const FeatureItem = ({ icon: Icon, title, description }: { icon: any, title: string, description: string }) => (
     <div className="flex gap-4 items-start group">
-        <div className="flex-shrink-0 w-10 h-10 rounded-[6px] bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-700">
+        <div className="flex-shrink-0 w-10 h-10 rounded-[6px] bg-stone-50 border border-stone-200 flex items-center justify-center text-">
             <Icon size={20} strokeWidth={1.5} />
         </div>
         <div className="flex-1">
@@ -69,7 +69,7 @@ const PricingSection: React.FC = () => {
                     </div>
 
                     {/* Left Side: Pricing & CTA */}
-                    <div className="w-full border-b md:border-b-0 md:border-r border-stone-200 p-8 md:p-16 flex flex-col justify-center items-center text-center ">
+                    <div className="w-full border-b md:border-b-0 md:border-r border-stone-200 p-4 md:p-8 flex flex-col justify-center items-center text-center ">
 
                         <div className="mb-8">
                             <span className="inline-block px-3 py-1 bg-stone-100 text-stone-600 text-[10px] font-bold uppercase tracking-widest mb-6 border border-stone-200 rounded-sm">
@@ -107,7 +107,7 @@ const PricingSection: React.FC = () => {
                     </div>
 
                     {/* Right Side: Features */}
-                    <div className="w-full p-8 md:p-16 border-b border-stone-200 bg-stone-50/50">
+                    <div className="w-full p-4 md:p-8 border-b border-stone-200 bg-stone-50/50">
                         <h3 className="font-sans text-[10px] font-bold text-brand-500 uppercase tracking-widest mb-8 border-b border-stone-100 pb-4 inline-block w-full">
                             Included Powerhouse Access
                         </h3>
@@ -121,6 +121,11 @@ const PricingSection: React.FC = () => {
                                 icon={Zap}
                                 title="Competitor Research & Gap-Analysis"
                                 description="Hands-free planning based on competitor gaps and real-time search intent analysis."
+                            />
+                            <FeatureItem
+                                icon={Target}
+                                title="The GSC Strategic Action Board"
+                                description="While we handle the complex math in the background, you get clear, actionable directives to fix cannibalization and reverse traffic decay."
                             />
                             <FeatureItem
                                 icon={Link2}

@@ -50,6 +50,15 @@ export function Footer() {
             <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-8 md:gap-12">
 
 
+              {/* Product */}
+              <div className="flex flex-col gap-4">
+                <h4 className="font-serif text-lg text-stone-900 font-medium">Product</h4>
+                <nav className="flex flex-col gap-3">
+                  <Link href="/#features" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Features</Link>
+                  <Link href="/case-studies/bringback" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Live Case Study</Link>
+                  <Link href="/#pricing" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Pricing</Link>
+                </nav>
+              </div>
 
               {/* Company */}
               <div className="flex flex-col gap-4">

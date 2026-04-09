@@ -40,8 +40,8 @@ export default function FounderNote() {
                 </div>
 
                 {/* Premium Wireframe Monolithic Letter Block */}
-                <div className="w-full border-x border-stone-200 bg-stone-50/30 p-8 md:p-24 relative flex justify-center">
-                    
+                <div className="w-full border-x border-stone-200 bg-stone-50/30 p-4 md:p-8 relative flex justify-center">
+
                     {/* Main Grid Corners */}
                     <CornerSquare className="-left-[5px] -top-[5px]" />
                     <CornerSquare className="-right-[5px] -top-[5px]" />

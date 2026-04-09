@@ -64,28 +64,58 @@ const BroadSearchVisual = () => (
 
 // --- Visual 2: Critic Agent ---
 const CriticVisual = () => (
-  <div className="w-full h-full flex items-center justify-center p-6">
-    <div className="w-full max-w-[240px] bg-stone-900 rounded-lg p-3 shadow-lg flex flex-col gap-2 font-mono text-[8px] leading-relaxed border border-stone-800">
-      <div className="flex gap-1.5 mb-1 border-b border-stone-800 pb-2">
-        <div className="w-2 h-2 rounded-full bg-red-500"></div>
-        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+  <div className="w-full h-full flex items-center justify-center p-5 pointer-events-none">
+    <div className="w-full flex items-stretch border border-stone-200 bg-white overflow-hidden">
+
+      {/* Zone 1: Source — Competitor Articles */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-2.5 px-3 py-4 bg-stone-50/60 border-r border-stone-200">
+        <span className="font-mono text-[7px] font-bold text-stone-300 uppercase tracking-widest text-center leading-snug">3 Competitor<br/>Articles</span>
+        {/* Stacked document physical stack */}
+        <div className="relative w-[46px] h-[42px]">
+          <div className="absolute top-2 left-2 w-full h-full bg-stone-200/70 border border-stone-200"></div>
+          <div className="absolute top-1 left-1 w-full h-full bg-stone-100 border border-stone-200"></div>
+          <div className="relative bg-white border border-stone-200 w-full h-full flex flex-col justify-center px-1.5 gap-[4px]">
+            <div className="w-full h-[1.5px] bg-stone-200"></div>
+            <div className="w-3/4 h-[1.5px] bg-stone-200"></div>
+            <div className="w-full h-[1.5px] bg-stone-200"></div>
+          </div>
+        </div>
+        <span className="font-mono text-[8px] font-bold text-stone-500">24,000 words</span>
       </div>
 
-      <div className="text-stone-400">
-        <span className="text-blue-400"></span> Analysing 24k Context Words...
+      {/* Zone 2: CRITIC AGENT — the processor */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-2.5 px-3 py-4 border-r border-stone-200">
+        <div className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-md shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] px-2.5 py-2 text-center">
+          <span className="text-[9px] font-bold text-stone-300 tracking-wide leading-tight block">CRITIC</span>
+          <span className="text-[9px] font-bold text-stone-300 tracking-wide leading-tight block">AGENT</span>
+        </div>
+        <div className="text-center space-y-[1px]">
+          <p className="font-mono text-[7px] text-stone-300 uppercase tracking-widest">Scans for</p>
+          <p className="font-mono text-[7px] text-stone-300 uppercase tracking-widest">missing gaps</p>
+        </div>
       </div>
 
-      <div className="bg-red-500/10 border-l-2 border-red-500 pl-2 py-1 text-red-200 my-1">
-        <span className="font-bold">CRITIC AGENT:</span> Missing B2B pricing data. Do not write generic filler.
+      {/* Zone 3: Verdict output */}
+      <div className="flex-[1.4] flex flex-col divide-y divide-stone-100">
+        {/* Verdict: COVERED (muted — passes) */}
+        <div className="flex-1 flex items-center justify-between px-3 bg-stone-50/40">
+          <span className="font-serif italic text-[9px] text-stone-400">Website citations</span>
+          <span className="font-mono text-[7px] font-bold text-stone-300 border border-stone-100 px-1.5 py-0.5">COVERED</span>
+        </div>
+        {/* Verdict: MISSING — the critical gap finding */}
+        <div className="flex-1 flex flex-col justify-center px-3 gap-[4px] bg-white">
+          <div className="flex items-center justify-between">
+            <span className="font-serif italic text-[10px] font-bold text-stone-800">B2B Pricing Data</span>
+            <span className="font-mono text-[8px] font-bold text-stone-700 border border-stone-300 px-1.5 py-0.5">MISSING</span>
+          </div>
+          <span className="font-mono text-[7px] text-stone-400">↗ Sniper query issued</span>
+        </div>
       </div>
 
-      <div className="text-stone-300 opacity-60">
-        Drafting Halted. Awaiting Sniper query.
-      </div>
     </div>
   </div>
 );
+
 
 // --- Visual 3: Sniper Search ---
 const SniperVisual = () => (
@@ -326,7 +356,7 @@ const FeaturesSection: React.FC = () => {
               Phase 2
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-              The Daily Autonomous <br /><span className='italic text-stone-500'>AEO Writer</span>
+              The Daily Autonomous <br /><span className='italic text-stone-500'>AI SEO Writer</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
