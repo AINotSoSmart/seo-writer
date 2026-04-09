@@ -1,5 +1,7 @@
-import React from 'react';
-import { Search, Link2, CheckCircle2, ShoppingBag, Database, Sparkles, FileText, MousePointer2 } from 'lucide-react';
+import {
+  Search, Link2, CheckCircle2, ShoppingBag, Database, Sparkles, FileText, MousePointer2,
+  LayoutGrid, MessageSquare, History, Settings2, GitPullRequest, Cpu, ShieldAlert, Target
+} from 'lucide-react';
 
 import { CornerSquare } from './CornerSquare';
 
@@ -64,51 +66,82 @@ const BroadSearchVisual = () => (
 
 // --- Visual 2: Critic Agent ---
 const CriticVisual = () => (
-  <div className="w-full h-full flex items-center justify-center p-5 pointer-events-none">
-    <div className="w-full flex items-stretch border border-stone-200 bg-white overflow-hidden">
+  <div className="w-full h-full relative overflow-hidden flex items-center justify-center pointer-events-none">
+    
+    {/* Subtle ambient glow matching BroadSearchVisual */}
+    <div className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-48 h-32 bg-stone-200/20 blur-2xl z-0"></div>
 
-      {/* Zone 1: Source — Competitor Articles */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-2.5 px-3 py-4 bg-stone-50/60 border-r border-stone-200">
-        <span className="font-mono text-[7px] font-bold text-stone-300 uppercase tracking-widest text-center leading-snug">3 Competitor<br/>Articles</span>
-        {/* Stacked document physical stack */}
-        <div className="relative w-[46px] h-[42px]">
-          <div className="absolute top-2 left-2 w-full h-full bg-stone-200/70 border border-stone-200"></div>
-          <div className="absolute top-1 left-1 w-full h-full bg-stone-100 border border-stone-200"></div>
-          <div className="relative bg-white border border-stone-200 w-full h-full flex flex-col justify-center px-1.5 gap-[4px]">
-            <div className="w-full h-[1.5px] bg-stone-200"></div>
-            <div className="w-3/4 h-[1.5px] bg-stone-200"></div>
-            <div className="w-full h-[1.5px] bg-stone-200"></div>
+    {/* Layer 0: Competitor Data Window - Stone palette, soft borders */}
+    <div className="absolute w-[280px] bg-stone-50 border border-stone-200 rounded-md shadow-inner transform -rotate-[5deg] -translate-x-10 -translate-y-6 z-0">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-stone-100">
+        <div className="flex items-center gap-1 opacity-40">
+          <div className="w-1.5 h-1.5 rounded-full bg-stone-300" />
+          <div className="w-1.5 h-1.5 rounded-full bg-stone-300" />
+        </div>
+        <span className="font-mono text-[7px] text-stone-400 uppercase tracking-widest">competitor_data.raw</span>
+      </div>
+      <div className="p-3 space-y-1.5 opacity-30">
+        <div className="h-1 w-full bg-stone-200" />
+        <div className="h-1 w-5/6 bg-stone-200" />
+        <div className="h-1 w-4/6 bg-stone-200" />
+        <div className="h-1 w-full bg-stone-200" />
+      </div>
+    </div>
+
+    {/* Main Critic Review Window - Clean, professional, stone-based */}
+    <div className="absolute w-[300px] bg-white border border-stone-200 rounded-md shadow-sm transform translate-x-4 translate-y-2 z-10 flex flex-col">
+      
+      {/* Top Bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-100 bg-stone-50/50">
+        <div className="flex items-center gap-2.5 text-stone-300">
+          <LayoutGrid size={12} />
+          <MessageSquare size={12} />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="px-1.5 py-0.5 text-[8px] font-bold text-stone-500 border border-stone-200 uppercase tracking-tighter bg-white">
+            Audit v1.4
+          </div>
+          <div className="flex items-center gap-1 px-2 py-0.5 text-[8px] font-bold text-stone-700 bg-stone-100 border border-stone-200">
+            <Sparkles size={10} className="text-stone-500" />
+            CRITIC
           </div>
         </div>
-        <span className="font-mono text-[8px] font-bold text-stone-500">24,000 words</span>
       </div>
 
-      {/* Zone 2: CRITIC AGENT — the processor */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-2.5 px-3 py-4 border-r border-stone-200">
-        <div className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-md shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] px-2.5 py-2 text-center">
-          <span className="text-[9px] font-bold text-stone-300 tracking-wide leading-tight block">CRITIC</span>
-          <span className="text-[9px] font-bold text-stone-300 tracking-wide leading-tight block">AGENT</span>
-        </div>
-        <div className="text-center space-y-[1px]">
-          <p className="font-mono text-[7px] text-stone-300 uppercase tracking-widest">Scans for</p>
-          <p className="font-mono text-[7px] text-stone-300 uppercase tracking-widest">missing gaps</p>
-        </div>
-      </div>
-
-      {/* Zone 3: Verdict output */}
-      <div className="flex-[1.4] flex flex-col divide-y divide-stone-100">
-        {/* Verdict: COVERED (muted — passes) */}
-        <div className="flex-1 flex items-center justify-between px-3 bg-stone-50/40">
-          <span className="font-serif italic text-[9px] text-stone-400">Website citations</span>
-          <span className="font-mono text-[7px] font-bold text-stone-300 border border-stone-100 px-1.5 py-0.5">COVERED</span>
-        </div>
-        {/* Verdict: MISSING — the critical gap finding */}
-        <div className="flex-1 flex flex-col justify-center px-3 gap-[4px] bg-white">
-          <div className="flex items-center justify-between">
-            <span className="font-serif italic text-[10px] font-bold text-stone-800">B2B Pricing Data</span>
-            <span className="font-mono text-[8px] font-bold text-stone-700 border border-stone-300 px-1.5 py-0.5">MISSING</span>
+      {/* Review Findings List - Soft, descriptive */}
+      <div className="p-1">
+        <div className="flex items-center justify-between p-2.5 opacity-40">
+          <div className="flex items-center gap-2.5">
+            <Link2 size={12} className="text-stone-400" />
+            <h4 className="text-[10px] font-bold text-stone-500">Website Citations</h4>
           </div>
-          <span className="font-mono text-[7px] text-stone-400">↗ Sniper query issued</span>
+          <span className="text-[7px] font-mono text-stone-400 border border-stone-100 px-1 py-0.5">COVERED</span>
+        </div>
+
+        <div className="flex items-center justify-between p-2.5 opacity-40 border-t border-stone-50">
+          <div className="flex items-center gap-2.5">
+            <ShoppingBag size={12} className="text-stone-400" />
+            <h4 className="text-[10px] font-bold text-stone-500">Product Comparison</h4>
+          </div>
+          <span className="text-[7px] font-mono text-stone-400 border border-stone-100 px-1 py-0.5">COVERED</span>
+        </div>
+
+        {/* The GAP - Highlighted with brand accent logic */}
+        <div className="m-1 p-2.5 bg-stone-50 border border-stone-200 rounded shadow-inner" style={{ backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(245, 245, 244, 0.5) 10px, rgba(245, 245, 244, 0.5) 11px)' }}>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={12} className="text-stone-700" />
+              <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-tight">B2B Pricing Data</h4>
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-stone-800 text-white text-[8px] font-bold tracking-tighter">
+              GAP <Target size={8} />
+            </div>
+          </div>
+          <p className="text-[9px] text-stone-500 leading-tight italic">Differential engine detected zero competitor pricing data.</p>
+          <div className="mt-2 text-[7px] font-mono text-stone-400 flex items-center gap-2">
+             <div className="w-1.5 h-1.5 rounded-full bg-green-500/50 shadow-[0_0_4px_rgba(34,197,94,0.4)]" />
+             SNIPER QUERY TRIGGERED
+          </div>
         </div>
       </div>
 
@@ -119,27 +152,88 @@ const CriticVisual = () => (
 
 // --- Visual 3: Sniper Search ---
 const SniperVisual = () => (
-  <div className="w-full h-full flex items-center justify-center p-6">
-    <div className="relative w-full max-w-[200px] bg-white border border-stone-100 rounded-lg p-3 shadow-sm flex flex-col gap-0">
-      <div className="flex items-center justify-between border-b border-stone-50 pb-2 mb-2">
-        <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Sniper Search</span>
-        <Search size={10} className="text-brand-500" />
+  <div className="w-full h-full relative overflow-hidden flex items-center justify-center pointer-events-none">
+    
+    {/* Background layer: Subtle data noise in stone palette */}
+    <div className="absolute inset-0 opacity-[0.03] grayscale flex flex-col gap-4 p-8 scale-110">
+      {Array(8).fill(0).map((_, i) => (
+        <div key={i} className="space-y-1">
+          <div className="h-1 w-1/3 bg-stone-900" />
+          <div className="h-1 w-full bg-stone-900" />
+        </div>
+      ))}
+    </div>
+
+    {/* The Sniper Viewfinder - SVG Overlay (Softened) */}
+    <svg className="absolute inset-0 w-full h-full z-10 opacity-[0.05]" viewBox="0 0 100 100">
+      <path d="M 35 15 L 15 15 L 15 35" fill="none" stroke="#000" strokeWidth="0.5" />
+      <path d="M 65 15 L 85 15 L 85 35" fill="none" stroke="#000" strokeWidth="0.5" />
+      <path d="M 35 85 L 15 85 L 15 65" fill="none" stroke="#000" strokeWidth="0.5" />
+      <path d="M 65 85 L 85 85 L 85 65" fill="none" stroke="#000" strokeWidth="0.5" />
+    </svg>
+
+    {/* Primary UI Window - Recessed style matching BroadSearch */}
+    <div className="relative w-[80%] bg-white border border-stone-200 rounded-md shadow-sm z-20 flex flex-col">
+      
+      {/* Top Bar - Clean, Stone-based */}
+      <div className="flex items-center justify-between px-3 py-2 bg-stone-50 border-b border-stone-200">
+        <div className="flex items-center gap-2">
+          <Target size={11} className="text-stone-400 font-bold" />
+          <span className="font-mono text-[8px] font-bold text-stone-500 uppercase tracking-widest">Sniper_Search.log</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-1 h-1 rounded-full bg-stone-300" />
+          <span className="font-mono text-[7px] text-stone-400">ACTIVE</span>
+        </div>
       </div>
 
-      <div className="bg-stone-50 border border-stone-100 p-2 rounded mb-3">
-        <span className="text-stone-600 font-serif italic text-[10px] leading-none">"B2B SaaS average ROI statistics numerical values exactly 2026"</span>
-      </div>
+      <div className="p-3">
+        {/* The Query being targeted */}
+        <div className="bg-stone-50 border border-stone-100 rounded p-2 mb-3 shadow-inner">
+          <div className="flex items-center gap-1.5 mb-1 opacity-50">
+             <Search size={9} className="text-stone-400" />
+             <span className="text-[7px] font-mono text-stone-500 uppercase">Target Query</span>
+          </div>
+          <p className="text-[10px] font-serif italic text-stone-700 leading-tight">
+            "Exact ROI of B2B SaaS 2026 comparison statistics"
+          </p>
+        </div>
 
-      <div className="relative border-l border-stone-100 ml-1.5 space-y-3 py-1">
-        <div className="relative pl-4">
-          <div className="absolute -left-[3px] top-1 w-1.5 h-1.5 rounded-full bg-brand-500 ring-2 ring-brand-100 shadow-sm animate-pulse"></div>
-          <div className="flex flex-col">
-            <span className="text-[9px] font-bold text-stone-800">Target Acquired</span>
-            <div className="text-[7px] text-stone-500 mt-0.5">"Average B2B ROI is 342% in Year 1."</div>
+        {/* The Extraction Result */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-end border-b border-stone-50 pb-1.5">
+            <div className="flex flex-col">
+               <span className="text-[7px] font-mono text-stone-300 uppercase tracking-widest">Extracted</span>
+               <span className="text-[10px] font-bold text-stone-800">ROI: 342.5%</span>
+            </div>
+            <div className="text-[8px] font-mono text-stone-400 px-1 border border-stone-100 rounded">98% Match</div>
+          </div>
+          
+          {/* Metrics - Soft progress bars */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <div className="h-[2px] w-full bg-stone-100">
+                <div className="h-full w-full bg-stone-400" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="h-[2px] w-full bg-stone-100">
+                <div className="h-full w-1/3 bg-stone-400" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
     </div>
+
+    {/* Floating Identifier - Bottom matching brand accent logic */}
+    <div className="absolute top-[15%] right-[5%] z-30">
+       <div className="bg-stone-800 text-white font-mono text-[7px] px-2 py-0.5 shadow-sm transform rotate-4">
+          SNIPER_ID_482
+       </div>
+    </div>
+
   </div>
 );
 
