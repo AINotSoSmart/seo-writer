@@ -143,15 +143,28 @@ export const runAuditTask = task({
                 // Auto-discover competitors via Tavily + LLM filter
                 competitors = await discoverCompetitors(brandData, 3, searchPrefs)
                 console.log(`[Audit Task] Discovered ${competitors.length} competitors: ${competitors.map(c => c.name).join(', ')}`)
+            }
 
-                // Cache discovered competitors for future use
-                if (competitors.length > 0) {
-                    await (supabase as any)
-                        .from("brand_details")
-                        .update({ discovered_competitors: competitors.map(c => ({ name: c.name, url: c.url })) })
-                        .eq("id", brandId)
-                    console.log(`[Audit Task] Cached ${competitors.length} competitors to brand_details`)
+            // EXTRA SECURITY GATE: Filter out app store domains so we never save or scan them
+            const originalCount = competitors.length;
+            competitors = competitors.filter(c => {
+                const lower = c.domain.toLowerCase();
+                const isBlocked = lower.endsWith('google.com') || lower.endsWith('apple.com');
+                if (isBlocked) {
+                    console.warn(`[Audit Task] SECURITY GATE: Blocking app store competitor -> ${c.domain}`);
                 }
+                return !isBlocked;
+            });
+
+            // If we auto-discovered and there are valid ones leftover, cache them
+            if (!brandRecord?.discovered_competitors?.length && competitors.length > 0) {
+                await (supabase as any)
+                    .from("brand_details")
+                    .update({ discovered_competitors: competitors.map(c => ({ name: c.name, url: c.url })) })
+                    .eq("id", brandId)
+                console.log(`[Audit Task] Cached ${competitors.length} valid competitors to brand_details`)
+            } else if (!brandRecord?.discovered_competitors?.length && originalCount > 0 && competitors.length === 0) {
+                console.warn(`[Audit Task] All discovered competitors were blocked by the security gate.`);
             }
 
             let competitorCoverages: Awaited<ReturnType<typeof scanAllCompetitors>> = []
