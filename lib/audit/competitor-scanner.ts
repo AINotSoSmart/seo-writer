@@ -85,7 +85,9 @@ export async function discoverCompetitors(
                         // Skip self, seen, and blocklisted
                         if (seenDomains.has(domain)) continue
                         if (brandNameLower.includes(domainBase) || domainBase.includes(brandNameLower.replace(/\s+/g, ''))) continue
-                        if (BLOCKLIST.has(domainBase)) continue
+                        if (BLOCKLIST.has(domainBase) || 
+                            domain.endsWith('google.com') || 
+                            domain.endsWith('apple.com')) continue
 
                         seenDomains.add(domain)
                         const snippet = (result.content || '').slice(0, 150).replace(/\n/g, ' ').trim()

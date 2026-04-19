@@ -11,11 +11,20 @@ export async function fetchSitemapUrls(websiteUrl: string): Promise<string[]> {
 
     const sitemapper = new Sitemapper({
         url: sitemapUrl,
-        timeout: 15000, // 15 seconds
+        timeout: 10000, 
     })
 
     try {
-        const { sites } = await sitemapper.fetch()
+        const sitemapFetchPromise = sitemapper.fetch()
+        const hardTimeoutPromise = new Promise<{ sites: string[] }>((_, reject) => {
+            setTimeout(() => reject(new Error("Sitemapper hard timeout exceeded (15s)")), 15000)
+        })
+
+        const { sites } = await Promise.race([
+            sitemapFetchPromise,
+            hardTimeoutPromise
+        ])
+        
         const urls = Array.from(new Set(sites || [])) // Deduplicate
         return urls
     } catch (error) {

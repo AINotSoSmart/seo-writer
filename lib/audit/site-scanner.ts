@@ -43,10 +43,21 @@ export async function fetchAllSitemapUrls(websiteUrl: string): Promise<string[]>
         try {
             const sitemapper = new Sitemapper({
                 url: currentUrl,
-                timeout: 15000,
+                timeout: 10000,
             })
 
-            const { sites } = await sitemapper.fetch()
+            // Add a hard timeout wrapper because Sitemapper's internal recursion
+            // ignores the timeout parameter for massive sitemap indexes
+            const sitemapFetchPromise = sitemapper.fetch()
+            const hardTimeoutPromise = new Promise<{ sites: string[] }>((_, reject) => {
+                setTimeout(() => reject(new Error("Sitemapper hard timeout exceeded (15s)")), 15000)
+            })
+
+            const { sites } = await Promise.race([
+                sitemapFetchPromise,
+                hardTimeoutPromise
+            ])
+
             if (sites && sites.length > 0) {
                 const urls = Array.from(new Set(sites as string[]))
                 console.log(`[Site Scanner] Found ${urls.length} URLs at ${currentUrl}`)
