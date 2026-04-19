@@ -822,7 +822,7 @@ You must write headers that are written for both humans and search engines, i me
 ## HEADING HIERARCHY RULES (CRITICAL FOR SEO - MUST FOLLOW)
 
 **LEVEL DEFINITIONS:**
-- **level: 2 (H2)** = Main topic pillars. Wide scope. (Max ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.h2Limit; })() } for this article length)
+- **level: 2 (H2)** = Main topic pillars. Wide scope. (Max ${(() => { const lc = getArticleLengthConfig(articleLength); return lc.h2Limit; })()} for this article length)
 - **level: 3 (H3)** = Specific sub-concepts. Narrower scope. (Where the real substance lives)
 - **level: 4 (H4)** = Granular details, lists, steps, specific features. Deep scope.
 
@@ -1441,7 +1441,7 @@ export const generateBlogPost = task({
       const maxSections = lengthConfig.sections.max
       if (outline.sections.length > maxSections) {
         console.warn(`[Length Control] Outline has ${outline.sections.length} sections, max is ${maxSections} for "${lengthConfig.label}". Requesting consolidation...`)
-        
+
         const consolidationPrompt = `You previously generated an article outline with ${outline.sections.length} sections, but the article length setting is "${lengthConfig.label}" which allows a MAXIMUM of ${maxSections} total sections (H2 + H3 + H4 combined).
 
 Your task: Consolidate this outline to have AT MOST ${maxSections} sections by:
@@ -1806,11 +1806,11 @@ CRITICAL EXECUTION RULES:
         const getStyleTemplate = (style: string) => {
           switch (style.toLowerCase()) {
             case 'vector':
-              return `STYLE: Clean vector illustration on a white background.
+              return `STYLE: Clean vector illustration on a visually appealing light background.
 
 BACKGROUND:
-- Pure white background with a subtle dotted or grid pattern
-- Keep the background clean and minimal - NO busy elements
+- Soft, elegant background with a subtle, clean pattern (e.g. light dotted grid boxes).
+- Do NOT make it completely blank white; give it a premium, textured but minimal feel.
 
 VISUAL ELEMENTS:
 - Place 1-2 flat vector elements on the RIGHT side of the image
@@ -1819,86 +1819,71 @@ VISUAL ELEMENTS:
 - Choose a harmonious 2-3 color palette
 
 COMPOSITION:
-- LEFT SIDE: A small, clean title text - this is where the title goes!
-- RIGHT SIDE: 1-2 clean vector icons, objects, or simple illustrations
-- Plenty of white space - do NOT overcrowd
+- LEFT SIDE: A large, bold, and highly legible title text taking up good space.
+- RIGHT SIDE: 1-2 clean vector icons or simple illustrations.
+- Balanced negative space, but not barren.
 
 CONSTRAINTS:
-- NO photorealistic elements
-- NO stock photo clichés
-- NO more than 2 visual elements on the right
-- Clean, modern, tech-forward aesthetic`
+- NO photorealistic elements.
+- Clean, modern, tech-forward aesthetic.`;
 
             case 'photorealistic':
             case 'photo':
             case 'stock':
-              return `STYLE: Clean editorial composition with photorealistic elements.
+              return `STYLE: High-end editorial composition with photorealistic elements.
 
 BACKGROUND:
-- Pure white or very light gray background
-- Optional: subtle dotted pattern or soft grid lines
-- Keep the background clean and uncluttered
+- Soft, light neutral background with a subtle, premium pattern (e.g., very faint grid, or elegant surface texture).
+- Do NOT make it completely empty white; it needs a sophisticated, clean backdrop.
 
 VISUAL ELEMENTS:
-- Place 1-2 photorealistic objects/elements on the RIGHT side
-- Objects should be relevant to the topic but NOT generic stock clichés
-- High quality, sharp, well-lit objects on the clean background
-- Objects appear to float or sit on the white surface
+- Place 1-2 photorealistic objects/elements on the RIGHT side.
+- High quality, sharp, well-lit product-style photography.
 
 COMPOSITION:
-- LEFT SIDE: A small, clean title text - this is where the title goes!
-- RIGHT SIDE: 1-2 clean realistic vector visual objects or product-style photography
-- Professional product photography aesthetic
+- LEFT SIDE: A large, bold, and prominent short title text.
+- RIGHT SIDE: Relevant, high-fidelity objects beautifully lit on the textured premium surface.
+- Balanced and professional product photography layout.
 
 CONSTRAINTS:
-- NO handshakes, pointing at screens, generic office scenes
-- NO busy or cluttered backgrounds
-- NO more than 2 visual elements
-- Editorial quality, suitable for premium business content`
+- NO generic stock clichés (handshakes, office scenes).
+- Editorial quality, suitable for premium business content.`;
 
             case 'minimalist':
-              return `STYLE: Ultra-minimal design on white background.
+              return `STYLE: Striking minimalist design with purposeful background styling.
 
 BACKGROUND:
-- Pure white background with optional subtle grid or dot pattern
-- Maximum negative space
+- Light, clean background featuring a very faint, precise pattern (e.g., subtle architectural lines, delicate dot grid, or soft gradient).
+- Avoid a barren blank canvas; use minimalism intelligently with texture.
 
 VISUAL ELEMENTS:
-- Single iconic element or geometric shape on the RIGHT side
-- Maximum 2-3 colors total
-- Abstract or symbolic representation of the topic
+- Single iconic element or geometric shape on the RIGHT side.
+- Maximum 2-3 solid colors total.
 
 COMPOSITION:
-- LEFT SIDE: A small, clean title text - this is where the title goes!
-- RIGHT SIDE: One simple, clean vector visual element
-- Lots of breathing room
+- LEFT SIDE: A large, crisp, and bold title text.
+- RIGHT SIDE: One simple, impactful visual element.
 
 CONSTRAINTS:
-- NO busy backgrounds
-- NO photorealistic elements
-- NO cluttered compositions
-- ONE main visual element only`
+- ONE main visual element only.
+- Very clean and striking.`;
 
             default:
-              // Default to clean vector style
-              return `STYLE: Clean professional illustration on white background.
+              return `STYLE: Clean professional layout on a soft patterned background.
 
 BACKGROUND:
-- White background with subtle dotted or grid pattern
-- Clean and minimal
+- Light background with a subtle, clean pattern (dotted, grid, or soft geometry) to prevent it from looking empty.
 
 VISUAL ELEMENTS:
-- 1-2 relevant elements on the RIGHT side of the image
-- Professional, modern aesthetic
+- 1-2 relevant elements on the RIGHT side.
+- Professional, modern aesthetic.
 
 COMPOSITION:
-- LEFT SIDE: A small, clean title text - this is where the title goes!
-- RIGHT SIDE: clean vector visual elements
+- LEFT SIDE: A large, bold, and highly legible title text.
+- RIGHT SIDE: Clean visual elements.
 
 CONSTRAINTS:
-- Professional and premium aesthetic
-- Clean white background
-- Maximum 2 visual elements`
+- Professional and premium aesthetic.`;
           }
         }
 
@@ -1914,12 +1899,12 @@ Image Style Preference: ${imageStyle}
 ${styleTemplate}
 
 YOUR TASK:
-Create a simple, descriptive prompt for an AI image generator to create the featured image.
-The generated prompt MUST instruct the image model to follow the composition above:
-- A small, clean title text on the left (using the keyword or a 2-3 word short summary).
-- Clean visuals on the right as described in the style template. Must be contextual to the articel content
-- Keep the overall design minimal and professional to avoid wasting generation credits.
-- Do not include extra text, paragraphs, or complex layouts.
+Create a single, descriptive prompt for an AI image generator to create the featured image.
+The generated prompt MUST instruct the model to follow the composition above:
+- A LARGE, bold, perfectly spelled title text on the left (Use 3 to 4 words summarizing the topic). Keep text prominent but short, as AI models struggle with long sentences.
+- Focus on rendering the text large and legible.
+- Must include a subtle, clean background pattern so it doesn't look barren.
+- Include the exact relevant visuals on the right as described in the style template.
 
 OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. No explanations.`
 
