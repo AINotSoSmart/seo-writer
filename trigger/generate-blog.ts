@@ -3,7 +3,8 @@ import { tavily } from "@tavily/core"
 import { buildTavilySearchOptions, extractSearchPrefs, TavilySearchPrefs } from "@/lib/tavily-search"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
-import { CompetitorDataSchema } from "@/lib/schemas/research"
+import { CompetitorDataSchema, CompetitorData } from "@/lib/schemas/research"
+import { AngleInsightsSchema, AngleInsights } from "@/lib/schemas/angle-insights"
 import { ArticleOutlineSchema } from "@/lib/schemas/outline"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { marked } from "marked"
@@ -715,7 +716,94 @@ ${criticAnalysis.gap_analysis || "No major gaps identified."}
   return cleanParseAndValidate(synthesisText, CompetitorDataSchema, genAI)
 }
 
-const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long', instructions?: string) => {
+// --- PHASE 2.5 HELPER: Angle Architect (Non-Commodity Enrichment) ---
+// Derives genuine insights from the synthesized research data — patterns, tradeoffs, fan-out intents.
+// All fields are nullable. If no genuine insight is found, returns null for that field.
+// Non-blocking: if the function fails, the pipeline continues normally with null insights.
+const deriveAngleInsights = async (
+  genAI: any,
+  keyword: string,
+  articleType: ArticleType,
+  competitorData: CompetitorData,
+  userTitle?: string
+): Promise<AngleInsights> => {
+  console.log(`[Angle Architect] Deriving insights for "${keyword}"...`)
+
+  const factLines = competitorData.fact_sheet.slice(0, 20).map((f, i) => `${i + 1}. ${f}`).join('\n')
+  const gapLines = [
+    competitorData.content_gap.missing_topics.length > 0 ? `Missing topics: ${competitorData.content_gap.missing_topics.join(', ')}` : '',
+    competitorData.content_gap.user_intent_gaps.length > 0 ? `User intent gaps: ${competitorData.content_gap.user_intent_gaps.join(', ')}` : '',
+  ].filter(Boolean).join('\n')
+
+  const productLines = competitorData.product_matrix && competitorData.product_matrix.length > 0
+    ? competitorData.product_matrix.map(p =>
+        `- ${p.name}: best for "${p.best_for}" | Pros: ${p.pros?.slice(0, 2).join(', ')} | Cons: ${p.cons?.slice(0, 2).join(', ')}`
+      ).join('\n')
+    : ''
+
+  const prompt = `You are a research analyst. You have a synthesized fact brief about: "${keyword}".
+
+Your job is to find what is genuinely interesting in this data. Do NOT generate marketing copy or invent drama.
+
+## THE DATA
+
+**Fact Sheet:**
+${factLines}
+
+**Content Gaps:**
+${gapLines || 'None identified.'}
+
+${productLines ? `**Product/Tool Data:**\n${productLines}` : ''}
+
+## YOUR TASK
+
+Analyze the data and return JSON. Every field can be null — only populate it if you have real evidence from the data above.
+
+### Field guidance:
+
+1. **fanout_intents** (ALWAYS try — max 5 items):
+   Sub-questions a person searching "${keyword}" is also trying to answer.
+   Think: what else do they need to know to act on the main topic?
+
+2. **data_pattern** (ONLY if 2+ data points point to the same underlying truth not stated anywhere):
+   A cross-source pattern. Example: "The top 3 tools all charge per user — costs scale badly at team growth."
+   Return null if you cannot find a genuine pattern.
+
+3. **honest_tradeoff** (ONLY if the data contains actual negative signals — limitations, complaints, hidden costs):
+   The real caveat. Must be evidence-based. Return null if no meaningful negative signal exists.
+
+4. **unique_angle** (ONLY if conventional wisdom about this topic appears incomplete or misleading based on data):
+   A reframing of the topic. NOT a contrarian for shock value. Return null if the data confirms conventional wisdom.
+
+5. **title_suggestion** (${userTitle ? 'User has provided a title — return null' : 'ONLY if you found a strong unique_angle or data_pattern — offer a non-listicle title framing'}):
+   ${userTitle ? 'Return null.' : 'Return null if no strong angle was found.'}
+
+## CRITICAL RULES
+- Do NOT invent anything not present in the data.
+- Null fields are acceptable and expected. Do not stretch weak signals.
+- fanout_intents is the most reliable — prioritize this if other fields feel forced.
+- Be a neutral analyst, not a copywriter.
+
+Return ONLY valid JSON:
+{
+  "fanout_intents": string[],
+  "data_pattern": string | null,
+  "honest_tradeoff": string | null,
+  "unique_angle": string | null,
+  "title_suggestion": string | null
+}`
+
+  const response = await genAI.models.generateContent({
+    model: "gemini-2.5-flash",
+    config: { responseMimeType: "application/json" },
+    contents: [{ role: "user", parts: [{ text: prompt }] }]
+  })
+
+  const parsed = cleanAndParse(response.text || '{}')
+  return AngleInsightsSchema.parse(parsed)
+}
+
+const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long', instructions?: string, angleInsights: AngleInsights | null = null) => {
   const strategy = getArticleStrategy(articleType)
 
   // Extract authority links from competitor data for external linking
@@ -761,6 +849,36 @@ Plan brand mentions sparingly - only where contextually valuable, HOW to section
 ` : ''
     }
 ${internalLinks.length > 0 ? `### INTERNAL LINKS POOL (USE 1-3 MAX NATURALLY WHERE MAKES SENSE and BUILDS AUTHORITY)\n${internalLinks.map(l => `- Title: ${l.title} | URL: ${l.url}`).join('\n')}` : ''}
+
+${angleInsights ? `---
+## ANGLE INTELLIGENCE (OPTIONAL ENRICHMENT — USE YOUR JUDGMENT)
+
+A research analyst reviewed the synthesized data and found the following insights.
+These are NOT mandatory directives. Use them only where they genuinely improve coverage and depth.
+If an insight doesn't fit naturally, ignore it entirely.
+
+${angleInsights.fanout_intents.length > 0 ? `### Fan-Out Intent Coverage (RECOMMENDED)
+Users searching "${keyword}" are also trying to answer:
+${angleInsights.fanout_intents.map(intent => `- ${intent}`).join('\n')}
+→ Ensure the outline covers these sub-questions somewhere. They do NOT need their own sections — fold them into the most relevant existing sections naturally.
+` : ''}
+${angleInsights.data_pattern ? `### Data Pattern Found
+"${angleInsights.data_pattern}"
+→ If this pattern adds genuine value for the reader, weave it into the most relevant section's instruction_note. Skip it if it feels forced.
+` : ''}
+${angleInsights.honest_tradeoff ? `### Honest Tradeoff
+"${angleInsights.honest_tradeoff}"
+→ If transparency here builds reader trust, include it in the appropriate section. Skip if not relevant to the article's angle.
+` : ''}
+${angleInsights.unique_angle ? `### Unique Angle
+"${angleInsights.unique_angle}"
+→ If this reframing makes the article more distinctive and genuinely useful, let it influence the intro instruction and article structure. If it doesn't fit naturally, ignore it.
+` : ''}
+${angleInsights.title_suggestion && !title ? `### Title Suggestion (if no strong title yet)
+"${angleInsights.title_suggestion}"
+→ Consider this if it's more specific and compelling than a generic title for this keyword. You are NOT required to use it.
+` : ''}---
+` : ''}
 
 ### ARTICLE REQUIREMENT STRATEGY:
 "${strategy.outline_instruction}" 
@@ -1373,6 +1491,22 @@ export const generateBlogPost = task({
         instructions
       )
 
+      // --- PHASE 2.5: ANGLE INSIGHTS (Non-blocking enrichment — invisible to UI) ---
+      let angleInsights: AngleInsights | null = null
+      try {
+        angleInsights = await deriveAngleInsights(genAI, keyword, articleType, competitorData, title)
+        console.log(`[Angle Architect] Insights derived:`, {
+          fanout_count: angleInsights?.fanout_intents?.length ?? 0,
+          has_pattern: !!angleInsights?.data_pattern,
+          has_tradeoff: !!angleInsights?.honest_tradeoff,
+          has_angle: !!angleInsights?.unique_angle,
+          has_title_suggestion: !!angleInsights?.title_suggestion,
+        })
+      } catch (err) {
+        console.warn(`[Angle Architect] Failed (non-blocking, continuing without insights):`, err)
+        angleInsights = null
+      }
+
       await supabase
         .from("articles")
         .update({ competitor_data: competitorData, status: "outlining" })
@@ -1413,7 +1547,7 @@ export const generateBlogPost = task({
         console.log(`🔗 [DEBUG] No external authority links available for outline`)
       }
 
-      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks, supportingKeywords, effectiveArticleLength, instructions)
+      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks, supportingKeywords, effectiveArticleLength, instructions, angleInsights)
       const outlineConfig = {}
       const outlineContents = [
         {
@@ -1837,8 +1971,10 @@ BACKGROUND:
 - Do NOT make it completely empty white; it needs a sophisticated, clean backdrop.
 
 VISUAL ELEMENTS:
-- Place 1-2 photorealistic objects/elements on the RIGHT side.
-- High quality, sharp, well-lit product-style photography.
+- Place 1-2 photorealistic objects/elements on the RIGHT side
+- Objects should be relevant to the topic but NOT generic stock clichés
+- High quality, sharp, well-lit objects on the clean background
+- Objects appear to float or sit on the white surface
 
 COMPOSITION:
 - LEFT SIDE: A large, bold, and prominent short title text.
@@ -1861,8 +1997,9 @@ VISUAL ELEMENTS:
 - Maximum 2-3 solid colors total.
 
 COMPOSITION:
-- LEFT SIDE: A large, crisp, and bold title text.
-- RIGHT SIDE: One simple, impactful visual element.
+- LEFT SIDE: A small, clean title text - this is where the title goes!
+- RIGHT SIDE: One simple, clean vector visual element
+- Lots of breathing room
 
 CONSTRAINTS:
 - ONE main visual element only.
