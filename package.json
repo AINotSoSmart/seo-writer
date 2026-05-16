@@ -71,7 +71,7 @@
     "@tiptap/pm": "^3.19.0",
     "@tiptap/react": "^3.19.0",
     "@tiptap/starter-kit": "^3.19.0",
-    "@trigger.dev/sdk": "4.4.",
+    "@trigger.dev/sdk": "4.4.6",
     "@types/cheerio": "^0.22.35",
     "@types/mark.js": "^8.11.12",
     "@upstash/qstash": "^2.8.3",
