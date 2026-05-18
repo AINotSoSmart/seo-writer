@@ -939,91 +939,179 @@ export const solutions: Record<string, SolutionData> = {
         engineName: 'LLM Brand Optimization',
         engineIcon: 'L',
         primaryKeyword: 'LLM brand optimization',
-        secondaryKeywords: ['AI brand management', 'LLM SEO', 'Control AI brand narrative'],
+        secondaryKeywords: ['AI brand management', 'AI reputation in search', 'Control AI brand narrative'],
         color: 'rose',
-        heroTitle: 'Protect and Control Your Brand Reputation in LLM Responses',
-        heroBadge: 'LLM BRAND CONTROL',
-        heroSubtitle: 'Stop AI hallucinations before they hurt your business. Monitor what ChatGPT and Claude say about you and use FlipAEO to correct the narrative.',
+        editorial: {
+            author: 'FlipAEO Research Team',
+            reviewer: 'FlipAEO Editorial Review',
+            lastUpdated: 'May 17, 2026'
+        },
+        methodology: {
+            summary: 'This page was rebuilt as a framework page instead of a buzzword page. We aligned it with Google Search guidance on helpful content and generative AI search, then turned the topic into an operational model teams can actually audit, measure, and improve over time.',
+            checks: [
+                'Reframed the page around an audit -> gap map -> source control -> monitoring workflow.',
+                'Added measurement and implementation sections so the page is useful beyond top-of-funnel reading.',
+                'Reduced hype language and replaced it with clearer operational outcomes.',
+                'Added sources to support the framework and improve trust.'
+            ]
+        },
+        measurementModel: {
+            title: 'What To Measure',
+            subtitle: 'LLM brand optimization only becomes real when you track the signals that affect recommendation quality and brand recall.',
+            metrics: [
+                {
+                    metric: 'Recommendation share',
+                    whyItMatters: 'Track how often AI engines include your brand in category-level answers.',
+                    targetSignal: 'More mentions in high-intent prompts such as best tools, alternatives, and vendor comparisons.'
+                },
+                {
+                    metric: 'Narrative accuracy',
+                    whyItMatters: 'Measure whether AI descriptions match your current positioning, pricing logic, and use cases.',
+                    targetSignal: 'Fewer outdated claims, deprecated features, or competitor-led frames in AI answers.'
+                },
+                {
+                    metric: 'Source visibility',
+                    whyItMatters: 'The pages AI systems can retrieve shape the story they tell about your brand.',
+                    targetSignal: 'More first-party pages, reviews, comparisons, and case studies appearing in citations or source lists.'
+                },
+                {
+                    metric: 'Competitive displacement',
+                    whyItMatters: 'You need to know which competitors dominate prompts you should own.',
+                    targetSignal: 'Improved share of voice for prompts where competitors previously controlled the framing.'
+                }
+            ]
+        },
+        implementationPlan: {
+            title: 'Implementation Plan',
+            subtitle: 'Treat this as an operating system, not a one-time campaign.',
+            phases: [
+                {
+                    phase: 'Phase 1',
+                    title: 'Audit The Current Narrative',
+                    description: 'Collect the prompts that matter, record how major AI engines describe your brand today, and log inaccuracies, omissions, and competitor-led framing.'
+                },
+                {
+                    phase: 'Phase 2',
+                    title: 'Fix Source Gaps',
+                    description: 'Publish or upgrade the pages that AI systems need in order to retrieve the right story: positioning pages, comparison pages, use-case pages, proof pages, and FAQs.'
+                },
+                {
+                    phase: 'Phase 3',
+                    title: 'Monitor And Defend',
+                    description: 'Re-run prompt sets on a schedule, watch for narrative drift, and update high-impact source pages whenever your product, market, or competitor landscape changes.'
+                }
+            ]
+        },
+        sources: [
+            {
+                label: 'Google Search guidance for helpful, reliable content',
+                href: 'https://developers.google.com/search/docs/fundamentals/creating-helpful-content',
+                note: 'Used to anchor the framework in people-first content and clear editorial intent.'
+            },
+            {
+                label: 'Google core update guidance',
+                href: 'https://developers.google.com/search/docs/appearance/core-updates',
+                note: 'Used to keep recovery expectations realistic and focused on sustained quality improvement.'
+            },
+            {
+                label: 'Google Search Essentials',
+                href: 'https://developers.google.com/search/docs/essentials',
+                note: 'Used to frame the page around eligibility, trust, and long-term search quality basics.'
+            },
+            {
+                label: 'Google guide to optimizing for generative AI search',
+                href: 'https://developers.google.com/search/docs/fundamentals/ai-optimization-guide',
+                note: 'Used to connect brand narrative work with source visibility in AI-assisted search experiences.'
+            }
+        ],
+        heroTitle: 'LLM Brand Optimization: A Practical Framework For What AI Engines Say About You',
+        heroBadge: 'LLM BRAND OPTIMIZATION',
+        heroSubtitle: 'If ChatGPT, Gemini, or Perplexity describe your company inaccurately, miss your brand in recommendations, or repeat a competitor-led story, this is the process for fixing it.',
         quickAnswer: {
             question: 'What is LLM Brand Optimization?',
-            answer: 'LLM Brand Optimization is the practice of strategically managing how large language models (ChatGPT, Gemini, Perplexity, Copilot, Meta AI) describe, recommend, and cite your brand. It encompasses AI reputation management, brand narrative engineering, and citation authority building to ensure AI engines tell your brand\'s story accurately, completely, and favorably.',
+            answer: 'LLM brand optimization is the discipline of improving how AI systems describe, compare, and recommend your brand. In practice, it means auditing AI answers, identifying retrieval and narrative gaps, publishing the source pages those systems need, and monitoring whether the story improves over time.',
             keyTakeaways: [
-                'AI engines are now the first touchpoint for brand research — what they say matters enormously.',
-                'LLM Brand Optimization controls the narrative across ChatGPT, Gemini, Perplexity, and more.',
-                'It combines reputation management, content strategy, and entity optimization.',
-                'FlipAEO engineers the content ecosystem that shapes how LLMs perceive and describe your brand.'
+                'AI engines are now part of brand research, vendor discovery, and comparison behavior.',
+                'The problem is usually not one bad answer but a weak source ecosystem behind the answer.',
+                'You cannot directly edit model outputs, but you can improve the pages, proof, and positioning they retrieve.',
+                'The best teams treat LLM brand optimization as an ongoing audit and publishing process.'
             ]
         },
         problems: {
-            title: 'Why AI Engines Are Telling the Wrong Story About Your Brand',
-            subtitle: 'If you don\'t control your AI narrative, your competitors — or worse, outdated information — will.',
+            title: 'Where Brands Lose Control',
+            subtitle: 'Most AI narrative problems come from missing or weak source material, not from one isolated hallucination.',
             items: [
-                { headline: 'AI engines tell an outdated story about you', description: 'LLMs are trained on historical web data and current web content. If your brand has evolved (new products, updated positioning, improved offerings), AI engines may still describe the old version of your brand — confusing potential customers and undermining your current positioning.' },
-                { headline: 'Competitors are shaping your AI narrative', description: 'When competitors publish comparison content, case studies, and thought leadership mentioning your brand, they influence how AI engines describe you. Without proactive narrative management, your competitors control how AI perceives your strengths and weaknesses.' },
-                { headline: 'AI engines recommend competitors, not you', description: 'When users ask AI engines "What\'s the best tool for [X]?", the AI generates a recommendation list based on its training data and web retrieval. If your brand hasn\'t built LLM authority, you\'re absent from these lists — losing potential customers to competitors who have.' }
+                { headline: 'Your brand story is outdated', description: 'AI systems often surface old product descriptions, old category labels, or old feature sets when your current source pages do not clearly replace them.' },
+                { headline: 'Competitors define you first', description: 'If competing brands publish more comparisons, category pages, and thought leadership than you do, AI systems often inherit their framing of your strengths and weaknesses.' },
+                { headline: 'You are absent from commercial prompts', description: 'When users ask for the best tools, vendors, or alternatives, brands without a strong comparison and proof ecosystem are easy to omit entirely.' }
             ]
         },
         howItWorks: {
-            title: 'How FlipAEO Controls Your AI Brand Narrative',
-            subtitle: 'We engineer the content ecosystem that shapes how every LLM perceives your brand.',
+            title: 'The Working Model',
+            subtitle: 'Strong AI brand visibility comes from an audit-and-publishing loop, not from one landing page.',
             steps: [
-                { stepNumber: '01', label: 'Monitor', title: 'AI Brand Perception Audit', description: 'We analyze what every major AI engine (ChatGPT, Perplexity, Gemini, Copilot, Meta AI) currently says about your brand — identifying inaccuracies, gaps, and competitor-influenced narratives.', detail: 'Our audit covers brand mentions, recommendation lists, sentiment analysis, and competitive positioning across all major LLMs.' },
-                { stepNumber: '02', label: 'Shape', title: 'Narrative Engineering', description: 'We create authoritative content that corrects inaccuracies, fills information gaps, and establishes your preferred brand narrative in a format that LLMs absorb and reproduce.', detail: 'Each article is strategically positioned to influence how LLMs describe your brand\'s strengths, use cases, and competitive advantages.' },
-                { stepNumber: '03', label: 'Defend', title: 'Ongoing Narrative Protection', description: 'We continuously monitor your AI brand narrative and deploy content to address new competitive threats, market changes, and evolving AI model updates.', detail: 'Monthly brand audits and proactive content updates ensure your AI narrative stays accurate and favorable as LLMs retrain and update.' }
+                { stepNumber: '01', label: 'Audit', title: 'Map The Prompt Set', description: 'Identify the prompts that matter most to pipeline and reputation: company queries, category queries, alternatives, vendor comparisons, and trust-sensitive objections.', detail: 'Start with the prompts sales, support, founders, and prospects actually care about instead of generic AI chatter.' },
+                { stepNumber: '02', label: 'Diagnose', title: 'Find The Narrative Gaps', description: 'Record what major AI engines say today, then tag the failures: omission, outdated messaging, weak differentiation, factual errors, and competitor-led framing.', detail: 'The audit should produce a concrete list of pages, proof assets, and positioning angles that are missing or underpowered.' },
+                { stepNumber: '03', label: 'Publish', title: 'Build Source Control', description: 'Create or upgrade the pages that give AI systems better source material: positioning pages, comparison pages, framework pages, FAQs, case studies, and product evidence.', detail: 'The goal is to improve the retrieval layer so the model has stronger first-party and third-party material to work with.' }
             ]
         },
         rankingFactors: {
-            title: 'What Shapes Your AI Brand Narrative',
-            subtitle: 'These factors determine what LLMs say about your brand.',
+            title: 'What Actually Shapes AI Brand Perception',
+            subtitle: 'These are the levers most teams can influence directly.',
             factors: [
-                { factor: 'Content Volume & Consistency', description: 'How much authoritative content exists about your brand, and is it consistent?', flipaeoApproach: 'We build a comprehensive content ecosystem with consistent brand messaging that LLMs absorb during training and retrieval.', importance: 'Critical' },
-                { factor: 'Third-Party Mentions', description: 'Do independent sources (reviews, articles, case studies) validate your brand claims?', flipaeoApproach: 'We create citation-worthy content that earns organic third-party references and mentions.', importance: 'Critical' },
-                { factor: 'Competitive Positioning Content', description: 'Who controls the comparison narratives in your category?', flipaeoApproach: 'We create authoritative comparison and positioning content that establishes your brand\'s strengths relative to competitors.', importance: 'High' },
-                { factor: 'Entity Clarity', description: 'Is your brand\'s identity, offerings, and positioning clearly defined online?', flipaeoApproach: 'We build entity-defining content with clear product descriptions, use cases, and value propositions.', importance: 'High' },
-                { factor: 'Freshness & Recency', description: 'Does current web content reflect your brand\'s latest positioning?', flipaeoApproach: 'Monthly content updates ensure LLMs have access to your current brand narrative during retrieval.', importance: 'High' },
-                { factor: 'Sentiment Signals', description: 'Is the overall web sentiment about your brand positive?', flipaeoApproach: 'We proactively publish positive case studies, testimonials, and thought leadership that shapes overall brand sentiment.', importance: 'Medium' }
+                { factor: 'Entity clarity', description: 'Can an AI system clearly understand who you are, what you sell, and which use cases you own?', flipaeoApproach: 'We strengthen product definitions, use-case pages, and comparison language so the brand is easier to retrieve and describe.', importance: 'Critical' },
+                { factor: 'Narrative consistency', description: 'Do your product pages, about page, comparisons, and external mentions tell the same story?', flipaeoApproach: 'We align the source ecosystem so AI systems do not pick up conflicting positioning signals.', importance: 'Critical' },
+                { factor: 'Evidence density', description: 'Do you publish proof, examples, case studies, and concrete outcomes, or only polished brand copy?', flipaeoApproach: 'We add higher-trust pages and evidence-led sections that support better recommendations.', importance: 'High' },
+                { factor: 'Competitive framing', description: 'Which brands currently control the category comparisons and alternatives conversation?', flipaeoApproach: 'We build comparison and category pages that reclaim the framing around buyer-fit, strengths, and limitations.', importance: 'High' },
+                { factor: 'Freshness and change management', description: 'Do source pages reflect your latest product, narrative, and market position?', flipaeoApproach: 'We treat updates as part of the operating rhythm so outdated claims do not linger in retrieval.', importance: 'High' },
+                { factor: 'Off-site corroboration', description: 'Do third-party pages reinforce your claims, or leave the field open to competitors?', flipaeoApproach: 'We identify which supporting proof assets and reputation surfaces need attention, not just first-party content.', importance: 'Medium' }
             ]
         },
         benefits: {
-            title: 'Why FlipAEO for LLM Brand Optimization',
-            subtitle: 'We put you in control of what every AI engine says about your brand.',
+            title: 'Why This Matters',
+            subtitle: 'This work influences discovery, reputation, and conversion quality at the same time.',
             items: [
-                { label: 'NARRATIVE', title: 'Control the AI conversation about your brand', description: 'When someone asks any AI "Tell me about [your brand]", the answer should be YOUR story — accurate, favorable, and complete. We engineer the content that makes this happen.', size: 'large' },
-                { label: 'DEFENSE', title: 'Protect against competitor narratives', description: 'Competitors are publishing content that shapes how AI perceives you. We proactively create content that establishes your strengths and counters competitor narratives.', size: 'small' },
-                { label: 'RECOMMENDATIONS', title: 'Get recommended, not just mentioned', description: 'Being mentioned is passive. Being recommended is powerful. We build the authority that makes LLMs actively recommend your brand for category queries.', size: 'small' },
-                { label: 'MONITORING', title: 'Continuous brand narrative protection', description: 'LLMs evolve constantly. We continuously monitor your AI narrative and deploy content to address changes, new competitors, and model updates.', size: 'large' }
+                { label: 'DISCOVERY', title: 'Show up in recommendation prompts', description: 'The first win is inclusion: your brand appears when users ask AI engines for tools, vendors, and category leaders.', size: 'large' },
+                { label: 'ACCURACY', title: 'Reduce outdated or wrong descriptions', description: 'Clearer source pages give AI systems less room to rely on stale, partial, or competitor-shaped information.', size: 'small' },
+                { label: 'POSITIONING', title: 'Control the comparison frame', description: 'When the right pages exist, AI systems are more likely to describe your product using your strengths, ideal customers, and differentiators.', size: 'small' },
+                { label: 'DEFENSE', title: 'Catch narrative drift early', description: 'A recurring audit process helps you spot new misinformation, category drift, or competitor pressure before it becomes a bigger brand problem.', size: 'large' }
             ]
         },
         useCases: {
-            title: 'Who Needs LLM Brand Optimization?',
-            subtitle: 'How brands take control of their AI narrative across every major LLM.',
+            title: 'Typical Use Cases',
+            subtitle: 'LLM brand optimization is most valuable when AI outputs affect commercial perception.',
             items: [
-                { role: 'VP of Marketing', scenario: 'You discover that ChatGPT describes your product using outdated positioning and mentions features you deprecated two years ago, confusing potential customers.', outcome: 'FlipAEO creates authoritative content that updates your AI narrative with current positioning, features, and value propositions.' },
-                { role: 'CEO / Founder', scenario: 'When investors ask AI engines about your company, they get incomplete or inaccurate information that doesn\'t reflect your current traction and vision.', outcome: 'We build a comprehensive content ecosystem that ensures AI engines accurately represent your company\'s strength, traction, and market position.' },
-                { role: 'Head of PR/Comms', scenario: 'A competitor publishes a biased comparison article and AI engines start citing it when users ask about your category, framing your product negatively.', outcome: 'We deploy counter-narrative content that establishes your brand\'s authoritative positioning and corrects competitive misinformation in AI responses.' }
+                { role: 'VP of Marketing', scenario: 'Your team notices that AI engines describe your product using an old positioning statement and leave out the use case you are trying to own now.', outcome: 'You rebuild the source pages and comparison ecosystem so the newer category story becomes easier for AI systems to retrieve.' },
+                { role: 'Founder or CEO', scenario: 'Investors, prospects, or partners ask AI engines about your company and receive thin or incomplete answers.', outcome: 'You strengthen core company, product, proof, and category pages so the brand is easier to summarize accurately.' },
+                { role: 'PR or Comms lead', scenario: 'Competitors publish narrative-setting comparisons and AI systems start echoing that framing in commercial prompts.', outcome: 'You publish stronger first-party comparisons, proof pages, and category definitions to reclaim the frame.' }
             ]
         },
         deepDive: {
-            title: 'Deep Dive: The Science of AI Brand Perception',
-            subtitle: 'How LLMs form and update their perception of your brand over time.',
+            title: 'How The Framework Works',
+            subtitle: 'The practical goal is to improve the source ecosystem behind the answer, not to chase one screenshot.',
             sections: [
-                { heading: 'How LLMs Form Brand Opinions', content: 'LLMs form "opinions" about brands through two channels: training data (historical web content absorbed during model training) and real-time retrieval (current web content accessed during RAG-based responses). Both channels matter. Training data shapes the LLM\'s baseline understanding, while retrieval data can override or supplement it. Effective LLM Brand Optimization must address both channels.' },
-                { heading: 'The Narrative Engineering Framework', content: 'Narrative Engineering is the process of strategically creating content that shapes how LLMs describe your brand. It involves: (1) Defining your ideal AI narrative, (2) Auditing the current AI narrative, (3) Identifying narrative gaps and inaccuracies, (4) Creating authoritative content to fill gaps and correct inaccuracies, and (5) Monitoring and maintaining the narrative over time.' },
-                { heading: 'Competitive Narrative Defense', content: 'In the AI search era, your competitors can influence how AI engines describe you. When a competitor publishes a biased comparison, case study, or review, AI engines may absorb and reproduce that narrative. Proactive LLM Brand Optimization includes monitoring competitive content and deploying counter-narratives that establish your brand\'s authoritative version of the story.' },
-                { heading: 'The ROI of AI Brand Management', content: 'AI engines are increasingly the first touchpoint in purchase research. When a potential customer asks ChatGPT about your category, the AI\'s response shapes their perception before they even visit your website. Brands that invest in LLM Brand Optimization control this critical first impression, leading to higher conversion rates, better qualified leads, and stronger competitive positioning.' }
+                { heading: 'Prompt Sets Matter More Than Anecdotes', content: 'Do not judge the problem from one surprising AI answer. Build a repeatable prompt set that includes brand, category, alternatives, comparison, pricing, trust, and use-case prompts. That gives you a usable baseline and shows where the real narrative problems live.' },
+                { heading: 'Retrieval Quality Beats Wishful Positioning', content: 'If AI systems cannot find clear, evidence-led pages that define your product and category fit, they will often rely on weaker or competitor-controlled sources. LLM brand optimization is mostly about improving the source layer those systems can retrieve.' },
+                { heading: 'Comparison Content Is A Brand Surface', content: 'Comparison pages are not only demand-capture assets. They also shape how AI systems explain who you compete with, where you win, and when a buyer should choose you. Weak comparison content leaves the narrative open to others.' },
+                { heading: 'The Best Outcome Is Better Answers And Better Traffic', content: 'This work helps with recommendation quality, but it also strengthens the content architecture behind branded and category search. When done well, it improves trust, message clarity, and the quality of inbound discovery across both AI and traditional search.' }
             ]
         },
         faqTitle: 'LLM Brand Optimization FAQ',
-        faqSubtitle: 'Common questions about controlling what AI engines say about your brand.',
+        faqSubtitle: 'Common questions from teams trying to improve how AI systems represent their brand.',
         faqs: [
-            { question: 'Can I control what AI engines say about my brand?', answer: 'You can\'t directly edit AI responses, but you can heavily influence them. By creating authoritative, consistent, well-structured content about your brand, you shape the source material that AI engines use to form and update their "understanding" of your brand.' },
-            { question: 'How quickly can I change my AI brand narrative?', answer: 'RAG-based responses (where AI browses the web) can be influenced within weeks of publishing new content. Training data-based responses take longer — typically 3-6 months as models retrain. FlipAEO targets both channels for comprehensive narrative control.' },
-            { question: 'Is LLM Brand Optimization different from PR or reputation management?', answer: 'It shares goals with PR but uses different tactics. Traditional PR targets journalists and publications. LLM Brand Optimization targets AI retrieval systems with structured, entity-rich content specifically formatted for machine comprehension and citation.' },
-            { question: 'What if AI engines are saying negative things about my brand?', answer: 'FlipAEO conducts a thorough AI perception audit and then deploys counter-narrative content that provides accurate, positive, authoritative information. Over time, the volume and authority of positive content outweighs negative signals in AI responses.' }
+            { question: 'Can I directly edit what AI engines say about my brand?', answer: 'No. The practical lever is the source ecosystem behind the answer: your product pages, comparison pages, proof pages, FAQs, and third-party corroboration.' },
+            { question: 'How fast can the narrative change?', answer: 'For retrieval-based answers, improvements can show up within weeks after better source pages are published and crawled. Broader model behavior and training-based memory can take longer.' },
+            { question: 'Is this just PR with a new name?', answer: 'No. There is overlap with PR and reputation work, but LLM brand optimization is much more retrieval- and source-structure-focused. It depends heavily on what pages exist, how clearly they define the brand, and how AI systems can use them.' },
+            { question: 'What should I build first?', answer: 'Start with the pages that influence high-intent prompts: product positioning pages, category pages, alternatives/comparison pages, proof pages, and FAQs that answer the most common objections or misconceptions.' }
         ],
-        cta: { headline: 'Ready to Control Your AI Narrative?', subheadline: 'Every day you wait, AI engines are telling someone else\'s version of your story. Take control now.', buttonLabel: 'Start My Brand Audit', buttonHref: '/login' },
+        cta: {
+            headline: 'Ready To Audit Your AI Narrative?',
+            subheadline: 'Start with the prompts that matter, document the gaps, and rebuild the pages AI systems actually need.',
+            buttonLabel: 'Start My Brand Audit',
+            buttonHref: '/login'
+        },
         relatedTitle: 'Explore More AI Engine Solutions',
-        relatedSubtitle: 'Optimize your brand visibility on specific AI engines.',
+        relatedSubtitle: 'Use engine-specific pages alongside this framework when you need channel-level execution.',
         relatedSlugs: ['answer-engine-optimization', 'generative-engine-optimization', 'meta-ai-optimization']
     }
 };

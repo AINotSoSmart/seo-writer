@@ -22,15 +22,15 @@ Recover deindexed URLs by reducing low-value index footprint, upgrading the stro
 
 | URL | Type | Decision | Priority | Current Problem | Recovery Goal | Merge / Canonical Destination | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `https://flipaeo.com/compare/flipaeo-vs-outranking` | Compare | Keep | P0 | Strong intent, but template-heavy and proof-light | Turn into flagship comparison with tested workflow evidence | N/A | Not started |
-| `https://flipaeo.com/compare/flipaeo-vs-contentbase-ai` | Compare | Keep | P0 | Strong intent, plus visible text-quality issues | Rewrite and fix all formatting defects first | N/A | Not started |
+| `https://flipaeo.com/compare/flipaeo-vs-outranking` | Compare | Keep | P0 | Strong intent, but template-heavy and proof-light | Turn into flagship comparison with tested workflow evidence | N/A | Rewritten |
+| `https://flipaeo.com/compare/flipaeo-vs-contentbase-ai` | Compare | Keep | P0 | Strong intent, plus visible text-quality issues | Rewrite and fix all formatting defects first | N/A | Rewritten |
 | `https://flipaeo.com/compare/flipaeo-vs-getgenie` | Compare | Keep | P1 | Useful WP-specific intent, but low differentiation | Make it the best WordPress-native comparison page in cluster | N/A | Not started |
-| `https://flipaeo.com/solutions/llm-brand-optimization` | Solution | Keep | P0 | Strategic page, but too claim-heavy and not evidence-backed enough | Rebuild as authoritative framework page with method, examples, and proof | N/A | Not started |
+| `https://flipaeo.com/solutions/llm-brand-optimization` | Solution | Keep | P0 | Strategic page, but too claim-heavy and not evidence-backed enough | Rebuild as authoritative framework page with method, examples, and proof | N/A | Rewritten |
 | `https://flipaeo.com/compare/flipaeo-vs-frase` | Compare | Keep | P1 | Good demand profile, but repetitive structure | Rebuild around editor workflow, team use case, and manual-vs-managed comparison | N/A | Not started |
-| `https://flipaeo.com/compare/flipaeo-vs-autoblogging-ai` | Merge | P2 | Bulk pSEO angle is weak, likely low-value cluster member | Fold value into one stronger bulk-AI-writer comparison asset | Proposed: `/compare/flipaeo-vs-bulk-ai-writers` | Not started |
-| `https://flipaeo.com/compare/flipaeo-vs-surfer-seo` | Compare | Keep | P0 | High-intent competitor page, but currently too templated | Make this the strongest legacy-SEO-tool comparison in the cluster | N/A | Not started |
-| `https://flipaeo.com/compare/flipaeo-vs-article-forge` | Noindex | P2 | Legacy tool, weak future demand, high overlap with other bulk-writer pages | Remove from index to reduce low-value footprint | N/A | Not started |
-| `https://flipaeo.com/compare/flipaeo-vs-byword` | Merge | P2 | Similar pSEO narrative overlap with other bulk-writer pages | Consolidate into broader bulk-writer comparison page | Proposed: `/compare/flipaeo-vs-bulk-ai-writers` | Not started |
+| `https://flipaeo.com/compare/flipaeo-vs-autoblogging-ai` | Merge | P2 | Bulk pSEO angle is weak, likely low-value cluster member | Fold value into one stronger bulk-AI-writer comparison asset | Proposed: `/compare/flipaeo-vs-bulk-ai-writers` | Redirected to hub |
+| `https://flipaeo.com/compare/flipaeo-vs-surfer-seo` | Compare | Keep | P0 | High-intent competitor page, but currently too templated | Make this the strongest legacy-SEO-tool comparison in the cluster | N/A | Rewritten |
+| `https://flipaeo.com/compare/flipaeo-vs-article-forge` | Noindex | P2 | Legacy tool, weak future demand, high overlap with other bulk-writer pages | Remove from index to reduce low-value footprint | N/A | Noindex applied |
+| `https://flipaeo.com/compare/flipaeo-vs-byword` | Merge | P2 | Similar pSEO narrative overlap with other bulk-writer pages | Consolidate into broader bulk-writer comparison page | Proposed: `/compare/flipaeo-vs-bulk-ai-writers` | Redirected to hub |
 
 ## Batch Plan
 
@@ -389,20 +389,20 @@ Recover deindexed URLs by reducing low-value index footprint, upgrading the stro
 
 | Task | Owner | Priority | URL / Cluster | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Approve page decisions |  | P0 | All 9 URLs | Not started |  |
-| Fix formatting defects |  | P0 | `flipaeo-vs-contentbase-ai` | Not started |  |
-| Rewrite flagship compare page |  | P0 | `flipaeo-vs-surfer-seo` | Not started |  |
-| Rewrite flagship compare page |  | P0 | `flipaeo-vs-outranking` | Not started |  |
-| Rewrite solution framework page |  | P0 | `llm-brand-optimization` | Not started |  |
-| Add sources + methodology pattern |  | P0 | Compare + Solution templates | Not started |  |
+| Approve page decisions |  | P0 | All 9 URLs | Completed | Keep / Merge / Noindex decisions executed in tracker and content work |
+| Fix formatting defects |  | P0 | `flipaeo-vs-contentbase-ai` | Completed | Broken copy replaced with cleaner, evidence-led comparison copy |
+| Rewrite flagship compare page |  | P0 | `flipaeo-vs-surfer-seo` | Completed | Rewritten around workflow fit, audit strengths, and recovery use case |
+| Rewrite flagship compare page |  | P0 | `flipaeo-vs-outranking` | Completed | Rewritten around platform depth vs selective recovery workflow |
+| Rewrite solution framework page |  | P0 | `llm-brand-optimization` | Completed | Rebuilt as a framework page with methodology, metrics, and phases |
+| Add sources + methodology pattern |  | P0 | Compare + Solution templates | Completed | Templates now support editorial metadata, methodology, and sources |
 | Rewrite compare page |  | P1 | `flipaeo-vs-getgenie` | Not started |  |
 | Rewrite compare page |  | P1 | `flipaeo-vs-frase` | Not started |  |
-| Decide bulk-writer hub scope |  | P2 | Byword / Autoblogging / Article Forge | Not started |  |
-| Merge byword content |  | P2 | `flipaeo-vs-byword` | Not started |  |
-| Merge autoblogging content |  | P2 | `flipaeo-vs-autoblogging-ai` | Not started |  |
-| Noindex low-value leaf |  | P2 | `flipaeo-vs-article-forge` | Not started |  |
-| Publish Batch 1 |  | P0 | P0 pages | Not started |  |
-| Measure reindexing after rewrite |  | P1 | P0 pages | Not started |  |
+| Decide bulk-writer hub scope |  | P2 | Byword / Autoblogging / Article Forge | Completed | Built `/compare/flipaeo-vs-bulk-ai-writers` as the consolidation asset |
+| Merge byword content |  | P2 | `flipaeo-vs-byword` | Completed | Leaf now redirects to the bulk-writer hub |
+| Merge autoblogging content |  | P2 | `flipaeo-vs-autoblogging-ai` | Completed | Leaf now redirects to the bulk-writer hub |
+| Noindex low-value leaf |  | P2 | `flipaeo-vs-article-forge` | Completed | Compare page removed from sitemap and marked noindex |
+| Publish Batch 1 |  | P0 | P0 pages | Ready | Content and templates updated; publishing / indexing request still pending |
+| Measure reindexing after rewrite |  | P1 | P0 pages | Pending | Start after updated pages are live and crawled |
 
 ## Notes
 - Do not judge success page by page only; watch whether the entire compare cluster starts regaining trust.

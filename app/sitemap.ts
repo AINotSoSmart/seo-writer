@@ -78,7 +78,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }]
 
   // Dynamically include Comparisons
-  const compareSlugs = Object.keys(comparisons)
+  const compareSlugs = Object.entries(comparisons)
+    .filter(([, comparison]) => !comparison.seo?.noindex && !comparison.seo?.redirectTo)
+    .map(([slug]) => slug)
   const comparePages: MetadataRoute.Sitemap = compareSlugs.map((slug) => ({
     url: `${baseUrl}/compare/${slug}`,
     lastModified: currentDate,

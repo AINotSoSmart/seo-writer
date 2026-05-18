@@ -1,6 +1,6 @@
 
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Navbar } from '@/components/landing/Navbar';
 import { Footer } from '@/components/landing/Footer';
@@ -26,12 +26,30 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         };
     }
 
+    if (comparison.seo?.redirectTo) {
+        return {
+            title: `${comparison.heroTitle} | FlipAEO`,
+            description: comparison.sonicBoomSummary,
+            alternates: {
+                canonical: `${defaultSEO.siteUrl}${comparison.seo.redirectTo}`
+            },
+            robots: {
+                index: false,
+                follow: true,
+            }
+        };
+    }
+
     return {
         title: `${comparison.heroTitle} | FlipAEO`,
         description: comparison.sonicBoomSummary,
         alternates: {
             canonical: `${defaultSEO.siteUrl}/compare/${slug}`
-        }
+        },
+        robots: comparison.seo?.noindex ? {
+            index: false,
+            follow: true,
+        } : undefined,
     };
 }
 
@@ -41,6 +59,10 @@ export default async function ComparisonPage({ params }: Props) {
 
     if (!comparison) {
         notFound();
+    }
+
+    if (comparison.seo?.redirectTo) {
+        redirect(comparison.seo.redirectTo);
     }
 
     const {
@@ -68,7 +90,8 @@ export default async function ComparisonPage({ params }: Props) {
     const { competitorPlans, flipaeoPlans, verdict: pricingVerdict } = pricing;
 
     // Dynamically generate "More Comparisons" cards
-    const allSlugs = Object.keys(comparisons) as (keyof typeof comparisons)[];
+    const allSlugs = (Object.keys(comparisons) as (keyof typeof comparisons)[])
+        .filter((s) => !comparisons[s].seo?.noindex && !comparisons[s].seo?.redirectTo);
 
     let relatedSlugs = allSlugs.filter(
         (s) => s !== slug && comparisons[s].category === comparison.category

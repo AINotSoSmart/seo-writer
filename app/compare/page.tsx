@@ -39,13 +39,11 @@ const comparisonData = [
 ];
 
 const bulkSpamAlternatives = [
-    { slug: 'byword', name: 'Byword', microCopy: "If you want to generate 1,000 generic, programmatic SEO articles for pennies, Byword is an excellent high-volume engine." },
+    { slug: 'bulk-ai-writers', name: 'Bulk AI Writers Hub', microCopy: "Compare Byword, Autoblogging.ai, and Article Forge in one stronger page built for consolidation instead of thin leaf-page overlap." },
     { slug: 'agility-writer', name: 'Agility Writer', microCopy: "If your goal is to spin up hundreds of high-volume Amazon affiliate reviews, Agility Writer is a great tool." },
     { slug: 'koala-writer', name: 'Koala Writer', microCopy: "If you are an affiliate marketer trying to pump out rapid-fire product reviews, Koala Writer is heavily optimized for that." },
     { slug: 'seowriting-ai', name: 'SEOwriting.ai', microCopy: "If you want to one-click publish hundreds of auto-generated WordPress articles for local SEO, SEOwriting.ai is a fast engine." },
     { slug: 'surgegraph', name: 'SurgeGraph', microCopy: "If your goal is to generate 5,000-word SEO articles in bulk to capture long-tail Google search volume, SurgeGraph is a powerhouse." },
-    { slug: 'article-forge', name: 'Article Forge', microCopy: "If your goal is to push a button and have an AI instantly spit out complete, hands-off SEO articles in bulk, Article Forge is a legacy staple." },
-    { slug: 'autoblogging-ai', name: 'Autoblogging.ai', microCopy: "If you run programmatic niche sites and want to bulk-publish 100 articles a day on autopilot, Autoblogging.ai is incredibly efficient." },
     { slug: 'seo-ai', name: 'SEO.ai', microCopy: "If you want an autopilot tool to generate traditional, keyword-stuffed SEO blogs for a local business, SEO.ai is a solid system." },
     { slug: 'cuppa-ai', name: 'Cuppa.ai', microCopy: "If you want to plug in your own API keys to mass-generate thousands of programmatic or local SEO pages for pennies, Cuppa.ai is fantastic." },
     { slug: 'contentbase-ai', name: 'ContentBase AI', microCopy: "If you want AI-generated SEO content with automated keyword targeting and a simple dashboard, ContentBase AI is a convenient choice." },
@@ -167,10 +165,10 @@ export default function CompareHub() {
                                     </div>
                                 </Link>
 
-                                <Link href="/compare/flipaeo-vs-byword" className="group block">
+                                <Link href="/compare/flipaeo-vs-bulk-ai-writers" className="group block">
                                     <div className="p-8 rounded-2xl border border-stone-200 bg-white transition-all duration-300 hover:border-brand-300 hover:bg-stone-50 h-full flex flex-col">
                                         <h3 className="text-xl font-bold text-stone-900 mb-2 group-hover:text-brand-600 transition-colors">Bulk AI Writers</h3>
-                                        <p className="text-stone-500 mb-6 flex-grow">Byword, Journalist AI, Koala</p>
+                                        <p className="text-stone-500 mb-6 flex-grow">Byword, Autoblogging.ai, Article Forge</p>
                                         <div className="mt-auto">
                                             <div className="text-sm font-medium text-brand-600 flex items-center">
                                                 Compare &rarr;
