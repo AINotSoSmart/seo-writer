@@ -6,6 +6,38 @@ export interface SolutionData {
     primaryKeyword: string;
     secondaryKeywords: string[];
     color: 'violet' | 'blue' | 'emerald' | 'amber' | 'rose';
+    editorial?: {
+        author: string;
+        reviewer: string;
+        lastUpdated: string;
+    };
+    methodology?: {
+        summary: string;
+        checks: string[];
+    };
+    measurementModel?: {
+        title: string;
+        subtitle: string;
+        metrics: {
+            metric: string;
+            whyItMatters: string;
+            targetSignal: string;
+        }[];
+    };
+    implementationPlan?: {
+        title: string;
+        subtitle: string;
+        phases: {
+            phase: string;
+            title: string;
+            description: string;
+        }[];
+    };
+    sources?: {
+        label: string;
+        href: string;
+        note?: string;
+    }[];
 
     heroTitle: string;
     heroBadge: string;

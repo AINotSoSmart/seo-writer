@@ -151,8 +151,11 @@ Make sure all required fields are present and have the correct types.
 `
 
     const fixResponse = await genAI.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      config: { responseMimeType: "application/json" },
+      model: "gemini-2.5-flash", // Upgraded to flash for larger context window
+      config: { 
+        responseMimeType: "application/json",
+        maxOutputTokens: 8192
+      },
       contents: [{ role: "user", parts: [{ text: fixPrompt }] }]
     })
 
@@ -1548,7 +1551,10 @@ export const generateBlogPost = task({
       }
 
       const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks, supportingKeywords, effectiveArticleLength, instructions, angleInsights)
-      const outlineConfig = {}
+      const outlineConfig = {
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json"
+      }
       const outlineContents = [
         {
           role: "user",
@@ -1598,7 +1604,10 @@ ${JSON.stringify(outline)}`
 
         const consolidationStream = await genAI.models.generateContentStream({
           model: "gemini-2.5-flash",
-          config: {},
+          config: {
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json"
+          },
           contents: [{ role: "user", parts: [{ text: consolidationPrompt }] }]
         })
 

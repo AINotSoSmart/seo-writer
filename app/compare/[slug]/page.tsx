@@ -47,6 +47,9 @@ export default async function ComparisonPage({ params }: Props) {
         competitorName,
         heroTitle,
         sonicBoomSummary,
+        editorial,
+        methodology,
+        sources,
         quickVerdict,
         matrix,
         verdict,
@@ -102,7 +105,10 @@ export default async function ComparisonPage({ params }: Props) {
                         "@type": "Article",
                         headline: heroTitle,
                         description: sonicBoomSummary,
-                        author: {
+                        author: editorial ? {
+                            "@type": "Person",
+                            name: editorial.author
+                        } : {
                             "@type": "Organization",
                             name: "FlipAEO",
                             url: defaultSEO.siteUrl
@@ -138,6 +144,16 @@ export default async function ComparisonPage({ params }: Props) {
                         }))
                     }}
                 />
+
+                {editorial && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-10">
+                        <div className="bg-white rounded-lg border border-stone-200 px-5 py-4 text-sm text-stone-600 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                            <span>Written by {editorial.author}</span>
+                            <span>Reviewed by {editorial.reviewer}</span>
+                            <span>Last updated {editorial.lastUpdated}</span>
+                        </div>
+                    </section>
+                )}
 
                 {/* Section 1: Quick Verdict Header */}
                 <section className="w-full max-w-5xl mx-auto px-6 mb-16">
@@ -179,6 +195,27 @@ export default async function ComparisonPage({ params }: Props) {
                         </div>
                     </div>
                 </section>
+
+                {methodology && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-16">
+                        <div className="bg-white rounded-lg border border-stone-200 overflow-hidden">
+                            <div className="bg-stone-50 px-6 py-4 border-b border-stone-200">
+                                <h2 className="text-sm font-display text-stone-900">How We Evaluated {competitorName}</h2>
+                            </div>
+                            <div className="p-6 space-y-5">
+                                <p className="text-sm text-stone-600 leading-relaxed">{methodology.summary}</p>
+                                <ul className="grid md:grid-cols-2 gap-3">
+                                    {methodology.checks.map((item, idx) => (
+                                        <li key={idx} className="flex items-start gap-2 text-sm text-stone-600">
+                                            <Check className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
+                                            <span>{item}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                )}
 
                 {/* Section 2: Feature Comparison Table */}
                 <section className="w-full max-w-5xl mx-auto px-6 mb-16">
@@ -645,6 +682,34 @@ export default async function ComparisonPage({ params }: Props) {
                         ))}
                     </div>
                 </section>
+
+                {sources && sources.length > 0 && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-16">
+                        <div className="flex items-center gap-3 mb-6 border-b border-stone-200 pb-2">
+                            <span className="text-xs font-bold text-brand-600 uppercase tracking-widest">[06b]</span>
+                            <h2 className="text-xs font-display text-stone-400 uppercase tracking-widest">Sources And Methodology</h2>
+                        </div>
+
+                        <div className="bg-white rounded-lg border border-stone-200 divide-y divide-stone-100">
+                            {sources.map((source, idx) => (
+                                <div key={idx} className="p-5 flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                                    <div className="text-sm text-stone-600">
+                                        <div className="font-medium text-stone-900">{source.label}</div>
+                                        {source.note && <div className="mt-1">{source.note}</div>}
+                                    </div>
+                                    <Link
+                                        href={source.href}
+                                        className="text-sm font-medium text-brand-600 hover:text-brand-700"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Visit source
+                                    </Link>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
 
                 <section className="w-full max-w-5xl mx-auto px-6 mb-16">
                     <div className="flex items-center gap-3 mb-6 border-b border-stone-200 pb-2">

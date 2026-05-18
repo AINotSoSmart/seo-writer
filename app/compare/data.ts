@@ -5,6 +5,20 @@ export interface ComparisonData {
     category: string;
     competitorLogo: string; // Just using a letter for now in the UI
     color: 'orange' | 'blue' | 'purple';
+    editorial?: {
+        author: string;
+        reviewer: string;
+        lastUpdated: string;
+    };
+    methodology?: {
+        summary: string;
+        checks: string[];
+    };
+    sources?: {
+        label: string;
+        href: string;
+        note?: string;
+    }[];
 
     // Section 1: Zero-Click Header
     heroTitle: string;

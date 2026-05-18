@@ -46,6 +46,11 @@ export default async function SolutionPage({ params }: Props) {
     }
 
     const {
+        editorial,
+        methodology,
+        measurementModel,
+        implementationPlan,
+        sources,
         engineName, heroTitle, heroBadge, heroSubtitle,
         quickAnswer, problems, howItWorks, rankingFactors, benefits,
         useCases, deepDive, faqTitle, faqSubtitle, faqs, cta, relatedTitle, relatedSubtitle, relatedSlugs, color
@@ -83,6 +88,10 @@ export default async function SolutionPage({ params }: Props) {
                         "@type": "Service",
                         name: `${engineName} Optimization by FlipAEO`,
                         description: heroSubtitle,
+                        author: editorial ? {
+                            "@type": "Person",
+                            name: editorial.author
+                        } : undefined,
                         provider: {
                             "@type": "Organization",
                             name: "FlipAEO",
@@ -152,6 +161,37 @@ export default async function SolutionPage({ params }: Props) {
                         <ArrowRight className="w-4 h-4" />
                     </Link>
                 </section>
+
+                {editorial && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-12">
+                        <div className="bg-white rounded-xl border border-stone-200 px-5 py-4 text-sm text-stone-600 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                            <span>Written by {editorial.author}</span>
+                            <span>Reviewed by {editorial.reviewer}</span>
+                            <span>Last updated {editorial.lastUpdated}</span>
+                        </div>
+                    </section>
+                )}
+
+                {methodology && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-16">
+                        <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                            <div className="bg-stone-50 px-6 py-4 border-b border-stone-200">
+                                <h2 className="text-sm font-display text-stone-900">Methodology</h2>
+                            </div>
+                            <div className="p-6 space-y-5">
+                                <p className="text-sm text-stone-600 leading-relaxed">{methodology.summary}</p>
+                                <ul className="grid md:grid-cols-2 gap-3">
+                                    {methodology.checks.map((item, idx) => (
+                                        <li key={idx} className="flex items-start gap-2.5 text-sm text-stone-600">
+                                            <Check className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
+                                            <span>{item}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                )}
 
                 {/* [02] ZERO-CLICK ANSWER */}
                 <section className="w-full max-w-5xl mx-auto px-6 mb-16">
@@ -357,6 +397,46 @@ export default async function SolutionPage({ params }: Props) {
                     </div>
                 </section>
 
+                {measurementModel && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-16">
+                        <div className="text-center mb-12">
+                            <h2 className="font-serif text-3xl md:text-4xl text-stone-900 mb-4 tracking-tight">{measurementModel.title}</h2>
+                            <p className="text-stone-500 text-lg max-w-2xl mx-auto">{measurementModel.subtitle}</p>
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                            <div className="divide-y divide-stone-100">
+                                {measurementModel.metrics.map((item, idx) => (
+                                    <div key={idx} className="grid md:grid-cols-3 gap-4 p-6">
+                                        <div className="text-sm font-semibold text-stone-900">{item.metric}</div>
+                                        <div className="text-sm text-stone-500 leading-relaxed">{item.whyItMatters}</div>
+                                        <div className="text-sm text-stone-700 leading-relaxed">{item.targetSignal}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {implementationPlan && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-16">
+                        <div className="text-center mb-12">
+                            <h2 className="font-serif text-3xl md:text-4xl text-stone-900 mb-4 tracking-tight">{implementationPlan.title}</h2>
+                            <p className="text-stone-500 text-lg max-w-2xl mx-auto">{implementationPlan.subtitle}</p>
+                        </div>
+
+                        <div className="grid md:grid-cols-3 gap-6">
+                            {implementationPlan.phases.map((item, idx) => (
+                                <div key={idx} className="bg-white border border-stone-200 rounded-2xl p-6">
+                                    <div className="text-[10px] font-bold text-brand-500 uppercase tracking-widest mb-2">{item.phase}</div>
+                                    <h3 className="font-serif text-xl text-stone-900 mb-3">{item.title}</h3>
+                                    <p className="text-sm text-stone-500 leading-relaxed">{item.description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
 
                 {/* [10] FAQ */}
                 <section className="w-full max-w-5xl mx-auto px-6 mb-16">
@@ -377,6 +457,34 @@ export default async function SolutionPage({ params }: Props) {
                         ))}
                     </div>
                 </section>
+
+                {sources && sources.length > 0 && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-16">
+                        <div className="text-center mb-12">
+                            <h2 className="font-serif text-3xl md:text-4xl text-stone-900 mb-4 tracking-tight">Sources And Methodology</h2>
+                            <p className="text-stone-500 text-lg max-w-2xl mx-auto">Use primary references, platform documentation, and Search Central guidance to validate the framework on this page.</p>
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100">
+                            {sources.map((source, idx) => (
+                                <div key={idx} className="p-6 flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                                    <div className="text-sm text-stone-600">
+                                        <div className="font-medium text-stone-900">{source.label}</div>
+                                        {source.note && <div className="mt-1">{source.note}</div>}
+                                    </div>
+                                    <Link
+                                        href={source.href}
+                                        className="text-sm font-medium text-brand-600 hover:text-brand-700"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Visit source
+                                    </Link>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
 
                 {/* [11] CTA */}
                 <section className="w-full max-w-5xl mx-auto px-6 mb-16">
