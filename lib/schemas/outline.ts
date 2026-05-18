@@ -21,17 +21,17 @@ export const ArticleOutlineSchema = z.object({
         instruction_note: z.string().min(10).max(2000),
         keywords_to_include: z.array(z.string()).max(20).default([]),
         // Optional external link to include in this section
-        external_link: ExternalLinkSchema.optional(),
+        external_link: ExternalLinkSchema.nullable().optional(),
         // Optional internal link to include in this section
         internal_link: z.object({
           url: z.string(),
           title: z.string(),
           anchor_context: z.string().describe("Context for the link anchor"),
-        }).optional(),
+        }).nullable().optional(),
         // Optional: Should this section have an in-content image?
-        needs_image: z.boolean().optional().default(false),
+        needs_image: z.boolean().nullable().optional().transform(v => v ?? false),
         // Optional: Type of image if needs_image is true
-        image_type: z.enum(['concept', 'how_to', 'comparison', 'process', 'insight']).optional(),
+        image_type: z.enum(['concept', 'how_to', 'comparison', 'process', 'insight']).nullable().optional(),
       })
     )
     .min(1),

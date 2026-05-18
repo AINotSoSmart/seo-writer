@@ -46,10 +46,10 @@ export interface ArticleOutline {
         heading: string;
         instruction_note?: string;
         keywords_to_include?: string[];
-        needs_image?: boolean;
-        image_type?: string;
-        external_link?: { url: string; anchor_context: string };
-        internal_link?: { url: string; title: string; anchor_context: string };
+        needs_image?: boolean | null;
+        image_type?: string | null;
+        external_link?: { url: string; anchor_context: string } | null;
+        internal_link?: { url: string; title: string; anchor_context: string } | null;
     }>;
 }
 
