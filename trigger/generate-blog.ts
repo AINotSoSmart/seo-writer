@@ -2100,7 +2100,7 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
         // Non-blocking, just continue
       }
 
-      await supabase
+      const { error: finalUpdateError } = await supabase
         .from("articles")
         .update({
           raw_content: finalMarkdown,
@@ -2111,6 +2111,10 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
           featured_image_url
         })
         .eq("id", articleId)
+
+      if (finalUpdateError) {
+        throw new Error(`Failed to save completed article to database: ${finalUpdateError.message}`)
+      }
 
       // --- NOTIFICATION: SEND EMAIL ---
       if (userId) {
