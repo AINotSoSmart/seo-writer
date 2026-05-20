@@ -6,6 +6,7 @@ import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { CompetitorDataSchema, CompetitorData } from "@/lib/schemas/research"
 import { AngleInsightsSchema, AngleInsights } from "@/lib/schemas/angle-insights"
 import { ArticleOutlineSchema } from "@/lib/schemas/outline"
+import { z } from "zod"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { marked } from "marked"
 import { generateImage } from "@/lib/fal"
@@ -895,11 +896,11 @@ ${(() => {
 **YOUR SCOPE: "${lc.label}" Article (~${lc.wordRange} words)**
 - Structure: ${articleLength === 'short' || articleLength === 'medium' ? 'Short, direct with inverted pyramid delivery (answers first, theory later).' : 'Deep, nested with high-value formatting signals.'}
 - H2 Limit: **EXACTLY ${lc.h2Limit} H2s.** No more.
-- Total Sections (H2 + H3 + H4 COMBINED): **STRICT LIMIT: ${lc.sections.min}–${lc.sections.max} sections total. DO NOT exceed ${lc.sections.max}.**
+- Total Sections (H2 + H3 + H4 COMBINED): **STRICT REQUIREMENT: You MUST generate between ${lc.sections.min} and ${lc.sections.max} sections total in the sections array. Lower than ${lc.sections.min} is a STRICT FAILURE. Higher than ${lc.sections.max} is a STRICT FAILURE.**
   - "Total sections" means EVERY entry in your sections array — H2s, H3s, and H4s ALL count toward this limit.
 - Words Per Section: ~${lc.wordsPerSection} words each.
 - Target Article Length: ~${lc.wordRange} words total.
-- GOAL: ${articleLength === 'short' || articleLength === 'medium' ? 'Speed to solution (snippet baits immediately under H2s). Fewer, denser sections.' : 'Exhaustive coverage without section bloat.'}
+- GOAL: ${articleLength === 'short' || articleLength === 'medium' ? 'Speed to solution (snippet baits immediately under H2s). Fewer, denser sections.' : 'Exhaustive coverage without section bloat. You MUST have at least ${lc.sections.min} sections to cover the topics in depth.'}
 `
     })()
     }
@@ -1000,8 +1001,8 @@ ${internalLinks.length > 0 ? internalLinks.map(l => `- Title: ${l.title} | URL: 
    - **Requirement:** You must COPY all the specific number/stat from the Fact Sheet into the instruction_note for each section(dont forget anything important, the fact sheet is curated data from the research).
    - **Rule:** Do not reuse the same fact in multiple sections. Assign it to the ONE best spot.
    - **DO NOT** write style instructions. Only focus on the **Substance**.
-5. Keep the instructions note as detailed and specific as possible to avoid any hallucination or misinterpretation by the writer.
-6. Instructions notes must also include the instructions for use of tables, bullet lists, callouts, etc in approx 50% sections, avoid walls of text.
+5. **CONCISE & FOCUSED INSTRUCTIONS:** Keep each section's "instruction_note" highly specific but CONCISE (target 50–80 words per section). Bullet points are highly encouraged. This prevents generation timeouts while ensuring the writer gets precise direction.
+6. **FORMATTING DIRECTIONS:** In approx 50% of the sections, specify a clear formatting element to be used (e.g., "Use a 3-column table for pricing," "Use a callout box for the honest tradeoff," "Use a bullet list for the steps"). This keeps the article visually engaging without requiring extremely long instructions.
 ## IN-CONTENT IMAGE SELECTION (IMPORTANT):
 For EACH H2 section, decide if an image would ADD VALUE to the content:
 - Set "needs_image": true if the section would benefit from a visual
@@ -1573,18 +1574,38 @@ export const generateBlogPost = task({
         outlineText += (c as any).text || ""
       }
 
-      // Use self-correcting parser for Zod validation with retry
-      let outline = await cleanParseAndValidate(outlineText, ArticleOutlineSchema, genAI)
-
       // --- LENGTH CONTROL: Outline section count validation ---
       const lengthConfig = getArticleLengthConfig(effectiveArticleLength)
+      const minSections = lengthConfig.sections.min
       const maxSections = lengthConfig.sections.max
+
+      // Create a dynamic Zod schema to enforce section boundaries for this specific length configuration
+      const dynamicOutlineSchema = ArticleOutlineSchema.superRefine((data, ctx) => {
+        if (data.sections.length < minSections) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Outline has too few sections (${data.sections.length}). For "${lengthConfig.label}" length, it MUST have AT LEAST ${minSections} sections. Do NOT truncate or consolidate the outline to a single or very few sections.`,
+            path: ["sections"]
+          })
+        }
+        if (data.sections.length > maxSections) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Outline has too many sections (${data.sections.length}). For "${lengthConfig.label}" length, it MUST have AT MOST ${maxSections} sections. Please merge closely related sections to stay under the limit.`,
+            path: ["sections"]
+          })
+        }
+      })
+
+      // Use self-correcting parser for dynamic Zod validation with retry
+      let outline = await cleanParseAndValidate(outlineText, dynamicOutlineSchema, genAI)
+
       if (outline.sections.length > maxSections) {
         console.warn(`[Length Control] Outline has ${outline.sections.length} sections, max is ${maxSections} for "${lengthConfig.label}". Requesting consolidation...`)
 
-        const consolidationPrompt = `You previously generated an article outline with ${outline.sections.length} sections, but the article length setting is "${lengthConfig.label}" which allows a MAXIMUM of ${maxSections} total sections (H2 + H3 + H4 combined).
+        const consolidationPrompt = `You previously generated an article outline with ${outline.sections.length} sections, but the article length setting is "${lengthConfig.label}" which requires between ${minSections} and ${maxSections} total sections (H2 + H3 + H4 combined).
 
-Your task: Consolidate this outline to have AT MOST ${maxSections} sections by:
+Your task: Consolidate this outline to have AT LEAST ${minSections} and AT MOST ${maxSections} sections by:
 1. Merging closely related H3/H4 sub-sections into their parent H2 — combine their instruction_notes.
 2. Combining thin sections that cover overlapping topics into a single, richer section.
 3. Keeping the most SEO-valuable sections. Prefer sections with external_link or internal_link assignments.
@@ -1592,6 +1613,7 @@ Your task: Consolidate this outline to have AT MOST ${maxSections} sections by:
 
 RULES:
 - Keep the SAME JSON schema structure.
+- Do NOT collapse the outline into a single or very few sections. It MUST have between ${minSections} and ${maxSections} sections total.
 - Preserve ALL external_link and internal_link assignments (move them if you merge their section).
 - Preserve needs_image assignments (keep the best 3).
 - Re-number the "id" fields sequentially (1, 2, 3...).
@@ -1617,7 +1639,7 @@ ${JSON.stringify(outline)}`
         }
 
         try {
-          const consolidatedOutline = await cleanParseAndValidate(consolidationText, ArticleOutlineSchema, genAI)
+          const consolidatedOutline = await cleanParseAndValidate(consolidationText, dynamicOutlineSchema, genAI)
           console.log(`[Length Control] ✅ Consolidated: ${outline.sections.length} → ${consolidatedOutline.sections.length} sections`)
           outline = consolidatedOutline
         } catch (consolidationError) {
