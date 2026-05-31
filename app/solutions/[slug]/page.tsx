@@ -51,6 +51,7 @@ export default async function SolutionPage({ params }: Props) {
         measurementModel,
         implementationPlan,
         sources,
+        relatedResources,
         engineName, heroTitle, heroBadge, heroSubtitle,
         quickAnswer, problems, howItWorks, rankingFactors, benefits,
         useCases, deepDive, faqTitle, faqSubtitle, faqs, cta, relatedTitle, relatedSubtitle, relatedSlugs, color
@@ -481,6 +482,35 @@ export default async function SolutionPage({ params }: Props) {
                                         Visit source
                                     </Link>
                                 </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {relatedResources && relatedResources.length > 0 && (
+                    <section className="w-full max-w-5xl mx-auto px-6 mb-16">
+                        <div className="text-center mb-12">
+                            <h2 className="font-serif text-3xl md:text-4xl text-stone-900 mb-4 tracking-tight">Put This Framework Into Practice</h2>
+                            <p className="text-stone-500 text-lg max-w-2xl mx-auto">Move from strategy to execution with the comparison pages most closely tied to this recovery workflow.</p>
+                        </div>
+
+                        <div className="grid md:grid-cols-3 gap-4">
+                            {relatedResources.map((resource) => (
+                                <Link
+                                    key={resource.href}
+                                    href={resource.href}
+                                    className="group block bg-white rounded-xl border border-stone-200 p-6 hover:border-brand-200 hover:bg-stone-50 transition-colors"
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <div className="text-sm font-semibold text-stone-900 group-hover:text-brand-700 transition-colors">
+                                                {resource.title}
+                                            </div>
+                                            <div className="text-sm text-stone-500 mt-2 leading-relaxed">{resource.description}</div>
+                                        </div>
+                                        <ArrowRight className="w-4 h-4 text-stone-300 group-hover:text-brand-600 transition-colors shrink-0 mt-0.5" />
+                                    </div>
+                                </Link>
                             ))}
                         </div>
                     </section>

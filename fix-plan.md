@@ -395,8 +395,9 @@ Recover deindexed URLs by reducing low-value index footprint, upgrading the stro
 | Rewrite flagship compare page |  | P0 | `flipaeo-vs-outranking` | Completed | Rewritten around platform depth vs selective recovery workflow |
 | Rewrite solution framework page |  | P0 | `llm-brand-optimization` | Completed | Rebuilt as a framework page with methodology, metrics, and phases |
 | Add sources + methodology pattern |  | P0 | Compare + Solution templates | Completed | Templates now support editorial metadata, methodology, and sources |
-| Rewrite compare page |  | P1 | `flipaeo-vs-getgenie` | Not started |  |
-| Rewrite compare page |  | P1 | `flipaeo-vs-frase` | Not started |  |
+| Rewrite compare page |  | P1 | `flipaeo-vs-getgenie` | Completed | Rebuilt around WordPress workflow fit, WooCommerce use cases, real pricing limits, and recovery-stage content strategy |
+| Rewrite compare page |  | P1 | `flipaeo-vs-frase` | Completed | Rebuilt around content-ops workflow, SEO + GEO scoring, AI visibility, GSC integration, and selective rewrite tradeoffs |
+| Strengthen contextual internal links |  | P1 | Compare winners + `llm-brand-optimization` | Completed | Replaced generic related cards with page-specific research paths and added framework-to-comparison cross-links |
 | Decide bulk-writer hub scope |  | P2 | Byword / Autoblogging / Article Forge | Completed | Built `/compare/flipaeo-vs-bulk-ai-writers` as the consolidation asset |
 | Merge byword content |  | P2 | `flipaeo-vs-byword` | Completed | Leaf now redirects to the bulk-writer hub |
 | Merge autoblogging content |  | P2 | `flipaeo-vs-autoblogging-ai` | Completed | Leaf now redirects to the bulk-writer hub |

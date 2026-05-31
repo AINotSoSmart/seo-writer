@@ -1,0 +1,642 @@
+/* ============================================
+   Content Plan Canvas - Premium Light Stone Styles
+   ============================================ */
+
+/* Base canvas container */
+.content-plan-canvas {
+  width: 100%;
+  height: 100%;
+  background: #fafaf9; /* Stone-50 */
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Override React Flow defaults for light theme */
+.content-plan-canvas .react-flow__background {
+  background: #fafaf9;
+}
+
+.content-plan-canvas .react-flow__minimap {
+  background: #ffffff;
+  border: 1px solid #e7e5e4; /* Stone-200 */
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.content-plan-canvas .react-flow__minimap-mask {
+  fill: rgba(120, 113, 108, 0.03);
+  stroke: rgba(120, 113, 108, 0.1);
+  stroke-width: 1;
+}
+
+.content-plan-canvas .react-flow__minimap-node {
+  fill: rgba(120, 113, 108, 0.15);
+  stroke: none;
+}
+
+/* Controls styling */
+.content-plan-canvas .react-flow__controls {
+  background: #ffffff;
+  border: 1px solid #e7e5e4; /* Stone-200 */
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.content-plan-canvas .react-flow__controls-button {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #e7e5e4;
+  color: #78716c; /* Stone-500 */
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.content-plan-canvas .react-flow__controls-button:hover {
+  background: #f5f5f4; /* Stone-100 */
+  color: #1c1917; /* Stone-900 */
+}
+
+.content-plan-canvas .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+/* Attribution hide */
+.content-plan-canvas .react-flow__attribution {
+  display: none;
+}
+
+/* ============================================
+   Edge Styles
+   ============================================ */
+
+/* Default edges (hierarchy) */
+.content-plan-canvas .react-flow__edge-path {
+  stroke: #78716c; /* Stone-500 */
+  stroke-width: 2;
+  transition: stroke 0.2s ease;
+}
+
+.content-plan-canvas .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #44403c; /* Stone-700 */
+  stroke-width: 2.5;
+}
+
+/* Connected-to edges (article relationships) */
+.content-plan-canvas .react-flow__edge.connected-edge .react-flow__edge-path {
+  stroke: #6366f1; /* Indigo-500 */
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  animation: dash-flow 1.5s linear infinite;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* Cluster edges */
+.content-plan-canvas .react-flow__edge.cluster-edge .react-flow__edge-path {
+  stroke: #a8a29e;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+/* ============================================
+   Node Base Styles
+   ============================================ */
+
+/* Handle styles */
+.content-plan-canvas .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: #78716c; /* Stone-500 */
+  border: 1.5px solid #ffffff;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.content-plan-canvas .react-flow__handle:hover {
+  background: #44403c;
+  border-color: #ffffff;
+  transform: scale(1.3);
+}
+
+/* ============================================
+   Brand Node
+   ============================================ */
+
+.canvas-brand-node {
+  background: #ffffff;
+  border: 1.5px solid #e7e5e4; /* Stone-200 */
+  border-radius: 16px;
+  padding: 20px 28px;
+  min-width: 220px;
+  text-align: center;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.02),
+    0 8px 30px rgba(120, 113, 108, 0.06);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: default;
+}
+
+.canvas-brand-node:hover {
+  border-color: #d6d3d1; /* Stone-300 */
+  box-shadow: 
+    0 2px 6px rgba(0, 0, 0, 0.03),
+    0 12px 40px rgba(120, 113, 108, 0.1);
+  transform: translateY(-2px);
+}
+
+.canvas-brand-node__title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1c1917; /* Stone-900 */
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.canvas-brand-node__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: #f5f5f4; /* Stone-100 */
+  border: 1px solid #e7e5e4;
+  font-size: 10px;
+  font-weight: 700;
+  color: #78716c; /* Stone-500 */
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ============================================
+   Pillar Node
+   ============================================ */
+
+.canvas-pillar-node {
+  background: #ffffff;
+  border: 1.5px solid #e7e5e4; /* Stone-200 */
+  border-radius: 14px;
+  padding: 16px 20px;
+  min-width: 240px;
+  max-width: 280px;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.02),
+    0 8px 24px rgba(120, 113, 108, 0.05);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: default;
+}
+
+.canvas-pillar-node:hover {
+  border-color: #cbd5e1; /* Slate accent */
+  box-shadow: 
+    0 2px 6px rgba(0, 0, 0, 0.03),
+    0 12px 32px rgba(120, 113, 108, 0.08);
+  transform: translateY(-2px);
+}
+
+.canvas-pillar-node__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1c1917;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.canvas-pillar-node__desc {
+  font-size: 11px;
+  color: #78716c;
+  line-height: 1.5;
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.canvas-pillar-node__slug {
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  color: #4f46e5; /* Premium Indigo */
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+/* ============================================
+   Category Node
+   ============================================ */
+
+.canvas-category-node {
+  background: #ffffff;
+  border: 1.5px solid #e7e5e4;
+  border-radius: 14px;
+  padding: 16px 20px;
+  min-width: 260px;
+  max-width: 300px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  transition: all 0.3s ease;
+  cursor: default;
+}
+
+.canvas-category-node::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0 2px 2px 0;
+}
+
+/* Category accent colors via left border - using premium, harmonious shades */
+.canvas-category-node[data-category="Core Answers"]::before { background: #d97706; } /* Amber-600 */
+.canvas-category-node[data-category="Supporting Articles"]::before { background: #2563eb; } /* Blue-600 */
+.canvas-category-node[data-category="Conversion Pages"]::before { background: #059669; } /* Emerald-600 */
+.canvas-category-node[data-category="Authority Plays"]::before { background: #7c3aed; } /* Violet-600 */
+
+.canvas-category-node:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.canvas-category-node__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvas-category-node__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1c1917;
+  letter-spacing: -0.01em;
+}
+
+.canvas-category-node__count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: #f5f5f4;
+  border: 1px solid #e7e5e4;
+  color: #78716c;
+}
+
+.canvas-category-node__tagline {
+  font-size: 11px;
+  color: #78716c;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
+/* ============================================
+   Article Node
+   ============================================ */
+
+.canvas-article-node {
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  padding: 14px 16px;
+  width: 300px;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.01),
+    0 4px 12px rgba(120, 113, 108, 0.03);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  position: relative;
+}
+
+.canvas-article-node:hover {
+  border-color: #a8a29e; /* Stone-400 */
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.02),
+    0 12px 32px rgba(120, 113, 108, 0.08);
+  transform: translateY(-2px) scale(1.01);
+}
+
+.canvas-article-node--published {
+  border-color: #a7f3d0; /* Emerald-200 */
+  background: #f0fdf4; /* Emerald-50 */
+}
+
+.canvas-article-node--published:hover {
+  border-color: #34d399; /* Emerald-400 */
+}
+
+.canvas-article-node--writing {
+  border-color: #bfdbfe; /* Blue-200 */
+  background: #eff6ff; /* Blue-50 */
+}
+
+.canvas-article-node--writing:hover {
+  border-color: #60a5fa; /* Blue-400 */
+}
+
+/* Status dot */
+.canvas-article-node__status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.canvas-article-node__status--published {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.3);
+}
+
+.canvas-article-node__status--writing {
+  background: #3b82f6;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.3);
+  animation: pulse-blue 2s ease-in-out infinite;
+}
+
+.canvas-article-node__status--pending {
+  background: transparent;
+  border: 1.5px solid #78716c;
+}
+
+@keyframes pulse-blue {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Phase badge */
+.canvas-article-node__phase {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.canvas-article-node__phase--Foundation { background: #fef3c7; color: #92400e; }
+.canvas-article-node__phase--Use-Case { background: #dbeafe; color: #1e40af; }
+.canvas-article-node__phase--Technical { background: #e0e7ff; color: #3730a3; }
+.canvas-article-node__phase--Trust { background: #dcfce7; color: #166534; }
+
+/* Impact indicator */
+.canvas-article-node__impact {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.canvas-article-node__impact--High { color: #16a34a; }
+.canvas-article-node__impact--Medium { color: #d97706; }
+.canvas-article-node__impact--Low { color: #78716c; }
+
+/* Title */
+.canvas-article-node__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1c1917;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Hook */
+.canvas-article-node__hook {
+  font-size: 11px;
+  color: #78716c;
+  line-height: 1.5;
+  font-style: italic;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Keyword chip */
+.canvas-article-node__keyword {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  font-size: 10px;
+  font-weight: 600;
+  color: #57534e;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cluster badge */
+.canvas-article-node__cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  background: #f3e8ff;
+  color: #6b21a8;
+  border: 1px solid #e9d5ff;
+}
+
+/* Intent chip */
+.canvas-article-node__intent {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+/* Type icon */
+.canvas-article-node__type {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #78716c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* GSC Metrics */
+.canvas-article-node__metrics {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.canvas-article-node__metric {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #57534e;
+}
+
+.canvas-article-node__metric-icon {
+  width: 12px;
+  height: 12px;
+  color: #78716c;
+}
+
+/* Opportunity score */
+.canvas-article-node__opp-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+/* Badge */
+.canvas-article-node__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #f5f5f4;
+  color: #57534e;
+  border: 1px solid #e7e5e4;
+}
+
+/* Date */
+.canvas-article-node__date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #78716c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Supporting keywords */
+.canvas-article-node__supporting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.canvas-article-node__supporting-kw {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 500;
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  color: #57534e;
+}
+
+/* Expanded details */
+.canvas-article-node__expanded {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e7e5e4;
+}
+
+.canvas-article-node__reason {
+  font-size: 11px;
+  color: #44403c;
+  line-height: 1.5;
+  padding: 6px 8px;
+  background: #fafaf9;
+  border-radius: 6px;
+  border-left: 2px solid #78716c;
+}
+
+.canvas-article-node__instructions {
+  font-size: 11px;
+  color: #14532d;
+  line-height: 1.5;
+  padding: 6px 8px;
+  background: #f0fdf4;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
+  margin-top: 6px;
+}
+
+/* ============================================
+   Responsive & Utility
+   ============================================ */
+
+/* Selection box */
+.content-plan-canvas .react-flow__selection {
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 4px;
+}
+
+/* Panel for legend/filters */
+.canvas-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  padding: 12px 16px;
+  z-index: 10;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.canvas-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #57534e;
+  padding: 3px 0;
+}
+
+.canvas-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

@@ -16,6 +16,26 @@ interface Props {
     }>;
 }
 
+function getComparisonDisplayTitle(competitorName: string) {
+    return `FlipAEO vs. ${competitorName}`;
+}
+
+function getComparisonMetaTitle(comparison: (typeof comparisons)[string]) {
+    if (comparison.seo?.metaTitle) {
+        return comparison.seo.metaTitle;
+    }
+
+    return `FlipAEO vs. ${comparison.competitorName}: Pricing, Features, Pros & Cons | FlipAEO`;
+}
+
+function getComparisonMetaDescription(comparison: (typeof comparisons)[string]) {
+    if (comparison.seo?.metaDescription) {
+        return comparison.seo.metaDescription;
+    }
+
+    return comparison.sonicBoomSummary;
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const { slug } = await params;
     const comparison = comparisons[slug];
@@ -28,8 +48,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     if (comparison.seo?.redirectTo) {
         return {
-            title: `${comparison.heroTitle} | FlipAEO`,
-            description: comparison.sonicBoomSummary,
+            title: getComparisonMetaTitle(comparison),
+            description: getComparisonMetaDescription(comparison),
             alternates: {
                 canonical: `${defaultSEO.siteUrl}${comparison.seo.redirectTo}`
             },
@@ -41,8 +61,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     return {
-        title: `${comparison.heroTitle} | FlipAEO`,
-        description: comparison.sonicBoomSummary,
+        title: getComparisonMetaTitle(comparison),
+        description: getComparisonMetaDescription(comparison),
         alternates: {
             canonical: `${defaultSEO.siteUrl}/compare/${slug}`
         },
@@ -65,9 +85,10 @@ export default async function ComparisonPage({ params }: Props) {
         redirect(comparison.seo.redirectTo);
     }
 
+    const pageTitle = getComparisonDisplayTitle(comparison.competitorName);
+
     const {
         competitorName,
-        heroTitle,
         sonicBoomSummary,
         editorial,
         methodology,
@@ -89,7 +110,7 @@ export default async function ComparisonPage({ params }: Props) {
 
     const { competitorPlans, flipaeoPlans, verdict: pricingVerdict } = pricing;
 
-    // Dynamically generate "More Comparisons" cards
+    // Use page-specific internal links first, then fall back to related comparisons.
     const allSlugs = (Object.keys(comparisons) as (keyof typeof comparisons)[])
         .filter((s) => !comparisons[s].seo?.noindex && !comparisons[s].seo?.redirectTo);
 
@@ -106,7 +127,7 @@ export default async function ComparisonPage({ params }: Props) {
 
     const selectedSlugs = relatedSlugs.slice(0, 3);
 
-    const moreAlternativeCards = selectedSlugs.map((s) => {
+    const fallbackAlternativeCards = selectedSlugs.map((s) => {
         const comp = comparisons[s];
         return {
             title: `FlipAEO vs. ${comp.competitorName}`,
@@ -117,6 +138,10 @@ export default async function ComparisonPage({ params }: Props) {
         };
     });
 
+    const moreAlternativeCards = moreAlternatives && moreAlternatives.length > 0
+        ? moreAlternatives
+        : fallbackAlternativeCards;
+
     return (
         <div className="relative min-h-screen w-full flex flex-col font-sans bg-stone-50/20">
             <Navbar />
@@ -126,7 +151,7 @@ export default async function ComparisonPage({ params }: Props) {
                     data={{
                         "@context": "https://schema.org",
                         "@type": "Article",
-                        headline: heroTitle,
+                        headline: pageTitle,
                         description: sonicBoomSummary,
                         author: editorial ? {
                             "@type": "Person",
@@ -168,23 +193,19 @@ export default async function ComparisonPage({ params }: Props) {
                     }}
                 />
 
-                {editorial && (
-                    <section className="w-full max-w-5xl mx-auto px-6 mb-10">
-                        <div className="bg-white rounded-lg border border-stone-200 px-5 py-4 text-sm text-stone-600 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                            <span>Written by {editorial.author}</span>
-                            <span>Reviewed by {editorial.reviewer}</span>
-                            <span>Last updated {editorial.lastUpdated}</span>
-                        </div>
-                    </section>
-                )}
-
                 {/* Section 1: Quick Verdict Header */}
                 <section className="w-full max-w-5xl mx-auto px-6 mb-16">
-                    <div className="text-center mb-10">
-                        <h1 className="font-display text-3xl md:text-5xl text-stone-900 leading-[1.1] mb-6 tracking-tight">
-                            FlipAEO vs. {competitorName}
+                    <div className="text-center mb-10 max-w-3xl mx-auto">
+                        <h1 className="font-display text-3xl md:text-5xl text-stone-900 leading-[1.1] mb-4 tracking-tight">
+                            {pageTitle}
                         </h1>
-                        <p className="text-stone-500 text-sm">The Honest Comparison for 2026</p>
+                        {editorial && (
+                            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-stone-400">
+                                <span>Updated {editorial.lastUpdated}</span>
+                                <span className="text-stone-300">•</span>
+                                <span>Reviewed by {editorial.reviewer}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-white rounded-lg border border-brand-200  overflow-hidden">
@@ -217,6 +238,7 @@ export default async function ComparisonPage({ params }: Props) {
                             </div>
                         </div>
                     </div>
+                
                 </section>
 
                 {methodology && (
@@ -782,7 +804,7 @@ export default async function ComparisonPage({ params }: Props) {
                 <section className="w-full max-w-5xl mx-auto px-6 mb-24">
                     <div className="flex items-center gap-3 mb-6 border-b border-stone-200 pb-2">
                         <span className="text-xs font-bold text-brand-600 uppercase tracking-widest">[08]</span>
-                        <h2 className="text-xs font-bold text-stone-400 uppercase tracking-widest">More Comparisons</h2>
+                        <h2 className="text-xs font-bold text-stone-400 uppercase tracking-widest">Related Research Paths</h2>
                     </div>
 
                     <div className="grid md:grid-cols-3 gap-4">

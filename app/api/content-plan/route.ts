@@ -87,37 +87,45 @@ export async function GET(req: NextRequest) {
                         })
                         .eq("id", plan.id)
 
-                    // Fetch pillar recommendations from brand_details
+                    // Fetch pillar recommendations and brand info from brand_details
                     const { data: brand } = await supabase
                         .from("brand_details")
-                        .select("pillar_recommendations")
+                        .select("pillar_recommendations, website_url, discovered_competitors")
                         .eq("id", plan.brand_id)
                         .maybeSingle()
 
-                    // Return the updated data with pillars
+                    // Return the updated data with pillars and brand info
                     return NextResponse.json({
                         ...plan,
                         plan_data: updatedPlanData,
-                        pillar_recommendations: brand?.pillar_recommendations || null
+                        pillar_recommendations: brand?.pillar_recommendations || null,
+                        brand_website_url: brand?.website_url || null,
+                        discovered_competitors: brand?.discovered_competitors || null
                     })
                 }
             }
         }
 
-        // Fetch pillar recommendations from brand_details for normal response
+        // Fetch pillar recommendations and brand info from brand_details for normal response
         let pillarRecommendations = null
+        let brandWebsiteUrl = null
+        let discoveredCompetitors = null
         if (plan.brand_id) {
             const { data: brand } = await supabase
                 .from("brand_details")
-                .select("pillar_recommendations")
+                .select("pillar_recommendations, website_url, discovered_competitors")
                 .eq("id", plan.brand_id)
                 .maybeSingle()
             pillarRecommendations = brand?.pillar_recommendations || null
+            brandWebsiteUrl = brand?.website_url || null
+            discoveredCompetitors = brand?.discovered_competitors || null
         }
 
         return NextResponse.json({
             ...plan,
-            pillar_recommendations: pillarRecommendations
+            pillar_recommendations: pillarRecommendations,
+            brand_website_url: brandWebsiteUrl,
+            discovered_competitors: discoveredCompetitors
         })
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 })

@@ -125,6 +125,12 @@ export interface SolutionData {
         buttonHref: string;
     };
 
+    relatedResources?: {
+        title: string;
+        description: string;
+        href: string;
+    }[];
+
     relatedTitle: string;
     relatedSubtitle: string;
     relatedSlugs: string[];
@@ -1110,6 +1116,23 @@ export const solutions: Record<string, SolutionData> = {
             buttonLabel: 'Start My Brand Audit',
             buttonHref: '/login'
         },
+        relatedResources: [
+            {
+                title: 'FlipAEO vs. Surfer SEO',
+                description: 'See how this framework applies when a team is choosing between editor-led optimization and a more selective authority-page recovery model.',
+                href: '/compare/flipaeo-vs-surfer-seo'
+            },
+            {
+                title: 'FlipAEO vs. Outranking',
+                description: 'Use this page when the question is whether you need a deep planning platform or a smaller set of stronger commercial pages.',
+                href: '/compare/flipaeo-vs-outranking'
+            },
+            {
+                title: 'FlipAEO vs. Frase',
+                description: 'Connect the brand framework to content-ops reality with a comparison focused on briefs, scoring, AI visibility, and refresh workflows.',
+                href: '/compare/flipaeo-vs-frase'
+            }
+        ],
         relatedTitle: 'Explore More AI Engine Solutions',
         relatedSubtitle: 'Use engine-specific pages alongside this framework when you need channel-level execution.',
         relatedSlugs: ['answer-engine-optimization', 'generative-engine-optimization', 'meta-ai-optimization']

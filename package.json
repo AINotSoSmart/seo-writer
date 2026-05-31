@@ -78,6 +78,7 @@
     "@upstash/ratelimit": "^2.0.6",
     "@upstash/redis": "^1.35.3",
     "@vercel/blob": "^2.0.0",
+    "@xyflow/react": "^12.10.2",
     "autoprefixer": "^10.4.20",
     "axios": "^1.12.2",
     "cheerio": "^1.2.0",

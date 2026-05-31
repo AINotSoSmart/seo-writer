@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import {
     Calendar,
     Sparkles,
@@ -21,6 +22,8 @@ import {
     Layers,
     Award,
     Waypoints,
+    LayoutGrid,
+    Network,
 } from "lucide-react"
 import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { Button } from "@/components/ui/button"
@@ -34,6 +37,19 @@ import { PlanCard } from "@/components/content-plan/plan-card"
 import { PaywallOverlay } from "@/components/content-plan/paywall-overlay"
 import { PillarPagesSection, PillarRecommendation } from "@/components/content-plan/pillar-pages-section"
 import { useSubscription } from "@/contexts/subscription-context"
+
+// Dynamic import for canvas view (heavy dependency, only load when needed)
+const ContentPlanCanvas = dynamic(
+    () => import("@/components/content-plan/content-plan-canvas").then(mod => ({ default: mod.ContentPlanCanvas })),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="h-[600px] flex items-center justify-center bg-stone-50 border border-stone-200 rounded-xl">
+                <CustomSpinner className="w-8 h-8 text-stone-500" />
+            </div>
+        )
+    }
+)
 
 // --- Minimal Design System Configuration ---
 
@@ -129,8 +145,11 @@ export default function ContentPlanPage() {
         generation_phase?: string;
         generation_error?: string;
         pillar_recommendations?: PillarRecommendation[] | null;
+        brand_website_url?: string | null;
+        discovered_competitors?: any[] | null;
     } | null>(null)
     const [filter, setFilter] = useState<"all" | "pending" | "writing" | "published">("all")
+    const [viewMode, setViewMode] = useState<"list" | "canvas">("list")
     const [error, setError] = useState("")
     const [editingId, setEditingId] = useState<string | null>(null)
     const [editForm, setEditForm] = useState<Partial<ContentPlanItem>>({})
@@ -615,6 +634,36 @@ export default function ContentPlanPage() {
 
                         {/* Right: Actions & View */}
                         <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
+                            {/* View Mode Toggle */}
+                            {plan && (
+                                <div className="flex items-center p-0.5 bg-stone-100/50 border border-stone-200/50 rounded-lg">
+                                    <button
+                                        onClick={() => setViewMode("list")}
+                                        className={cn(
+                                            "cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-bold transition-all",
+                                            viewMode === "list"
+                                                ? "text-stone-900 bg-white shadow-sm ring-1 ring-stone-200"
+                                                : "text-stone-400 hover:text-stone-600"
+                                        )}
+                                    >
+                                        <LayoutGrid className="w-3.5 h-3.5" />
+                                        Cards
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode("canvas")}
+                                        className={cn(
+                                            "cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-bold transition-all",
+                                            viewMode === "canvas"
+                                                ? "text-stone-900 bg-white shadow-sm ring-1 ring-stone-200"
+                                                : "text-stone-400 hover:text-stone-600"
+                                        )}
+                                    >
+                                        <Network className="w-3.5 h-3.5" />
+                                        Canvas
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Credits Warning */}
                             {!hasCredits && (
                                 <Link href="/subscribe" className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-lg border border-red-100 hover:bg-red-100/50 transition-colors">
@@ -663,7 +712,19 @@ export default function ContentPlanPage() {
                 </div>
 
                 {/* --- Body Content --- */}
-                <div className="p-4 space-y-8">
+                {viewMode === "canvas" && plan ? (
+                    /* Canvas View */
+                    <div className="p-2">
+                        <ContentPlanCanvas
+                            planData={plan.plan_data || []}
+                            pillars={plan.pillar_recommendations || null}
+                            brandWebsiteUrl={plan.brand_website_url || null}
+                            discoveredCompetitors={plan.discovered_competitors || null}
+                        />
+                    </div>
+                ) : (
+                    /* List/Cards View */
+                    <div className="p-4 space-y-8">
 
 
 
@@ -915,6 +976,7 @@ export default function ContentPlanPage() {
                         </>
                     )}
                 </div>
+                )}
             </GlobalCard>
 
             {/* Automation Modal for handling missed articles */}
