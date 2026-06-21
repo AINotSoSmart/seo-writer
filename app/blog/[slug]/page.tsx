@@ -10,6 +10,7 @@ import { getPostBySlug, getAllPostSlugs, formatDate, calculateReadingTime, extra
 import { notFound, redirect } from "next/navigation"
 import Image from "next/image"
 import { defaultSEO, organizationSchema } from "@/config/seo"
+import { AeoSummaryWidget } from "@/components/aeo-summary-widget"
 
 // Ensure static generation with ISR for crawler stability
 export const dynamic = 'force-static'
@@ -250,6 +251,11 @@ function BlogPostContent({ post }: { post: WordPressPost }) {
         {/* Article Content */}
         <div className="max-w-4xl mx-auto px-4 w-full pb-24">
           <div className="md:p-8 ">
+            <AeoSummaryWidget
+              postUrl={`${defaultSEO.siteUrl}/blog/${post.slug}`}
+              postTitle={post.title}
+            />
+
             <BlogContentRenderer content={post.content} />
 
             <AuthorCard

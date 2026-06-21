@@ -61,6 +61,9 @@ export function ContentPlanCanvas({
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
+    // Interactive Hover State
+    const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
+
     // Legend visibility
     const [showLegend, setShowLegend] = useState(true)
 
@@ -75,13 +78,80 @@ export function ContentPlanCanvas({
         return { total, published, writing, pending, clusters, categories }
     }, [planData])
 
+    // Compute interactive nodes styling (Focus Mode)
+    const styledNodes = useMemo(() => {
+        if (!hoveredNodeId) return nodes
+
+        const connectedNodeIds = new Set<string>([hoveredNodeId])
+        edges.forEach(edge => {
+            const isConnectionEdge = edge.className === "connected-edge" || edge.id.startsWith("connection-")
+            if (isConnectionEdge) {
+                if (edge.source === hoveredNodeId) connectedNodeIds.add(edge.target)
+                if (edge.target === hoveredNodeId) connectedNodeIds.add(edge.source)
+            }
+        })
+
+        return nodes.map(node => {
+            const isConnected = connectedNodeIds.has(node.id)
+            const isStructureNode = node.type === "brandNode" || node.type === "pillarNode" || node.type === "categoryNode"
+            
+            return {
+                ...node,
+                style: {
+                    ...node.style,
+                    opacity: isConnected || isStructureNode ? 1 : 0.3,
+                    transition: "opacity 0.2s ease",
+                }
+            }
+        })
+    }, [nodes, edges, hoveredNodeId])
+
+    // Compute interactive edges styling (Focus Mode)
+    const styledEdges = useMemo(() => {
+        return edges.map(edge => {
+            const isConnectionEdge = edge.className === "connected-edge" || edge.id.startsWith("connection-")
+            
+            if (!isConnectionEdge) {
+                // Fade structural edges if focusing on an article
+                return {
+                    ...edge,
+                    style: {
+                        ...edge.style,
+                        opacity: hoveredNodeId ? 0.25 : 1,
+                        transition: "opacity 0.2s ease",
+                    }
+                }
+            }
+            
+            // Show relationship lines ONLY if they touch the hovered article
+            const isRelated = edge.source === hoveredNodeId || edge.target === hoveredNodeId
+            return {
+                ...edge,
+                hidden: !isRelated,
+                style: {
+                    ...edge.style,
+                    opacity: isRelated ? 1 : 0,
+                    transition: "opacity 0.2s ease",
+                }
+            }
+        })
+    }, [edges, hoveredNodeId])
+
     return (
         <div className="content-plan-canvas" style={{ height: "calc(100vh - 160px)", minHeight: "600px" }}>
             <ReactFlow
-                nodes={nodes}
-                edges={edges}
+                nodes={styledNodes}
+                edges={styledEdges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
+                onNodeMouseEnter={(_, node) => {
+                    if (node.type === "articleNode") {
+                        setHoveredNodeId(node.id)
+                    }
+                }}
+                onNodeMouseLeave={() => {
+                    setHoveredNodeId(null)
+                }}
                 nodeTypes={nodeTypes}
                 fitView
                 fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
@@ -128,6 +198,9 @@ export function ContentPlanCanvas({
                                 >
                                     ✕
                                 </button>
+                            </div>
+                            <div style={{ fontSize: 9, color: "#78716c", fontStyle: "italic", marginBottom: 8 }}>
+                                💡 Hover over a card to view connections.
                             </div>
                             <div className="canvas-legend__item">
                                 <div className="canvas-legend__dot" style={{ background: "#10b981" }} />

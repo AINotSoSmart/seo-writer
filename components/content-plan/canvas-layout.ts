@@ -247,8 +247,9 @@ export function buildCanvasGraph(args: {
                     id: `connection-${article.id}-to-${conn}`,
                     source: sourceNodeId,
                     target: targetNodeId,
-                    type: 'smoothstep',
+                    type: 'default',
                     animated: true,
+                    className: 'connected-edge',
                     style: { stroke: '#6366f1', strokeWidth: 2, strokeDasharray: '5,5' },
                 })
             }

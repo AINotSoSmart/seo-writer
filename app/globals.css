@@ -875,20 +875,38 @@ html {
 
 /* Blockquotes */
 .blog-content blockquote {
-  @apply relative py-6 pl-14 pr-4 mb-10 text-left border-none bg-transparent;
+  position: relative !important;
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+  padding-left: 1.5rem !important;
+  padding-right: 1rem !important;
+  margin-bottom: 2.5rem !important;
+  text-align: left !important;
+  border: none !important;
+  background-color: transparent !important;
 }
 
 .blog-content blockquote::before {
-  content: "";
-  @apply absolute top-0 left-0 w-10 h-10 opacity-30 pointer-events-none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231c1917' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-quote'%3E%3Cpath d='M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'%3E%3C/path%3E%3Cpath d='M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: contain;
+  content: "\201C" !important;
+  position: absolute !important;
+  top: -0.25rem !important;
+  left: 0 !important;
+  font-size: 6rem !important;
+  line-height: 1 !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  color: #1c1917 !important;
+  opacity: 0.08 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  display: block !important;
 }
 
 .blog-content blockquote p {
   font-family: var(--font-space-grotesk), sans-serif;
-  @apply text-xl md:text-2xl italic text-stone-800 leading-relaxed mb-0 relative z-10;
+  @apply text-xl md:text-2xl italic text-stone-800 relative z-10;
+  line-height: 1.4 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 .blog-content blockquote cite {
@@ -942,30 +960,38 @@ html {
   @apply text-sm text-muted-foreground mt-3 italic;
 }
 
-/* WordPress specific classes */
-.blog-content .wp-block-image {
-  @apply mb-8 text-center;
-}
-
-.blog-content .wp-block-image img {
-  @apply rounded-lg;
-}
-
 .blog-content .wp-block-quote {
-  @apply relative py-6 pl-14 pr-4 mb-10 text-left border-none bg-transparent;
+  position: relative !important;
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+  padding-left: 4rem !important;
+  padding-right: 1rem !important;
+  margin-bottom: 2.5rem !important;
+  text-align: left !important;
+  border: none !important;
+  background-color: transparent !important;
 }
 
 .blog-content .wp-block-quote::before {
-  content: "";
-  @apply absolute top-0 left-0 w-10 h-10 opacity-30 pointer-events-none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231c1917' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-quote'%3E%3Cpath d='M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'%3E%3C/path%3E%3Cpath d='M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: contain;
+  content: "" !important;
+  position: absolute !important;
+  top: 1.5rem !important;
+  left: 1.5rem !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  opacity: 0.3 !important;
+  pointer-events: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231c1917' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-quote'%3E%3Cpath d='M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'%3E%3C/path%3E%3Cpath d='M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'%3E%3C/path%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+  display: block !important;
 }
 
 .blog-content .wp-block-quote p {
   font-family: var(--font-space-grotesk), sans-serif;
-  @apply text-lg md:text-xl italic text-stone-800 leading-relaxed mb-0 relative z-10;
+  @apply text-lg md:text-xl italic text-stone-800 leading-relaxed relative z-10;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 .blog-content .wp-block-quote cite {
@@ -1099,8 +1125,20 @@ html {
     @apply text-xl mt-6 mb-3;
   }
 
-  .blog-content blockquote {
-    @apply pl-4 pr-2 py-3;
+  .blog-content blockquote,
+  .blog-content .wp-block-quote {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+
+  .blog-content blockquote::before,
+  .blog-content .wp-block-quote::before {
+    position: absolute !important;
+    top: -0.15rem !important;
+    left: 0 !important;
+    font-size: 4.5rem !important;
   }
 
   .blog-content table {
