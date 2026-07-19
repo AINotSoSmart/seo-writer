@@ -1,6 +1,7 @@
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { ContentPlanItem } from "@/lib/schemas/content-plan"
 import { BrandDetails } from "@/lib/schemas/brand"
+import { validateArticleKeywords, expandKeyword } from "@/lib/plans/keyword-validator"
 
 /**
  * Strategic Planner - Revamped content plan generation using mega-prompt approach.
@@ -27,6 +28,85 @@ export interface StrategicPlanResult {
  * Generate a strategic 30-day content plan using the mega-prompt approach.
  * This produces persona-driven, interconnected content plans instead of abstract keyword lists.
  */
+/**
+ * Gather real search queries from Google Autocomplete to seed the LLM.
+ * This prevents the LLM from hallucinating keywords nobody actually searches.
+ */
+async function gatherAutocompleteSeed(brandData: BrandDetails): Promise<string[]> {
+    // Build 3-5 seed phrases from brand identity
+    const seedPhrases: string[] = []
+
+    // From product identity ("literally" field is the plain-language description)
+    const literally = brandData.product_identity?.literally || brandData.category || ''
+    if (literally) {
+        // Extract core noun phrases: "automated smart blinds" → ["smart blinds", "automated blinds"]
+        const words = literally.toLowerCase().split(/[\s,]+/).filter(w => w.length > 2)
+        if (words.length >= 2) {
+            seedPhrases.push(words.slice(0, 3).join(' '))
+        }
+        if (words.length >= 1) {
+            seedPhrases.push(words[0])
+        }
+    }
+
+    // From category
+    if (brandData.category && !seedPhrases.includes(brandData.category.toLowerCase())) {
+        seedPhrases.push(brandData.category.toLowerCase())
+    }
+
+    // From core features (take first 2 meaningful ones)
+    if (Array.isArray(brandData.core_features)) {
+        for (const feature of brandData.core_features.slice(0, 2)) {
+            const cleaned = feature.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
+            if (cleaned.length > 3 && cleaned.split(' ').length <= 4) {
+                seedPhrases.push(cleaned)
+            }
+        }
+    }
+
+    // Deduplicate and limit
+    const uniqueSeeds = [...new Set(seedPhrases)].slice(0, 5)
+
+    if (uniqueSeeds.length === 0) {
+        console.warn('[Autocomplete Seed] No seed phrases could be derived from brand data')
+        return []
+    }
+
+    console.log(`[Autocomplete Seed] Expanding ${uniqueSeeds.length} seed phrases: ${uniqueSeeds.join(', ')}`)
+
+    // Hit Google Autocomplete for each seed
+    const allSuggestions: string[] = []
+    for (const seed of uniqueSeeds) {
+        try {
+            const suggestions = await expandKeyword(seed)
+            allSuggestions.push(...suggestions)
+        } catch (e) {
+            console.warn(`[Autocomplete Seed] Failed to expand "${seed}":`, e)
+        }
+    }
+
+    // Also try question-form seeds: "how to [seed]", "best [seed]"
+    const questionSeeds = uniqueSeeds.slice(0, 2).flatMap(s => [
+        `how to ${s}`,
+        `best ${s}`,
+        `${s} vs`
+    ])
+
+    for (const qs of questionSeeds) {
+        try {
+            const suggestions = await expandKeyword(qs)
+            allSuggestions.push(...suggestions)
+        } catch (e) {
+            // Non-blocking
+        }
+    }
+
+    // Deduplicate and return
+    const unique = [...new Set(allSuggestions)].slice(0, 40)
+    console.log(`[Autocomplete Seed] Gathered ${unique.length} real search suggestions`)
+    return unique
+}
+
 export async function generateStrategicPlan({
     brandData,
     brandUrl,
@@ -38,6 +118,14 @@ export async function generateStrategicPlan({
     const client = getGeminiClient()
     const today = new Date()
     const currentDate = `${today.toLocaleDateString('en-US', { month: 'long' })} ${today.getFullYear()}`
+
+    // === GATHER REAL SEARCH DATA BEFORE GENERATION ===
+    let autocompleteSuggestions: string[] = []
+    try {
+        autocompleteSuggestions = await gatherAutocompleteSeed(brandData)
+    } catch (e) {
+        console.warn('[Strategic Planner] Autocomplete seeding failed (non-blocking):', e)
+    }
 
     // Format competitor section
     const competitorSection = competitorBrands.length > 0
@@ -79,6 +167,17 @@ ${auditPillarSuggestions.map(p => `- ${p.suggested_title} (Sections: ${p.key_sec
     const bannedTerms = [brandData.product_name, ...featureList].filter(Boolean)
     const bannedExamples = bannedTerms.slice(0, 3).map(t => `- "${t}" ← Brand feature (User doesn't know this name)`).join('\n')
 
+    // Format autocomplete section
+    const autocompleteSection = autocompleteSuggestions.length > 0
+        ? `## REAL SEARCH QUERIES FROM GOOGLE AUTOCOMPLETE (PRIMARY KEYWORD SOURCE)
+These are ACTUAL queries people type into Google right now. Use these as your PRIMARY source for main_keyword values.
+You may adapt or extend them, but at least 70% of your main_keywords should come from or closely match these:
+
+${autocompleteSuggestions.map(s => `- "${s}"`).join('\n')}
+
+If you need keywords NOT on this list, they must still follow the natural query format shown above.`
+        : ''
+
     const megaPrompt = `
 ## Context
 You are analyzing a brand: ${brandData.product_name}
@@ -95,6 +194,8 @@ Current Date: ${currentDate}
 ## Internal Product Capabilities (Background Context ONLY)
 *Use these to understand HOW we solve problems, but DO NOT use these names as keywords.*
 ${Array.isArray(brandData.core_features) ? brandData.core_features.join(', ') : brandData.core_features}
+
+${autocompleteSection}
 
 here are the competitor brands:
 ${competitorSection}
@@ -118,46 +219,79 @@ You MUST translate features into the **User Problem** they solve.
 - ❌ **BAD (Feature-First):** "What is Anti-AI Filter?" (User doesn't know this exists)
 - ✅ **GOOD (Problem-First):** "How to bypass AI detection" (The problem the filter solves)
 
-## CRITICAL: What Makes a GOOD Content Plan
+---
 
-### ✅ GOOD Keyword Examples (Real queries people search):
-- "best AI headshot generator 2026"
-- "how to get professional headshots without a photographer"
-- "AI headshots vs professional photographer cost"
-- "do AI headshots look fake on LinkedIn"
-- "corporate headshot poses male"
+## KEYWORD FORMAT RULES (MOST CRITICAL SECTION — READ CAREFULLY)
 
-### ❌ BAD Keyword Examples (Nobody searches these):
+The main_keyword MUST be a query a real human would type into Google.
+
+### ❌ KEYWORD-STUFFED (INSTANTLY REJECTED):
+- "circadian rhythm smart home blinds" ← Nobody searches 5 jammed-together nouns
+- "automated shades for light management" ← Corporate jargon, not a search
+- "product strategic confusion assessment" ← Invented academic phrase
+- "reduce handoff loss product engineering" ← Nobody types this
+- "smart shades for seasonal depression" ← Keyword salad
+- "scaling product value for growth" ← Buzzword soup
 ${bannedExamples}
-- "money back guarantee AI photos" ← Not a search query
-- "our privacy policy" ← Self-promotional
-- "why we delete your data" ← Self-promotional sales copy
-- "what our users say" ← Testimonials are not SEO content
+
+### ✅ NATURAL SEARCH QUERIES (WHAT REAL PEOPLE TYPE):
+- "do smart blinds help you sleep" ← Natural question
+- "best smart blinds for bedroom" ← Simple shopping query
+- "smart blinds vs regular blinds" ← Clean comparison
+- "how to fix product strategy" ← Real problem search
+- "why is my team not shipping" ← Real pain point
+- "best AI headshot generator 2026" ← Time-stamped shopping query
+
+### THE RULES:
+1. **Maximum 5 words** for main_keyword. If you write 6+ words, you're keyword-stuffing.
+2. Must sound like **natural speech** — read it aloud. Would you say this to a friend?
+3. **Questions work great:** "how to...", "why does...", "is X worth it", "can you..."
+4. **Shopping queries work:** "best X for Y", "X vs Y", "X cost 2026", "X reviews"
+5. **No jargon stacking:** Don't combine 3+ technical terms into one keyword
+6. **The Google test:** Paste your keyword into Google. If autocomplete suggests something DIFFERENT, use the autocomplete version instead.
+
+---
+
+## TITLE ≠ KEYWORD RULE (MANDATORY)
+
+The title and main_keyword must NOT be the same string or a trivial rearrangement.
+- **main_keyword** = what the user searches (short, plain, 2-5 words)
+- **title** = a compelling headline that earns the click (can be longer, specific, opinionated)
+
+❌ BAD (title IS the keyword):
+- main_keyword: "smart window treatments for health" / title: "Smart Window Treatments for Health"
+- main_keyword: "circadian rhythm smart home blinds" / title: "Circadian Rhythm & Smart Home Blinds"
+
+✅ GOOD (title adds value beyond the keyword):
+- main_keyword: "smart blinds for sleep" / title: "I Replaced My Bedroom Blinds—Here's How My Sleep Changed"
+- main_keyword: "best smart blinds 2026" / title: "We Tested 5 Smart Blind Brands. Only 2 Were Worth It."
+
+---
 
 ## The 4 Content Categories (Strict Distribution)
 
 ### 1. Core Answers (12 articles)
 Educational "hub" content. Example queries:
-- "what are AI headshots"
-- "are AI generated photos legal to use"
+- "what are smart blinds"
+- "are AI headshots legal"
 - "how long do AI headshots take"
 
 ### 2. Supporting Articles (8 articles)
 Specific how-to guides and tips. Example queries:
-- "how to take good photos for AI headshot"
-- "best outfit for professional headshot"
+- "how to install smart blinds"
+- "best outfit for headshot"
 - "how to smile naturally in photos"
 
 ### 3. Conversion Pages (6 articles)
 Persona + comparison content. Example queries:
-- "AI headshots for realtors"
-- "HeadshotPro vs [competitor]"
-- "best AI headshot for LinkedIn 2026"
+- "smart blinds for renters"
+- "HeadshotPro vs Aragon"
+- "best AI headshot for LinkedIn"
 
 ### 4. Authority Plays (4 articles)
 Data-driven thought leadership. Example queries:
-- "AI headshot industry statistics 2026"
-- "study: do recruiters prefer professional photos"
+- "smart home statistics 2026"
+- "do recruiters prefer professional photos"
 
 ---
 
@@ -173,14 +307,8 @@ Data-driven thought leadership. Example queries:
 
 **REQUIRED DISTRIBUTION:** Your 30-article plan MUST include:
 - 8-12 articles with article_type: "informational"
-- 8-10 articles with article_type: "howto" 
+- 8-10 articles with article_type: "howto"
 - 8-12 articles with article_type: "commercial"
-
-**Examples of how ANY category can have ANY type:**
-- Core Answers + "howto": "How to Choose the Right AI Headshot Generator"
-- Supporting Articles + "commercial": "Best Poses for LinkedIn vs Tinder Headshots" 
-- Authority Plays + "commercial": "Top 10 AI Headshot Tools Compared: 2026 Study"
-- Conversion Pages + "informational": "What Realtors Need to Know About AI Headshots"
 
 ---
 
@@ -190,31 +318,25 @@ Data-driven thought leadership. Example queries:
 - ❌ BANNED: "Data Study of Ten Thousand Users Shows That Authentic AI Photos Increase Recruiter Response by Forty Percent" (107 chars!)
 - ✅ GOOD: "Do AI Photos Hurt Your LinkedIn Response Rate?" (46 chars)
 
-### 2. Keywords Must Be REAL Search Queries
-- Test: Would a real person type this into Google?
-- ❌ "nano texture engine explained" ← Brand feature, not a search
-- ✅ "why do AI photos look so fake" ← Real user question
-
-### 3. NO Self-Promotional Content
+### 2. NO Self-Promotional Content
 - ❌ "What our customers say about us"
 - ❌ "Why our money-back guarantee matters"
 - ❌ "How [brand name] works"
 - ✅ "How AI headshot generators work" (generic, educational)
 
-### 4. Supporting Keywords: Provide 3-5 Related Queries
-Each article must have \`supporting_keywords\` array with related search terms.
+### 3. Supporting Keywords: Provide 3-5 Related Queries
+Each supporting_keyword must ALSO be a natural search query (2-5 words).
 
-### 5. Impact Must Vary
+### 4. Impact Must Vary
 - **High** (10 articles): Highest traffic potential, core topics
 - **Medium** (15 articles): Supporting content
 - **Low** (5 articles): Niche or experimental topics
 
-### 6. Reason Field = STRATEGIC RATIONALE (Not the hook!)
-Explain WHY this article is strategically important:
+### 5. Reason Field = STRATEGIC RATIONALE (Not the hook!)
 - ❌ "Stop settling for rubbery skin..." (this is a hook)
 - ✅ "High-volume query with low competition; establishes authority on core category question"
 
-### 7. Connected_to = Article Day Numbers (Not titles)
+### 6. Connected_to = Article Day Numbers (Not titles)
 Use integers: \`[1, 5, 12]\` not \`["day-1", "day-5"]\`
 
 ---
@@ -239,9 +361,9 @@ Each article schema:
   "day": 8,
   "phase": "Use-Case",
   "category": "Supporting Articles",
-  "main_keyword": "how to pose for AI headshot",
-  "supporting_keywords": ["AI headshot tips", "best pose for professional photo", "linkedin photo poses"],
-  "title": "How to Pose for AI Headshots: Quick Guide",
+  "main_keyword": "how to pose for headshot",
+  "supporting_keywords": ["headshot poses tips", "best pose professional photo", "linkedin photo poses"],
+  "title": "5 Headshot Poses That Actually Look Natural",
   "hook": "Get camera-ready in 5 minutes",
   "reason": "High-traffic how-to query for users actively preparing to use the product",
   "user_intent": "Informational",
@@ -261,16 +383,18 @@ Each article schema:
 
 ## FINAL CHECKLIST
 Before finalizing, verify:
+- [ ] ALL main_keywords are 2-5 words (NEVER 6+)
+- [ ] ALL main_keywords sound like natural speech (read aloud test)
+- [ ] NO main_keyword is the same as its title
 - [ ] ALL titles are under 60 characters
-- [ ] NO self-promotional content (testimonials, pricing, guarantees)
-- [ ] Keywords are REAL search queries (test: would someone Google this?)
-- [ ] \`supporting_keywords\` has 3-5 items per article
+- [ ] NO self-promotional content
+- [ ] \`supporting_keywords\` has 3-5 items per article (also natural queries)
 - [ ] \`reason\` explains strategy, NOT repeat the hook
 - [ ] \`impact\` is properly distributed (10 High, 15 Medium, 5 Low)
 - [ ] \`connected_to\` uses day numbers as integers
 - [ ] At least 3 competitor comparison articles with real names
-- [ ] At least 3 persona-specific articles (realtors, doctors, actors, etc.)
-- [ ] article_type distribution: 8-12 informational, 8-10 howto, 8-12 commercial (NOT all informational!)
+- [ ] At least 3 persona-specific articles
+- [ ] article_type distribution: 8-12 informational, 8-10 howto, 8-12 commercial
 `
 
     try {
@@ -320,7 +444,7 @@ Before finalizing, verify:
         const result = JSON.parse(text)
 
         // Transform raw plan into ContentPlanItem format
-        const planItems: ContentPlanItem[] = (result.plan || []).map((item: any, index: number) => {
+        let planItems: ContentPlanItem[] = (result.plan || []).map((item: any, index: number) => {
             const scheduledDate = new Date(today)
             scheduledDate.setDate(today.getDate() + (item.day - 1))
 
@@ -344,6 +468,22 @@ Before finalizing, verify:
                 reason: item.reason || "Strategic content for topic cluster authority."
             }
         })
+
+        // === POST-GENERATION: VALIDATE KEYWORDS AGAINST GOOGLE AUTOCOMPLETE ===
+        try {
+            console.log(`[Strategic Planner] Validating ${planItems.length} keywords against Google Autocomplete...`)
+            const validated = await validateArticleKeywords(planItems, true) // autoReplace = true
+            const replacedCount = validated.filter(v => v.original_keyword).length
+            const invalidCount = validated.filter(v => !v.keyword_validated && !v.original_keyword).length
+
+            console.log(`[Strategic Planner] Keyword validation: ${replacedCount} auto-replaced, ${invalidCount} still unvalidated`)
+
+            // Update plan items with validated/replaced keywords
+            planItems = validated.map(({ keyword_validated, original_keyword, ...rest }) => rest) as ContentPlanItem[]
+        } catch (validationError) {
+            console.warn('[Strategic Planner] Keyword validation failed (non-blocking):', validationError)
+            // Continue with unvalidated keywords — better than failing entirely
+        }
 
         // Calculate distribution
         const categoryDistribution: Record<string, number> = {
@@ -463,6 +603,13 @@ CRITICAL RULES:
    - "howto" for step-by-step guides and tutorials
    - "commercial" for comparisons, alternatives, and buying guides
 
+## KEYWORD FORMAT RULES (CRITICAL)
+- main_keyword MUST be 2-5 words maximum. NEVER 6+ words.
+- Must sound like natural speech (read it aloud — would you say this to a friend?)
+- main_keyword must NOT be the same as the title
+- ❌ "automated shades for light management" ← keyword-stuffed jargon
+- ✅ "best smart blinds" ← real search query
+
 ## Product Context (Quick Reference)
 - Product: ${brandData.product_name}
 - What it is: ${brandData.product_identity?.literally || brandData.category || 'Software'}
@@ -475,9 +622,9 @@ Return a JSON array of ${count} articles. Each article:
   "day": 15,
   "phase": "Technical",
   "category": "Supporting Articles",
-  "main_keyword": "how to smile naturally for photos",
-  "supporting_keywords": ["natural smile tips", "photo smile tricks", "candid photo pose"],
-  "title": "How to Smile Naturally in Photos",
+  "main_keyword": "smile naturally in photos",
+  "supporting_keywords": ["natural smile tips", "candid photo pose", "photo smile tricks"],
+  "title": "5 Tricks for a Natural Smile in Photos",
   "hook": "Look confident, not awkward",
   "reason": "High-volume how-to query for photo preparation",
   "user_intent": "Informational",
@@ -533,7 +680,7 @@ For example, if rejected topic was about "AI headshots vs professional photograp
         const rawItems = JSON.parse(text)
 
         // Transform to ContentPlanItem format
-        const replacements: ContentPlanItem[] = rawItems.map((item: any, index: number) => {
+        let replacements: ContentPlanItem[] = rawItems.map((item: any, index: number) => {
             const scheduledDate = new Date(today)
             scheduledDate.setDate(today.getDate() + (item.day - 1))
 
@@ -555,6 +702,18 @@ For example, if rejected topic was about "AI headshots vs professional photograp
                 reason: item.reason || "Replacement article for deduplicated content."
             }
         })
+
+        // === POST-GENERATION: VALIDATE REPLACEMENT KEYWORDS TOO ===
+        try {
+            const validated = await validateArticleKeywords(replacements, true)
+            const replacedCount = validated.filter(v => v.original_keyword).length
+            if (replacedCount > 0) {
+                console.log(`[Replacement Generator] Keyword validation: ${replacedCount} keywords auto-replaced`)
+            }
+            replacements = validated.map(({ keyword_validated, original_keyword, ...rest }) => rest) as ContentPlanItem[]
+        } catch (e) {
+            console.warn('[Replacement Generator] Keyword validation failed (non-blocking):', e)
+        }
 
         console.log(`[Replacement Generator] Generated ${replacements.length} replacement articles`)
         return replacements

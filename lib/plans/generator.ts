@@ -7,6 +7,7 @@ import { getCoverageContext, summarizeCoverage } from "@/lib/coverage/analyzer"
 import { scheduleByCluster, consolidateClusters } from "@/lib/plans/cluster-scheduler"
 import { TopicHierarchy } from "@/lib/plans/topic-hierarchy"
 import { checkSitemapDuplication } from "@/lib/internal-linking"
+import { validateArticleKeywords } from "@/lib/plans/keyword-validator"
 
 // Strategic Article Category Distribution (30 = 12 + 8 + 6 + 4)
 export const ARTICLE_CATEGORIES = {
@@ -360,12 +361,46 @@ These are the SAME intent cluster → **PICK ONE, cover others as H2 sections:**
 
 ---
 
+## KEYWORD FORMAT RULES (CRITICAL — READ BEFORE GENERATING)
+
+The main_keyword MUST be a query a real human would type into Google.
+
+### ❌ KEYWORD-STUFFED (INSTANTLY REJECTED):
+- "circadian rhythm smart home blinds" ← Nobody searches 5 jammed-together nouns
+- "automated shades for light management" ← Corporate jargon
+- "product strategic confusion assessment" ← Invented academic phrase
+- "reduce handoff loss product engineering" ← Nobody types this
+
+### ✅ NATURAL SEARCH QUERIES (WHAT REAL PEOPLE TYPE):
+- "do smart blinds help you sleep" ← Natural question
+- "best smart blinds for bedroom" ← Simple shopping query
+- "smart blinds vs regular blinds" ← Clean comparison
+- "how to fix product strategy" ← Real problem search
+
+### THE RULES:
+1. **Maximum 5 words** for main_keyword. 6+ words = keyword-stuffing.
+2. Must sound like **natural speech** — read it aloud.
+3. **Questions work great:** "how to...", "why does...", "is X worth it"
+4. **Shopping queries work:** "best X for Y", "X vs Y", "X cost 2026"
+5. **No jargon stacking:** Don't combine 3+ technical terms
+
+## TITLE ≠ KEYWORD RULE (MANDATORY)
+
+The title and main_keyword must NOT be the same string.
+- **main_keyword** = what the user searches (short, plain, 2-5 words)
+- **title** = a compelling headline that earns the click
+
+❌ BAD: main_keyword: "smart window treatments for health" / title: "Smart Window Treatments for Health"
+✅ GOOD: main_keyword: "smart blinds for sleep" / title: "I Replaced My Bedroom Blinds—Here's How My Sleep Changed"
+
+---
+
 ## YOUR TASK
 
 Generate EXACTLY 30 articles distributed as follows (NO EXCEPTIONS):
 
 | Category | Count | REQUIRED article_type |
-|----------|-------|----------------------|
+|----------|-------|-----------------------|
 | Core Answers | 12 | informational |
 | Supporting Articles | 8 | howto |
 | Conversion Pages | 6 | commercial |
@@ -386,8 +421,8 @@ If your output has >16 informational articles, YOU HAVE FAILED. Check your work.
 
 For each article provide:
 1. title: Compelling blog post title (follow MODERN SEO rules above)
-2. main_keyword: Primary target keyword (2-4 words)
-3. supporting_keywords: 2-3 related keywords (array) which are user intent keywords
+2. main_keyword: Primary target keyword (2-5 words, NATURAL SPEECH)
+3. supporting_keywords: 2-3 related keywords (array, also natural queries)
 4. article_type: "informational" | "commercial" | "howto" (MUST match category above)
 5. cluster: Topic cluster for organization
 6. intent_role: The specific intent ("Core Answer", "Problem-Specific", "Comparison", "Decision", "Emotional/Story", "Authority/Edge")
@@ -401,7 +436,9 @@ For each article provide:
 1. Each article's parent_question must be UNIQUE across the plan.
 2. If the brand has multiple features, articles must be distributed across ALL features.
 3. You MUST generate EXACTLY 30 articles with the 12-8-6-4 distribution.
-4. article_type MUST match the category (see table above). Supporting Articles = howto, Conversion Pages = commercial.
+4. article_type MUST match the category (see table above).
+5. ALL main_keywords MUST be 2-5 words (NEVER 6+) and sound like natural speech.
+6. NO main_keyword may be the same as its title.
 `
 
     const response = await client.models.generateContent({
@@ -732,7 +769,26 @@ Each article needs: title, main_keyword, supporting_keywords, article_type, clus
     const consolidated = consolidateClusters(rawItems, 3, 8)
 
     // Then schedule by cluster
-    const scheduledPlan = scheduleByCluster(consolidated, today)
+    let scheduledPlan = scheduleByCluster(consolidated, today)
+
+    // === POST-GENERATION: VALIDATE KEYWORDS AGAINST GOOGLE AUTOCOMPLETE ===
+    try {
+        console.log(`[Content Plan] Validating ${scheduledPlan.length} keywords against Google Autocomplete...`)
+        const validated = await validateArticleKeywords(scheduledPlan as any[], true) // autoReplace = true
+        const replacedCount = validated.filter(v => v.original_keyword).length
+        const invalidCount = validated.filter(v => !v.keyword_validated && !v.original_keyword).length
+
+        console.log(`[Content Plan] Keyword validation: ${replacedCount} auto-replaced, ${invalidCount} still unvalidated`)
+
+        // Update plan items with validated/replaced keywords
+        scheduledPlan = validated.map(v => ({
+            ...v,
+            keyword_validated: undefined,
+            original_keyword: undefined,
+        })) as typeof scheduledPlan
+    } catch (validationError) {
+        console.warn('[Content Plan] Keyword validation failed (non-blocking):', validationError)
+    }
 
     return { plan: scheduledPlan as ContentPlanItem[], categoryDistribution }
 }
