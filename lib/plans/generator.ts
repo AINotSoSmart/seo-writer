@@ -781,11 +781,7 @@ Each article needs: title, main_keyword, supporting_keywords, article_type, clus
         console.log(`[Content Plan] Keyword validation: ${replacedCount} auto-replaced, ${invalidCount} still unvalidated`)
 
         // Update plan items with validated/replaced keywords
-        scheduledPlan = validated.map(v => ({
-            ...v,
-            keyword_validated: undefined,
-            original_keyword: undefined,
-        })) as typeof scheduledPlan
+        scheduledPlan = validated.map(({ keyword_validated, original_keyword, ...rest }) => rest) as typeof scheduledPlan
     } catch (validationError) {
         console.warn('[Content Plan] Keyword validation failed (non-blocking):', validationError)
     }
