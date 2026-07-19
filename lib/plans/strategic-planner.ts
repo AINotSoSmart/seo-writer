@@ -399,7 +399,7 @@ Before finalizing, verify:
 
     try {
         const response = await client.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: [{ role: "user", parts: [{ text: megaPrompt }] }],
             config: {
                 responseMimeType: "application/json",
@@ -641,7 +641,7 @@ For example, if rejected topic was about "AI headshots vs professional photograp
 
     try {
         const response = await client.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.1-flash-lite",
             contents: [{ role: "user", parts: [{ text: replacementPrompt }] }],
             config: {
                 responseMimeType: "application/json",

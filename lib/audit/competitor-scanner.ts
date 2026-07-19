@@ -153,7 +153,7 @@ Return the brand name, URL, and a 1-sentence justification for each REAL competi
 Be very selective. 3-5 truly relevant competitors is better than 10 loosely related ones.`
 
         const geminiResponse = await client.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.1-flash-lite",
             contents: [{ role: "user", parts: [{ text: filterPrompt }] }],
             config: {
                 responseMimeType: "application/json",

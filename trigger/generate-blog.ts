@@ -152,7 +152,7 @@ Make sure all required fields are present and have the correct types.
 `
 
     const fixResponse = await genAI.models.generateContent({
-      model: "gemini-2.5-flash", // Upgraded to flash for larger context window
+      model: "gemini-3.1-flash-lite", // Upgraded to flash for larger context window
       config: { 
         responseMimeType: "application/json",
         maxOutputTokens: 8192
@@ -470,7 +470,7 @@ OUTPUT: Return ONLY the image prompt string. No explanations.
 `
 
   const response = await genAI.models.generateContent({
-    model: "gemini-2.5-flash-lite",
+    model: "gemini-3.1-flash-lite",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: { responseMimeType: "text/plain" }
   })
@@ -624,7 +624,7 @@ const performDeepResearch = async (
 
   const criticPrompt = getCriticGapPrompt(keyword, articleType, broadContext, instructions)
   const criticResp = await genAI.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.1-flash-lite",
     config: { responseMimeType: "application/json" },
     contents: [{ role: "user", parts: [{ text: criticPrompt }] }]
   })
@@ -705,7 +705,7 @@ ${criticAnalysis.gap_analysis || "No major gaps identified."}
 `
 
   const synthesisStream = await genAI.models.generateContentStream({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.1-flash-lite",
     config: {},
     contents: [{ role: "user", parts: [{ text: synthesisPrompt + "\n\n" + combinedData }] }]
   })
@@ -798,7 +798,7 @@ Return ONLY valid JSON:
 }`
 
   const response = await genAI.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.1-flash-lite",
     config: { responseMimeType: "application/json" },
     contents: [{ role: "user", parts: [{ text: prompt }] }]
   })
@@ -1564,7 +1564,7 @@ export const generateBlogPost = task({
       ]
 
       const outlineStream = await genAI.models.generateContentStream({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         config: outlineConfig,
         contents: outlineContents
       })
@@ -1625,7 +1625,7 @@ Original outline:
 ${JSON.stringify(outline)}`
 
         const consolidationStream = await genAI.models.generateContentStream({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.1-flash-lite",
           config: {
             maxOutputTokens: 8192,
             responseMimeType: "application/json"
@@ -1734,7 +1734,7 @@ CRITICAL EXECUTION RULES:
         ]
 
         const writeStream = await genAI.models.generateContentStream({
-          model: "gemini-2.5-flash",
+          model: "gemini-3-flash-preview",
           config: writeConfig,
           contents: writeContents
         })
@@ -1782,7 +1782,7 @@ CRITICAL EXECUTION RULES:
         ]
 
         const writeStream = await genAI.models.generateContentStream({
-          model: "gemini-2.5-flash-lite",
+          model: "gemini-3-flash-preview",
           config: writeConfig,
           contents: writeContents
         })
@@ -1948,7 +1948,7 @@ CRITICAL EXECUTION RULES:
       let meta_description = ""
       try {
         const seoResponse = await genAI.models.generateContent({
-          model: "gemini-2.5-flash-lite",
+          model: "gemini-3.1-flash-lite",
           config: seoConfig,
           contents: seoContents
         })
@@ -2080,7 +2080,7 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
         const imagePromptContents = [{ role: "user", parts: [{ text: imagePromptSystem }] }]
 
         const imagePromptResponse = await genAI.models.generateContent({
-          model: "gemini-2.5-flash-lite",
+          model: "gemini-3.1-flash-lite",
           config: imagePromptConfig,
           contents: imagePromptContents
         })

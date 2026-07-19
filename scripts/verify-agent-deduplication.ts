@@ -8,7 +8,7 @@ dotenv.config() // fallback to .env
 
 async function runVerification() {
     console.log("🚀 Starting Agentic Deduplication Verification")
-    console.log("Model: gemini-2.5-flash")
+    console.log("Model: gemini-3.1-flash-lite")
     console.log("----------------------------------------")
 
     const testCases = [

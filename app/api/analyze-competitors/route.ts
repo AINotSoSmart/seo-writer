@@ -156,7 +156,7 @@ Focus on finding similar products, not niche features.
 `
 
         const categoryResponse = await client.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.1-flash-lite",
             contents: [{ role: "user", parts: [{ text: categoryPrompt }] }],
             config: {
                 responseMimeType: "application/json",
@@ -278,7 +278,7 @@ Examples:
 `
 
         const response = await client.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.1-flash-lite",
             contents: [{ role: "user", parts: [{ text: extractPrompt }] }],
             config: {
                 responseMimeType: "application/json",

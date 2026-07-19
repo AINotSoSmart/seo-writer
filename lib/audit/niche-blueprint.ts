@@ -7,7 +7,7 @@ import { GeminiBlueprintOutputSchema } from "@/lib/schemas/audit"
  * Generates the Niche Topical Map — what topics/questions a brand MUST cover
  * to be considered an authority in their niche.
  * 
- * Uses gemini-2.5-flash for high-quality strategic output.
+ * Uses gemini-3.1-flash-lite for high-quality strategic output.
  * 
  * Output: 5-7 pillars with 6-10 required topics each (~40-60 total topics)
  */
@@ -108,7 +108,7 @@ Generate 40-60 total topics across all pillars. Be comprehensive but avoid topic
 
     try {
         const response = await client.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.1-flash-lite",
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             config: {
                 responseMimeType: "application/json",

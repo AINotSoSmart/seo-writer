@@ -442,7 +442,7 @@ For each article provide:
 `
 
     const response = await client.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.1-flash-lite",
         contents: [
             { role: "user", parts: [{ text: systemPrompt }] },
             { role: "model", parts: [{ text: "I understand. I will follow the AEO title rules strictly and ensure every title contains specific value and is quotable by AI systems. I will never use banned patterns like 'Everything You Need to Know' or 'Ultimate Guide'." }] },
@@ -614,7 +614,7 @@ Return ONLY a JSON object with format: { "titles": ["Fixed Title 1", "Fixed Titl
 The order must match the violations list above.`
 
             const fixResponse = await client.models.generateContent({
-                model: "gemini-2.5-flash",
+                model: "gemini-3.1-flash-lite",
                 contents: [{ role: "user", parts: [{ text: fixPrompt }] }],
                 config: { responseMimeType: "application/json" }
             })
@@ -683,7 +683,7 @@ Each article needs: title, main_keyword, supporting_keywords, article_type, clus
 
         try {
             const topUpResponse = await client.models.generateContent({
-                model: "gemini-2.5-flash",
+                model: "gemini-3.1-flash-lite",
                 contents: [{ role: "user", parts: [{ text: topUpPrompt }] }],
                 config: {
                     responseMimeType: "application/json",

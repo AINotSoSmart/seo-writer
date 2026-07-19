@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenAI } from "@google/genai"
 import { createClient } from "@/utils/supabase/server"
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite"
+const GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 const PROMPTS: Record<string, (text: string) => string> = {
     rewrite: (text) => `Rewrite this text to be clearer and more engaging. Keep the same general meaning but significantly improve the writing quality. Output ONLY the rewritten text, no explanations:
