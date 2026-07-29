@@ -71,7 +71,7 @@
     "@tiptap/pm": "^3.19.0",
     "@tiptap/react": "^3.19.0",
     "@tiptap/starter-kit": "^3.19.0",
-    "@trigger.dev/sdk": "4.5.4",
+    "@trigger.dev/sdk": "4.5.8",
     "@types/cheerio": "^0.22.35",
     "@types/mark.js": "^8.11.12",
     "@upstash/qstash": "^2.8.3",
@@ -130,7 +130,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
-    "@trigger.dev/build": "4.5.4",
+    "@trigger.dev/build": "4.5.8",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
