@@ -124,6 +124,7 @@ function hasSearchDemand(candidate: string, suggestions: string[]): boolean {
 export interface DemandFilterResult {
     kept: HarvestedQuery[]
     dropped: Array<{ query: string; source: string }>
+    requestsAttempted: number
     /** Requests that failed — those candidates are kept, not silently cut */
     checkFailures: number
 }
@@ -148,7 +149,12 @@ export async function filterToSearchedQueries(
     const candidates = queries.filter(testable)
 
     if (candidates.length === 0) {
-        return { kept: exempt, dropped: [], checkFailures: 0 }
+        return {
+            kept: exempt,
+            dropped: [],
+            requestsAttempted: 0,
+            checkFailures: 0,
+        }
     }
 
     console.log(`[DemandFilter] Checking ${candidates.length} page-derived strings`)
@@ -187,5 +193,10 @@ export async function filterToSearchedQueries(
         `dropped ${dropped.length} with no search demand, ${checkFailures} checks inconclusive`
     )
 
-    return { kept, dropped, checkFailures }
+    return {
+        kept,
+        dropped,
+        requestsAttempted: candidates.length,
+        checkFailures,
+    }
 }

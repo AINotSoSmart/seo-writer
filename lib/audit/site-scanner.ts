@@ -1,5 +1,5 @@
-import Sitemapper from "sitemapper"
 import { extractTitleFromUrl } from "@/lib/internal-linking"
+import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import { PageInfo } from "./types"
 
 // ============================================================
@@ -18,8 +18,37 @@ import { PageInfo } from "./types"
  * Unlike the plan generator's version, this does NOT filter to blog-only URLs.
  */
 export async function fetchAllSitemapUrls(websiteUrl: string): Promise<string[]> {
-    const baseUrl = websiteUrl.replace(/\/$/, '')
+    const subject = new URL(websiteUrl)
+    const baseUrl = subject.origin
+    const subjectHost = subject.hostname.toLowerCase().replace(/^www\./, "")
     const sitemapPaths = ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml']
+    const discovered: string[] = []
+    const queue: string[] = []
+    const seenSitemaps = new Set<string>()
+
+    const sameHostHttpUrl = (value: string): URL | null => {
+        try {
+            const url = new URL(value, baseUrl)
+            const host = url.hostname.toLowerCase().replace(/^www\./, "")
+            return ["http:", "https:"].includes(url.protocol) &&
+                host === subjectHost
+                ? url
+                : null
+        } catch {
+            return null
+        }
+    }
+
+    const extractLocations = (xml: string): string[] =>
+        Array.from(xml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi))
+            .map((match) =>
+                match[1]
+                    .replace(/&amp;/g, "&")
+                    .replace(/&lt;/g, "<")
+                    .replace(/&gt;/g, ">")
+                    .trim(),
+            )
+            .filter(Boolean)
 
     // Check robots.txt for sitemap location
     try {
@@ -28,51 +57,67 @@ export async function fetchAllSitemapUrls(websiteUrl: string): Promise<string[]>
         })
         if (robotsRes.ok) {
             const robotsTxt = await robotsRes.text()
-            const sitemapMatch = robotsTxt.match(/Sitemap:\s*(https?:\/\/[^\s]+)/i)
-            if (sitemapMatch?.[1]) {
-                const foundUrl = sitemapMatch[1].trim()
-                try {
-                    const parsed = new URL(foundUrl)
-                    if (!sitemapPaths.includes(parsed.pathname) && !sitemapPaths.includes(foundUrl)) {
-                        sitemapPaths.unshift(foundUrl)
-                    }
-                } catch { /* invalid URL, skip */ }
+            for (const match of robotsTxt.matchAll(/Sitemap:\s*(https?:\/\/[^\s]+)/gi)) {
+                const found = sameHostHttpUrl(match[1])
+                if (found) queue.push(found.toString())
             }
         }
     } catch { /* robots.txt failed, continue */ }
 
-    // Try each sitemap path
-    for (const pathOrUrl of sitemapPaths) {
-        const currentUrl = pathOrUrl.startsWith('http') ? pathOrUrl : `${baseUrl}${pathOrUrl}`
-
+    queue.push(...sitemapPaths.map((path) => `${baseUrl}${path}`))
+    while (
+        queue.length > 0 &&
+        seenSitemaps.size < HARVEST_POLICY.maxSitemapFiles &&
+        discovered.length < HARVEST_POLICY.maxSitemapUrls
+    ) {
+        const currentUrl = queue.shift()!
+        if (seenSitemaps.has(currentUrl)) continue
+        seenSitemaps.add(currentUrl)
         try {
-            const sitemapper = new Sitemapper({
-                url: currentUrl,
-                timeout: 10000,
+            const response = await fetch(currentUrl, {
+                signal: AbortSignal.timeout(10_000),
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (compatible; FlipAEO Bot/1.0)",
+                    Accept: "application/xml,text/xml,text/plain",
+                },
             })
-
-            // Add a hard timeout wrapper because Sitemapper's internal recursion
-            // ignores the timeout parameter for massive sitemap indexes
-            const sitemapFetchPromise = sitemapper.fetch()
-            const hardTimeoutPromise = new Promise<{ sites: string[] }>((_, reject) => {
-                setTimeout(() => reject(new Error("Sitemapper hard timeout exceeded (15s)")), 15000)
-            })
-
-            const { sites } = await Promise.race([
-                sitemapFetchPromise,
-                hardTimeoutPromise
-            ])
-
-            if (sites && sites.length > 0) {
-                const urls = Array.from(new Set(sites as string[]))
-                console.log(`[Site Scanner] Found ${urls.length} URLs at ${currentUrl}`)
-                return urls
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            const xml = await response.text()
+            const locations = extractLocations(xml)
+            if (/<sitemapindex[\s>]/i.test(xml)) {
+                for (const location of locations) {
+                    const child = sameHostHttpUrl(location)
+                    if (
+                        child &&
+                        !seenSitemaps.has(child.toString()) &&
+                        queue.length + seenSitemaps.size <
+                            HARVEST_POLICY.maxSitemapFiles
+                    ) {
+                        queue.push(child.toString())
+                    }
+                }
+            } else {
+                for (const location of locations) {
+                    const page = sameHostHttpUrl(location)
+                    if (page) discovered.push(page.toString())
+                    if (discovered.length >= HARVEST_POLICY.maxSitemapUrls) break
+                }
             }
         } catch (e: any) {
             console.warn(`[Site Scanner] Failed ${currentUrl}: ${e.message}`)
         }
     }
 
+    const urls = Array.from(new Set(discovered)).slice(
+        0,
+        HARVEST_POLICY.maxSitemapUrls,
+    )
+    if (urls.length > 0) {
+        console.log(
+            `[Site Scanner] Found ${urls.length} URLs from ${seenSitemaps.size} bounded sitemap files`,
+        )
+        return urls
+    }
     console.warn(`[Site Scanner] No sitemap found for ${baseUrl}`)
     return []
 }

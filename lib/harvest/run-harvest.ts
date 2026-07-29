@@ -1,40 +1,51 @@
 /**
- * The full closed-pool audit pipeline.
+ * Production adapter for the shared in-memory harvest.
  *
- *   harvest ─▶ coverage ─▶ gaps ─▶ article units ─▶ clusters ─▶ persisted plan
- *
- * Replaces the old sequence in trigger/run-audit.ts, which began with
- * `generateNicheBlueprint()` inventing 40-60 topics from the brand's own
- * onboarding form and then scored the site against that imagined denominator.
- *
- * Nothing here originates in a model. The model writes headlines at the end and
- * nothing else.
+ * This module owns only progress reporting and immutable persistence. All
+ * discovery filtering, coverage, gap, and clustering behavior lives in
+ * assembly.ts and is therefore identical to /api/harvest/verify.
  */
 
-import { randomBytes } from "crypto"
+import { randomUUID } from "crypto"
+
 import { createAdminClient } from "@/utils/supabase/admin"
-import { BrandDetails } from "@/lib/schemas/brand"
+import type { BrandDetails } from "@/lib/schemas/brand"
 import { extractSearchPrefs } from "@/lib/tavily-search"
-import { discoverCompetitors } from "@/lib/audit/competitor-scanner"
+import { assembleHarvest, type HarvestOutput } from "./assembly"
+import { deriveSeeds } from "./pool"
+import { HARVEST_POLICY } from "./policy"
+import { selectQualifiedProgramScope } from "./program-contract"
 
-import { harvestQueryPool } from "./pool"
-import { loadQueryPool, scanCoverage, persistUserCoverage, SiteCoverageResult } from "./coverage"
-import { computeGaps, loadPoolMeta, persistCompetitorMatches, GapAnalysisResult } from "./gap-engine"
-import {
-    collapseToArticles,
-    groupIntoClusters,
-    titleArticles,
-    nameClusters,
-    assertCollapseRatio,
-    ArticleCluster,
-} from "./clusterer"
-
-/** Below this, a niche cannot support a recurring program */
-export const MIN_VIABLE_ARTICLES = 25
-
-const MAX_COMPETITORS = 4
+const COUNTRY_ISO: Record<string, string> = {
+    "united states": "us",
+    "united kingdom": "gb",
+    australia: "au",
+    canada: "ca",
+    india: "in",
+    germany: "de",
+    france: "fr",
+    japan: "jp",
+    brazil: "br",
+    netherlands: "nl",
+    italy: "it",
+    spain: "es",
+    mexico: "mx",
+    singapore: "sg",
+    "new zealand": "nz",
+    ireland: "ie",
+    sweden: "se",
+    switzerland: "ch",
+    "south africa": "za",
+    poland: "pl",
+    norway: "no",
+    denmark: "dk",
+    "united arab emirates": "ae",
+    philippines: "ph",
+    indonesia: "id",
+}
 
 export interface HarvestAuditResult {
+    auditId: string
     poolSize: number
     articleCount: number
     clusterCount: number
@@ -44,220 +55,192 @@ export interface HarvestAuditResult {
     competitorsScanned: number
     userPagesScanned: number
     publicToken: string
-    /** True when the niche is too small to justify a subscription */
     belowViableThreshold: boolean
-    clusters: ArticleCluster[]
+    policyVersion: string
+    resultHash: string
     durationMs: number
 }
 
 export type PhaseReporter = (phase: string, detail?: string) => Promise<void> | void
 
 export interface RunHarvestOptions {
-    /** Progress callback so the Trigger task can stream status to the UI */
+    auditId: string
     onPhase?: PhaseReporter
-    /**
-     * Pre-resolved competitors. The Trigger task supplies these because it owns
-     * the cached-competitor lookup and the app-store security gate; discovery
-     * only runs here when they are absent.
-     */
-    competitors?: Array<{ name: string; url: string }>
+    competitors: Array<{ name: string; url: string }>
+    initialSourceCallLedger?: HarvestOutput["sourceCallLedger"]
+    onSourceProgress?: (
+        phase: string,
+        ledger: HarvestOutput["sourceCallLedger"],
+    ) => Promise<void> | void
 }
 
-/**
- * Runs the complete audit for a brand and persists pool, clusters, and planned
- * articles.
- */
-export async function runHarvestAudit(
-    userId: string,
-    brandId: string,
-    brandData: BrandDetails,
-    brandUrl: string,
-    options: RunHarvestOptions = {}
-): Promise<HarvestAuditResult> {
-    const { onPhase, competitors: providedCompetitors } = options
-    const startedAt = Date.now()
-    const report = async (phase: string, detail?: string) => {
-        console.log(`[HarvestAudit] ${phase}${detail ? `: ${detail}` : ""}`)
-        if (onPhase) await onPhase(phase, detail)
-    }
-
-    const searchPrefs = extractSearchPrefs(brandData)
-
-    // --- 1. Competitors ---
-    await report("competitor_discovery")
-    const discovered = providedCompetitors?.length
-        ? providedCompetitors
-        : await discoverCompetitors(brandData, MAX_COMPETITORS, searchPrefs)
-    const competitorUrls = discovered.map((c) => c.url)
-
-    // --- 2. Harvest the observable universe ---
-    await report("harvesting", `${competitorUrls.length} competitors`)
-    const harvest = await harvestQueryPool(userId, brandId, brandData, competitorUrls)
-
-    // --- 3. Coverage: user site, then each competitor ---
-    const poolQueries = await loadQueryPool(brandId)
-
-    await report("scanning_user_site", brandUrl)
-    const userCoverage = await scanCoverage(brandUrl, brandData.product_name, poolQueries)
-    await persistUserCoverage(brandId, userCoverage)
-
-    await report("scanning_competitors", `${discovered.length} sites`)
-    const competitorCoverages: SiteCoverageResult[] = []
-    for (const competitor of discovered) {
-        try {
-            competitorCoverages.push(
-                await scanCoverage(competitor.url, competitor.name, poolQueries)
-            )
-        } catch (error) {
-            console.error(`[HarvestAudit] Competitor scan failed for ${competitor.url}:`, error)
-        }
-    }
-
-    // --- 4. Gaps by set difference ---
-    await report("computing_gaps")
-    const poolMeta = await loadPoolMeta(brandId)
-    const gapResult: GapAnalysisResult = computeGaps(userCoverage, competitorCoverages, poolMeta)
-    await persistCompetitorMatches(brandId, gapResult.gaps)
-
-    // --- 5. Collapse gaps into article units ---
-    await report("clustering")
-    const embeddingMap = new Map(poolQueries.map((q) => [q.id, q.embedding]))
-
-    let units = collapseToArticles(gapResult.gaps, embeddingMap)
-    assertCollapseRatio(gapResult.gapCount, units.length)
-
-    units = await titleArticles(units)
-
-    let clusters = groupIntoClusters(units)
-    clusters = await nameClusters(clusters)
-
-    // --- 6. Persist the plan ---
-    await report("persisting")
-    await persistClusters(userId, brandId, clusters)
-
-    const publicToken = await ensurePublicToken(userId, brandId)
-
-    const result: HarvestAuditResult = {
-        poolSize: harvest.poolSize,
-        articleCount: units.length,
-        clusterCount: clusters.length,
-        authorityScore: gapResult.authorityScore,
-        coveredCount: gapResult.coveredCount,
-        gapCount: gapResult.gapCount,
-        competitorsScanned: competitorCoverages.length,
-        userPagesScanned: userCoverage.pagesScanned,
-        publicToken,
-        belowViableThreshold: units.length < MIN_VIABLE_ARTICLES,
-        clusters,
-        durationMs: Date.now() - startedAt,
-    }
-
-    if (result.belowViableThreshold) {
-        console.warn(
-            `[HarvestAudit] Niche yields only ${units.length} articles — below the ` +
-            `${MIN_VIABLE_ARTICLES} needed to justify a recurring program. ` +
-            `The UI should offer a one-off instead of a subscription.`
-        )
-    }
-
-    console.log(
-        `[HarvestAudit] Complete in ${(result.durationMs / 1000).toFixed(1)}s: ` +
-        `${result.poolSize} queries -> ${result.articleCount} articles -> ` +
-        `${result.clusterCount} clusters. Authority ${result.authorityScore}%`
-    )
-
-    return result
+function brandContext(brand: BrandDetails): string {
+    return [
+        brand.product_identity?.literally,
+        brand.category,
+        brand.audience?.primary ? `for ${brand.audience.primary}` : "",
+        Array.isArray(brand.core_features) ? brand.core_features.slice(0, 4).join(", ") : "",
+    ]
+        .filter(Boolean)
+        .join(". ")
 }
 
-/**
- * Replaces any existing plan for the brand with the freshly computed one.
- *
- * Deleting pending rows (and leaving published ones alone) is what makes a
- * re-harvest safe: articles already shipped stay in the burn-down, while the
- * unshipped remainder is recomputed against the current pool.
- */
-async function persistClusters(
-    userId: string,
-    brandId: string,
-    clusters: ArticleCluster[]
-): Promise<void> {
-    const supabase = createAdminClient()
+export function isSubscriptionEligible(
+    clusters: Array<{ articles: unknown[] }>,
+): boolean {
+    return selectQualifiedProgramScope(
+        clusters.map((cluster, index) => ({
+            id: String(index),
+            priority: index,
+            articleCount: cluster.articles.length,
+        })),
+        [],
+        false,
+    ).eligible
+}
 
-    // Clear only unshipped work
-    await (supabase as any)
-        .from("planned_articles")
-        .delete()
-        .eq("brand_id", brandId)
-        .in("status", ["pending", "scheduled"])
-
-    await (supabase as any)
-        .from("audit_clusters")
-        .delete()
-        .eq("brand_id", brandId)
-
-    for (let i = 0; i < clusters.length; i++) {
-        const cluster = clusters[i]
-
-        const { data: clusterRow, error: clusterError } = await (supabase as any)
-            .from("audit_clusters")
-            .insert({
-                user_id: userId,
-                brand_id: brandId,
-                name: cluster.name,
-                priority: i, // index doubles as priority — clusters arrive pre-sorted
-                article_count: cluster.articles.length,
-                competitor_urls: cluster.competitorUrls,
-            })
-            .select("id")
-            .single()
-
-        if (clusterError || !clusterRow) {
-            console.error(`[HarvestAudit] Failed to insert cluster "${cluster.name}":`, clusterError)
-            continue
-        }
-
-        const articleRows = cluster.articles.map((article, index) => ({
-            user_id: userId,
-            brand_id: brandId,
-            cluster_id: clusterRow.id,
+export async function persistHarvestOutput(
+    auditId: string,
+    output: HarvestOutput,
+): Promise<{ publicToken: string }> {
+    const supabase = createAdminClient() as any
+    const clusterIds = output.clusters.map(() => randomUUID())
+    const clusterRows = output.clusters.map((cluster, index) => ({
+        id: clusterIds[index],
+        name: cluster.name,
+        description: "",
+        priority: index,
+        article_count: cluster.articles.length,
+        competitor_urls: cluster.competitorUrls,
+    }))
+    const articleRows = output.clusters.flatMap((cluster, clusterIndex) =>
+        cluster.articles.map((article, articleIndex) => ({
+            id: randomUUID(),
+            cluster_id: clusterIds[clusterIndex],
             title: article.title,
             main_keyword: article.mainKeyword,
             supporting_keywords: article.supportingKeywords,
             source_query_ids: article.sourceQueryIds,
             article_type: article.articleType,
-            // Highest-priority article in the cluster becomes the hub every
-            // other article links back to.
-            is_pillar: index === 0,
-            status: "pending",
-        }))
+            intent_role: articleIndex === 0 ? "pillar" : "supporting",
+            is_pillar: articleIndex === 0,
+        })),
+    )
+    const queryRows = output.queries.map((query) => ({
+        id: query.id,
+        query: query.evidence.query,
+        query_norm: query.evidence.query_norm,
+        source: query.evidence.source,
+        source_url: query.evidence.source_url,
+        source_seed: query.evidence.source_seed,
+        observed_value: query.evidence.observed_value,
+        observed_at: query.evidence.observed_at,
+        embedding: query.embedding,
+        status: query.userCoverage.status,
+        covered_by_url: query.userCoverage.matchedUrl,
+        covered_by_title: query.userCoverage.matchedTitle,
+        coverage_similarity: query.userCoverage.similarity,
+        competitor_matches: query.competitorMatches,
+    }))
 
-        const { error: articleError } = await (supabase as any)
-            .from("planned_articles")
-            .insert(articleRows)
-
-        if (articleError) {
-            console.error(`[HarvestAudit] Failed to insert articles for "${cluster.name}":`, articleError)
-        }
+    const { error: finalizeError } = await supabase.rpc("finalize_audit_run", {
+        p_audit_id: auditId,
+        p_query_rows: queryRows,
+        p_cluster_rows: clusterRows,
+        p_article_rows: articleRows,
+        p_statistics: {
+            pool_size: output.statistics.poolSize,
+            article_count: output.statistics.articleCount,
+            cluster_count: output.statistics.clusterCount,
+            authority_score: output.statistics.authorityScore,
+            competitors_scanned: output.statistics.competitorsScanned,
+            user_pages_scanned: output.statistics.userPagesScanned,
+            site_page_snapshot: output.sitePages,
+        },
+        p_result_hash: output.resultHash,
+        p_policy_version: output.policyVersion,
+        p_source_call_ledger: output.sourceCallLedger,
+    })
+    if (finalizeError) {
+        throw new Error(`Audit finalization failed: ${finalizeError.message}`)
     }
 
-    console.log(`[HarvestAudit] Persisted ${clusters.length} clusters`)
-}
-
-/**
- * Returns the brand's public audit token, creating one if absent.
- * Stable across re-harvests so a shared link never breaks.
- */
-async function ensurePublicToken(userId: string, brandId: string): Promise<string> {
-    const supabase = createAdminClient()
-
-    const { data: existing } = await (supabase as any)
+    const { data: audit } = await supabase
         .from("topical_audits")
         .select("public_token")
-        .eq("user_id", userId)
-        .eq("brand_id", brandId)
-        .maybeSingle()
+        .eq("id", auditId)
+        .single()
+    return { publicToken: audit?.public_token || "" }
+}
 
-    if (existing?.public_token) return existing.public_token
+export async function runHarvestAudit(
+    userId: string,
+    brandId: string,
+    brandData: BrandDetails,
+    brandUrl: string,
+    options: RunHarvestOptions,
+): Promise<HarvestAuditResult> {
+    const startedAt = Date.now()
+    const report = async (phase: string, detail?: string) => {
+        console.log(`[HarvestAudit] ${phase}${detail ? `: ${detail}` : ""}`)
+        if (options.onPhase) await options.onPhase(phase, detail)
+    }
 
-    return randomBytes(16).toString("hex")
+    const seeds = deriveSeeds(brandData)
+    if (seeds.length === 0) {
+        throw new Error("The brand needs a category or product description before an audit can run.")
+    }
+    const competitors = options.competitors
+        .slice(0, HARVEST_POLICY.maxCompetitors)
+        .map((competitor) => competitor.url)
+    const prefs = extractSearchPrefs(brandData)
+    const countryCode = COUNTRY_ISO[(prefs.country || "").toLowerCase()]
+
+    await report("harvesting", `${competitors.length} competitors`)
+    const output = await assembleHarvest(
+        {
+            subjectUrl: brandUrl,
+            subjectName: brandData.product_name || "Customer site",
+            seeds,
+            competitors,
+            countryCode,
+            brandContext: brandContext(brandData),
+            excludeContext: brandData.product_identity?.not,
+        },
+        {
+            onProgress: async (progress) => {
+                await report(progress.phase)
+                await options.onSourceProgress?.(
+                    progress.phase,
+                    progress.sourceCallLedger,
+                )
+            },
+        },
+    )
+    if (options.initialSourceCallLedger?.length) {
+        output.sourceCallLedger = [
+            ...options.initialSourceCallLedger,
+            ...output.sourceCallLedger,
+        ]
+    }
+    await report("persisting")
+
+    const persisted = await persistHarvestOutput(options.auditId, output)
+
+    return {
+        auditId: options.auditId,
+        poolSize: output.statistics.poolSize,
+        articleCount: output.statistics.articleCount,
+        clusterCount: output.statistics.clusterCount,
+        authorityScore: output.statistics.authorityScore,
+        coveredCount: output.statistics.coveredCount,
+        gapCount: output.statistics.gapCount,
+        competitorsScanned: output.statistics.competitorsScanned,
+        userPagesScanned: output.statistics.userPagesScanned,
+        publicToken: persisted.publicToken,
+        belowViableThreshold: !isSubscriptionEligible(output.clusters),
+        policyVersion: output.policyVersion,
+        resultHash: output.resultHash,
+        durationMs: Date.now() - startedAt,
+    }
 }

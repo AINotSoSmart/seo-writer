@@ -74,7 +74,7 @@ export default function BlogPostError({
 
           {/* Right Side: Graphic */}
           <div className="order-1 md:order-2 flex justify-center transform hover:scale-105 transition-transform duration-500">
-            <ErrorGraphic mode="error" errorCode="404_ARTICLE" />
+            <ErrorGraphic mode="error" />
           </div>
 
         </div>

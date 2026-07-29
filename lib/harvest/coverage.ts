@@ -22,7 +22,6 @@
  * omitted entirely.
  */
 
-import { createAdminClient } from "@/utils/supabase/admin"
 import { generateEmbedding } from "@/lib/gemini-embedding"
 import {
     fetchAllSitemapUrls,
@@ -32,6 +31,7 @@ import {
 } from "@/lib/audit/site-scanner"
 import { batchExtractDocuments, PageDocument } from "./page-document"
 import { buildDocumentFrequency, definingTerms, checkEvidence } from "./evidence"
+import { HARVEST_POLICY } from "./policy"
 import { mapWithConcurrency } from "./types"
 
 /**
@@ -104,10 +104,7 @@ export const COVERAGE_THRESHOLDS = {
      */
     MIN_ABSOLUTE: 0.60,
 }
-
 const EMBEDDING_CONCURRENCY = 5
-const MAX_PAGES_PER_SITE = 250
-
 /**
  * How many top-ranked pages the evidence stage may consider.
  *
@@ -151,29 +148,11 @@ export interface SiteCoverageResult {
     siteUrl: string
     siteName: string
     pagesScanned: number
+    pagesAttempted: number
+    pages: Array<{ url: string; title: string; embedding: number[] }>
     coverage: QueryCoverage[]
     /** Share of pool queries at `covered` status, 0-100 */
     coveredPercent: number
-}
-
-/**
- * Loads a brand's query pool with embeddings.
- */
-export async function loadQueryPool(brandId: string): Promise<PoolQuery[]> {
-    const supabase = createAdminClient()
-
-    const { data, error } = await (supabase as any)
-        .from("query_pool")
-        .select("id, query, embedding")
-        .eq("brand_id", brandId)
-
-    if (error) {
-        throw new Error(`Failed to load query pool: ${error.message}`)
-    }
-
-    return (data || [])
-        .filter((r: any) => Array.isArray(r.embedding) && r.embedding.length > 0)
-        .map((r: any) => ({ id: r.id, query: r.query, embedding: r.embedding }))
 }
 
 /** Percentile helper for the distribution log */
@@ -203,6 +182,8 @@ export async function scanCoverage(
             siteUrl,
             siteName,
             pagesScanned: 0,
+            pagesAttempted: 0,
+            pages: [],
             coverage: poolQueries.map((q) => ({
                 queryId: q.id,
                 query: q.query,
@@ -226,7 +207,8 @@ export async function scanCoverage(
         `[Coverage] ${siteName}: ${contentUrls.length} content pages (from ${urls.length} sitemap URLs)`
     )
 
-    const allDocuments = await batchExtractDocuments(contentUrls.slice(0, MAX_PAGES_PER_SITE))
+    const attemptedUrls = contentUrls.slice(0, HARVEST_POLICY.maxCoveragePages)
+    const allDocuments = await batchExtractDocuments(attemptedUrls)
 
     // Drop pages whose titles carry no topical signal ("Home", "Contact", ...)
     const documents = allDocuments.filter((d) => hasMeaningfulTitle(d.title))
@@ -387,40 +369,13 @@ export async function scanCoverage(
         siteUrl,
         siteName,
         pagesScanned: embeddedPages.length,
+        pagesAttempted: attemptedUrls.length,
+        pages: embeddedPages.map(({ doc, embedding }) => ({
+            url: doc.url,
+            title: doc.title,
+            embedding,
+        })),
         coverage,
         coveredPercent,
     }
-}
-
-/**
- * Writes the user's own coverage back onto `query_pool`.
- * Competitor coverage is stored separately via the gap engine.
- */
-export async function persistUserCoverage(
-    brandId: string,
-    result: SiteCoverageResult
-): Promise<void> {
-    const supabase = createAdminClient()
-
-    const CHUNK = 100
-    for (let i = 0; i < result.coverage.length; i += CHUNK) {
-        const chunk = result.coverage.slice(i, i + CHUNK)
-
-        await Promise.all(
-            chunk.map((c) =>
-                (supabase as any)
-                    .from("query_pool")
-                    .update({
-                        status: c.status,
-                        covered_by_url: c.matchedUrl,
-                        covered_by_title: c.matchedTitle,
-                        coverage_similarity: c.similarity,
-                    })
-                    .eq("id", c.queryId)
-                    .eq("brand_id", brandId)
-            )
-        )
-    }
-
-    console.log(`[Coverage] Persisted coverage for ${result.coverage.length} queries`)
 }

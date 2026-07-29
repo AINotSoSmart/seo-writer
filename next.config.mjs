@@ -4,9 +4,6 @@ const nextConfig = {
   
   serverExternalPackages: ["jsdom"],
 
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
     remotePatterns: [

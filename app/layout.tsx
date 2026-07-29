@@ -12,7 +12,7 @@ import {
 } from "@/lib/seo"
 import { Toaster } from "@/components/ui/sonner"
 import { Toaster as ShadcnToaster } from "@/components/ui/toaster"
-import Script from "next/script"
+import { CookieConsent } from "@/components/CookieConsent"
 
 
 const inter = Inter({
@@ -126,32 +126,6 @@ export default async function RootLayout({
         />
         {/* Note: WebApplication schema is page-specific and added only to home page */}
 
-        {/* Google tag (gtag.js) */}
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=G-FFT0K6XLCB`}
-          strategy="afterInteractive"
-        />
-        <Script id="gtag-init" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-FFT0K6XLCB');
-          `}
-        </Script>
-        <Script id="crisp-chat" strategy="afterInteractive">
-          {`
-            window.$crisp=[];
-            window.CRISP_WEBSITE_ID="24e9aa78-e330-4dc3-9366-da0b3dc6f7ee";
-            (function(){
-              var d=document;
-              var s=d.createElement("script");
-              s.src="https://beta.client.crisp.chat/l.js";
-              s.async=1;
-              d.getElementsByTagName("head")[0].appendChild(s);
-            })();
-          `}
-        </Script>
       </head>
       <body className="font-sans antialiased public-headings" style={{
         backgroundImage: `url("${FINE_NOISE_SVG}")`,
@@ -165,6 +139,11 @@ export default async function RootLayout({
         </ErrorBoundary>
         <Toaster richColors closeButton />
         <ShadcnToaster />
+        <CookieConsent
+          analyticsId="G-FFT0K6XLCB"
+          clarityProjectId={process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID}
+          crispWebsiteId="24e9aa78-e330-4dc3-9366-da0b3dc6f7ee"
+        />
       </body>
     </html>
   )

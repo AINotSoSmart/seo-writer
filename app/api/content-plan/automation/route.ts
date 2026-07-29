@@ -1,206 +1,135 @@
 import { NextRequest, NextResponse } from "next/server"
+
 import { createClient } from "@/utils/supabase/server"
-import { ContentPlanItem } from "@/lib/schemas/content-plan"
-import { creditService } from "@/lib/credits"
+
+async function ownedProgram(request: NextRequest) {
+    const supabase = await createClient()
+    const {
+        data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return { error: "Unauthorized", status: 401 } as const
+
+    const requestedProgramId =
+        request.nextUrl.searchParams.get("programId") ||
+        (await request.clone().json().catch(() => ({})))?.programId
+
+    let query = (supabase as any)
+        .from("programs")
+        .select(
+            "id, scope_status, status, paused_at, tier, clusters_per_month, cancellation_status",
+        )
+        .eq("user_id", user.id)
+        .in("scope_status", ["active", "paused", "scope_delivered"])
+
+    if (requestedProgramId) query = query.eq("id", requestedProgramId)
+
+    const { data: program, error } = await query
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+    if (error) {
+        return { error: "Unable to load the program.", status: 500 } as const
+    }
+    if (!program) return { error: "No finite program found.", status: 404 } as const
+
+    return { supabase, program } as const
+}
 
 /**
- * POST /api/content-plan/automation
- * Activate automation for the user's content plan
- * Body: { action: 'gradual' | 'skip' | 'reschedule' }
+ * Resume deliveries. The SQL function moves every unstarted cluster by the
+ * exact pause duration so the frozen cadence cannot be compressed.
  */
 export async function POST(request: NextRequest) {
-    try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-        }
-
-        // 1. Strict Credit Gate: Must have at least 1 credit to ACTIVATE automation
-        const { hasCredits } = await creditService.hasCredits(user.id, 1)
-        if (!hasCredits) {
-            return NextResponse.json({
-                error: "Insufficient credits. Please top up to activate automation."
-            }, { status: 402 }) // 402 Payment Required
-        }
-
-        const body = await request.json().catch(() => ({}))
-        const action = body.action || "gradual" // Default to gradual catch-up
-
-        // Get the user's content plan with plan_data
-        const { data: plan, error: fetchError } = await supabase
-            .from("content_plans")
-            .select("id, automation_status, plan_data")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .single()
-
-        if (fetchError || !plan) {
-            return NextResponse.json({ error: "No content plan found" }, { status: 404 })
-        }
-
-        const today = new Date().toISOString().split('T')[0]
-        let updatedPlanData = plan.plan_data as ContentPlanItem[]
-
-        // Handle the user's chosen action for missed articles
-        if (action === "skip") {
-            // Mark all missed articles as "skipped"
-            updatedPlanData = updatedPlanData.map(item => {
-                if (item.scheduled_date < today && item.status === "pending") {
-                    return { ...item, status: "skipped" as const }
-                }
-                return item
-            })
-        } else if (action === "reschedule") {
-            // Shift all pending dates forward starting from today
-            const pendingItems = updatedPlanData
-                .filter(item => item.status === "pending")
-                .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
-
-            let dateOffset = 0
-            const rescheduledIds = new Map<string, string>()
-
-            for (const item of pendingItems) {
-                const newDate = new Date()
-                newDate.setDate(newDate.getDate() + dateOffset)
-                rescheduledIds.set(item.id, newDate.toISOString().split('T')[0])
-                dateOffset++
-            }
-
-            updatedPlanData = updatedPlanData.map(item => {
-                const newDate = rescheduledIds.get(item.id)
-                if (newDate) {
-                    return { ...item, scheduled_date: newDate }
-                }
-                return item
-            })
-        }
-        // For 'gradual' mode, no plan_data changes needed - scheduler handles rate limiting
-
-        // Activate automation with the chosen catch_up_mode
-        const { error: updateError } = await supabase
-            .from("content_plans")
-            .update({
-                automation_status: "active",
-                catch_up_mode: action,
-                plan_data: updatedPlanData,
-                updated_at: new Date().toISOString()
-            })
-            .eq("id", plan.id)
-
-        if (updateError) {
-            console.error("Failed to activate automation:", updateError)
-            return NextResponse.json({ error: "Failed to activate automation" }, { status: 500 })
-        }
-
-        const messages: Record<string, string> = {
-            gradual: "Automation activated! Missed articles will be processed 1 per hour.",
-            skip: "Automation activated! Missed articles have been skipped.",
-            reschedule: "Automation activated! All pending articles have been rescheduled starting today."
-        }
-
-        return NextResponse.json({
-            success: true,
-            automation_status: "active",
-            catch_up_mode: action,
-            message: messages[action] || messages.gradual
-        })
-    } catch (e: any) {
-        console.error("Automation POST error:", e)
-        return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 })
+    const result = await ownedProgram(request)
+    if ("error" in result) {
+        return NextResponse.json({ error: result.error }, { status: result.status })
     }
+    if (result.program.scope_status !== "paused") {
+        return NextResponse.json(
+            { error: "Only a paused program can resume deliveries." },
+            { status: 409 },
+        )
+    }
+
+    const { error } = await (result.supabase as any).rpc("resume_program", {
+        p_program_id: result.program.id,
+    })
+    if (error) {
+        console.error("[program/resume]", error)
+        return NextResponse.json({ error: "Unable to resume deliveries." }, { status: 500 })
+    }
+
+    return NextResponse.json({
+        success: true,
+        automation_status: "active",
+        scope_status: "active",
+        message: "Deliveries resumed. The remaining cadence has been preserved.",
+    })
 }
 
 /**
- * DELETE /api/content-plan/automation
- * Pause automation for the user's content plan
+ * Pause deliveries only. Billing continues, and generation already in progress
+ * may finish behind the cluster delivery gate.
  */
 export async function DELETE(request: NextRequest) {
-    try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-        }
-
-        // Get the user's content plan
-        const { data: plan, error: fetchError } = await supabase
-            .from("content_plans")
-            .select("id, automation_status")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .single()
-
-        if (fetchError || !plan) {
-            return NextResponse.json({ error: "No content plan found" }, { status: 404 })
-        }
-
-        // Pause automation
-        const { error: updateError } = await supabase
-            .from("content_plans")
-            .update({ automation_status: "paused" })
-            .eq("id", plan.id)
-
-        if (updateError) {
-            console.error("Failed to pause automation:", updateError)
-            return NextResponse.json({ error: "Failed to pause automation" }, { status: 500 })
-        }
-
-        return NextResponse.json({
-            success: true,
-            automation_status: "paused",
-            message: "Automation paused. You can reactivate anytime."
-        })
-    } catch (e: any) {
-        console.error("Automation DELETE error:", e)
-        return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 })
+    const result = await ownedProgram(request)
+    if ("error" in result) {
+        return NextResponse.json({ error: result.error }, { status: result.status })
     }
+    if (result.program.scope_status !== "active") {
+        return NextResponse.json(
+            { error: "Only an active program can pause deliveries." },
+            { status: 409 },
+        )
+    }
+
+    const { error } = await (result.supabase as any).rpc("pause_program", {
+        p_program_id: result.program.id,
+    })
+    if (error) {
+        console.error("[program/pause]", error)
+        return NextResponse.json({ error: "Unable to pause deliveries." }, { status: 500 })
+    }
+
+    return NextResponse.json({
+        success: true,
+        automation_status: "paused",
+        scope_status: "paused",
+        message: "Deliveries paused—billing continues.",
+    })
 }
 
-/**
- * GET /api/content-plan/automation
- * Get current automation status and missed article count
- */
 export async function GET(request: NextRequest) {
-    try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const result = await ownedProgram(request)
+    if ("error" in result) {
+        if (result.status === 404) {
+            return NextResponse.json({
+                automation_status: null,
+                scope_status: null,
+                missedCount: 0,
+            })
         }
-
-        // Get the user's content plan with plan_data
-        const { data: plan, error: fetchError } = await supabase
-            .from("content_plans")
-            .select("id, automation_status, catch_up_mode, plan_data")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .single()
-
-        if (fetchError || !plan) {
-            return NextResponse.json({ automation_status: null, missedCount: 0 })
-        }
-
-        // Calculate missed articles (scheduled before today, still pending)
-        const today = new Date().toISOString().split('T')[0]
-        const planData = plan.plan_data as ContentPlanItem[]
-        const missedCount = planData.filter(
-            item => item.scheduled_date < today && item.status === "pending"
-        ).length
-
-        return NextResponse.json({
-            automation_status: plan.automation_status || "paused",
-            catch_up_mode: plan.catch_up_mode || "gradual",
-            missedCount
-        })
-    } catch (e: any) {
-        console.error("Automation GET error:", e)
-        return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 })
+        return NextResponse.json({ error: result.error }, { status: result.status })
     }
+
+    const now = new Date().toISOString()
+    const { count } = await (result.supabase as any)
+        .from("program_clusters")
+        .select("id", { count: "exact", head: true })
+        .eq("program_id", result.program.id)
+        .in("state", ["scheduled", "blocked"])
+        .lt("scheduled_for", now)
+
+    return NextResponse.json({
+        programId: result.program.id,
+        automation_status:
+            result.program.scope_status === "paused" ? "paused" : "active",
+        scope_status: result.program.scope_status,
+        cancellation_status: result.program.cancellation_status,
+        missedCount: count || 0,
+        pausedAt: result.program.paused_at,
+        billingContinuesWhilePaused: true,
+    })
 }

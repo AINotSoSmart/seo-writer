@@ -2,8 +2,6 @@
 
 import {
   BadgeCheck,
-  Bell,
-  Coins,
   Home,
   LogOut,
   Sparkles,
@@ -25,8 +23,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { useCreditManager } from "@/lib/credit-manager"
-import { FeatherIcon } from "@/components/icons/feathericon"
 
 
 interface HeaderUserProps {
@@ -36,21 +32,11 @@ interface HeaderUserProps {
     avatar: string
     id: string
   }
-  initialCreditBalance: number
 }
 
-export function HeaderUser({ user, initialCreditBalance }: HeaderUserProps) {
-  const { balance: creditBalance } = useCreditManager(user.id)
+export function HeaderUser({ user }: HeaderUserProps) {
   return (
     <div className="flex items-center gap-3">
-      {/* Credit Display */}
-      <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded-md">
-        <span className="flex items-center gap-2"><FeatherIcon size={12} /></span>
-        <span className="text-sm font-medium text-foreground">
-          {creditBalance.toLocaleString()}
-        </span>
-      </div>
-
       {/* User Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

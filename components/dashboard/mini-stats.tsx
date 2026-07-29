@@ -26,7 +26,10 @@ export function MiniAreaChart() {
         <XAxis dataKey="day" tickLine={false} axisLine={false} />
         <YAxis width={40} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
         <Tooltip
-          formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]}
+          formatter={(value) => [
+            `$${Number(value || 0).toLocaleString()}`,
+            "Revenue",
+          ]}
           contentStyle={{
             background: "hsl(var(--background))",
             border: "1px solid hsl(var(--border))",

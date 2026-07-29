@@ -11,10 +11,8 @@ import { LoadingProvider } from "@/components/loading-provider"
 import { SubscriptionProvider } from "@/contexts/subscription-context"
 import { NavigationProgress } from "@/components/navigation-progress"
 import { createClient } from "@/utils/supabase/server"
-import { creditService } from "@/lib/credits"
 import { redirect } from "next/navigation"
 import Script from "next/script"
-import ClarityInit from "@/components/ClarityInit"
 
 export default async function DashboardLayout({
   children,
@@ -33,9 +31,6 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // Fetch user's credit balance for header display
-  const { balance: creditBalance } = await creditService.getUserCredits(user.id)
-
   // Fetch subscription status (single query)
   const { data: subscription } = await supabase
     .from('dodo_subscriptions')
@@ -50,7 +45,6 @@ export default async function DashboardLayout({
   return (
     <div className="protected-scope">
       <NavigationProgress />
-      <ClarityInit projectId={process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID || ""} userId={user.id} />
       {/* Checkout return tracking script moved here from root layout to scope it to protected pages */}
       <Script id="ga-checkout-return" strategy="afterInteractive">
         {`
@@ -122,7 +116,6 @@ export default async function DashboardLayout({
                   avatar: user.user_metadata?.avatar_url || "/placeholder-user.jpg",
                   id: user.id,
                 }}
-                initialCreditBalance={creditBalance}
               />
             </div>
           </header>

@@ -18,13 +18,13 @@
 -- upsell instead of a liability, and margin stays flat because COGS scales
 -- with articles shipped.
 --
--- ⚠️ BEFORE RUNNING THIS:
---    1. Create three subscription products in the Dodo Payments dashboard.
---    2. Replace each REPLACE_WITH_DODO_PRODUCT_ID below with its real id.
---    3. Confirm `credits` against measured COGS per article — see the Step 0
+-- BEFORE RUNNING THIS:
+--    1. Confirm these three Dodo product IDs still belong to the intended
+--       sandbox/production account and map to Close, Accelerate, and Dominate.
+--    2. Confirm `credits` against measured COGS per article — see the Step 0
 --       note in docs/PIVOT.md. If an article costs more than ~$10 all-in, the
 --       tier prices move up rather than the margins down.
---    The migration intentionally fails loudly if the placeholders are left in.
+--    The guard remains so a future copy cannot silently reintroduce placeholders.
 -- ============================================================================
 
 DO $$
@@ -55,7 +55,7 @@ INSERT INTO dodo_pricing_plans (name, description, price, credits, currency, dod
 VALUES
     (
         'Close',
-        'One cluster per month. Every article in the cluster ships together, fully interlinked.',
+        'Six-cluster program delivered one complete cluster per 30-day billing period.',
         249,
         15,
         'USD',
@@ -65,7 +65,7 @@ VALUES
     ),
     (
         'Accelerate',
-        'Two clusters per month. Closes a typical niche in about half the time.',
+        'Six-cluster program delivered in complete batches, two clusters per 30-day billing period.',
         449,
         30,
         'USD',
@@ -75,7 +75,7 @@ VALUES
     ),
     (
         'Dominate',
-        'Four clusters per month. For large niches, or when speed matters more than spread.',
+        'Six-cluster program delivered in complete batches, four clusters per 30-day billing period.',
         799,
         60,
         'USD',
@@ -87,5 +87,4 @@ ON CONFLICT DO NOTHING;
 
 
 COMMENT ON TABLE dodo_pricing_plans IS
-    'Velocity tiers: price is per clusters-shipped-per-month, not per article. '
-    'metadata.clusters_per_month drives scheduling in actions/harvest.ts startProgram().';
+    'Finite six-cluster velocity tiers. Pricing changes delivery cadence, not scope.';

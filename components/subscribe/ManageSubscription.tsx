@@ -33,7 +33,6 @@ export interface PlanRow {
     name: string
     description?: string | null
     price: number
-    credits?: number | null
     currency?: string | null
     dodo_product_id: string
 }
@@ -42,6 +41,7 @@ interface ManageSubscriptionProps {
     subscription: SubscriptionSummary
     plans: PlanRow[]
     userEmail?: string | null
+    finiteScopeDelivered?: boolean
 }
 
 function formatCurrency(amount: number, currency: string = 'USD') {
@@ -76,7 +76,11 @@ function daysUntil(dateIso?: string): number {
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
 }
 
-export default function ManageSubscription({ subscription, plans, userEmail }: ManageSubscriptionProps) {
+export default function ManageSubscription({
+    subscription,
+    plans,
+    finiteScopeDelivered = false,
+}: ManageSubscriptionProps) {
     const [busy, setBusy] = useState(false)
     const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
     const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
@@ -92,9 +96,11 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
         return (
             `This will schedule your subscription to cancel at the end of the current billing period.` +
             (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
-            ` You can restore anytime before that date.`
+            (finiteScopeDelivered
+                ? ` This completed finite program cannot be renewed; a future program requires a new checkout.`
+                : ` You can restore anytime before that date.`)
         )
-    }, [cancelGuardDate])
+    }, [cancelGuardDate, finiteScopeDelivered])
 
     // Map pricing plans to BillingSDK Plan type
     const billingPlans = useMemo<BSDKPlan[]>(() => {
@@ -107,13 +113,11 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
             yearlyPrice: String((p.price ?? 0) * 12),
             buttonText: 'Select',
             features: [
-                { name: p.credits ? `${p.credits} Human-like articles per month` : 'AI-generated articles', icon: 'check' },
-                { name: 'Automated content strategy', icon: 'check' },
-                { name: 'CMS integration', icon: 'check' },
-                { name: 'On-brand AI images', icon: 'check' },
-                { name: 'Smart internal linking', icon: 'check' },
-                { name: 'Real-time research with citations', icon: 'check' },
-                { name: 'Cancel anytime', icon: 'check' },
+                { name: 'Six qualified priority clusters', icon: 'check' },
+                { name: 'Frozen URLs and internal-link graph', icon: 'check' },
+                { name: 'Complete cluster-batch delivery', icon: 'check' },
+                { name: 'WordPress-ready or manual delivery', icon: 'check' },
+                { name: 'Automatic end-of-scope cancellation', icon: 'check' },
             ],
         }))
     }, [plans])
@@ -317,7 +321,7 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
                                 Cancel at period end
                             </Button>
                         )}
-                        {subscription.status === 'active' && localCancelAtPeriodEnd && (
+                        {subscription.status === 'active' && localCancelAtPeriodEnd && !finiteScopeDelivered && (
                             <Button
                                 variant="default"
                                 onClick={() => setConfirmRestoreOpen(true)}
@@ -353,7 +357,7 @@ export default function ManageSubscription({ subscription, plans, userEmail }: M
             />
 
             <ConfirmationDialog
-                isOpen={confirmRestoreOpen}
+                isOpen={confirmRestoreOpen && !finiteScopeDelivered}
                 onClose={() => setConfirmRestoreOpen(false)}
                 onConfirm={async () => {
                     try {

@@ -1,412 +1,440 @@
-# FlipAEO Pivot — Closed-Pool Harvest
+# FlipAEO Closed-Pool Pivot
 
-> **Working doc.** Any agent picking this up cold should read this file end to end
-> before touching `lib/harvest/`, `lib/audit/`, or `trigger/run-audit.ts`.
-> **Update the Status Board and Changelog at the bottom of this file with every
-> change you make.** That instruction is load-bearing — this doc is the only
-> continuity between sessions.
+> This is the authoritative implementation handoff. Read it before changing the
+> audit, purchase, delivery, billing, publication, or prospect-audit paths.
+> Update this document whenever the product contract or release status changes.
 
-Branch: `pivot/closed-pool-harvest` · Started 2026-07-28 · Status: **Engine + product complete; Dodo IDs and end-to-end validation remain**
+Branch: `pivot/closed-pool-harvest`
 
----
+Last implementation update: 2026-07-30
 
-## 1. Read this first
+Status: **application contract implemented and locally validated; checkout remains
+disabled pending the staging/external release gate**
 
-FlipAEO is being rebuilt around one principle:
+## 1. Locked product contract
 
-> **Nothing enters the system that was not observed somewhere real, and nothing is
-> reported as covered unless a specific page demonstrably answers it.**
+FlipAEO now has one finite contract:
 
-Everything below is downstream of that sentence. The old system invented its own
-inputs with an LLM and then measured itself against them. The new one harvests
-real search queries, records where each was seen, and verifies coverage against
-actual page text.
+> **Immutable evidence audit -> six qualified priority clusters -> frozen URLs
+> and internal-link graph -> cluster-level generation and delivery -> optional
+> publication -> automatic cancellation at the end of the paid scope.**
 
----
+Locked decisions:
 
-## 2. Why — the business diagnosis
+- Every audit is a new immutable run.
+- A program contains the six highest-priority unsold qualified clusters.
+- A qualified cluster has 3-15 unique articles.
+- The selected six clusters must contain at least 25 articles in total.
+- Small niches are rejected. There is no one-off fallback product.
+- The customer confirms an absolute, HTTPS, same-host URL pattern containing
+  exactly one `{slug}` before checkout.
+- Every selected article receives a deterministic slug and absolute target URL.
+- The complete pillar/leaf/sibling link graph is frozen before payment.
+- Clusters are delivered atomically; partially generated clusters stay withheld.
+- Delivery is distinct from optional WordPress/manual publication.
+- The subscription requests cancellation at the end of the current billing
+  period after all six clusters are delivered.
+- Prospect claims are bound to one normalized email address.
+- Public checkout remains fail-closed until the external release gate passes.
 
-Numbers as of 2026-07: ~75 signups, **2 paying customers**, $420 lifetime revenue,
-100% churn at months 2 / 4 / 5. GSC: 19,986 impressions → 127 clicks over six months.
+The three velocity tiers are defined once in `config/product-truth.ts`:
 
-Three findings drove the pivot:
+| Tier | Price | Delivery cadence |
+|---|---:|---|
+| Close | $249 | One cluster per 30-day period |
+| Accelerate | $449 | Two clusters per 30-day period, 15 days apart |
+| Dominate | $799 | Four clusters per 30-day period, spaced 7/8 days apart |
 
-**a) The topical audit was fabricated.** `lib/audit/niche-blueprint.ts` generated
-the "niche topical map" — the denominator of the Authority Score — from a single
-Gemini Flash Lite call seeded only by the brand's own onboarding form. No SERP, no
-competitor data, no volume. `authority-scorer.ts` then did exact 3x/2x/1x weighted
-maths against that imagined denominator, and `projectScoreAfterPlan()` guaranteed
-the "after" number looked good. That number was on the sales screen.
+These are delivery speeds for the same finite six-cluster scope. They are not
+article quotas and do not promise rankings, traffic, citations, or domination.
 
-**b) The engine shipped duplicates to hit a quota.** `lib/plans/generator.ts:531`
-re-added posts already rejected as duplicates whenever fewer than 20 survived
-dedup, to reach 30. Months 1–2 looked fine; by month 3–4 customers received
-rewrites of their own articles. **That `if` statement is the churn mechanism.**
+## 2. Implementation status
 
-**c) Pricing sat in the dead zone.** [AI-native SaaS retention](https://getspike.ai/blog/saas-churn-rate-benchmarks/)
-splits sharply on price: sub-$50 tools show 23% gross revenue retention (~9 month
-lifetime), >$250 tools show 70% (~34 months). FlipAEO was $79 — priced like a
-budget tool, so it attracted tourists and got tourist retention.
-[SEO industry data](https://arvow.com/blog/seo-agency-statistics-2026) also shows
-retainer engagements lose ~8% of clients in months 1–6 vs 28% for project
-engagements, which rules out a one-off "sprint pack" model.
+### 2.0 Why the v2 SQL migration is long
 
----
+`supabase/migrations/20260730_closed_pool_v2.sql` is about 1,700 lines because
+the old product already has live users, audits, generated articles, payments,
+and program records. This is not a blank-schema migration and it is not 1,700
+lines of unrelated feature tables. It has to change the data model without
+deleting history, then make the new contract impossible to violate through a
+race, webhook replay, browser request, or re-audit.
 
-## 3. What we're building
+The migration deliberately keeps the transition in one ordered unit so the
+schema changes, legacy backfill, constraints, guards, RLS, and transactional RPCs
+land together. Splitting those steps across partially deployed states could
+leave programs pointing at mutable/latest data or make old articles disappear.
 
-**Same product. Same subscription. Fixed engine. Different buyer. Higher price.**
+Guided migration map:
 
-- **Sell scope, not quantity.** The audit shows the whole map on day one
-  ("140 articles across 11 clusters"), then a burn-down. Monthly article count
-  varies; the *total* is fixed and visible, so variance stops mattering.
-- **Price velocity, not scope.** $249 / $449 / $799 for 1 / 2 / 4 clusters per
-  month. A bigger niche becomes an upsell, not a liability, and margin stays flat
-  because COGS scales with articles.
-- **Ship complete clusters, not daily drips.** A cluster's internal link graph is
-  only valid when every member exists.
-- **Tell customers when they're finished.** Running out is a feature. It is the
-  only version where the audit number is trustworthy.
+| Approx. lines | What it does | Why it belongs in the database |
+|---|---|---|
+| 19-173 | Turns `topical_audits` into run records, backfills legacy audits, and adds `brand_details.current_audit_id` | An audit must remain an historical snapshot while a later audit runs. A brand pointer is switched only after success. |
+| 174-380 | Adds mandatory `audit_id` ownership, restrictive foreign keys, scoped uniqueness, and immutable-row triggers | Application-only checks can be bypassed or race. The database must reject edits/deletes of completed evidence. |
+| 381-489 | Splits article generation/delivery/publication fields and tightens RLS | A generated article is not delivered or published. Browser clients must not advance paid lifecycle state. |
+| 490-685 | Adds frozen purchase intents, finite program fields, brand-subject guards, normalized `program_clusters`, and legacy backfill | Checkout must buy a known audit/scope/graph, not whatever happens to be latest when a webhook arrives. Arrays cannot safely hold per-cluster state and timestamps. |
+| 686-750 | Stores the frozen link graph, period grants, idempotent consumptions, and provider cost events | Graph edges, billing entitlement, retries, and real margin all need durable, queryable ledgers. |
+| 751-948 | Adds hashed email-bound audit claims, atomic prospect creation/transfer, and read-only RLS for new tables | A public report token must not grant ownership, and a claim must never overwrite another customer website. |
+| 949-1132 | `finalize_audit_run` validates and commits the complete evidence snapshot in one transaction | Hundreds of separate inserts followed by a pointer update can expose partial audits. One RPC rolls everything back on any invariant failure. |
+| 1133-1288 | `provision_program_from_intent` creates the exact program, six cluster rows, frozen URLs, and graph | Duplicate/out-of-order Dodo events must still create exactly one program from exactly one frozen purchase. |
+| 1289-1403 | Period grant and per-article consumption RPCs | Concurrent retries must not double-spend entitlement or grant the same billing period twice. |
+| 1404-1487 | Pause/resume RPCs with exact schedule shifting and legacy graph guard | Pausing must stop delivery without silently changing billing or compressing future cadence. |
+| 1488-end | Atomic cluster delivery and HTML graph validation | Successful siblings must remain hidden until every member exists and every frozen target is an actual anchor. Cluster six also closes scope atomically. |
 
-**Target: 3 paying customers at $249+ from 30 outreach audits. Below that, the
-hypothesis is rejected and the asset gets listed.**
+Why the logic is not only in TypeScript:
 
-### Explicitly NOT doing until three people have paid
-Multi-site management, white-label, client reporting, onboarding rebuild,
-AppSumo, Product Hunt, WordPress plugin.
+- **Transactions:** audit finalization, claim transfer, provisioning, allowance
+  consumption, schedule shifting, and cluster release change multiple tables.
+  Supabase HTTP calls cannot make a multi-call sequence atomic.
+- **Concurrency:** Dodo webhooks, Trigger.dev workers, retries, and users can act
+  at the same time. Unique indexes and row locks are the final authority.
+- **Security:** RLS and triggers stop a browser/API client from marking an
+  article delivered/published or rewriting purchased evidence.
+- **History preservation:** restrictive foreign keys and immutable guards protect
+  previously generated, delivered, and published work during re-audits.
+- **Legacy conversion:** the backfill translates existing rows into the new
+  model instead of asking the founder to delete the database or abandon users.
 
----
+### 2.0.1 Why and how each new subsystem exists
 
-## 4. Architecture
+| Subsystem | Why it was needed | How it works |
+|---|---|---|
+| Immutable audit runs | The old brand pool could be deleted/replaced by a re-audit, cascading into plans and purchased work. | Every run gets a new ID; completed evidence is guarded; `current_audit_id` switches only inside atomic finalization; programs retain their purchased audit ID. |
+| Shared harvest assembly | `/verify` and production previously could disagree, making the provenance test unable to predict real data. | Both call `assembleHarvest`; one policy controls filtering/caps/invariants/hash; only production calls the persistence RPC. |
+| Bounded source policy | Tavily/sitemap work could vary too widely and create unknown cost/time. | Competitor, query, page, sitemap, and cluster caps are centralized; all discovery is bounded and recorded in an internal source ledger. |
+| Purchase intent | A delayed webhook could otherwise provision the newest audit or changed URL settings instead of what the customer saw. | The intent freezes user, brand, audit, tier, six clusters, pattern, slugs, graph, and expiry before checkout; webhook consumes it once. |
+| Frozen link graph | "Fully interlinked" was previously copy, not a verified product property. | Deterministic pillar/leaf/sibling edges and target URLs are stored before purchase, injected into generation, then validated again before delivery. |
+| Cluster withholding | Shipping articles one at a time exposes broken internal links and incomplete topical units. | All cluster members generate behind `withheld`; only the atomic delivery RPC makes the complete validated batch visible. |
+| Billing-period ledger | Generic subscription events and retries could reset credits or grant work twice. | Each subscription/period has one grant and each planned article one consumption; unique keys and locks make replay harmless. |
+| Finite cancellation state | A delivered six-cluster scope must not renew into unpromised work, and a failed cancellation API call must not be hidden. | Cluster six marks scope delivered; a worker requests end-period cancellation; local state distinguishes pending, confirmed scheduled, ended, and error/retry. |
+| Separate article states | `completed` had been used as generated, delivered, and published at different points. | Three independent state machines and timestamps track generation, customer delivery, and optional publication. |
+| WordPress permalink guard | WordPress can rewrite a slug, breaking every frozen incoming link. | Draft/publish responses are compared to `target_url`; mismatch stops publication and returns the post to draft. |
+| Founder prospect claims | Outreach audits must scale without occupying/overwriting the founder's own brand or being claimable by anyone with a public link. | Prospect audits store their own site snapshot; public and hashed claim tokens are separate; an exact-email atomic transfer attaches only to a matching/new brand. |
+| Small-niche rejection | Selling six clusters where six qualified clusters do not exist would recreate quota-filling and duplicate content. | The same eligibility function gates UI and purchase intent creation; ineligible reports show evidence but no offers or checkout. |
+| Product-truth config | Prices, quotas, promises, and integrations had drifted across pages/schema/dashboard. | `config/product-truth.ts` is the source for tier/scope wording; contract tests scan active surfaces for forbidden legacy claims. |
+| Retired runtime routes/jobs | Hidden navigation alone leaves old mutation endpoints and schedulers able to create conflicting work. | Unsupported APIs return 410, old workers/modules are removed, and only `program-lifecycle` is deployed as the replacement schedule. |
+| Consent gating | GA, Clarity, and support tools should not start before the visitor chooses optional categories. | `CookieConsent` records categories and loads analytics/support scripts only after consent. |
+| Provider cost events | Revenue can look healthy while article COGS is unknown or retries are double-counted. | Each Gemini/Tavily/FAL call records provider/model/units/request cost and whether usage measurement was complete; unknown cost remains null, never fake zero. |
+| Checkout feature flag | Local tests cannot prove Dodo, WordPress, Trigger.dev, or production database behavior. | Checkout defaults off and can be enabled only after the documented staging/manual evidence gate passes. |
 
+### 2.1 Immutable audit lifecycle - implemented
+
+`supabase/migrations/20260730_closed_pool_v2.sql` converts the mutable
+brand-scoped pool into immutable audit snapshots:
+
+- `topical_audits` is a run record with subject/input/brand snapshots, policy
+  version, kind, owner/creator, result hash, source ledger, failure details, and
+  `requires_reaudit`.
+- `brand_details.current_audit_id` changes only after successful atomic
+  finalization.
+- `query_pool`, `audit_clusters`, `planned_articles`, and `programs` require an
+  `audit_id`.
+- Query uniqueness is `(audit_id, query_norm)`.
+- Completed audit evidence is protected by database triggers.
+- Existing records are backfilled into synthetic `legacy-import` runs.
+- Programs and program clusters use restrictive foreign keys, so a re-audit
+  cannot cascade into purchased/generated/delivered/published history.
+- `finalize_audit_run` validates and commits all evidence, clusters, articles,
+  statistics, completion state, and the current pointer atomically.
+- A website host cannot change or be archived while its program is active or
+  paused. Changing a completed website subject clears its current audit.
+- A `current_audit_id` must point to a completed audit owned by that exact brand
+  and user.
+- Customer RLS is read-only for closed-pool evidence/program state. Program
+  article mutation remains server-controlled.
+
+### 2.2 Shared bounded harvest - implemented
+
+`lib/harvest/assembly.ts` is the authoritative no-write pipeline used by both
+production and `/api/harvest/verify`.
+
+Production adds only progress reporting and the immutable finalization RPC.
+`/verify` remains development-only and writes nothing.
+
+Current centralized policy (`lib/harvest/policy.ts`, version
+`closed-pool-v2.2.0`):
+
+- Maximum 4 competitors.
+- Maximum 400 post-demand-filter queries.
+- Maximum 120 fetched competitor-corpus pages in total.
+- Maximum 250 coverage pages per site.
+- Maximum 15 articles per cluster.
+- Maximum 20 sitemap files and 5,000 sitemap URLs per site.
+- Collapse target 25-40% when at least 60 gaps exist.
+- No recursive or open-ended Tavily discovery.
+
+The pipeline hard-fails on configured source failure, all-demand-check failure,
+missing provenance, empty/niche-empty pools, unreadable subject/competitor
+coverage, embedding failure, cluster oversize, or invalid collapse. It emits an
+internal attempted/succeeded/failed/cached source-call ledger and a stable result
+hash. Customer copy does not expose source-call counts, query-pool language,
+collapse ratio, credits, or COGS.
+
+### 2.3 Frozen link graph and atomic cluster delivery - implemented
+
+Key files:
+
+- `lib/harvest/link-graph.ts`
+- `lib/harvest/purchase-intent.ts`
+- `lib/harvest/program-provisioning.ts`
+- `trigger/ship-cluster.ts`
+- `trigger/generate-blog.ts`
+
+The purchase intent freezes the user, brand, audit, tier, exact six clusters,
+URL pattern, deterministic slugs, absolute URLs, and graph snapshot. Dodo
+provisions from that intent, never from the latest audit.
+
+Graph rules are enforced:
+
+- One pillar and 2-14 leaves per cluster.
+- Pillar -> every leaf.
+- Every leaf -> pillar.
+- Every leaf -> two most similar siblings where available.
+- No self-links, duplicate directed edges, unresolved targets, or external-host
+  targets.
+- Frozen anchors are 2-8 words and unique per source where practical.
+- Up to two frozen existing-site links may supplement the cluster graph.
+- The writer deterministically appends any missing exact anchor/destination.
+- SQL delivery validation confirms the frozen URLs exist as actual HTML anchors.
+
+The hourly `program-lifecycle` worker is the only new recurring delivery worker.
+It claims article state before spawning generation, uses idempotent child task
+keys, retries only failed members, withholds successful siblings, validates the
+complete graph, and atomically releases the cluster. A terminal writer failure
+marks the article failed and cluster blocked.
+
+### 2.4 Finite billing lifecycle - implemented
+
+Billing is bound one-to-one across purchase intent, subscription, and program:
+
+- One Dodo subscription can provision at most one finite program.
+- Period grants are unique on `(subscription_id, period_start)`.
+- Article entitlement consumption is atomic and idempotent per planned article.
+- Duplicate and out-of-order payment/activation webhooks are harmless.
+- Payment-before-activation is recovered from the frozen purchase intent.
+- `subscription.updated` synchronizes status/dates only; it does not grant,
+  reschedule, reactivate, or create work.
+- Plan changes apply as next-period metadata without moving frozen schedules.
+- Pause operates on `programs`; billing continues and delivery stops.
+- Resume shifts all unstarted dates by the exact pause duration.
+- Delivering cluster six atomically sets `scope_status=scope_delivered`.
+- Cancellation requests use
+  `cancel_at_next_billing_date=true`, retry on failure, and alert the founder.
+- The UI never says cancellation is scheduled until Dodo/webhook state confirms
+  it.
+- Renewal/update events cannot reopen a delivered scope.
+- A second six-cluster program requires a fresh checkout.
+
+### 2.5 Generation, delivery, and publication states - implemented
+
+`planned_articles` independently tracks:
+
+- Generation: `planned`, `queued`, `generating`, `generated`, `failed`.
+- Delivery: `withheld`, `delivered`.
+- Publication: `unpublished`, `draft`, `published`.
+
+`articles.status=completed` means generation completed, never publication.
+WordPress draft creation records `draft`; publish records `published` only after
+the returned permalink matches the frozen URL. A missing or changed permalink
+fails closed and returns the post to draft. Manual publication requires a final
+public URL and confirmation.
+
+Program completion depends on delivered clusters, not customer publication.
+Approved completion wording is:
+
+- "Program scope delivered."
+- "All six clusters in this program have been delivered."
+- "Additional qualified clusters remain available for a future program."
+
+### 2.6 Founder prospect path - implemented
+
+`/founder/prospect-audits` is protected by `FOUNDER_USER_IDS`.
+
+- Prospect runs use the shared harvest and do not consume/overwrite the
+  founder's customer brand slot.
+- Runs are queued with progress, source ledger, bounded retry, and terminal
+  failure handling.
+- Public and claim tokens are separate, unguessable, revocable, and `noindex`.
+- Claim tokens are hashed, one-time, email-bound, and expire after 30 days.
+- Login/password/OAuth preserve `next=/claim/{token}`.
+- Claiming requires the exact normalized email.
+- It creates a brand only when the claimant has none; an existing brand is used
+  only when its canonical host matches.
+- Ownership of all audit-scoped rows transfers atomically while founder
+  attribution remains.
+- Checkout eligibility expires 30 days after audit completion; stale reports
+  remain viewable but require a new immutable audit before purchase.
+
+### 2.7 Eligibility and public truth - implemented
+
+Both UI and server reject checkout unless the audit has:
+
+- Six qualified unsold clusters.
+- 3-15 articles in every selected cluster.
+- At least 25 articles across the six.
+- Complete provenance.
+- A valid frozen graph.
+- A current, non-legacy, non-stale audit.
+
+Ineligible audit pages show measured evidence but no prices, tiers, checkout
+buttons, or subscription Offer schema. They do not advertise a one-off.
+
+Public/product cleanup completed:
+
+- Product truth is centralized in `config/product-truth.ts`.
+- Landing, pricing, features, metadata, schema, Open Graph, generated
+  `llms.txt`, privacy, terms, refund, and billing copy use the finite contract.
+- Analytics/support scripts require cookie consent.
+- The seven feature pages now represent audit evidence, competitor gaps,
+  complete cluster delivery, frozen graph, WordPress/manual delivery, and
+  burn-down.
+- Relevant legacy feature slugs redirect; unsupported writer claims return 410.
+- `/compare` and `/compare/*` return 410 and are absent from sitemap/internal
+  navigation. Other retired public tool/solution paths are also blocked in
+  `proxy.ts`.
+- Dashboard reads normalized audits/programs and separates generated, delivered,
+  and published progress.
+- Active integrations are WordPress and manual delivery only.
+- Action Board, SEO Health, GSC, Shopify, Webflow, credit APIs, ad-hoc
+  generation, pillar generation, and link-sync runtime paths are removed or
+  explicit 410 responses.
+- Dead credit/GSC/Shopify/Webflow modules and legacy content-plan views were
+  removed; do not re-import or rebuild them.
+
+## 3. Database and deployment order
+
+Do not enable checkout while applying this work.
+
+1. Back up the staging database.
+2. Apply `supabase/migrations/20260729_velocity_pricing.sql`.
+3. Apply `supabase/migrations/20260730_closed_pool_v2.sql`.
+4. Deploy application and Trigger.dev source with
+   `CLOSED_POOL_CHECKOUT_ENABLED=false`.
+5. Confirm `program-lifecycle` is healthy.
+6. Only then archive these Trigger.dev schedules:
+   - `daily-content-watchman`
+   - `seo-health-auto-refresh`
+   - `sitemap-sync-scheduler`
+   - `gsc-daily-auto-refresh`
+   - `ship-cluster`
+7. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
+8. Enable checkout only on the exact commit that passed all gates.
+
+Required server environment:
+
+```text
+CLOSED_POOL_CHECKOUT_ENABLED=false
+FOUNDER_USER_IDS=<comma-separated Supabase user UUIDs>
+FOUNDER_ALERT_EMAIL=<founder operations email>
+PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 ```
-seeds ─┬─▶ autocomplete  ─┐
-       ├─▶ SERP questions ─┼─▶ dedupe ─▶ demand filter ─▶ niche filter ─▶ query_pool
-       └─▶ competitor pages ┘                                                  │
-                                                                               ▼
-                                              coverage (2 stages) ◀── user + competitor sites
-                                                                               │
-                                                    gaps = pool − covered ◀─────┘
-                                                                               │
-                                       article units ─▶ clusters ─▶ planned_articles
-```
 
-### 4.1 Harvest — provenance is mandatory
-Every row carries `source`, `source_url`, `observed_value`, `observed_at`.
-`source_url` is `NOT NULL` and always re-openable:
+## 4. Current verification record
 
-| Source | `source_url` is |
-|---|---|
-| `autocomplete` | the exact Google Suggest request URL |
-| `paa` | the page whose visible text contains the question |
-| `competitor_sitemap` | the page whose title/h1 contains the topic |
+Local verification completed on 2026-07-30:
 
-`harvestQueryPool()` **throws** if any row lacks one. A `HarvestIntegrityError`
-also aborts the run if any source hard-fails (every request errored) — a bad
-Tavily key once produced zero SERP questions while the pipeline reported success.
+- `npm run test:pivot-contract`: **13/13 test groups passed**.
+- `tsc --noEmit --pretty false`: **passed**.
+- `npm run build`: **passed** before the instruction to skip further builds.
+- Public checkout remains disabled by default in code.
 
-### 4.2 Coverage — two stages, and one is not enough
-1. **Retrieval (recall)** — page embedded as a document (title + description +
-   h1 + H2s), asymmetric `RETRIEVAL_QUERY` / `RETRIEVAL_DOCUMENT` task types,
-   scored as `similarity + margin` where `margin = best − medianAcrossPages`.
-2. **Evidence (precision)** — does the matched page actually contain the query's
-   *defining terms*? Defining = low document frequency across that site, so it is
-   decided per site rather than by a word list. Checked across the **top 3**
-   candidates, not just the top hit.
+The contract suite is `tests/pivot-contract.test.mjs`. It covers:
 
-**Why stage 2 is non-negotiable:** calibrated against pixreunion.com, none of the
-three candidate scorers separated hand-labelled positives from negatives
-(gaps of −0.031, −0.069, −0.064 — all overlapping). Embedding similarity measures
-subject adjacency. A restoration page sits close to "animate old photos with ai"
-whether or not it mentions animation.
+- URL-pattern and deterministic graph invariants.
+- Six-cluster selection and stale-audit rejection.
+- Prospect retry semantics.
+- Shared verify/production assembly and bounded policy.
+- Immutable SQL, RLS, billing, claim, state, and brand-subject guards.
+- Webhook/scheduler finite-scope behavior.
+- Retired routes/jobs and stale active copy.
+- Consent/checkout fail-closed defaults.
+- WordPress permalink protection.
+- Provider usage/cost recording.
 
-### 4.3 Gaps — pure set difference
-`gaps = query_pool − user_covered`. No LLM. Each gap carries its `source_url` and
-the competitor URLs answering it. **The audit is falsifiable** — every claim
-links to the page that proves it.
+No further build should be run merely for documentation or small copy changes.
+Follow `AGENTS.md`: lint/typecheck/build only after a meaningful code batch or at
+the final release boundary.
 
-### 4.4 Clustering — the LLM only names things
-Queries collapse into article units (main + supporting keywords), units group
-into clusters of 8–15. The LLM receives N units and must return N titles. If it
-returns any other count the response is discarded and deterministic titles are
-used. **It never invents a topic. There is no article quota.**
+## 5. External release gate - not yet completed
 
----
+Local code cannot certify external behavior. The following remain deliberately
+open and must be performed against staging/Dodo sandbox/WordPress:
 
-## 5. Code map
+- Apply and verify the new migrations on a staging copy.
+- Open 20 sampled provenance URLs and confirm every observed query.
+- Run verify/production parity with identical mocked or cached source responses.
+- Exercise one eligible audit and one intentionally small niche.
+- Complete Dodo sandbox checkout and replay duplicate/out-of-order webhooks.
+- Re-audit during an active program and confirm the program remains pinned.
+- Force one article failure and verify cluster withholding/retry/atomic delivery.
+- Exercise WordPress draft, publish, and permalink mismatch behavior.
+- Exercise pause/resume date shifting.
+- Deliver all six clusters and verify Dodo end-of-period cancellation, including
+  an initial cancellation API failure and retry.
+- Exercise the complete founder public-report/login/email-bound-claim flow.
+- Crawl public routes and confirm redirects/410s/canonicals/schema/sitemap.
+- Set real `PROGRAM_COST_RATES_JSON`, complete a cluster, and verify every
+  `program_cost_events` row has complete usage and a non-null cost.
+- Archive the retired Trigger.dev schedules only after the replacement is live.
 
-| Path | Role |
-|---|---|
-| `lib/harvest/types.ts` | Shared types, `isPlausibleQuery`, `capProportionally`, brand helpers |
-| `lib/harvest/autocomplete.ts` | Recursive a–z + question-prefix expansion |
-| `lib/harvest/serp-questions.ts` | Question headings off ranking pages (**not** Google's PAA box — Tavily has no such endpoint) |
-| `lib/harvest/competitor-corpus.ts` | Competitor page titles/h1s via real fetches |
-| `lib/harvest/query-validation.ts` | Search-demand filter (autocomplete as oracle) |
-| `lib/harvest/niche-filter.ts` | Niche centroid + drift centroid relevance gate |
-| `lib/harvest/pool.ts` | Orchestrates harvest, enforces integrity, persists |
-| `lib/harvest/page-document.ts` | Page fetch + structural/body extraction |
-| `lib/harvest/coverage.ts` | Stage 1 retrieval + thresholds |
-| `lib/harvest/evidence.ts` | Stage 2 lexical verification |
-| `lib/harvest/gap-engine.ts` | Set difference + competitor evidence |
-| `lib/harvest/clusterer.ts` | Collapse, group, constrained titler |
-| `lib/harvest/run-harvest.ts` | Full pipeline orchestrator |
-| `actions/harvest.ts` | Read side: `getAuditScope`, `getGapEvidence`, `getPlannedArticles` |
-| `app/api/harvest/verify/` | Dev-only end-to-end dry run (no DB writes) |
-| `app/api/harvest/calibrate/` | Dev-only threshold calibration harness |
-| `supabase/migrations/20260728_harvest_pool.sql` | `query_pool`, `audit_clusters`, `planned_articles`, `programs` |
+See `docs/CLOSED_POOL_RELEASE_GATE.md` for the numbered 24-step evidence record.
+Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
-### Deleted (do not resurrect)
-`lib/audit/niche-blueprint.ts`, `lib/audit/gap-matrix.ts`,
-`lib/audit/authority-scorer.ts`, `lib/plans/generator.ts`,
-`lib/plans/gap-analysis.ts`, `lib/plans/serp-intelligence.ts`,
-`lib/plans/topic-hierarchy.ts`, `lib/plans/similarity-agent.ts`,
-`scripts/verify-agent-deduplication.ts`, `app/api/generate-content-plan/`.
+## 6. Rules for the next agent
 
----
+1. Do not replace immutable audit runs with a mutable brand pool.
+2. Do not provision from "latest audit"; provision only from a frozen purchase
+   intent.
+3. Do not expose a cluster until every member is generated and its graph passes.
+4. Do not equate generated, delivered, and published.
+5. Do not reset allowance or reschedule work from generic subscription updates.
+6. Do not reopen a `scope_delivered` program.
+7. Do not claim cancellation is scheduled before Dodo confirms it.
+8. Do not advertise or create a one-off fallback for small niches.
+9. Do not expose query-pool/collapse/Tavily/credit/COGS/founder language to
+   customers.
+10. Do not resurrect Action Board, SEO Health, GSC, Shopify, Webflow, credit
+    quotas, daily article shipping, quota refills, or the legacy planner.
+11. A provenance gap, unresolved graph edge, permalink mismatch, billing replay
+    failure, or unknown provider cost is a release blocker.
+12. Keep checkout disabled until the manual external gate passes.
 
-## 6. Calibrated constants — derived, not guessed
+## 7. Changelog
 
-**Never hand-tune these. Re-derive with `/api/harvest/calibrate`.**
+### 2026-07-30 - final local contract pass
 
-| Constant | Value | Where | Basis |
-|---|---|---|---|
-| `COVERAGE_THRESHOLDS.COVERED` | 0.78 | `coverage.ts` | Below lowest labelled positive across both sites (0.789, 0.863). Deliberately permissive — evidence supplies precision. |
-| `COVERAGE_THRESHOLDS.PARTIAL` | 0.74 | `coverage.ts` | **Uncalibrated** — neither labelled set has a partial class. |
-| `NICHE_RELEVANCE_FLOOR` | 0.50 | `niche-filter.ts` | Pharmacology drift from "topical" formed a population at 0.42–0.46; legitimate queries began ~p25 (0.539). |
-| `PAGE_DERIVED_RELEVANCE_FLOOR` | 0.38 | `niche-filter.ts` | Page-derived rows are contextually grounded; the full floor cut real product questions. |
-| `MIN_RAREST_TERM_OCCURRENCES` | 2 | `evidence.ts` | A term mentioned once in passing is not coverage. |
-| `MAX_WORDS_FOR_DEMAND_CHECK` | 7 | `query-validation.ts` | Autocomplete does not suggest 8+ word strings; testing them measures the oracle, not demand. |
-| `CLUSTER_THRESHOLDS.*` | 0.78 / 0.62 | `clusterer.ts` | **Provisional.** Guarded by `assertCollapseRatio()`. |
+- Added the active-program brand-host/current-audit database guard.
+- Tightened writer enforcement from "destination exists" to the exact frozen
+  anchor plus destination.
+- Removed remaining unreachable credit/GSC/Shopify/Webflow and legacy
+  content-plan modules.
+- Expanded the contract suite to 13 passing invariant groups.
+- Confirmed TypeScript and the production build pass.
+- Replaced the previous mixed Phase B notes with this authoritative handoff.
 
-### Calibration results (2026-07-29)
+### 2026-07-30 - closed-pool v2 implementation
 
-| Site | Pages | Labels | Result |
-|---|---|---|---|
-| bringback.pro | 70 | 10 pos / 6 neg | **16/16** |
-| pixreunion.com | 11 | 10 pos / 10 neg | **19/20** (0 FN, 1 arguable FP) |
+- Implemented immutable audit snapshots, atomic finalization, normalized
+  programs/program clusters, restrictive history ownership, and legacy import.
+- Unified bounded harvest computation and provenance/source-call accounting.
+- Added frozen purchase intents, URL graph, cluster withholding, and atomic
+  delivery.
+- Added period grants, idempotent consumption, pause/resume, finite-scope
+  cancellation, and replay-safe webhooks.
+- Separated generation/delivery/publication state and protected WordPress
+  permalinks.
+- Added founder prospect audits, public/claim tokens, and exact-email ownership
+  transfer.
+- Enforced six-cluster eligibility and stale/legacy audit rejection.
+- Rebuilt active product truth/public copy and retired legacy product surfaces.
+- Added provider cost accounting and the closed-pool release gate.
 
-Scoring-function comparison on bringback.pro:
+### 2026-07-28 to 2026-07-29 - evidence engine and first pivot
 
-| Scorer | minPos | maxNeg | gap |
-|---|---|---|---|
-| margin only | 0.131 | 0.135 | **−0.004** (overlaps) |
-| similarity only | 0.711 | 0.704 | +0.007 |
-| **similarity + margin** | **0.864** | **0.817** | **+0.047** |
-
----
-
-## 7. Verification protocol
-
-Dev server: `npm run dev`. **Use `127.0.0.1`, not `localhost`** — `localhost`
-resolves to IPv6 on this machine and hangs. Both endpoints are exempted from auth
-in `proxy.ts` by **exact path match only**, and return 404 when
-`NODE_ENV === "production"`.
-
-```bash
-curl -X POST http://127.0.0.1:3000/api/harvest/verify -H 'content-type: application/json' -d '{"url":"https://example.com","seeds":["seed one"],"brandContext":"one sentence describing the product","excludeContext":"what the seeds must NOT mean","competitors":["https://rival.com"],"maxQueries":300}'
-```
-
-```bash
-curl -X POST http://127.0.0.1:3000/api/harvest/calibrate -H 'content-type: application/json' -d '{"url":"https://example.com","positives":["query the site answers"],"negatives":["query it does not"]}'
-```
-
-**Deriving honest labels:** fetch the site's sitemap and map positives to
-dedicated pages. Negatives must include the hard controls — competitor-branded
-queries, location-specific searches, rival-tool tutorials. Those are what the
-broken version got wrong.
-
-### Acceptance checks (enforced by `/verify`)
-| Check | Requirement |
-|---|---|
-| `provenance` | 100% of gaps carry a `source_url` |
-| `sources_healthy` | no source hard-failed |
-| `all_sources_represented` | capping did not zero out a source |
-| `cluster_size` | largest cluster ≤ 15 |
-| `collapse_ratio` | 25–40% — **disputed, see §8** |
-
-`INCONCLUSIVE` is not a pass. A run that cannot measure something must not claim
-it verified it.
-
----
-
-## 8. Status board
-
-### Done and verified
-- [x] Closed-pool harvest with mandatory provenance (100% traceable, 3 runs)
-- [x] Source failure surfacing — hard failures abort instead of reporting success
-- [x] Competitor topics from visible page text, not slug inference
-- [x] Niche filter with niche + drift centroids (kills ambiguous-seed drift)
-- [x] Search-demand filter for page furniture (structural, replaced regex blocklists)
-- [x] **Two-stage coverage** — 35/36 across two sites, 0 false negatives
-- [x] Cluster oversize bug (was producing 18 and 40 against a max of 15)
-- [x] Intra-batch dedup in `plan-deduplication.ts` (items were never compared to each other)
-- [x] `autoReplace` removed from `keyword-validator.ts` (silently rewrote article targets)
-- [x] `run-audit.ts` rewired to the closed-pool pipeline
-
-### Open
-- [ ] **`collapse_ratio` target is disputed.** Evidence says it tracks source mix,
-      not clustering quality: same code gave 27.7% on a 90%-autocomplete pool and
-      42.3% on a healthy 63% one. Four runs across two sites cluster at 40–46%.
-      **Recommendation: re-base to 35–50%.** Needs a human decision — do not
-      silently move it, and do not tune the clusterer to satisfy the old number.
-- [ ] **Session-token leak in dev logs.** Not reproduced statically (no
-      `getSession()` calls, no debug flags). `lib/safe-log.ts` exists and is
-      applied to signout handlers as precaution only. **Needs the actual log
-      line.** Rotate the exposed session regardless.
-- [ ] `COVERAGE_THRESHOLDS.PARTIAL` uncalibrated — no partial class in either label set.
-- [ ] One arguable false positive: `restore old photos in photoshop` on
-      pixreunion.com, whose page genuinely discusses Photoshop.
-
-### Phase B — mostly done
-- [x] **Cadence: cluster batches.** `trigger/ship-cluster.ts` (`clusterShipper`) ships
-      one complete cluster at a time from `planned_articles`, pillar first, with a
-      batch credit preflight and per-article deduction. It only marks the sold
-      cluster subset complete after generation finishes, and pauses on failures.
-- [x] **Legacy watchman guarded.** `dailyContentWatchman` skips any brand with an
-      active program, so the two schedulers never double-charge.
-- [x] **`generate-plan.ts` rewired.** Runs `runHarvestAudit` and mirrors
-      `planned_articles` into `content_plans.plan_data` for the existing dashboard.
-      The five-stage LLM chain and `targetCount: 30` are gone.
-- [x] **Audit UI:** `components/audit/scope-results.tsx` — scope headline, velocity
-      tiers, recommended program, burn-down, and a clickable evidence table.
-- [x] **Public audit route:** `app/audit/[token]/page.tsx`, no auth, `noindex`.
-- [x] **Program lifecycle:** `startProgram()` / `getProgramProgress()` in `actions/harvest.ts`.
-- [x] **Archived:** SEO Health + Action Board removed from the sidebar; Webflow and
-      Shopify gated behind `SHOW_ARCHIVED_INTEGRATIONS = false`. Code and tables intact.
-- [ ] **Pricing rows — needs you.** `supabase/migrations/20260729_velocity_pricing.sql`
-      is written but **deliberately fails until the three Dodo product IDs are filled in**.
-      Create the products, replace the placeholders, verify `credits` against measured COGS.
-- [x] **Onboarding uses `ScopeResults`.** The console follows the seven real
-      harvest phases; completion loads `getAuditScope`, `getGapEvidence`, and
-      `getProgramProgress`. Refresh recovery no longer depends on a legacy JSON blob.
-- [x] **Plan handoff reuses the audit.** `/api/content-plan/start-background`
-      mirrors existing `planned_articles` and does not run the Tavily-heavy
-      harvest twice.
-- [x] **Commerce lifecycle is connected.** Active Dodo velocity subscriptions
-      provision/reschedule the latest audited brand; cancellations pause it.
-- [x] **Content-plan dashboard reads clusters.** The retired 12/8/6/4 categories
-      made harvested plans render empty. It now groups the authoritative rows by
-      harvested cluster and shows unscheduled work honestly before purchase.
-- [x] Landing and pricing copy now sell finite scope + delivery velocity. GSC,
-      quota-of-30, Shopify, and Webflow promises are removed from active surfaces.
-- [x] Deprecated `topical_audits` columns are dropped by
-      `20260729_drop_legacy_audit_columns.sql`; the old result component and action
-      are deleted.
-- [x] Archived routes redirect out of SEO Health / Action Board; comparison pages
-      for the retired quota product are `noindex` and excluded from the sitemap.
-
----
-
-## 9. Rules for whoever works on this next
-
-1. **Update this doc.** Status board and changelog, every change. No exceptions.
-2. **Never hand-tune a threshold.** Run `/api/harvest/calibrate` with labelled
-   data. If populations overlap, the *method* is wrong — say so rather than
-   picking a number that splits the difference.
-3. **Never reintroduce absolute-threshold-only coverage.** It produced a 99%
-   authority score on a site covering almost nothing. Two stages or nothing.
-4. **Do not add regex blocklists for content quality.** That was tried twice; each
-   round caught the previous examples and missed the next. Prefer evidential
-   tests (does anyone search it? is the term actually on the page?).
-5. **The legacy audit shape is gone.** Do not re-add `niche_blueprint`,
-   `projected_score`, `gap_matrix`, or the retired `actions/audit.ts` read path.
-6. **Provenance is the product.** A gap without a working `source_url` is a bug,
-   not a tuning issue. This is the only thing separating FlipAEO from a $19
-   competitor.
-7. **Report failures plainly.** Several rounds of this work found that a proposed
-   fix was wrong. Saying so early is cheaper than defending it.
-
----
-
-## 10. Changelog
-
-### 2026-07-29 — Phase B/C completion: product seam and commerce
-- Replaced the legacy onboarding result and four fictional progress phases with
-  `ScopeResults` and the seven closed-pool phases emitted by `run-audit.ts`.
-- `/api/topical-audit` now returns only scope fields. Deleted `actions/audit.ts`
-  and `components/audit/audit-results.tsx`; added the legacy-column drop migration.
-- `/api/content-plan/start-background` now mirrors the completed harvest instead
-  of paying for a duplicate crawl, competitor scan, and Tavily harvest.
-- Replaced the dashboard's fixed 12/8/6/4 categories with dynamic harvested
-  clusters. Added an explicit cluster-delivery marker and honest pre-purchase
-  scheduling state.
-- Connected subscription activation, renewal, plan change, and cancellation to
-  program provisioning. Scheduling is idempotent, restricted to the sold
-  clusters, and synchronized into the compatibility `content_plans` read model.
-- Corrected delivery state: `planned_articles` reaches `published` only when the
-  generation task succeeds; failures pause the program; burn-down is derived
-  from finished rows; the legacy watchman skips active, paused, and completed
-  closed-pool programs.
-- Rebuilt active landing/pricing/checkout copy around finite scope and velocity;
-  checkout renders all DB-driven tiers instead of `plans[0]`.
-- Archived old GSC routes by redirect, stopped loading hidden CMS integrations,
-  and removed stale comparison pages from the sitemap while keeping their code.
-
-### 2026-07-29 — Phase B: delivery, UI, and archiving
-- **`trigger/ship-cluster.ts`** — new `clusterShipper` scheduled task. Ships a whole
-  cluster per run (pillar first), preflights the cluster credit requirement, marks the program
-  complete when the niche is closed instead of re-shipping.
-- **`trigger/scheduler.ts`** — legacy `dailyContentWatchman` now skips brands with a
-  closed-pool program, preventing double-charging and quota refills after completion.
-- **`trigger/generate-plan.ts`** — rewired to `runHarvestAudit`. Removed the five-stage
-  LLM chain and `deduplicateWithReplacementLoop(..., { targetCount: 30 })`; mirrors
-  `planned_articles` into `content_plans.plan_data` for the existing dashboard.
-- **Deleted the last of the LLM-invents-topics chain** (no remaining callers):
-  `lib/plans/strategic-planner.ts`, `lib/plans/plan-deduplication.ts`,
-  `lib/plans/cluster-scheduler.ts`, `lib/plans/keyword-validator.ts`.
-  Deduplication is now structural — the pool's `UNIQUE (brand_id, query_norm)` plus
-  clustering collapse — rather than a post-hoc filter with a quota to refill.
-- **`actions/harvest.ts`** — added `startProgram()` (commits a tier, schedules one
-  date per cluster) and `getProgramProgress()` (burn-down).
-- **`components/audit/scope-results.tsx`** — new scope view. No Authority Score against
-  an invented denominator, no projected-score simulation. Scope, velocity tiers,
-  burn-down, and an evidence table where every gap links to its source URL.
-- **`app/audit/[token]/page.tsx`** — public read-only audit, `noindex`, no signup wall.
-- **Archived:** SEO Health and Action Board removed from the sidebar; Webflow and
-  Shopify gated behind `SHOW_ARCHIVED_INTEGRATIONS`. Nothing deleted.
-- **`supabase/migrations/20260729_velocity_pricing.sql`** — $249 / $449 / $799 tiers,
-  deactivates the $79 plan. Guarded: raises an exception until real Dodo product IDs
-  replace the placeholders.
-
-
-### 2026-07-29 — Coverage rewrite (two-stage) and pool cleanup
-- **Replaced absolute-threshold coverage with retrieval + evidence.** Absolute
-  cutoff of 0.62 had reported 390/392 queries covered (99% authority) on a site
-  whose pages contained almost none of them.
-- Added `lib/harvest/evidence.ts`: per-site document frequency, defining-term
-  extraction, occurrence-counted verification across the top 3 candidates.
-- Added `app/api/harvest/calibrate/`: labelled-data harness that compares
-  scoring functions and reports separability instead of assuming one works.
-- Fixed bidirectional prefix match (`"photoshop".startsWith("photo")`).
-- Fixed nav contamination of document frequency (prefer `<main>`, strip chrome).
-- Raised page read budget 120KB → 400KB; a 747KB page was truncated before
-  `</main>`, losing the body text the evidence check needed.
-- Lowered semantic gate 0.84 → 0.78 once evidence supplied precision.
-- Demand filter: separated empty-but-successful autocomplete responses from
-  failed requests (72 inconclusive → 0); scoped to ≤7-word queries after it was
-  found cutting legitimate long-tail questions (110 dropped → 21).
-- Rejected first-person-plural strings (`our`/`we`/`us`) as site self-description.
-- Auto-excluded each source page's own brand via its domain.
-- Stripped UI artifacts (`expand collapse`) at extraction.
-- Page-derived rows given a lower niche floor (0.38) than autocomplete (0.50).
-- Added `lib/safe-log.ts` and applied to signout handlers.
-
-### 2026-07-29 — Provenance repair
-- Autocomplete rows now carry the exact Suggest request URL as `source_url`,
-  plus `observed_value`/`observed_at`. Previously null — 86% of gaps were
-  unverifiable and the provenance test failed outright.
-- `SourceReport` per harvester; hard failures abort the run.
-- Competitor topics read from real page titles/h1s; slug-only pages dropped.
-- Added niche drift centroid (`excludeContext` / `product_identity.not`).
-- Fixed cluster oversize (`large.length === 0` branch skipped splitting).
-- Fixed `capProportionally` zeroing out whole sources on a tail slice.
-- `proxy.ts`: dev-only exemption for harvest endpoints, exact path match.
-
-### 2026-07-28 — Engine replacement
-- Deleted the fabricated pipeline (9 files, ~1,970 lines) including
-  `generator.ts:531`, the branch that re-shipped rejected duplicates to hit a
-  quota of 30.
-- Built `lib/harvest/` closed-pool architecture; rewired `trigger/run-audit.ts`.
-- Migration `20260728_harvest_pool.sql`.
-- Removed the LLM YES/NO dedup gate; added intra-batch comparison.
-- Removed `autoReplace` from `keyword-validator.ts`.
+- Replaced the fabricated LLM topical blueprint with observed autocomplete,
+  search-page question, and competitor-page evidence.
+- Added mandatory provenance, hard source failures, demand/niche filters,
+  bounded site coverage, evidence verification, gap computation, and constrained
+  clustering.
+- Removed quota-refill duplicate generation and the old LLM planning chain.
+- Calibrated two-stage retrieval/evidence coverage against BringBack and
+  PixReunion test sets.

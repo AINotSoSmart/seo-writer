@@ -13,14 +13,11 @@ import { formatDistanceToNow } from 'date-fns'
 import Link from 'next/link'
 import { InvoiceHistory, type InvoiceItem } from '@/components/billingsdk/invoice-history'
 
-// Removed complex credit transaction service dependency
-
 interface Payment {
   id: string
   amount: number
   currency: string
   status: string
-  credits: number
   created_at: string
   completed_at?: string
   pricing_plan: {
@@ -45,19 +42,10 @@ interface SubscriptionSummary {
 interface AccountDashboardProps {
   user: User
   payments: Payment[]
-  currentCredits: number
-  totalCreditsPurchased: number
   subscription?: SubscriptionSummary | null
 }
 
-interface UsageStats {
-  totalSpent: number
-  thisMonth: number
-  lastMonth: number
-  topFeatures: Array<{ feature: string; credits: number }>
-}
-
-export function AccountDashboard({ user, payments, currentCredits, totalCreditsPurchased, subscription }: AccountDashboardProps) {
+export function AccountDashboard({ user, payments, subscription }: AccountDashboardProps) {
 
   const formatCurrency = (amount: number, currency: string = 'USD') => {
     return new Intl.NumberFormat('en-US', {

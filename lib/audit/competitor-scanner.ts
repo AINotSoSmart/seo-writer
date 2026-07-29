@@ -16,6 +16,11 @@ interface DiscoveredCompetitor {
     domain: string
 }
 
+export type CompetitorDiscoveryTelemetry = (call: {
+    source: "competitor_discovery_tavily" | "competitor_filter_gemini"
+    succeeded: boolean
+}) => void
+
 /**
  * Discovers ACTUAL product competitors via dual Tavily searches + LLM filtering.
  * 
@@ -28,14 +33,18 @@ interface DiscoveredCompetitor {
 export async function discoverCompetitors(
     brandData: BrandDetails,
     maxCompetitors: number = 5,
-    searchPrefs?: TavilySearchPrefs
+    searchPrefs?: TavilySearchPrefs,
+    telemetry?: CompetitorDiscoveryTelemetry,
 ): Promise<DiscoveredCompetitor[]> {
     const apiKey = process.env.TAVILY_API_KEY
     if (!apiKey) {
         console.warn("[Competitor Scanner] No Tavily API key, skipping competitor discovery")
+        telemetry?.({ source: "competitor_discovery_tavily", succeeded: false })
         return []
     }
 
+    let geminiAttempted = false
+    let geminiCompleted = false
     try {
         const tvly = tavily({ apiKey })
         const brandNameLower = brandData.product_name.toLowerCase()
@@ -77,6 +86,10 @@ export async function discoverCompetitors(
                     searchDepth: "basic"
                 })
                 const response = await tvly.search(modifiedQuery, options)
+                telemetry?.({
+                    source: "competitor_discovery_tavily",
+                    succeeded: true,
+                })
 
                 for (const result of response.results || []) {
                     try {
@@ -102,6 +115,10 @@ export async function discoverCompetitors(
                     } catch { /* invalid URL */ }
                 }
             } catch (e) {
+                telemetry?.({
+                    source: "competitor_discovery_tavily",
+                    succeeded: false,
+                })
                 console.warn(`[Competitor Scanner] Query failed: "${query}"`, e)
             }
         }
@@ -114,6 +131,7 @@ export async function discoverCompetitors(
         // === LLM FILTER: Send all results to Gemini to identify actual competitors ===
         const { getGeminiClient } = await import("@/utils/gemini/geminiClient")
         const client = getGeminiClient()
+        geminiAttempted = true
 
         const filterPrompt = `You are a strict competitor analyst. Your job is to identify DIRECT product competitors.
 
@@ -188,11 +206,19 @@ Be very selective. 3-5 truly relevant competitors is better than 10 loosely rela
                     domain
                 }
             })
+        geminiCompleted = true
+        telemetry?.({ source: "competitor_filter_gemini", succeeded: true })
 
         console.log(`[Competitor Scanner] LLM identified ${competitors.length} real competitors: ${competitors.map(c => `${c.name} (${c.url})`).join(', ')}`)
         return competitors
 
     } catch (error) {
+        if (geminiAttempted && !geminiCompleted) {
+            telemetry?.({
+                source: "competitor_filter_gemini",
+                succeeded: false,
+            })
+        }
         console.error("[Competitor Scanner] Discovery failed:", error)
         return []
     }

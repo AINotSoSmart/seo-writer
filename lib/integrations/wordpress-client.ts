@@ -518,6 +518,51 @@ export async function createPost(
     }
 }
 
+export async function updatePostStatus(
+    credentials: WordPressCredentials,
+    postId: number,
+    status: "draft" | "publish",
+): Promise<{ success: boolean; post?: WordPressPost; error?: string }> {
+    try {
+        const response = await fetch(
+            `${credentials.siteUrl.replace(/\/+$/, "")}/wp-json/wp/v2/posts/${postId}`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: createAuthHeader(
+                        credentials.username,
+                        credentials.appPassword,
+                    ),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ status }),
+            },
+        )
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}))
+            return {
+                success: false,
+                error: error.message || `Failed to update post: ${response.status}`,
+            }
+        }
+        const post = await response.json()
+        return {
+            success: true,
+            post: {
+                id: post.id,
+                link: post.link,
+                status: post.status,
+                title: post.title,
+            },
+        }
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update post",
+        }
+    }
+}
+
 /**
  * Full publish flow: upload featured image + create post
  */

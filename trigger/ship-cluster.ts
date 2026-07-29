@@ -1,307 +1,355 @@
 import { schedules } from "@trigger.dev/sdk/v3"
+
+import { scheduleEndOfScopeCancellation } from "@/lib/harvest/billing-lifecycle"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { generateBlogPost } from "./generate-blog"
-import { adminHasCredits, adminDeductCredits, adminAddCredits } from "@/lib/credits"
 
-/**
- * Cluster Shipper — the delivery cadence for the closed-pool model.
- *
- * Ships one complete cluster at a time rather than one article per day.
- *
- * WHY: a cluster's value is its internal link graph, and that graph is only
- * valid once every member exists. The previous scheduler dripped a single
- * article per hour, which meant article 2 linked to article 30 for four weeks.
- * Shipping the batch whole makes the graph resolve at publish time and gives the
- * customer a monthly deliverable that reads as one thing.
- *
- * Reads `planned_articles` / `audit_clusters` / `programs` — the closed-pool
- * tables. The legacy `dailyContentWatchman` in scheduler.ts still serves
- * `content_plans` rows and skips any brand that has an active program, so the
- * two never process the same brand.
- */
+const MAX_GENERATION_RETRIES = 2
 
-/** Cap per run so one large cluster cannot drain a balance unnoticed */
-const MAX_ARTICLES_PER_CLUSTER_RUN = 20
-
-interface DueCluster {
-    clusterId: string
-    clusterName: string
-    articles: Array<{
-        id: string
-        title: string
-        main_keyword: string
-        supporting_keywords: string[]
-        article_type: string
-        is_pillar: boolean
-    }>
+type ProgramRow = {
+    id: string
+    user_id: string
+    brand_id: string
+    audit_id: string
+    dodo_subscription_id: string
+    scope_status: string
+    cancellation_status: string
 }
 
-export const clusterShipper = schedules.task({
-    id: "ship-cluster",
-    // Hourly so different timezones are handled gracefully; the scheduled_date
-    // check means a cluster still only ships once.
+/**
+ * The only recurring closed-pool worker:
+ * - starts due clusters,
+ * - retries failed members,
+ * - releases ready clusters atomically,
+ * - retries end-of-scope cancellation.
+ */
+export const programLifecycleScheduler = schedules.task({
+    id: "program-lifecycle",
     cron: "0 * * * *",
+    queue: { concurrencyLimit: 1 },
+    maxDuration: 900,
     run: async () => {
-        console.log("📦 Cluster Shipper: scanning for clusters due...")
-
         const supabase = createAdminClient() as any
-        const today = new Date().toISOString().split("T")[0]
-
+        const now = new Date().toISOString()
         const { data: programs, error } = await supabase
             .from("programs")
-            .select("id, user_id, brand_id, tier, clusters_per_month, total_articles, completed_count, clusters_included")
-            .eq("status", "active")
-
-        if (error) {
-            console.error("❌ Cluster Shipper DB error:", error)
-            return { result: "Failed to fetch programs", error: error.message }
-        }
-
-        if (!programs || programs.length === 0) {
-            console.log("😴 Cluster Shipper: no active programs.")
-            return { result: "No active programs", shipped: 0 }
-        }
-
-        let clustersShipped = 0
-        let articlesTriggered = 0
-
-        for (const program of programs) {
-            const includedClusterIds = Array.isArray(program.clusters_included)
-                ? program.clusters_included
-                : []
-            if (includedClusterIds.length === 0) {
-                console.warn(`Program ${program.id} has no included clusters; pausing it.`)
-                await supabase
-                    .from("programs")
-                    .update({ status: "paused", updated_at: new Date().toISOString() })
-                    .eq("id", program.id)
-                continue
-            }
-
-            const due = await findDueCluster(
-                supabase,
-                program.brand_id,
-                today,
-                includedClusterIds,
+            .select(
+                "id, user_id, brand_id, audit_id, dodo_subscription_id, scope_status, cancellation_status",
             )
+            .in("scope_status", ["active", "paused", "scope_delivered"])
 
-            if (!due) {
-                // Nothing due. If nothing is left at all, the niche is complete.
-                const [{ count: remaining }, { count: writing }, { count: failed }] = await Promise.all([
-                    supabase
-                        .from("planned_articles")
-                        .select("id", { count: "exact", head: true })
-                        .eq("brand_id", program.brand_id)
-                        .in("cluster_id", includedClusterIds)
-                        .in("status", ["pending", "scheduled"]),
-                    supabase
-                        .from("planned_articles")
-                        .select("id", { count: "exact", head: true })
-                        .eq("brand_id", program.brand_id)
-                        .in("cluster_id", includedClusterIds)
-                        .eq("status", "writing"),
-                    supabase
-                        .from("planned_articles")
-                        .select("id", { count: "exact", head: true })
-                        .eq("brand_id", program.brand_id)
-                        .in("cluster_id", includedClusterIds)
-                        .eq("status", "failed"),
-                ])
+        if (error) throw new Error(`Program lifecycle load failed: ${error.message}`)
+        let generated = 0
+        let delivered = 0
+        let blocked = 0
 
-                if ((remaining ?? 0) === 0) {
-                    if ((writing ?? 0) > 0) continue
-
-                    if ((failed ?? 0) > 0) {
-                        await supabase
-                            .from("programs")
-                            .update({ status: "paused", updated_at: new Date().toISOString() })
-                            .eq("id", program.id)
-                        console.warn(`Program ${program.id} paused with ${failed} failed article(s).`)
-                        continue
-                    }
-
-                    await supabase
-                        .from("programs")
-                        .update({
-                            status: "completed",
-                            completed_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("id", program.id)
-
-                    // Running out is the designed outcome, not a failure. The UI
-                    // tells the customer their niche is closed rather than
-                    // quietly re-shipping rewrites of their own articles.
-                    console.log(
-                        `🏁 Program ${program.id}: niche complete — no gaps left for brand ${program.brand_id}`
+        for (const program of (programs || []) as ProgramRow[]) {
+            if (
+                program.scope_status === "scope_delivered" &&
+                ["active", "error", "request_pending"].includes(
+                    program.cancellation_status,
+                )
+            ) {
+                try {
+                    await scheduleEndOfScopeCancellation(program.id)
+                } catch (cancellationError) {
+                    console.error(
+                        `[ProgramLifecycle] Cancellation retry failed for ${program.id}:`,
+                        cancellationError,
                     )
                 }
                 continue
             }
+            if (program.scope_status === "paused") continue
 
-            const batch = due.articles.slice(0, MAX_ARTICLES_PER_CLUSTER_RUN)
+            const { data: clusters } = await supabase
+                .from("program_clusters")
+                .select("id, audit_cluster_id, state, scheduled_for, retry_count")
+                .eq("program_id", program.id)
+                .in("state", ["scheduled", "generating", "blocked", "ready"])
+                .order("sequence", { ascending: true })
 
-            // Preflight the whole cluster before starting it. Credits remain
-            // article-denominated internally so a 15-article cluster cannot
-            // overdraw a tier funded for fewer generation jobs.
-            const { hasCredits, currentBalance, error: creditError } = await adminHasCredits(
-                program.user_id,
-                batch.length
-            )
+            for (const cluster of clusters || []) {
+                if (cluster.state === "scheduled" && cluster.scheduled_for > now) continue
 
-            if (creditError) {
-                console.error(`❌ Credit check failed for user ${program.user_id}: ${creditError}`)
-                continue
-            }
-
-            if (!hasCredits) {
-                console.warn(
-                    `⚠️ User ${program.user_id} has ${currentBalance} credits, needs ${batch.length} ` +
-                    `for cluster "${due.clusterName}". Pausing program ${program.id}.`
-                )
-                await supabase
-                    .from("programs")
-                    .update({ status: "paused", updated_at: new Date().toISOString() })
-                    .eq("id", program.id)
-                continue
-            }
-
-            console.log(
-                `🚀 Shipping cluster "${due.clusterName}" (${batch.length} articles) for brand ${program.brand_id}`
-            )
-
-            const shippedIds: string[] = []
-            const { data: contentPlan } = await supabase
-                .from("content_plans")
-                .select("id")
-                .eq("user_id", program.user_id)
-                .eq("brand_id", program.brand_id)
-                .order("created_at", { ascending: false })
-                .limit(1)
-                .maybeSingle()
-
-            for (const article of batch) {
-                const { success: deducted } = await adminDeductCredits(
-                    program.user_id,
-                    1,
-                    `Cluster "${due.clusterName}": ${article.main_keyword}`
-                )
-                if (!deducted) {
-                    console.error(`❌ Credit deduction failed for ${article.main_keyword}`)
+                if (cluster.state === "ready") {
+                    const completed = await deliverCluster(supabase, program, cluster.id)
+                    delivered++
+                    if (completed) {
+                        try {
+                            await scheduleEndOfScopeCancellation(program.id)
+                        } catch (cancellationError) {
+                            console.error(
+                                `[ProgramLifecycle] End-of-scope cancellation failed for ${program.id}:`,
+                                cancellationError,
+                            )
+                        }
+                    }
                     continue
                 }
 
-                try {
-                    const { data: newArticle, error: articleError } = await supabase
-                        .from("articles")
-                        .insert({
-                            brand_id: program.brand_id,
-                            keyword: article.main_keyword,
-                            status: "queued",
-                            user_id: program.user_id,
-                        })
-                        .select("id")
-                        .single()
-
-                    if (articleError || !newArticle) {
-                        console.error(`❌ Failed to create article row:`, articleError)
-                        await adminAddCredits(program.user_id, 1, "Refund: article row creation failed")
-                        continue
+                const outcome = await advanceCluster(
+                    supabase,
+                    program,
+                    cluster.id,
+                    cluster.audit_cluster_id,
+                )
+                generated += outcome.triggered
+                if (outcome.blocked) blocked++
+                if (outcome.ready) {
+                    const completed = await deliverCluster(supabase, program, cluster.id)
+                    delivered++
+                    if (completed) {
+                        try {
+                            await scheduleEndOfScopeCancellation(program.id)
+                        } catch (cancellationError) {
+                            console.error(
+                                `[ProgramLifecycle] End-of-scope cancellation failed for ${program.id}:`,
+                                cancellationError,
+                            )
+                        }
                     }
-
-                    await generateBlogPost.trigger({
-                        articleId: newArticle.id,
-                        keyword: article.main_keyword,
-                        brandId: program.brand_id,
-                        title: article.title,
-                        articleType: (article.article_type as any) || "informational",
-                        supportingKeywords: article.supporting_keywords || [],
-                        cluster: due.clusterName,
-                        planId: contentPlan?.id,
-                        itemId: article.id,
-                        plannedArticleId: article.id,
-                    })
-
-                    await supabase
-                        .from("planned_articles")
-                        .update({
-                            status: "writing",
-                            article_id: newArticle.id,
-                            shipped_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("id", article.id)
-
-                    shippedIds.push(article.id)
-                    articlesTriggered++
-                } catch (e) {
-                    console.error(`❌ Trigger failed for "${article.main_keyword}":`, e)
-                    await adminAddCredits(program.user_id, 1, "Refund: cluster trigger failed")
                 }
-            }
-
-            if (shippedIds.length > 0) {
-                clustersShipped++
             }
         }
 
-        console.log(
-            `📦 Cluster Shipper done: ${clustersShipped} clusters, ${articlesTriggered} articles triggered`
-        )
-        return { result: "OK", clustersShipped, articlesTriggered }
+        return { programs: programs?.length || 0, generated, delivered, blocked }
     },
 })
 
-/**
- * Finds the highest-priority cluster with articles due today or earlier.
- *
- * Returns the whole cluster, not the individual due articles — partial delivery
- * is what the batch model exists to avoid.
- */
-async function findDueCluster(
+async function advanceCluster(
     supabase: any,
-    brandId: string,
-    today: string,
-    includedClusterIds: string[],
-): Promise<DueCluster | null> {
-    const { data: dueArticles } = await supabase
+    program: ProgramRow,
+    programClusterId: string,
+    auditClusterId: string,
+): Promise<{ triggered: number; blocked: boolean; ready: boolean }> {
+    const { data: plannedRows, error } = await supabase
         .from("planned_articles")
-        .select("cluster_id")
-        .eq("brand_id", brandId)
-        .in("cluster_id", includedClusterIds)
-        .in("status", ["pending", "scheduled"])
-        .lte("scheduled_date", today)
-        .limit(200)
-
-    if (!dueArticles || dueArticles.length === 0) return null
-
-    const clusterIds = Array.from(
-        new Set(dueArticles.map((a: any) => a.cluster_id).filter(Boolean))
-    )
-    if (clusterIds.length === 0) return null
-
-    // Lowest priority number ships first — clusters arrive pre-sorted from the
-    // harvest, so index 0 is the highest-value one.
-    const { data: clusters } = await supabase
-        .from("audit_clusters")
-        .select("id, name, priority")
-        .in("id", clusterIds)
-        .order("priority", { ascending: true })
-        .limit(1)
-
-    const cluster = clusters?.[0]
-    if (!cluster) return null
-
-    const { data: articles } = await supabase
-        .from("planned_articles")
-        .select("id, title, main_keyword, supporting_keywords, article_type, is_pillar")
-        .eq("brand_id", brandId)
-        .eq("cluster_id", cluster.id)
-        .in("status", ["pending", "scheduled"])
-        // Pillar first: it is the hub every leaf links back to
+        .select(
+            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, article_id, generation_status, retry_count",
+        )
+        .eq("audit_id", program.audit_id)
+        .eq("cluster_id", auditClusterId)
         .order("is_pillar", { ascending: false })
+    if (error || !plannedRows?.length) {
+        await markClusterBlocked(
+            supabase,
+            programClusterId,
+            error?.message || "cluster_has_no_articles",
+        )
+        return { triggered: 0, blocked: true, ready: false }
+    }
 
-    if (!articles || articles.length === 0) return null
+    const allGenerated = plannedRows.every(
+        (article: any) => article.generation_status === "generated",
+    )
+    if (allGenerated) {
+        await supabase
+            .from("program_clusters")
+            .update({
+                state: "ready",
+                ready_at: new Date().toISOString(),
+                failure_code: null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", programClusterId)
+        return { triggered: 0, blocked: false, ready: true }
+    }
 
-    return { clusterId: cluster.id, clusterName: cluster.name, articles }
+    const candidates = plannedRows.filter((article: any) =>
+        ["planned", "queued", "failed"].includes(article.generation_status),
+    )
+    const exhausted = candidates.filter(
+        (article: any) =>
+            article.generation_status === "failed" &&
+            Number(article.retry_count || 0) >= MAX_GENERATION_RETRIES,
+    )
+    if (exhausted.length > 0) {
+        await markClusterBlocked(
+            supabase,
+            programClusterId,
+            "article_retry_limit_reached",
+        )
+        return { triggered: 0, blocked: true, ready: false }
+    }
+
+    await supabase
+        .from("program_clusters")
+        .update({
+            state: "generating",
+            generation_started_at: new Date().toISOString(),
+            failure_code: null,
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", programClusterId)
+
+    let triggered = 0
+    for (const planned of candidates) {
+        const { data: consumed, error: consumeError } = await supabase.rpc(
+            "consume_program_credit",
+            {
+                p_planned_article_id: planned.id,
+                p_dodo_subscription_id: program.dodo_subscription_id,
+            },
+        )
+        if (consumeError || !consumed) {
+            await markClusterBlocked(
+                supabase,
+                programClusterId,
+                "billing_allowance_unavailable",
+            )
+            return { triggered, blocked: true, ready: false }
+        }
+
+        let articleId = planned.article_id
+        if (!articleId) {
+            const { data: article, error: articleError } = await supabase
+                .from("articles")
+                .insert({
+                    brand_id: program.brand_id,
+                    keyword: planned.main_keyword,
+                    slug: planned.slug,
+                    status: "queued",
+                    user_id: program.user_id,
+                    planned_article_id: planned.id,
+                    delivery_visible_at: null,
+                })
+                .select("id")
+                .single()
+            if (articleError || !article) {
+                await markArticleFailed(
+                    supabase,
+                    planned.id,
+                    articleError?.message || "article_row_creation_failed",
+                )
+                continue
+            }
+            articleId = article.id
+        }
+
+        const frozenLinks = await loadFrozenLinks(supabase, program.id, planned.id)
+        const nextRetryCount = Number(planned.retry_count || 0) + 1
+        const { data: claimedState, error: queueStateError } = await supabase
+            .from("planned_articles")
+            .update({
+                article_id: articleId,
+                status: "writing",
+                generation_status: "generating",
+                generation_error: null,
+                retry_count: nextRetryCount,
+                shipped_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", planned.id)
+            .in("generation_status", ["planned", "queued", "failed"])
+            .select("id")
+            .maybeSingle()
+        if (queueStateError || !claimedState) {
+            if (!queueStateError) continue
+            await markArticleFailed(
+                supabase,
+                planned.id,
+                `generation_state_update_failed: ${queueStateError.message}`,
+            )
+            continue
+        }
+
+        try {
+            await generateBlogPost.trigger({
+                articleId,
+                keyword: planned.main_keyword,
+                brandId: program.brand_id,
+                title: planned.title,
+                articleType: planned.article_type || "informational",
+                supportingKeywords: planned.supporting_keywords || [],
+                plannedArticleId: planned.id,
+                frozenLinks,
+            }, {
+                idempotencyKey: `${planned.id}:${nextRetryCount}`,
+            })
+            triggered++
+        } catch (triggerError) {
+            await markArticleFailed(
+                supabase,
+                planned.id,
+                triggerError instanceof Error ? triggerError.message : "generation_trigger_failed",
+            )
+        }
+    }
+
+    return { triggered, blocked: false, ready: false }
+}
+
+async function loadFrozenLinks(
+    supabase: any,
+    programId: string,
+    sourceArticleId: string,
+): Promise<Array<{ title: string; url: string; relationship: string }>> {
+    const { data: rows } = await supabase
+        .from("planned_article_links")
+        .select("target_article_id, target_url, anchor_text, relationship")
+        .eq("program_id", programId)
+        .eq("source_article_id", sourceArticleId)
+    return (rows || []).map((row: any) => ({
+        title: row.anchor_text,
+        url: row.target_url,
+        relationship: row.relationship,
+    }))
+}
+
+async function deliverCluster(
+    supabase: any,
+    program: ProgramRow,
+    programClusterId: string,
+): Promise<boolean> {
+    // Re-read status immediately before the transactional release so a pause
+    // clicked while generation was running is respected.
+    const { data: current } = await supabase
+        .from("programs")
+        .select("scope_status")
+        .eq("id", program.id)
+        .single()
+    if (current?.scope_status !== "active") return false
+
+    const { data: completed, error } = await supabase.rpc(
+        "deliver_program_cluster",
+        { p_program_cluster_id: programClusterId },
+    )
+    if (error) {
+        await markClusterBlocked(supabase, programClusterId, error.message)
+        return false
+    }
+    return Boolean(completed)
+}
+
+async function markClusterBlocked(
+    supabase: any,
+    programClusterId: string,
+    failureCode: string,
+): Promise<void> {
+    await supabase
+        .from("program_clusters")
+        .update({
+            state: "blocked",
+            failure_code: failureCode.slice(0, 500),
+            retry_count: 1,
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", programClusterId)
+}
+
+async function markArticleFailed(
+    supabase: any,
+    plannedArticleId: string,
+    message: string,
+): Promise<void> {
+    await supabase
+        .from("planned_articles")
+        .update({
+            status: "failed",
+            generation_status: "failed",
+            generation_error: message.slice(0, 1000),
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", plannedArticleId)
 }

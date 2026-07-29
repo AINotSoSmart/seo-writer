@@ -1,17 +1,16 @@
 "use client";
 
 import React from 'react';
-import { Menu, X, ArrowRight } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import Button from './Button';
 import Link from 'next/link';
 import Image from 'next/image';
 
 const NAV_LINKS = [
-  { label: 'How it works', href: '/#how-it-works' },
-  { label: 'Benefits', href: '/#benefits' },
-  { label: 'Features', href: '/#features' },
-  { label: 'Proof', href: '/case-studies/bringback' },
-  { label: 'Pricing', href: '/#pricing' },
+  { label: 'Product contract', href: '/features' },
+  { label: 'Evidence audit', href: '/features/evidence-backed-topical-audit' },
+  { label: 'Cluster delivery', href: '/features/topic-cluster-delivery' },
+  { label: 'Pricing', href: '/pricing' },
 ];
 
 export const Navbar: React.FC = () => {
@@ -87,7 +86,7 @@ export const Navbar: React.FC = () => {
             </div>
 
             {/* CTA Button */}
-            <Link href="/content-plan">
+            <Link href="/login?next=/onboarding">
               <button
                 id="nav-cta-btn"
                 className="
@@ -99,7 +98,7 @@ export const Navbar: React.FC = () => {
                        px-2 sm:px-5 pt-1 sm:pt-2 pb-2 sm:pb-3 rounded-lg
                        transition-all duration-150 ease-out
                      ">
-                <span className="text-gray-600 font-semibold text-xs sm:text-sm">Start Ranking in AI</span>
+                <span className="text-gray-600 font-semibold text-xs sm:text-sm">Run Evidence Audit</span>
               </button>
             </Link>
             {/* Mobile Menu Toggle (only visible on mobile) */}
@@ -143,7 +142,7 @@ export const Navbar: React.FC = () => {
           <div className="p-2 mt-1">
             <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
               <Button className="w-full justify-center bg-stone-900 text-brand-50 shadow-none rounded-lg py-3">
-                Start Ranking Now
+                Run Evidence Audit
               </Button>
             </Link>
           </div>

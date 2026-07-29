@@ -78,6 +78,11 @@ function LoginFormContent({ displayError, state, formAction }: {
   formAction: (formData: FormData) => void
 }) {
   const { isReady } = useCSRF()
+  const searchParams = useSearchParams()
+  const requestedNext = searchParams.get('next') || '/content-plan'
+  const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//')
+    ? requestedNext
+    : '/content-plan'
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-stone-50/50">
@@ -130,6 +135,7 @@ function LoginFormContent({ displayError, state, formAction }: {
               <div className="mb-6">
                 <form action={signInWithGoogle}>
                   <CSRFInput />
+                  <input type="hidden" name="next" value={next} />
                   <GoogleSignInButton csrfReady={isReady} />
                 </form>
               </div>
@@ -167,6 +173,7 @@ function LoginFormContent({ displayError, state, formAction }: {
               {/* Magic Link Form */}
               <form action={formAction} className="space-y-4">
                 <CSRFInput />
+                <input type="hidden" name="next" value={next} />
                 <div className="space-y-1.5">
                   <label htmlFor="email" className="block text-sm font-semibold text-stone-700">Work Email</label>
                   <Input

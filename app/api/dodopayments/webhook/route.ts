@@ -4,6 +4,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { createHmac, timingSafeEqual, createHash } from 'crypto'
 import { Webhook } from 'standardwebhooks'
 import { provisionProgramForSubscription } from '@/lib/harvest/program-provisioning'
+import { grantBillingPeriodOnce } from '@/lib/harvest/billing-lifecycle'
 
 export const runtime = 'nodejs'
 
@@ -389,55 +390,6 @@ async function updateSubscriptionServiceFields(
         .update(update)
         .eq('dodo_subscription_id', dodo_subscription_id);
 }
-async function setUserCreditsToPlanCredits(
-    supabase: ReturnType<typeof createAdminClient>,
-    user_id: string,
-    planCredits: number | null,
-) {
-    if (typeof planCredits !== 'number' || !Number.isFinite(planCredits) || planCredits < 0) return
-
-    // Update-first strategy to avoid requiring a unique constraint on user_id
-    const { data: existing } = await supabase
-        .from('credits')
-        .select('user_id')
-        .eq('user_id', user_id)
-        .maybeSingle()
-
-    if (existing) {
-        await supabase
-            .from('credits')
-            .update({ credits: planCredits })
-            .eq('user_id', user_id)
-    } else {
-        await supabase
-            .from('credits')
-            .insert({ user_id, credits: planCredits })
-    }
-}
-
-async function reactivateUserPlans(supabase: ReturnType<typeof createAdminClient>, user_id: string) {
-    try {
-        const { data } = await supabase
-            .from('content_plans' as any)
-            .select('id, automation_status')
-            .eq('user_id', user_id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-        const latestPlan = data as any;
-        if (latestPlan && (latestPlan.automation_status === 'completed' || latestPlan.automation_status === 'paused')) {
-            await supabase
-                .from('content_plans' as any)
-                .update({ automation_status: 'active', updated_at: new Date().toISOString() })
-                .eq('id', latestPlan.id)
-            console.log(`[Webhook] Reactivated content plan ${latestPlan.id} after payment/renewal.`)
-        }
-    } catch (err) {
-        console.error('[Webhook] Failed to reactivate content plan:', err)
-    }
-}
-
 export async function POST(req: NextRequest) {
     // Read raw body FIRST for signature verification
     const rawBody = await req.text()
@@ -559,24 +511,48 @@ export async function POST(req: NextRequest) {
             payload?.subscription ??
             data
 
+        const isSubscriptionEvent = eventType.startsWith('subscription.')
         const dodo_subscription_id: string | undefined =
-            subscriptionObj?.id ||
             subscriptionObj?.subscription_id ||
-            data?.id
+            data?.subscription_id ||
+            data?.payment?.subscription_id ||
+            data?.invoice?.subscription_id ||
+            payload?.subscription_id ||
+            (isSubscriptionEvent ? subscriptionObj?.id : undefined)
 
         // Product mapping often comes via plan.product_id or direct product_id
         const dodo_product_id: string | undefined =
             subscriptionObj?.product_id ||
             subscriptionObj?.plan?.product_id ||
-            data?.product_id
+            data?.product_id ||
+            data?.payment?.product_id ||
+            data?.invoice?.product_id
 
         // We set user_id during checkout metadata; retrieve it
-        const meta = subscriptionObj?.metadata || data?.metadata || payload?.metadata || {}
+        const meta =
+            subscriptionObj?.metadata ||
+            data?.payment?.metadata ||
+            data?.invoice?.metadata ||
+            data?.metadata ||
+            payload?.metadata ||
+            {}
         const user_id: string | undefined = meta?.user_id
+        const purchase_intent_id: string | undefined =
+            meta?.purchase_intent_id ||
+            payload?.metadata?.purchase_intent_id ||
+            data?.metadata?.purchase_intent_id
 
         // Payment or invoice events may not have subscription payload; try alternative metadata root
         const rootUserId = payload?.metadata?.user_id
-        const effective_user_id = user_id || rootUserId
+        let effective_user_id = user_id || rootUserId
+        if (!effective_user_id && dodo_subscription_id) {
+            const { data: localSubscription } = await (supabase as any)
+                .from('dodo_subscriptions')
+                .select('user_id')
+                .eq('dodo_subscription_id', dodo_subscription_id)
+                .maybeSingle()
+            effective_user_id = localSubscription?.user_id || null
+        }
 
         const price_snapshot_raw = Number(subscriptionObj?.total_amount ?? data?.total_amount ?? payload?.total_amount)
         const price_snapshot = Number.isFinite(price_snapshot_raw) ? price_snapshot_raw : null
@@ -592,7 +568,7 @@ export async function POST(req: NextRequest) {
             }
 
             const status = (eventType === 'subscription.activated' || eventType === 'subscription.active') ? 'active' : 'pending'
-            const { planCredits, pricing_plan_id } = await upsertSubscriptionFromEvent(supabase, {
+            const { pricing_plan_id } = await upsertSubscriptionFromEvent(supabase, {
                 user_id: effective_user_id,
                 dodo_subscription_id,
                 dodo_product_id: dodo_product_id ?? null,
@@ -614,47 +590,133 @@ export async function POST(req: NextRequest) {
                 } catch { }
             }
 
-            // If the subscription is already active on create (some providers send as active), also provision credits
+            // Provision exactly the frozen purchase intent. Credit allowance is
+            // granted only by a successful payment/renewal period event.
             const remoteStatus = (subscriptionObj?.status ?? '').toString().toLowerCase()
             if (status === 'active' || remoteStatus === 'active') {
-                // Non-rollover: reset to plan credits
-                await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits ?? null)
                 await provisionProgramForSubscription(
                     supabase,
                     effective_user_id,
-                    pricing_plan_id ?? null,
+                    purchase_intent_id ?? null,
+                    dodo_subscription_id,
                 )
             }
             // Persist service-management fields for reporting/operations
             await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
         } else if (eventType === 'payment.succeeded' || eventType === 'subscription.renewed' || eventType === 'invoice.paid') {
-            // Credit provisioning on successful renewal/payment
             if (!effective_user_id) {
                 await markFailed(supabase, webhookId, 'Missing user_id for payment/renewal event')
                 return NextResponse.json({ ok: true, note: 'missing user_id' }, { status: 200 })
             }
 
-            // Get active subscription and its plan credits
-            const { data: activeSub } = await supabase
+            let subscriptionQuery: any = (supabase as any)
                 .from('dodo_subscriptions')
-                .select('pricing_plan_id, status, dodo_pricing_plans(credits)')
+                .select('dodo_subscription_id, pricing_plan_id, status, dodo_pricing_plans(credits)')
                 .eq('user_id', effective_user_id)
                 .eq('status', 'active')
+            if (dodo_subscription_id) {
+                subscriptionQuery = subscriptionQuery.eq('dodo_subscription_id', dodo_subscription_id)
+            }
+            let { data: activeSub } = await subscriptionQuery
+                .order('created_at', { ascending: false })
+                .limit(1)
                 .maybeSingle()
 
-            // Coerce numeric strings from PostgREST
-            // @ts-ignore
+            // Payment may arrive before subscription.activated. Resolve the
+            // signed purchase intent, materialize the local subscription, and
+            // continue through the same idempotent provisioning path.
+            if (!activeSub && dodo_subscription_id && purchase_intent_id) {
+                const { data: frozenIntent } = await (supabase as any)
+                    .from('program_purchase_intents')
+                    .select(
+                        'id, pricing_plan_id, dodo_pricing_plans(dodo_product_id, credits)',
+                    )
+                    .eq('id', purchase_intent_id)
+                    .eq('user_id', effective_user_id)
+                    .in('status', ['checkout_created', 'provisioned'])
+                    .maybeSingle()
+                const intentProductId =
+                    frozenIntent?.dodo_pricing_plans?.dodo_product_id
+                if (frozenIntent?.pricing_plan_id && intentProductId) {
+                    await upsertSubscriptionFromEvent(supabase, {
+                        user_id: effective_user_id,
+                        dodo_subscription_id,
+                        dodo_product_id: intentProductId,
+                        status: 'active',
+                        raw: subscriptionObj,
+                        price_snapshot,
+                        currency_snapshot,
+                    })
+                    const { data: recoveredSubscription } = await (supabase as any)
+                        .from('dodo_subscriptions')
+                        .select(
+                            'dodo_subscription_id, pricing_plan_id, status, dodo_pricing_plans(credits)',
+                        )
+                        .eq('dodo_subscription_id', dodo_subscription_id)
+                        .maybeSingle()
+                    activeSub = recoveredSubscription
+                }
+            }
+
             const planCredits: number | null = (() => {
                 const v = (activeSub as any)?.dodo_pricing_plans?.credits
                 const n = Number(v)
                 return Number.isFinite(n) ? n : null
             })()
-            await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits)
-            await provisionProgramForSubscription(
-                supabase,
-                effective_user_id,
-                activeSub?.pricing_plan_id || null,
-            )
+            const effectiveSubscriptionId =
+                dodo_subscription_id || (activeSub as any)?.dodo_subscription_id
+            if (!effectiveSubscriptionId || planCredits === null) {
+                throw new Error('Payment event could not resolve an active subscription allowance')
+            }
+
+            // Event order differs by provider. Provision is idempotent and may
+            // safely run here if payment arrived before activation.
+            if (purchase_intent_id) {
+                await provisionProgramForSubscription(
+                    supabase,
+                    effective_user_id,
+                    purchase_intent_id,
+                    effectiveSubscriptionId,
+                )
+            }
+            const { data: program } = await (supabase as any)
+                .from('programs')
+                .select('id, scope_status, pending_tier')
+                .eq('dodo_subscription_id', effectiveSubscriptionId)
+                .maybeSingle()
+
+            // A renewal after finite scope delivery is recorded, but it can
+            // never reset credits or reopen delivery.
+            if (program?.scope_status !== 'scope_delivered') {
+                const newlyGranted = await grantBillingPeriodOnce({
+                    supabase,
+                    dodoSubscriptionId: effectiveSubscriptionId,
+                    userId: effective_user_id,
+                    programId: program?.id || null,
+                    allowance: planCredits,
+                    eventId: webhookId,
+                    resource: subscriptionObj,
+                    eventTimestamp: payload?.timestamp,
+                })
+                if (newlyGranted && program?.pending_tier) {
+                    const clustersPerMonth =
+                        program.pending_tier === 'close'
+                            ? 1
+                            : program.pending_tier === 'accelerate'
+                              ? 2
+                              : 4
+                    await (supabase as any)
+                        .from('programs')
+                        .update({
+                            tier: program.pending_tier,
+                            clusters_per_month: clustersPerMonth,
+                            pending_tier: null,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', program.id)
+                        .eq('scope_status', 'active')
+                }
+            }
             // Also complete the latest pending change if any
             try {
                 await completeLatestPendingChange(supabase, effective_user_id, null, { completed_by: eventType })
@@ -662,14 +724,23 @@ export async function POST(req: NextRequest) {
             // Persist next billing date if present
             if (dodo_subscription_id) {
                 await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
+                const cancellationScheduled = Boolean(
+                    subscriptionObj?.cancel_at_next_billing_date ??
+                    subscriptionObj?.cancel_at_period_end,
+                )
+                if (cancellationScheduled) {
+                    await (supabase as any)
+                        .from('programs')
+                        .update({
+                            cancellation_status: 'scheduled',
+                            cancellation_confirmed_at: new Date().toISOString(),
+                            cancellation_error: null,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('dodo_subscription_id', dodo_subscription_id)
+                        .in('cancellation_status', ['request_pending', 'error', 'scheduled'])
+                }
             }
-
-            // --- REACTIVATE COMPLETED OR PAUSED CONTENT PLANS ---
-            // If the user's subscription renewed, they may have a content plan that was marked "completed"
-            // because their previously active subscription lapsed, or "paused" due to 0 credits.
-            // By setting their latest plan back to "active", the scheduler will pick it up and
-            // either resume processing or auto-generate a new plan if it's exhausted.
-            await reactivateUserPlans(supabase, effective_user_id)
 
             // Persist payment record for invoice history
             const paymentObj = data?.payment ?? data
@@ -718,9 +789,21 @@ export async function POST(req: NextRequest) {
             await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
             await (supabase as any)
                 .from('programs')
-                .update({ status: 'paused', updated_at: new Date().toISOString() })
-                .eq('user_id', effective_user_id)
-                .eq('status', 'active')
+                .update({
+                    status: 'cancelled',
+                    cancellation_status: 'ended',
+                    cancellation_confirmed_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('dodo_subscription_id', dodo_subscription_id)
+            await (supabase as any)
+                .from('programs')
+                .update({
+                    scope_status: 'cancelled',
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('dodo_subscription_id', dodo_subscription_id)
+                .neq('scope_status', 'scope_delivered')
         } else if (eventType === 'subscription.plan_changed') {
             // Plan changed mid-cycle: update mapping/status, do not reset credits
             if (effective_user_id && dodo_subscription_id) {
@@ -751,11 +834,21 @@ export async function POST(req: NextRequest) {
                             { completed_by: eventType },
                         )
                     } catch { }
-                    await provisionProgramForSubscription(
-                        supabase,
-                        effective_user_id,
-                        pricing_plan_id ?? null,
-                    )
+                    const { data: nextPlan } = await (supabase as any)
+                        .from('dodo_pricing_plans')
+                        .select('name, metadata')
+                        .eq('id', pricing_plan_id)
+                        .maybeSingle()
+                    const pendingTier = String(
+                        nextPlan?.metadata?.tier || nextPlan?.name || '',
+                    ).toLowerCase()
+                    if (['close', 'accelerate', 'dominate'].includes(pendingTier)) {
+                        await (supabase as any)
+                            .from('programs')
+                            .update({ pending_tier: pendingTier, updated_at: new Date().toISOString() })
+                            .eq('dodo_subscription_id', dodo_subscription_id)
+                            .eq('scope_status', 'active')
+                    }
                 }
                 await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
             }
@@ -771,7 +864,7 @@ export async function POST(req: NextRequest) {
                     expired: 'expired',
                 }
                 const mapped = statusMap[remoteStatus] ?? 'pending'
-                const { planCredits, pricing_plan_id } = await upsertSubscriptionFromEvent(supabase, {
+                await upsertSubscriptionFromEvent(supabase, {
                     user_id: effective_user_id,
                     dodo_subscription_id,
                     dodo_product_id: dodo_product_id ?? null,
@@ -780,24 +873,22 @@ export async function POST(req: NextRequest) {
                     price_snapshot,
                     currency_snapshot,
                 })
-                if (mapped === 'active') {
-                    await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits ?? null)
-                    await reactivateUserPlans(supabase, effective_user_id)
-                    await provisionProgramForSubscription(
-                        supabase,
-                        effective_user_id,
-                        pricing_plan_id ?? null,
-                    )
-                    try {
-                        await completeLatestPendingChange(
-                            supabase,
-                            effective_user_id,
-                            pricing_plan_id ?? null,
-                            { completed_by: eventType },
-                        )
-                    } catch { }
-                }
                 await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
+                if (
+                    subscriptionObj?.cancel_at_next_billing_date === true ||
+                    subscriptionObj?.cancel_at_period_end === true
+                ) {
+                    await (supabase as any)
+                        .from('programs')
+                        .update({
+                            cancellation_status: 'scheduled',
+                            cancellation_confirmed_at: new Date().toISOString(),
+                            cancellation_error: null,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('dodo_subscription_id', dodo_subscription_id)
+                        .in('cancellation_status', ['request_pending', 'error', 'scheduled'])
+                }
             }
         } else {
             // Unknown or unhandled event; accept for now

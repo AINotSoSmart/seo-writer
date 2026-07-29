@@ -148,7 +148,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint .",
-    "start": "next start"
+    "start": "next start",
+    "test:pivot-contract": "node --experimental-strip-types --test tests/pivot-contract.test.mjs"
   },
   "version": "0.1.0"
 }

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import { tasks } from "@trigger.dev/sdk/v3"
 import type { runAuditTask } from "@/trigger/run-audit"
+import { randomBytes } from "crypto"
+import { deriveSeeds } from "@/lib/harvest/pool"
+import { HARVEST_POLICY } from "@/lib/harvest/policy"
+import { createAdminClient } from "@/utils/supabase/admin"
 
 // ============================================================
 // Topical Audit API — Thin trigger + GET status endpoint
@@ -21,36 +25,69 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const { brandId, brandData, brandUrl } = await req.json()
+        const { brandId } = await req.json()
 
-        if (!brandId || !brandData || !brandUrl) {
-            return NextResponse.json({ error: "Brand ID, data, and URL required" }, { status: 400 })
+        if (!brandId) {
+            return NextResponse.json({ error: "Brand ID required" }, { status: 400 })
         }
 
-        // Check if there's already a running audit
-        const { data: existing } = await supabase
+        // Authentication is checked with the request client; immutable run
+        // creation/mutation is service-side only.
+        const db = createAdminClient() as any
+        const { data: brand, error: brandError } = await db
+            .from("brand_details")
+            .select("id, website_url, brand_data")
+            .eq("id", brandId)
+            .eq("user_id", user.id)
+            .single()
+        if (brandError || !brand) {
+            return NextResponse.json({ error: "Brand not found" }, { status: 404 })
+        }
+
+        const brandData = brand.brand_data
+        const brandUrl = brand.website_url
+        const seeds = deriveSeeds(brandData)
+        if (seeds.length === 0) {
+            return NextResponse.json(
+                { error: "Add a category or product description before running the audit." },
+                { status: 422 },
+            )
+        }
+
+        // One immutable run may execute per brand at a time.
+        const { data: existing } = await db
             .from("topical_audits")
-            .select("generation_status")
+            .select("id")
             .eq("user_id", user.id)
             .eq("brand_id", brandId)
-            .single()
+            .eq("run_status", "running")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
 
-        if (existing?.generation_status === "running") {
+        if (existing?.id) {
             return NextResponse.json({
                 message: "Audit already running",
-                status: "running"
+                status: "running",
+                auditId: existing.id,
             })
         }
 
-        // Create or reset the audit row. The result columns describe the
-        // evidence-backed closed pool; the former blueprint columns are gone.
-        const { error: upsertError } = await supabase
+        const publicToken = randomBytes(24).toString("hex")
+        const { data: audit, error: insertError } = await db
             .from("topical_audits")
-            .upsert({
+            .insert({
                 user_id: user.id,
                 brand_id: brandId,
+                subject_url: brandUrl,
+                input_seeds: seeds,
+                brand_snapshot: brandData,
+                audit_kind: "customer",
+                created_by_user_id: user.id,
+                run_status: "running",
                 generation_status: "running",
                 generation_phase: "competitor_discovery",
+                harvest_policy_version: HARVEST_POLICY.version,
                 generation_error: null,
                 authority_score: 0,
                 pool_size: 0,
@@ -59,30 +96,55 @@ export async function POST(req: NextRequest) {
                 competitors_scanned: 0,
                 topics_analyzed: 0,
                 user_pages_scanned: 0,
-                updated_at: new Date().toISOString()
-            }, {
-                onConflict: "user_id,brand_id"
+                public_token: publicToken,
+                started_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
             })
+            .select("id")
+            .single()
 
-        if (upsertError) {
-            console.error("[Audit API] Upsert failed:", upsertError)
-            throw new Error(`Failed to create audit record: ${upsertError.message}`)
+        if (insertError || !audit) {
+            console.error("[Audit API] Insert failed:", insertError)
+            throw new Error(`Failed to create audit record: ${insertError?.message || "unknown error"}`)
         }
 
         // Trigger the background task
-        const handle = await tasks.trigger<typeof runAuditTask>("run-topical-audit", {
-            userId: user.id,
-            brandId,
-            brandData,
-            brandUrl
-        })
+        let handle
+        try {
+            handle = await tasks.trigger<typeof runAuditTask>("run-topical-audit", {
+                userId: user.id,
+                brandId,
+                brandData,
+                brandUrl,
+                auditId: audit.id,
+            })
+        } catch (queueError) {
+            await db
+                .from("topical_audits")
+                .update({
+                    run_status: "failed",
+                    generation_status: "failed",
+                    generation_phase: null,
+                    failure_code: "queue_failed",
+                    generation_error:
+                        queueError instanceof Error
+                            ? queueError.message
+                            : "Audit queue failed",
+                    failed_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", audit.id)
+                .eq("user_id", user.id)
+            throw queueError
+        }
 
         console.log(`[Audit API] Triggered audit task: ${handle.id}`)
 
         return NextResponse.json({
             message: "Audit started",
             status: "running",
-            taskId: handle.id
+            taskId: handle.id,
+            auditId: audit.id,
         })
 
     } catch (error: any) {
@@ -109,9 +171,34 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "brandId required" }, { status: 400 })
         }
 
-        const { data: audit, error } = await supabase
+        const db = supabase as any
+        const { data: running } = await db
+            .from("topical_audits")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("brand_id", brandId)
+            .eq("run_status", "running")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        const { data: brand } = await db
+            .from("brand_details")
+            .select("current_audit_id")
+            .eq("id", brandId)
+            .eq("user_id", user.id)
+            .maybeSingle()
+
+        const auditId = running?.id || brand?.current_audit_id
+        if (!auditId) {
+            return NextResponse.json({ status: "not_found", audit: null })
+        }
+
+        const { data: audit, error } = await db
             .from("topical_audits")
             .select(`
+                id,
+                run_status,
                 generation_status,
                 generation_phase,
                 generation_error,
@@ -124,8 +211,8 @@ export async function GET(req: NextRequest) {
                 user_pages_scanned,
                 public_token
             `)
+            .eq("id", auditId)
             .eq("user_id", user.id)
-            .eq("brand_id", brandId)
             .single()
 
         if (error || !audit) {
@@ -137,7 +224,7 @@ export async function GET(req: NextRequest) {
 
         // Build a response tailored to the current status
         return NextResponse.json({
-            status: audit.generation_status,
+            status: audit.run_status,
             phase: audit.generation_phase,
             error: audit.generation_error,
             audit: audit.generation_status === "completed" ? {

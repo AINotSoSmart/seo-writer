@@ -237,36 +237,11 @@ export default function OnboardingPage() {
         window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
-    // Generate plan after viewing audit results
-    const handleGeneratePlan = async () => {
-        if (!brandId || !brandData) return
-        setIsGeneratingPlan(true)
-        setError("")
-
-        try {
-            const fullUrl = `https://${url.trim()}`
-            const bgRes = await fetch("/api/content-plan/start-background", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    brandId,
-                    brandData,
-                    brandUrl: fullUrl
-                }),
-            })
-
-            if (!bgRes.ok) {
-                const bgError = await bgRes.json()
-                throw new Error(bgError.error || "Failed to start plan generation")
-            }
-
-            // Clear onboarding storage and redirect
-            clearOnboardingStorage()
-            router.push("/content-plan")
-        } catch (e: any) {
-            setError(e.message || "Failed to start plan generation")
-            setIsGeneratingPlan(false)
-        }
+    // The immutable harvest is already the plan. Never mirror it into the
+    // legacy content_plans table or run a second paid harvest.
+    const handleGeneratePlan = () => {
+        clearOnboardingStorage()
+        router.push(auditScope?.checkoutEligible ? "/subscribe" : "/content-plan")
     }
 
     // Load the closed-pool read model after completion and on refresh.
@@ -757,11 +732,9 @@ export default function OnboardingPage() {
                                                         disabled={isGeneratingPlan}
                                                         className="bg-stone-900 text-white hover:bg-stone-800"
                                                     >
-                                                        {isGeneratingPlan ? (
-                                                            <><Loader2 className="w-4 h-4 animate-spin mr-2" />Preparing plan...</>
-                                                        ) : (
-                                                            <>Review Planned Articles <ArrowRight className="w-4 h-4 ml-2" /></>
-                                                        )}
+                                                        {auditScope.checkoutEligible
+                                                            ? <>Confirm URLs and Pricing <ArrowRight className="w-4 h-4 ml-2" /></>
+                                                            : <>Review Measured Scope <ArrowRight className="w-4 h-4 ml-2" /></>}
                                                     </Button>
                                                 </div>
                                             </div>

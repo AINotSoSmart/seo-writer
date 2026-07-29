@@ -3,47 +3,22 @@
  * NOTE: Do not import the server SDK here. These functions run in the browser.
  */
 
-type ProductCartItem = { product_id: string; quantity: number; amount?: number }
-
-type CustomerRequest = {
-    email: string
-    name?: string
-    phone_number?: string
-}
-
-type BillingAddress = {
-    country: string
-    city: string
-    state?: string
-    street: string
-    zipcode: string
-}
-
 /**
- * Create hosted Checkout Session and return the checkout_url and session_id
+ * Create a hosted checkout from a server-validated frozen program intent.
+ * The browser is never allowed to choose a Dodo product or arbitrary cart.
  */
 export async function checkout(
-    product_cart: ProductCartItem[],
-    customer?: CustomerRequest,
-    billing_address?: BillingAddress,
-    return_url?: string,
-    metadata?: Record<string, string>,
+    input: {
+        auditId: string
+        tier: 'close' | 'accelerate' | 'dominate'
+        publicationUrlPattern: string
+        returnUrl: string
+    },
 ): Promise<{ checkout_url: string; session_id: string }> {
-    if (!return_url) {
-        throw new Error('return_url is required')
-    }
-    const payload: any = {
-        product_cart,
-        return_url,
-        metadata,
-    }
-    if (customer) payload.customer = customer
-    if (billing_address) payload.billing_address = billing_address
-
     const res = await fetch('/api/dodopayments/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(input),
     })
 
     const data = await res.json()

@@ -28,7 +28,10 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const type = (searchParams.get('type') || 'email').toLowerCase()
-  const next = searchParams.get('next') ?? '/content-plan'
+  const requestedNext = searchParams.get('next') ?? '/content-plan'
+  const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//')
+    ? requestedNext
+    : '/content-plan'
 
   if (code) {
     try {
@@ -48,7 +51,11 @@ export async function GET(request: NextRequest) {
         const brandCount = await getBrandCount(data.user.id)
 
         // If no brands and not already going to onboarding/special page, redirect to onboarding
-        if (brandCount === 0 && !next.includes('onboarding')) {
+        if (
+          brandCount === 0 &&
+          !next.includes('onboarding') &&
+          !next.startsWith('/claim/')
+        ) {
           return NextResponse.redirect(`${origin}/onboarding`)
         }
 
@@ -81,7 +88,11 @@ export async function GET(request: NextRequest) {
         const brandCount = await getBrandCount(data.user.id)
 
         // If no brands and not already going to onboarding/special page, redirect to onboarding
-        if (brandCount === 0 && !next.includes('onboarding')) {
+        if (
+          brandCount === 0 &&
+          !next.includes('onboarding') &&
+          !next.startsWith('/claim/')
+        ) {
           return NextResponse.redirect(`${origin}/onboarding`)
         }
 

@@ -13,6 +13,11 @@ type AuthState = {
   success?: string
 }
 
+function safeNext(formData: FormData): string {
+  const value = String(formData.get('next') || '/content-plan')
+  return value.startsWith('/') && !value.startsWith('//') ? value : '/content-plan'
+}
+
 export async function signInWithMagicLink(
   _prevState: AuthState | null,
   formData: FormData
@@ -25,6 +30,7 @@ export async function signInWithMagicLink(
 
   // Apply rate limiting based on email only if enabled
   const email = formData.get('email') as string
+  const next = safeNext(formData)
   if (isRateLimitingEnabled()) {
     const rateLimitResult = await checkRateLimit(`magic-link:${email}`, authRateLimit)
 
@@ -40,7 +46,7 @@ export async function signInWithMagicLink(
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/content-plan`,
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     })
 
@@ -74,11 +80,12 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
   }
 
   const supabase = await createClient()
+  const next = safeNext(formData)
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/content-plan`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   })
 
@@ -119,7 +126,7 @@ export async function login(formData: FormData) {
     }
   }
 
-  redirect('/content-plan')
+  redirect(safeNext(formData))
 }
 
 export async function signup(formData: FormData) {
@@ -145,5 +152,5 @@ export async function signup(formData: FormData) {
     }
   }
 
-  redirect('/content-plan')
+  redirect(safeNext(formData))
 }

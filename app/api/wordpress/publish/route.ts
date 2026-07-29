@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
-import { publishToWordPress, uploadContentImagesToWordPress, prepareContentForWordPress } from "@/lib/integrations/wordpress-client"
+import {
+    prepareContentForWordPress,
+    publishToWordPress,
+    updatePostStatus,
+    uploadContentImagesToWordPress,
+} from "@/lib/integrations/wordpress-client"
+import { createAdminClient } from "@/utils/supabase/admin"
+
+function canonicalPublicationUrl(value: string): string {
+    const url = new URL(value)
+    url.hash = ""
+    url.search = ""
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/"
+    return url.toString()
+}
 
 export async function POST(req: NextRequest) {
     try {
@@ -10,6 +24,7 @@ export async function POST(req: NextRequest) {
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
+        const admin = createAdminClient() as any
 
         const body = await req.json()
         const { articleId, connectionId, publishStatus = 'publish' } = body
@@ -19,9 +34,9 @@ export async function POST(req: NextRequest) {
         }
 
         // 1. Fetch the article
-        const { data: article, error: articleError } = await supabase
+        const { data: article, error: articleError } = await (supabase as any)
             .from("articles")
-            .select("id, outline, final_html, meta_description, slug, featured_image_url, user_id")
+            .select("id, outline, final_html, meta_description, slug, featured_image_url, user_id, planned_article_id")
             .eq("id", articleId)
             .eq("user_id", user.id)
             .single()
@@ -86,33 +101,153 @@ export async function POST(req: NextRequest) {
         processedContent = prepareContentForWordPress(processedContent)
 
         // 5. Publish to WordPress
-        const result = await publishToWordPress(
+        const { data: plannedArticle } = article.planned_article_id
+            ? await (supabase as any)
+                  .from("planned_articles")
+                  .select("id, slug, target_url")
+                  .eq("id", article.planned_article_id)
+                  .eq("user_id", user.id)
+                  .maybeSingle()
+            : { data: null }
+
+        // Program posts are created as drafts first. This lets us verify the
+        // actual permalink before any public publication can break the graph.
+        const createStatus = plannedArticle ? "draft" : publishStatus
+        let result = await publishToWordPress(
             credentials,
             {
                 title: article.outline?.title || 'Untitled',
                 content: processedContent,
                 excerpt: article.meta_description || undefined,
-                slug: article.slug || undefined,
+                slug: plannedArticle?.slug || article.slug || undefined,
                 featuredImageUrl,
                 categoryId: connection.default_category_id || null,
             },
-            publishStatus
+            createStatus,
         )
 
         if (!result.success) {
             return NextResponse.json({ error: result.error }, { status: 500 })
         }
 
-        // 5. Update article with WordPress post info
-        await supabase
+        const returnedUrl = result.post?.link
+        if (
+            plannedArticle?.target_url &&
+            (
+                !returnedUrl ||
+                canonicalPublicationUrl(returnedUrl) !==
+                    canonicalPublicationUrl(plannedArticle.target_url)
+            )
+        ) {
+            await Promise.all([
+                admin
+                    .from("articles")
+                    .update({
+                        wordpress_post_id: String(result.post?.id),
+                        wordpress_post_url: returnedUrl,
+                        wordpress_site_id: connectionId,
+                        published_at: null,
+                    })
+                    .eq("id", articleId),
+                admin
+                    .from("planned_articles")
+                    .update({
+                        publication_status: "draft",
+                        publication_url: returnedUrl,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", plannedArticle.id),
+            ])
+            return NextResponse.json(
+                {
+                    error:
+                        "WordPress returned a permalink that does not match the frozen URL. The post was kept as a draft.",
+                    code: "permalink_mismatch",
+                    expectedUrl: plannedArticle.target_url,
+                    actualUrl: returnedUrl,
+                    postId: result.post?.id,
+                },
+                { status: 409 },
+            )
+        }
+
+        if (plannedArticle && publishStatus === "publish" && result.post?.id) {
+            result = await updatePostStatus(credentials, result.post.id, "publish")
+            if (!result.success) {
+                return NextResponse.json(
+                    {
+                        error:
+                            result.error ||
+                            "The permalink matched, but WordPress could not publish the draft.",
+                    },
+                    { status: 502 },
+                )
+            }
+            const publishedUrl = result.post?.link
+            if (
+                !publishedUrl ||
+                canonicalPublicationUrl(publishedUrl) !==
+                    canonicalPublicationUrl(plannedArticle.target_url)
+            ) {
+                await updatePostStatus(credentials, result.post!.id, "draft")
+                await Promise.all([
+                    admin
+                        .from("articles")
+                        .update({
+                            wordpress_post_id: String(result.post?.id),
+                            wordpress_post_url: publishedUrl || null,
+                            wordpress_site_id: connectionId,
+                            published_at: null,
+                        })
+                        .eq("id", articleId)
+                        .eq("user_id", user.id),
+                    admin
+                        .from("planned_articles")
+                        .update({
+                            publication_status: "draft",
+                            publication_url: publishedUrl || null,
+                            published_at: null,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("id", plannedArticle.id)
+                        .eq("user_id", user.id),
+                ])
+                return NextResponse.json(
+                    {
+                        error:
+                            "WordPress changed the permalink while publishing. The post was returned to draft.",
+                        code: "permalink_mismatch",
+                        expectedUrl: plannedArticle.target_url,
+                        actualUrl: publishedUrl || null,
+                    },
+                    { status: 409 },
+                )
+            }
+        }
+
+        const isPublished = result.post?.status === "publish"
+        const publicationTime = isPublished ? new Date().toISOString() : null
+        await admin
             .from("articles")
             .update({
                 wordpress_post_id: String(result.post?.id),
                 wordpress_post_url: result.post?.link,
                 wordpress_site_id: connectionId,
-                published_at: new Date().toISOString(),
+                published_at: publicationTime,
             })
             .eq("id", articleId)
+
+        if (plannedArticle) {
+            await admin
+                .from("planned_articles")
+                .update({
+                    publication_status: isPublished ? "published" : "draft",
+                    publication_url: result.post?.link,
+                    published_at: publicationTime,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", plannedArticle.id)
+        }
 
         return NextResponse.json({
             success: true,

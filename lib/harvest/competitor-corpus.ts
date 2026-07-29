@@ -17,6 +17,7 @@
 
 import { fetchAllSitemapUrls, filterContentUrls, hasMeaningfulTitle } from "@/lib/audit/site-scanner"
 import { batchExtractDocuments } from "./page-document"
+import { HARVEST_POLICY } from "./policy"
 import {
     HarvestedQuery,
     HarvestOutput,
@@ -49,8 +50,6 @@ const BOILERPLATE_TITLE_PATTERNS = [
 ]
 
 /** Pages worth fetching per competitor — each one is an HTTP request */
-const MAX_PAGES_PER_COMPETITOR = 120
-
 function isBoilerplateTitle(title: string): boolean {
     return BOILERPLATE_TITLE_PATTERNS.some((pattern) => pattern.test(title.trim()))
 }
@@ -77,8 +76,10 @@ export async function harvestCompetitorCorpus(
     let failed = 0
     let slugOnlyDropped = 0
     let boilerplateDropped = 0
+    let remainingPageBudget = HARVEST_POLICY.maxCompetitorCorpusPages
 
     for (const competitorUrl of competitorUrls) {
+        if (remainingPageBudget <= 0) break
         try {
             const sitemapUrls = await fetchAllSitemapUrls(competitorUrl)
 
@@ -88,7 +89,11 @@ export async function harvestCompetitorCorpus(
                 continue
             }
 
-            const contentUrls = filterContentUrls(sitemapUrls).slice(0, MAX_PAGES_PER_COMPETITOR)
+            const contentUrls = filterContentUrls(sitemapUrls).slice(
+                0,
+                remainingPageBudget,
+            )
+            remainingPageBudget -= contentUrls.length
             const documents = await batchExtractDocuments(contentUrls)
 
             for (const doc of documents) {

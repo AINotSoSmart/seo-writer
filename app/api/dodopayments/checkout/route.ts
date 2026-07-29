@@ -1,151 +1,130 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getDodoClient } from '@/lib/dodopayments-server'
-import { createClient } from '@/utils/supabase/server'
+import { NextRequest, NextResponse } from "next/server"
+
+import { getDodoClient } from "@/lib/dodopayments-server"
+import {
+    createProgramPurchaseIntent,
+    PurchaseIntentError,
+    type VelocityTier,
+} from "@/lib/harvest/purchase-intent"
+import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
+
+const VALID_TIERS = new Set<VelocityTier>(["close", "accelerate", "dominate"])
 
 /**
- * POST /api/dodopayments/checkout
- * Creates a Dodo Payments Checkout Session for a subscription product.
- *
- * References:
- * - Dodo Payments Node SDK: https://github.com/dodopayments/dodopayments-node/blob/main/README.md
- * - Checkout Sessions API: https://github.com/dodopayments/dodopayments-node/blob/main/api.md
- *
- * Expected JSON body:
- * {
- *   "product_cart": [{ "product_id": "prod_xxx", "quantity": 1, "amount"?: number }],
- *   "customer": { "email": string, "name"?: string, "phone_number"?: string },
- *   "billing_address": { "country": string, "city": string, "state"?: string, "street": string, "zipcode": string },
- *   "return_url": string,
- *   "metadata"?: Record<string, string>
- * }
- *
- * Response:
- * { "checkout_url": string, "session_id": string }
+ * Closed-pool checkout accepts product intent, not an arbitrary Dodo cart.
+ * The database intent pins the immutable audit, six clusters, URLs, and graph.
  */
 export async function POST(req: NextRequest) {
+    if (process.env.CLOSED_POOL_CHECKOUT_ENABLED !== "true") {
+        return NextResponse.json(
+            { error: "Checkout remains closed while the delivery contract is being verified." },
+            { status: 503 },
+        )
+    }
+
     try {
         const supabase = await createClient()
         const {
             data: { user },
         } = await supabase.auth.getUser()
-
         if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
         const body = await req.json().catch(() => ({}))
-        const {
-            product_cart,
-            customer,
-            billing_address,
-            return_url,
-            metadata,
-        } = body || {}
+        const auditId = typeof body.auditId === "string" ? body.auditId : ""
+        const tier = String(body.tier || "").toLowerCase() as VelocityTier
+        const publicationUrlPattern =
+            typeof body.publicationUrlPattern === "string"
+                ? body.publicationUrlPattern
+                : ""
+        const returnUrl = typeof body.returnUrl === "string" ? body.returnUrl : ""
 
-        // Basic validation
-        if (!Array.isArray(product_cart) || product_cart.length === 0) {
+        if (!auditId || !VALID_TIERS.has(tier) || !publicationUrlPattern || !returnUrl) {
             return NextResponse.json(
-                { error: 'product_cart is required and must be a non-empty array' },
+                {
+                    error:
+                        "auditId, a valid tier, publicationUrlPattern, and returnUrl are required.",
+                },
                 { status: 400 },
             )
         }
-        for (const item of product_cart) {
-            if (!item?.product_id || typeof item.product_id !== 'string') {
-                return NextResponse.json(
-                    { error: 'Each product_cart item must include a valid product_id' },
-                    { status: 400 },
-                )
-            }
-            if (
-                typeof item.quantity !== 'number' ||
-                !Number.isInteger(item.quantity) ||
-                item.quantity <= 0
-            ) {
-                return NextResponse.json(
-                    { error: 'Each product_cart item must include a positive integer quantity' },
-                    { status: 400 },
-                )
-            }
-            if (item.amount !== undefined && (typeof item.amount !== 'number' || item.amount < 0)) {
-                return NextResponse.json(
-                    { error: 'If provided, amount must be a non-negative number (lowest denomination)' },
-                    { status: 400 },
-                )
-            }
-        }
 
-        if (!return_url || typeof return_url !== 'string') {
-            return NextResponse.json({ error: 'return_url is required' }, { status: 400 })
-        }
-
-        // Build metadata: add user_id only if not already provided
-        const finalMetadata: Record<string, any> = { ...(metadata ?? {}) }
-        if (!Object.prototype.hasOwnProperty.call(finalMetadata, 'user_id')) {
-            finalMetadata.user_id = user.id
-        }
-
+        const intent = await createProgramPurchaseIntent({
+            userId: user.id,
+            auditId,
+            tier,
+            publicationUrlPattern,
+        })
         const client = getDodoClient()
+        const session = await client.checkoutSessions.create({
+            product_cart: [{ product_id: intent.dodoProductId, quantity: 1 }],
+            return_url: returnUrl,
+            customer: user.email ? { email: user.email } : undefined,
+            metadata: {
+                user_id: user.id,
+                purchase_intent_id: intent.id,
+                audit_id: auditId,
+                tier,
+            },
+        } as any)
 
-        // Build params for Dodo Checkout Session
-        const params: any = {
-            product_cart,
-            return_url,
-            metadata: finalMetadata,
+        const db = createAdminClient() as any
+        const { error: intentUpdateError } = await db
+            .from("program_purchase_intents")
+            .update({
+                status: "checkout_created",
+                checkout_session_id: session.session_id,
+            })
+            .eq("id", intent.id)
+            .eq("user_id", user.id)
+        if (intentUpdateError) {
+            throw new Error(
+                `Checkout was created but its frozen purchase intent could not be activated: ${intentUpdateError.message}`,
+            )
         }
 
-        if (customer && typeof customer === 'object') {
-            params.customer = customer
-        }
-        if (billing_address && typeof billing_address === 'object') {
-            params.billing_address = billing_address
-        }
-
-        const session = await client.checkoutSessions.create(params)
-
-        // Optional: Track a pending subscription change (audit trail)
-        // Attempt to map the first product to a local pricing plan
         try {
-            const firstProductId: string | undefined = product_cart?.[0]?.product_id
-            let to_plan_id: string | null = null
-
-            if (firstProductId) {
-                const { data: plan } = await supabase
-                    .from('dodo_pricing_plans')
-                    .select('id')
-                    .eq('dodo_product_id', firstProductId)
-                    .maybeSingle()
-
-                to_plan_id = (plan as any)?.id ?? null
-            }
-
-            await supabase.from('dodo_subscription_changes').insert({
+            await db.from("dodo_subscription_changes").insert({
                 user_id: user.id,
                 from_plan_id: null,
-                to_plan_id,
+                to_plan_id: intent.pricingPlanId,
                 checkout_session_id: session.session_id,
-                status: 'pending',
-                change_type: 'new',
+                status: "pending",
+                change_type: "new",
                 metadata: {
-                    source: 'api.dodopayments.checkout',
-                    product_cart,
+                    source: "closed_pool_purchase_intent",
+                    purchase_intent_id: intent.id,
+                    audit_id: auditId,
+                    tier,
                 },
             })
-        } catch (auditErr) {
-            console.warn('dodo_subscription_changes insert failed (non-blocking):', auditErr)
+        } catch (error) {
+            console.warn("Subscription change audit insert failed:", error)
         }
 
+        return NextResponse.json({
+            checkout_url: session.checkout_url,
+            session_id: session.session_id,
+            purchase_intent_id: intent.id,
+        })
+    } catch (error) {
+        console.error("Checkout session error:", error)
+        if (error instanceof PurchaseIntentError) {
+            return NextResponse.json(
+                { error: error.message, code: error.code },
+                { status: error.status },
+            )
+        }
         return NextResponse.json(
             {
-                checkout_url: session.checkout_url,
-                session_id: session.session_id,
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : "Failed to create checkout session",
             },
-            { status: 200 },
+            { status: 500 },
         )
-    } catch (err: any) {
-        console.error('Checkout session error:', err)
-        const message =
-            (err && (err.message || err.error || err.toString())) ||
-            'Failed to create checkout session'
-        return NextResponse.json({ error: message }, { status: 500 })
     }
 }

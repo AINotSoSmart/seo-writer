@@ -1,8 +1,6 @@
 import { MetadataRoute } from 'next'
 import { defaultSEO } from '@/config/seo'
 import { getAllPostSlugs } from '@/lib/wordpress'
-import { getAllToolSlugs } from '@/lib/tools'
-import { solutions } from '@/app/solutions/data'
 import { features } from '@/app/features/data'
 // Regenerate sitemap periodically to auto-include newly published WordPress posts
 export const revalidate = 600 // seconds
@@ -51,45 +49,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }))
 
   // Dynamically include WordPress blog posts
-  const blogSlugs = await getAllPostSlugs().catch(() => [])
+  const retiredBlogSlugs = new Set([
+    'boost-ecommerce-ai-search-visibility',
+  ])
+  const blogSlugs = (await getAllPostSlugs().catch(() => []))
+    .filter((slug) => !retiredBlogSlugs.has(slug))
   const blogPages: MetadataRoute.Sitemap = blogSlugs.map((slug) => ({
     url: `${baseUrl}/blog/${slug}`,
     lastModified: currentDate,
     changeFrequency: 'weekly' as const,
     priority: 0.6,
   }))
-
-  // Dynamically include Tools
-  const toolSlugs = await getAllToolSlugs().catch(() => [])
-  const toolPages: MetadataRoute.Sitemap = toolSlugs.map((slug) => ({
-    url: `${baseUrl}/tools/${slug}`,
-    lastModified: currentDate,
-    changeFrequency: 'weekly' as const,
-    priority: 0.8,
-  }))
-
-  // Add main tools page if not already in extraRoutes
-  const toolsIndexPage: MetadataRoute.Sitemap = [{
-    url: `${baseUrl}/tools`,
-    lastModified: currentDate,
-    changeFrequency: 'weekly' as const,
-    priority: 0.9,
-  }]
-
-  // Dynamically include Solutions
-  const solutionSlugs = Object.keys(solutions)
-  const solutionPages: MetadataRoute.Sitemap = solutionSlugs.map((slug) => ({
-    url: `${baseUrl}/solutions/${slug}`,
-    lastModified: currentDate,
-    changeFrequency: 'weekly' as const,
-    priority: 0.8,
-  }))
-  const solutionsIndexPage: MetadataRoute.Sitemap = [{
-    url: `${baseUrl}/solutions`,
-    lastModified: currentDate,
-    changeFrequency: 'weekly' as const,
-    priority: 0.9,
-  }]
 
   // Dynamically include Features
   const featureSlugs = Object.keys(features)
@@ -108,5 +78,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Note: Protected pages like /blog-writer, /account are intentionally excluded
 
-  return [...staticPages, ...additionalPages, ...blogPages, ...toolPages, ...toolsIndexPage, ...solutionsIndexPage, ...solutionPages, ...featuresIndexPage, ...featurePages]
+  return [...staticPages, ...additionalPages, ...blogPages, ...featuresIndexPage, ...featurePages]
 }

@@ -5,8 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { getUserBrandStatus } from "@/actions/brand"
 import { getUserDefaults, setDefaultBrand } from "@/actions/preferences"
 import { createClient } from "@/utils/supabase/client"
-import { getBrandLinkCountAction } from "@/actions/internal-linking"
-import { Check, Globe, Plus, Edit, Settings2, Loader2, Link2, RefreshCcw, ExternalLink, AlertCircle, FileText, Search } from "lucide-react"
+import { Check, Globe, Plus, Edit, Settings2, Loader2, ExternalLink, AlertCircle, FileText, Search } from "lucide-react"
 import BrandOnboarding from "@/components/brand-onboarding"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -31,8 +30,6 @@ export default function SettingsPage() {
   const [brandCount, setBrandCount] = useState(0)
   const [isCreatingBrand, setIsCreatingBrand] = useState(false)
   const [editingBrand, setEditingBrand] = useState<BrandInfo | null>(null)
-  const [syncingId, setSyncingId] = useState<string | null>(null)
-  const [linkCounts, setLinkCounts] = useState<Record<string, number>>({})
 
 
 
@@ -66,21 +63,6 @@ export default function SettingsPage() {
     init()
   }, [supabase, router])
 
-  const fetchLinkCounts = async (brandsList: BrandInfo[]) => {
-    const counts: Record<string, number> = {}
-    await Promise.all(brandsList.map(async (b) => {
-      const res = await getBrandLinkCountAction(b.id)
-      if (res.success) counts[b.id] = res.count
-    }))
-    setLinkCounts(counts)
-  }
-
-  useEffect(() => {
-    if (brands.length > 0) {
-      fetchLinkCounts(brands)
-    }
-  }, [brands])
-
   const refreshBrands = async () => {
     const status = await getUserBrandStatus()
     // @ts-ignore
@@ -89,31 +71,6 @@ export default function SettingsPage() {
     setBrandLimit(status.limit)
     // @ts-ignore
     setBrandCount(status.count)
-  }
-
-  const handleSyncLinks = async (brandId: string, websiteUrl: string) => {
-    setSyncingId(brandId)
-    try {
-      // Clean URL and assume /sitemap.xml
-      let sitemapUrl = websiteUrl.endsWith('/') ? `${websiteUrl}sitemap.xml` : `${websiteUrl}/sitemap.xml`
-
-      const res = await fetch('/api/content-plan/sync-links', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sitemapUrl, brandId })
-      })
-
-      if (!res.ok) throw new Error("Failed to start sync")
-
-      toast.success("Sync started! This may take a few minutes for deep indexing.")
-
-      // Update count after a delay (optimistic or just let user refresh)
-      setTimeout(() => fetchLinkCounts(brands), 3000)
-    } catch (error: any) {
-      toast.error(error.message || "Failed to sync links")
-    } finally {
-      setSyncingId(null)
-    }
   }
 
   const handleUpdateSearchPrefs = async (brandId: string, field: 'search_country' | 'search_topic' | 'article_length', value: string) => {
@@ -326,38 +283,6 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        {/* Panel: Internal Linking */}
-                        <div className="p-4 bg-white rounded-xl border border-stone-100 md:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-stone-200 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-50 text-blue-500 rounded-md border border-blue-100">
-                              <Link2 className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <div className="text-[10px] font-bold text-stone-900 uppercase tracking-wider mb-0.5">Internal Linking Engine</div>
-                              <div className="text-xs text-stone-500 font-medium flex items-center gap-2">
-                                {linkCounts[b.id] !== undefined ? (
-                                  <>
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                                    {linkCounts[b.id]} links indexed and ready
-                                  </>
-                                ) : (
-                                  'Index your site for semantic link suggestions'
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="h-9 text-xs gap-2 px-4 font-bold bg-stone-100 hover:bg-stone-200 text-stone-900 border-none transition-colors w-full sm:w-auto"
-                            onClick={() => handleSyncLinks(b.id, b.website_url)}
-                            disabled={syncingId === b.id}
-                          >
-                            <RefreshCcw className={`w-3.5 h-3.5 ${syncingId === b.id ? 'animate-spin' : ''}`} />
-                            {syncingId === b.id ? 'SYNCING...' : 'SYNC SITE'}
-                          </Button>
-                        </div>
                       </div>
                     </div>
                   )

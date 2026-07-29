@@ -23,6 +23,11 @@ import { analyzeArticleCoverage } from "@/lib/coverage/analyzer"
 import { ArticleReadyEmail } from "@/lib/emails/templates/article-ready"
 import { resend, EMAIL_FROM, EMAIL_REPLY_TO } from "@/lib/emails/client"
 import { render } from "@react-email/components"
+import {
+  ProgramCostCollector,
+  trackGeminiClient,
+  trackTavilyClient,
+} from "@/lib/harvest/cost-accounting"
 
 /**
  * Tactical Deduplication Layer: Enriches outline sections with link instructions
@@ -115,6 +120,34 @@ const cleanAndParse = (text: string) => {
       throw new Error("Failed to parse JSON from LLM response")
     }
   }
+}
+
+/**
+ * The model may omit a requested link. Frozen program edges are a delivery
+ * contract, so deterministically append any missing edge before HTML is saved.
+ */
+function ensureFrozenLinksInMarkdown(
+  markdown: string,
+  links: Array<{ title: string; url: string }>
+): string {
+  // A bare URL, citation, image, or differently worded anchor is not the
+  // frozen edge. Require the exact contracted anchor and destination.
+  const normalizedLinks = links.map((link) => ({
+    ...link,
+    anchor: link.title.replace(/[[\]]/g, "").trim(),
+  }))
+  const missing = normalizedLinks.filter(
+    (link) =>
+      !markdown.includes(`[${link.anchor}](${link.url})`) &&
+      !markdown.includes(`[${link.anchor}](<${link.url}>)`),
+  )
+  if (missing.length === 0) return markdown
+
+  const related = missing
+    .map((link) => `- [${link.anchor}](<${link.url}>)`)
+    .join("\n")
+
+  return `${markdown.trim()}\n\n## Related reading\n\n${related}\n`
 }
 
 // Self-correcting JSON parser with Zod validation retry
@@ -1392,7 +1425,21 @@ State facts confidently from the provided instructions notes for wiritng the sec
 `
 }
 
-
+interface GenerateBlogPayload {
+  articleId: string;
+  keyword: string;
+  brandId: string;
+  title?: string;
+  articleType?: ArticleType;
+  articleLength?: ArticleLength;
+  supportingKeywords?: string[];
+  cluster?: string;
+  planId?: string;
+  itemId?: string;
+  plannedArticleId?: string;
+  frozenLinks?: Array<{ title: string; url: string; relationship?: string }>;
+  instructions?: string;
+}
 
 export const generateBlogPost = task({
   id: "generate-blog-post",
@@ -1401,20 +1448,40 @@ export const generateBlogPost = task({
   queue: {
     concurrencyLimit: 3, // Max 3 articles generating simultaneously across all users
   },
-  run: async (payload: {
-    articleId: string;
-    keyword: string;
-    brandId: string;
-    title?: string;
-    articleType?: ArticleType;
-    articleLength?: ArticleLength;
-    supportingKeywords?: string[];
-    cluster?: string;
-    planId?: string;
-    itemId?: string;
-    plannedArticleId?: string;
-    instructions?: string;
-  }) => {
+  maxDuration: 900,
+  onFailure: async ({ payload, error }: { payload: GenerateBlogPayload; error: unknown }) => {
+    if (!payload.plannedArticleId) return
+    const supabase = createAdminClient() as any
+    const message =
+      error instanceof Error ? error.message : "Generation task ended before completion"
+    await supabase
+      .from("planned_articles")
+      .update({
+        status: "failed",
+        generation_status: "failed",
+        generation_error: message.slice(0, 1000),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", payload.plannedArticleId)
+      .eq("generation_status", "generating")
+    const { data: planned } = await supabase
+      .from("planned_articles")
+      .select("cluster_id")
+      .eq("id", payload.plannedArticleId)
+      .maybeSingle()
+    if (planned?.cluster_id) {
+      await supabase
+        .from("program_clusters")
+        .update({
+          state: "blocked",
+          failure_code: "generation_task_failed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("audit_cluster_id", planned.cluster_id)
+        .in("state", ["generating", "ready"])
+    }
+  },
+  run: async (payload: GenerateBlogPayload) => {
     const {
       articleId,
       keyword,
@@ -1427,14 +1494,19 @@ export const generateBlogPost = task({
       planId,
       itemId,
       plannedArticleId,
+      frozenLinks = [],
       instructions
     } = payload
     const supabase = createAdminClient()
+    const costCollector = new ProgramCostCollector()
     let phase: "research" | "outline" | "writing" | "polish" = "research"
 
     // Initialize clients inside the task to avoid build-time errors
-    const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY! })
-    const genAI = getGeminiClient()
+    const tvly = trackTavilyClient(
+      tavily({ apiKey: process.env.TAVILY_API_KEY! }),
+      costCollector,
+    )
+    const genAI = trackGeminiClient(getGeminiClient(), costCollector)
 
     try {
       // 0. Brand is required - fetch brand details including style_dna
@@ -1465,7 +1537,10 @@ export const generateBlogPost = task({
       const userId = articleRec?.user_id
       let internalLinks: any[] = []
 
-      if (userId) {
+      if (frozenLinks.length > 0) {
+        internalLinks = frozenLinks
+        console.log(`[Blog Gen] Using ${frozenLinks.length} frozen program links`)
+      } else if (userId) {
         console.log(`🔗 [DEBUG] Searching for internal links...`)
         console.log(`🔗 [DEBUG] userId: ${userId}, brandId: ${brandId}`)
         console.log(`🔗 [DEBUG] Search query: "${title || keyword}"`)
@@ -1853,6 +1928,7 @@ CRITICAL EXECUTION RULES:
             )
 
             // Generate image via Fal.ai
+            costCollector.recordRequest("fal", "fal-ai/flux-2", "section_image")
             const sectionImageResult = await generateImage(sectionImagePrompt) as any
             const sectionImageUrl = sectionImageResult?.images?.[0]?.url
 
@@ -1906,7 +1982,10 @@ CRITICAL EXECUTION RULES:
       // from Phase 4. Also prevents hallucination risk from large context edits.
 
       // Use currentDraft directly - it's already clean Markdown from Phase 4
-      const finalMarkdown = currentDraft
+      const finalMarkdown =
+        frozenLinks.length > 0
+          ? ensureFrozenLinksInMarkdown(currentDraft, frozenLinks)
+          : currentDraft
 
       // Convert Markdown to HTML for public blog view cache
       const finalHtml = await marked.parse(finalMarkdown)
@@ -2089,6 +2168,7 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
         const imagePrompt = imagePromptResponse.text || `A professional featured image for a blog post about ${keyword}`
 
         // 2. Generate Image using Fal.ai
+        costCollector.recordRequest("fal", "fal-ai/flux-2", "featured_image")
         const imageResult = await generateImage(imagePrompt) as any
         const imageUrl = imageResult?.images?.[0]?.url
 
@@ -2150,7 +2230,7 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
       }
 
       // --- NOTIFICATION: SEND EMAIL ---
-      if (userId) {
+      if (userId && !plannedArticleId) {
         try {
           const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId)
 
@@ -2178,72 +2258,19 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
         }
       }
 
-      // --- PHASE 8: UPDATE CONTENT PLAN IF APPLICABLE ---
-      if (payload.planId && payload.itemId) {
-        try {
-          // 1. Fetch current plan
-          const { data: plan } = await (supabase as any)
-            .from("content_plans")
-            .select("*")
-            .eq("id", payload.planId)
-            .single()
-
-          if (plan && plan.plan_data) {
-            // 2. Update specific item status
-            const updatedPlanData = plan.plan_data.map((item: any) => {
-              if (item.id === payload.itemId) {
-                return { ...item, status: "published" } // Mark as published when generation completes
-              }
-              return item
-            })
-
-            // 3. Save back
-            await (supabase as any)
-              .from("content_plans")
-              .update({ plan_data: updatedPlanData })
-              .eq("id", payload.planId)
-
-            console.log(`Updated content plan ${payload.planId} item ${payload.itemId} to published`)
-          }
-        } catch (e) {
-          console.error("Failed to update content plan status", e)
-          // Non-blocking
-        }
-      }
-
-      // Closed-pool delivery state is authoritative in planned_articles. Mark
-      // the row complete only after the article itself has finished, then
-      // derive burn-down progress from completed rows to avoid counting failed
-      // Trigger jobs as "closed".
+      // Generation does not mean delivery or publication. The cluster
+      // coordinator releases every generated sibling atomically later.
       if (plannedArticleId) {
         await (supabase as any)
           .from("planned_articles")
-          .update({ status: "published", updated_at: new Date().toISOString() })
+          .update({
+            status: "writing",
+            generation_status: "generated",
+            generated_at: new Date().toISOString(),
+            generation_error: null,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", plannedArticleId)
-
-        const { data: program } = await (supabase as any)
-          .from("programs")
-          .select("id, clusters_included")
-          .eq("brand_id", brandId)
-          .eq("status", "active")
-          .maybeSingle()
-
-        if (program?.id && Array.isArray(program.clusters_included)) {
-          const { count } = await (supabase as any)
-            .from("planned_articles")
-            .select("id", { count: "exact", head: true })
-            .eq("brand_id", brandId)
-            .in("cluster_id", program.clusters_included)
-            .eq("status", "published")
-
-          await (supabase as any)
-            .from("programs")
-            .update({
-              completed_count: count || 0,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", program.id)
-        }
       }
 
 
@@ -2297,15 +2324,44 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
       if (payload.plannedArticleId) {
         await (supabase as any)
           .from("planned_articles")
-          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .update({
+            status: "failed",
+            generation_status: "failed",
+            generation_error: msg,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", payload.plannedArticleId)
-        await (supabase as any)
-          .from("programs")
-          .update({ status: "paused", updated_at: new Date().toISOString() })
-          .eq("brand_id", payload.brandId)
-          .eq("status", "active")
+        const { data: planned } = await (supabase as any)
+          .from("planned_articles")
+          .select("cluster_id")
+          .eq("id", payload.plannedArticleId)
+          .maybeSingle()
+        if (planned?.cluster_id) {
+          await (supabase as any)
+            .from("program_clusters")
+            .update({
+              state: "blocked",
+              failure_code: "article_generation_failed",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("audit_cluster_id", planned.cluster_id)
+            .in("state", ["scheduled", "generating", "ready"])
+        }
       }
       throw e
+    } finally {
+      try {
+        await costCollector.persist(
+          supabase as any,
+          payload.plannedArticleId,
+          payload.articleId,
+        )
+      } catch (costError) {
+        console.error(
+          `[ProgramCost] Failed to persist usage for ${payload.articleId}:`,
+          costError,
+        )
+      }
     }
   },
 })

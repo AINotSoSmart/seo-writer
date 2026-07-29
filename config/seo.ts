@@ -1,321 +1,212 @@
-/**
- * SEO Configuration for FlipAEO
- * 
- * This file contains all SEO-related configurations for FlipAEO,
- * the Strategic Content Engine for Generative Engine Optimization (GEO).
- */
-
 export interface SEOConfig {
-  title: string;
-  description: string;
-  keywords: string[];
-  author: string;
-  siteUrl: string;
-  siteName: string;
-  locale: string;
-  type: string;
-  robots: string;
-  googleSiteVerification?: string;
-  bingSiteVerification?: string;
-  yandexVerification?: string;
+  title: string
+  description: string
+  keywords: string[]
+  author: string
+  siteUrl: string
+  siteName: string
+  locale: string
+  type: string
+  robots: string
+  googleSiteVerification?: string
+  bingSiteVerification?: string
+  yandexVerification?: string
 }
 
-export interface SocialConfig {
-  twitter: {
-    handle: string;
-    site: string;
-    cardType: 'summary' | 'summary_large_image' | 'app' | 'player';
-  };
-  linkedin: {
-    handle?: string;
-  };
-}
-
-export interface OrganizationSchema {
-  '@type': string;
-  name: string;
-  url: string;
-  logo: string;
-  description: string;
-  address?: {
-    '@type': string;
-    streetAddress?: string;
-    addressLocality?: string;
-    addressRegion?: string;
-    postalCode?: string;
-    addressCountry?: string;
-  };
-  contactPoint?: {
-    '@type': string;
-    telephone?: string;
-    contactType?: string;
-    email?: string;
-  };
-  sameAs?: string[];
-}
-
-// Default SEO Configuration
 export const defaultSEO: SEOConfig = {
-  title: 'FlipAEO - The First Answer Engine Optimization (AEO) Writer',
-  description: 'FlipAEO is the only automated AEO platform that builds topical authority and forces structured data to get your brand cited by Perplexity, ChatGPT, and AI Search. 30 articles/month on autopilot.',
+  title: "FlipAEO — Evidence-backed topic-cluster delivery",
+  description:
+    "FlipAEO measures source-linked search gaps, freezes six qualified topic clusters and their internal-link graph, then delivers each cluster as a complete batch.",
   keywords: [
-    'Answer Engine Optimization tool',
-    'GEO Content Writer',
-    'Optimize for Perplexity AI',
-    'AI content engine',
-    'AI article generator',
-    'authority content',
-    'AI visibility',
-    'content strategy',
-    'SEO AI tool',
-    'ChatGPT ranking',
-    'Perplexity optimization',
-    'AI citations',
-    'B2B content marketing',
-    'automated content creation',
-    'brand authority'
+    "topic cluster software",
+    "content gap audit",
+    "internal linking",
+    "content program",
+    "SEO content clusters",
   ],
-  author: 'FlipAEO',
-  siteUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://flipaeo.com',
-  siteName: 'FlipAEO',
-  locale: 'en_US',
-  type: 'website',
-  robots: 'index, follow',
-  // Add your verification codes here
-  googleSiteVerification: '',
-  yandexVerification: '',
-};
+  author: "FlipAEO",
+  siteUrl: process.env.NEXT_PUBLIC_APP_URL || "https://flipaeo.com",
+  siteName: "FlipAEO",
+  locale: "en_US",
+  type: "website",
+  robots: "index, follow",
+  googleSiteVerification: "",
+  yandexVerification: "",
+}
 
-// Social Media Configuration
-export const socialConfig: SocialConfig = {
+export const socialConfig = {
   twitter: {
-    handle: '@flipaeo',
-    site: '@flipaeo',
-    cardType: 'summary_large_image',
+    handle: "@flipaeo",
+    site: "@flipaeo",
+    cardType: "summary_large_image" as const,
   },
-  linkedin: {
-    handle: 'flipaeo',
-  },
-};
+  linkedin: { handle: "flipaeo" },
+}
 
-// Organization Schema for Structured Data
-export const organizationSchema: OrganizationSchema = {
-  '@type': 'Organization',
-  name: 'FlipAEO',
+export const organizationSchema = {
+  "@type": "Organization",
+  name: "FlipAEO",
   url: defaultSEO.siteUrl,
   logo: `${defaultSEO.siteUrl}/site-logo.png`,
-  description: 'Strategic Content Engine for Generative Engine Optimization. Helping businesses dominate AI search with authority-building content.',
+  description: defaultSEO.description,
   contactPoint: {
-    '@type': 'ContactPoint',
-    contactType: 'customer service',
-    email: 'support@flipaeo.com',
+    "@type": "ContactPoint",
+    contactType: "customer service",
+    email: "support@flipaeo.com",
   },
-  sameAs: [
-    'https://x.com/flipaeo',
-  ],
-};
+  sameAs: ["https://x.com/flipaeo"],
+}
 
-// --- Page-specific SEO configurations ---
 export const pageSEO = {
   home: {
-    title: 'FlipAEO - The First Answer Engine Optimization (AEO) Writer | Get Cited by AI',
-    description: 'Stop fighting for Google\'s blue links. FlipAEO is the only automated AEO platform that builds topical authority, forces structured data, and guarantees E-E-A-T to get your brand cited by Perplexity, ChatGPT, and Google AI Overviews.',
-    keywords: ['Answer Engine Optimization tool', 'GEO Content Writer', 'Optimize for Perplexity AI', 'AI Citation Builder', 'Automated AEO Writer', 'content strategy'],
+    title: "Evidence-backed topic-cluster delivery",
+    description: defaultSEO.description,
+    keywords: defaultSEO.keywords,
   },
   login: {
-    title: 'Sign In - FlipAEO',
-    description: 'Sign in to your FlipAEO account to access your content dashboard and generate AI-researched articles.',
-    keywords: ['login', 'sign in', 'FlipAEO account', 'content dashboard'],
+    title: "Sign in to FlipAEO",
+    description: "Sign in to review your audit and finite delivery program.",
+    keywords: ["FlipAEO login"],
   },
   dashboard: {
-    title: 'Content Dashboard - FlipAEO',
-    description: 'Access your FlipAEO dashboard to manage your content strategy, generate articles, and publish to your CMS.',
-    keywords: ['dashboard', 'content management', 'article generation'],
-    robots: 'noindex, nofollow',
+    title: "Program dashboard",
+    description: "Track generated, delivered, and published program articles separately.",
+    keywords: ["content program dashboard"],
+    robots: "noindex, nofollow",
   },
   pricing: {
-    title: 'Pricing - FlipAEO | $79/Month for dominating Google and AI search engines',
-    description: 'Simple, transparent pricing for FlipAEO. One plan with everything you need: 30 AI-generated articles/month, automated content strategy, CMS integration, and priority support. 14-day money-back guarantee.',
-    keywords: ['FlipAEO pricing', 'AI seo content generation pricing', 'AI Search visibility pricing', 'content engine cost', 'article generation pricing'],
+    title: "Six-cluster program delivery speeds",
+    description:
+      "Choose the delivery cadence for one fixed six-cluster scope. Checkout appears only after an eligible audit and confirmed publishing URL pattern.",
+    keywords: ["topic cluster pricing", "content program pricing"],
   },
   about: {
-    title: 'About FlipAEO - Our Mission to Democratize AI Visibility',
-    description: 'Learn the story behind FlipAEO and our mission to help businesses of all sizes win in the age of AI search through strategic, authority-building content.',
-    keywords: ['about FlipAEO', 'AI content company', 'GEO company', 'content strategy team'],
+    title: "About FlipAEO",
+    description: "Why FlipAEO uses finite, source-linked scopes instead of endless article quotas.",
+    keywords: ["about FlipAEO"],
   },
   blog: {
-    title: 'Blog - FlipAEO | AEO/GEO & AI Content Strategy Insights',
-    description: 'Expert insights on Generative Engine Optimization (GEO), AI search visibility, content strategy, and how to get cited by AI search engines like ChatGPT and Perplexity.',
-    keywords: ['AEO guides', 'GEO guides', 'AI SEO tips', 'content strategy blog', 'AI visibility insights', 'generative engine optimization guide'],
+    title: "FlipAEO content strategy notes",
+    description: "Practical notes on search evidence, topic clusters, and internal linking.",
+    keywords: ["topic cluster guide", "content gap research"],
   },
   privacyPolicy: {
-    title: 'Privacy Policy - FlipAEO',
-    description: 'Learn how FlipAEO collects, uses, and protects your personal data. We integrate with Google services including OAuth and Google Search Console.',
-    keywords: ['FlipAEO privacy', 'data protection', 'GDPR compliance', 'Google API privacy'],
+    title: "Privacy Policy",
+    description: "How FlipAEO processes account data, public website content, and audit links.",
+    keywords: ["FlipAEO privacy"],
   },
   terms: {
-    title: 'Terms of Service - FlipAEO',
-    description: 'Review the terms and conditions for using FlipAEO, the Strategic Content Engine for Generative Engine Optimization.',
-    keywords: ['FlipAEO terms', 'terms of service', 'user agreement', 'content license'],
+    title: "Terms of Service",
+    description: "Terms for finite FlipAEO audit and delivery programs.",
+    keywords: ["FlipAEO terms"],
   },
   refundPolicy: {
-    title: 'Refund Policy - FlipAEO | 14-Day Money-Back Guarantee',
-    description: 'FlipAEO offers a 14-day money-back guarantee. If you are not satisfied with the quality of your articles, we will refund you in full.',
-    keywords: ['FlipAEO refund', 'money-back guarantee', 'refund policy', 'cancellation'],
+    title: "Refund Policy",
+    description: "Refund terms for FlipAEO finite delivery programs.",
+    keywords: ["FlipAEO refund"],
   },
   subscribe: {
-    title: 'Subscribe - FlipAEO | Start Your Content Strategy',
-    description: 'Subscribe to FlipAEO and start generating authority-building articles that AI search engines cite. 30 articles/month, automated strategy, 1-click CMS publishing.',
-    keywords: ['subscribe FlipAEO', 'start content strategy', 'AI content subscription'],
-    robots: 'noindex, nofollow',
+    title: "Choose program delivery speed",
+    description:
+      "Confirm the frozen publication URL pattern and choose delivery speed for an eligible six-cluster scope.",
+    keywords: ["FlipAEO program"],
+    robots: "noindex, nofollow",
   },
-};
+}
 
-// Open Graph Image Configuration
 export const openGraphImages = {
   default: {
     url: `${defaultSEO.siteUrl}/og-image.png`,
     width: 1200,
     height: 630,
-    alt: 'FlipAEO - Strategic Content Engine for AI Search Domination',
+    alt: "FlipAEO evidence-backed topic-cluster delivery",
   },
   logo: {
     url: `${defaultSEO.siteUrl}/site-logo.png`,
     width: 400,
     height: 400,
-    alt: 'FlipAEO Logo',
+    alt: "FlipAEO logo",
   },
-};
+}
 
-// Robots.txt Configuration
 export const robotsConfig = {
   rules: {
-    userAgent: '*',
-    allow: '/',
+    userAgent: "*",
+    allow: "/",
     disallow: [
-      '/api/',
-      '/blog-writer/',
-      '/account/',
-      '/settings/',
-      '/admin/',
-      '/onboarding/',
+      "/api/",
+      "/account/",
+      "/settings/",
+      "/onboarding/",
+      "/content-plan/",
+      "/articles/",
+      "/subscribe/",
+      "/founder/",
+      "/claim/",
+      "/audit/",
+      "/compare/",
     ],
   },
   sitemap: `${defaultSEO.siteUrl}/sitemap.xml`,
-};
+}
 
-// Sitemap Configuration
 export const sitemapConfig = {
   siteUrl: defaultSEO.siteUrl,
   generateRobotsTxt: true,
-  exclude: [
-    '/blog-writer/*',
-    '/account/*',
-    '/reports/*',
-    '/settings/*',
-    '/api/*',
-    '/auth/*',
-    '/error',
-    '/admin/*',
-    '/onboarding/*',
-    '/subscribe/*',
-  ],
-  additionalPaths: async () => {
-    return [];
-  },
-};
+  exclude: ["/api/*", "/auth/*", "/account/*", "/settings/*", "/onboarding/*"],
+  additionalPaths: async () => [],
+}
 
-// JSON-LD Schema Templates
 export const schemaTemplates = {
   website: {
-    '@context': 'https://schema.org',
-    '@type': 'WebSite',
+    "@context": "https://schema.org",
+    "@type": "WebSite",
     name: defaultSEO.siteName,
     url: defaultSEO.siteUrl,
     description: defaultSEO.description,
-    publisher: {
-      '@type': 'Organization',
-      name: organizationSchema.name,
-    },
+    publisher: { "@type": "Organization", name: organizationSchema.name },
   },
   softwareApplication: {
-    '@context': 'https://schema.org',
-    '@type': 'WebApplication',
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
     name: defaultSEO.siteName,
-    description: 'Strategic Content Engine for Generative Engine Optimization (GEO). Generate authority-building articles that AI search engines cite and recommend.',
+    description: defaultSEO.description,
     url: defaultSEO.siteUrl,
-    applicationCategory: 'BusinessApplication',
-    applicationSubCategory: 'Content Marketing Software',
-    operatingSystem: 'Web Browser',
-    offers: {
-      '@type': 'Offer',
-      price: '59',
-      priceCurrency: 'USD',
-      availability: 'https://schema.org/InStock',
-      priceValidUntil: '2026-02-29',
-    },
-    publisher: organizationSchema,
+    applicationCategory: "BusinessApplication",
+    applicationSubCategory: "Content Marketing Software",
+    operatingSystem: "Web Browser",
     featureList: [
-      '30 AI-generated articles per month',
-      'Automated content strategy based on competitor analysis',
-      'CMS integration (WordPress, Webflow, Shopify)',
-      'On-brand AI images',
-      'Smart internal linking',
-      'Real-time research with verified citations',
-      'Answer-first content structure for AI visibility',
-      'Priority support',
+      "Source-linked topical audit",
+      "Competitor gap evidence",
+      "Finite six-cluster program",
+      "Frozen internal-link graph",
+      "Complete cluster delivery",
+      "WordPress draft and manual delivery",
     ],
+    publisher: organizationSchema,
   },
-  service: (service: { name: string, description: string, url: string, serviceType: string, provider: any }) => ({
-    '@context': 'https://schema.org',
-    '@type': 'Service',
-    name: service.name,
-    description: service.description,
-    url: service.url,
-    serviceType: service.serviceType,
-    provider: service.provider,
-    areaServed: {
-      '@type': 'Place',
-      name: 'Worldwide'
-    },
-    offers: {
-      '@type': 'Offer',
-      price: '59',
-      priceCurrency: 'USD'
-    }
-  })
-};
+  service: (service: {
+    name: string
+    description: string
+    url: string
+    serviceType: string
+    provider: unknown
+  }) => ({
+    "@context": "https://schema.org",
+    "@type": "Service",
+    ...service,
+  }),
+}
 
-// SEO Utility Functions
 export const seoUtils = {
-  /**
-   * Generate page title with site name
-   */
-  generateTitle: (pageTitle?: string): string => {
-    if (!pageTitle) return defaultSEO.title;
-    return `${pageTitle} | ${defaultSEO.siteName}`;
-  },
-
-  /**
-   * Generate canonical URL
-   */
-  generateCanonicalUrl: (path: string, baseUrl?: string): string => {
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    const url = baseUrl || defaultSEO.siteUrl;
-    return `${url}${cleanPath}`;
-  },
-
-  /**
-   * Generate Open Graph URL
-   */
-  generateOgUrl: (path: string): string => {
-    return seoUtils.generateCanonicalUrl(path);
-  },
-
-  /**
-   * Merge SEO config with page-specific overrides
-   */
-  mergeSEOConfig: (pageConfig: Partial<SEOConfig>): SEOConfig => {
-    return { ...defaultSEO, ...pageConfig };
-  },
-};
+  generateTitle: (title?: string) =>
+    title ? `${title} | ${defaultSEO.siteName}` : defaultSEO.title,
+  generateCanonicalUrl: (path: string, baseUrl?: string) =>
+    `${baseUrl || defaultSEO.siteUrl}${path.startsWith("/") ? path : `/${path}`}`,
+  generateOgUrl: (path: string) =>
+    `${defaultSEO.siteUrl}${path.startsWith("/") ? path : `/${path}`}`,
+  mergeSEOConfig: (pageConfig: Partial<SEOConfig>): SEOConfig => ({
+    ...defaultSEO,
+    ...pageConfig,
+  }),
+}

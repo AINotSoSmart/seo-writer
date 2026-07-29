@@ -27,17 +27,10 @@ export default async function AccountPage() {
     .order('created_at', { ascending: false })
     .limit(20)
 
-  // Get user's current credit balance
-  const { data: credits } = await supabase
-    .from('credits')
-    .select('credits')
-    .eq('user_id', user.id)
-    .single()
-
   // Fetch user's active subscription summary
   const { data: activeSub } = await supabase
     .from('dodo_subscriptions')
-    .select('dodo_subscription_id, status, cancel_at_period_end, next_billing_date, current_period_end, canceled_at, metadata, price_snapshot, currency_snapshot, dodo_pricing_plans(name, credits)')
+    .select('dodo_subscription_id, status, cancel_at_period_end, next_billing_date, current_period_end, canceled_at, metadata, price_snapshot, currency_snapshot, dodo_pricing_plans(name)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -82,26 +75,19 @@ export default async function AccountPage() {
       }
       : null
 
-  // Calculate total credits purchased from completed payments
-  const totalCreditsPurchased = payments
-    ?.filter(payment => payment.status === 'completed')
-    ?.reduce((sum, payment) => sum + payment.credits, 0) || 0
-
   return (
     <div className="container mx-auto">
       <GlobalCard contentClassName="p-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Account</h1>
           <p className="text-muted-foreground mt-2">
-            Manage your profile, view payment history, and track your credits
+            Manage your profile, finite program billing, and invoice history
           </p>
         </div>
 
         <AccountDashboard
           user={user}
           payments={payments || []}
-          currentCredits={credits?.credits || 0}
-          totalCreditsPurchased={totalCreditsPurchased}
           subscription={subscription}
         />
         <FeedbackForm userId={user.id} />
@@ -112,5 +98,5 @@ export default async function AccountPage() {
 
 export const metadata = {
   title: 'Account',
-  description: 'Manage your account, view payment history, and track credits',
+  description: 'Manage your account, finite program billing, and invoice history',
 }

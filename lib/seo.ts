@@ -180,23 +180,15 @@ export function generateWebApplicationJsonLd(props?: { title?: string; descripti
     "applicationSubCategory": "Content Marketing Software",
     "operatingSystem": "Web Browser",
     "browserRequirements": "Requires JavaScript. Requires HTML5.",
-    "softwareVersion": "1.0",
     "inLanguage": "en-US",
     "keywords": keywords,
-
-    "screenshot": [
-      `${process.env.NEXT_PUBLIC_APP_URL}/images/screenshot.png`,
-      `${process.env.NEXT_PUBLIC_APP_URL}/images/screenshot-dashboard.png`
-    ],
-
     "featureList": [
-      "30 AI-generated articles per month",
-      "Automated content strategy based on competitor analysis",
-      "CMS integration (WordPress, Webflow, Shopify)",
-      "On-brand AI images",
-      "Smart internal linking",
-      "Real-time research with verified citations",
-      "Answer-first content structure for AI visibility",
+      "Source-linked evidence audit",
+      "Six qualified priority clusters",
+      "Frozen article URLs and internal-link graph",
+      "Complete cluster batch delivery",
+      "WordPress drafts and manual delivery",
+      "Automatic end-of-scope cancellation",
     ],
 
     "author": {
@@ -211,66 +203,7 @@ export function generateWebApplicationJsonLd(props?: { title?: string; descripti
         "@type": "ImageObject",
         "url": `${process.env.NEXT_PUBLIC_APP_URL}/site-logo.png`
       }
-    },
-    "offers": [
-      {
-        "@type": "Offer",
-        "name": "All-in-One Plan",
-        "price": "59",
-        "priceCurrency": "USD",
-        "description": "30 AI-generated articles per month with automated content strategy, CMS integration, and priority support.",
-        "availability": "https://schema.org/InStock"
-      }
-    ],
-    "aggregateRating": {
-      "@type": "AggregateRating",
-      "ratingValue": "4.8",
-      "ratingCount": "3"
-    },
-    "review": [
-      {
-        "@type": "Review",
-        "author": {
-          "@type": "Person",
-          "name": "Cichy",
-          "jobTitle": "Founder at Launchdirectories.com"
-        },
-        "reviewRating": {
-          "@type": "Rating",
-          "ratingValue": "5",
-          "bestRating": "5"
-        },
-        "reviewBody": "FlipAEO transformed my content strategy. the article quality is really satisfying, now i am using it on two of my saas, getting pretty results"
-      },
-      {
-        "@type": "Review",
-        "author": {
-          "@type": "Person",
-          "name": "Rishabh",
-          "jobTitle": "SaaS Entrepreneur"
-        },
-        "reviewRating": {
-          "@type": "Rating",
-          "ratingValue": "5",
-          "bestRating": "5"
-        },
-        "reviewBody": "The AI research quality is incredible. Our articles now get cited by ChatGPT and Perplexity regularly."
-      },
-      {
-        "@type": "Review",
-        "author": {
-          "@type": "Person",
-          "name": "Ben Krich",
-          "jobTitle": "SaaS Marketer"
-        },
-        "reviewRating": {
-          "@type": "Rating",
-          "ratingValue": "4.5",
-          "bestRating": "5"
-        },
-        "reviewBody": "The competitor analysis and content gap identification is a game-changer. Worth every penny."
-      }
-    ]
+    }
   };
 
   return generateJsonLd(webAppSchema);
@@ -463,15 +396,15 @@ export const commonPageMetadata = {
   }),
 
   pricing: () => generateMetadata({
-    title: 'Pricing Plans',
-    description: 'Simple, transparent pricing for FlipAEO. One plan with 30 AI articles/month, automated content strategy, CMS integration. $79/month with 14-day money-back guarantee.',
+    title: 'Program Delivery Speeds',
+    description: 'Choose delivery cadence for one fixed, eligible six-cluster scope after confirming the permanent publication URL pattern.',
     canonical: '/pricing',
     keywords: ['FlipAEO pricing', 'AI content pricing', 'GEO pricing', 'content engine cost'],
   }),
 
-  buyCredits: () => generateMetadata({
-    title: 'Subscribe',
-    description: 'Start your FlipAEO subscription. 30 AI articles/month with automated strategy and 1-click CMS publishing.',
+  subscribe: () => generateMetadata({
+    title: 'Choose Delivery Speed',
+    description: 'Confirm the frozen publication URL pattern and select a delivery cadence for an eligible six-cluster program.',
     canonical: '/subscribe',
     keywords: ['subscribe', 'FlipAEO subscription', 'content strategy'],
     noindex: true,

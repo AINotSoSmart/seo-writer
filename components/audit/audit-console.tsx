@@ -95,7 +95,7 @@ const PHASE_COPY: Record<AuditPhase, {
     },
     computing_gaps: {
         label: "Computing verified gaps",
-        description: "Subtracting your coverage from the observed query pool.",
+        description: "Comparing observed searches with the coverage found on your pages.",
         icon: Database,
     },
     clustering: {

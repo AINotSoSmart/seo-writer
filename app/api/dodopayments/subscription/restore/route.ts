@@ -40,6 +40,38 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        const { data: ownedSubscription, error: ownershipError } = await supabase
+            .from('dodo_subscriptions')
+            .select('dodo_subscription_id')
+            .eq('dodo_subscription_id', subscription_id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+        if (ownershipError || !ownedSubscription) {
+            return NextResponse.json({ error: 'Subscription not found' }, { status: 404 })
+        }
+
+        const { data: completedProgram, error: programError } = await (supabase as any)
+            .from('programs')
+            .select('id')
+            .eq('dodo_subscription_id', subscription_id)
+            .eq('scope_status', 'scope_delivered')
+            .limit(1)
+            .maybeSingle()
+
+        if (programError) {
+            return NextResponse.json({ error: 'Failed to verify program scope' }, { status: 500 })
+        }
+        if (completedProgram) {
+            return NextResponse.json(
+                {
+                    error:
+                        'This finite program is complete. A future six-cluster program requires a new checkout.',
+                },
+                { status: 409 },
+            )
+        }
+
         const client = getDodoClient()
 
         // Remote: unset cancel_at_next_billing_date
