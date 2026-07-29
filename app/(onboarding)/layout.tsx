@@ -24,6 +24,11 @@ export default async function OnboardingLayout({
         redirect("/login?next=/onboarding")
     }
 
+    async function handleSignOut(): Promise<void> {
+        "use server"
+        await signOut()
+    }
+
     return (
         <div className="relative min-h-screen bg-stone-50 text-stone-950">
             <div className="pointer-events-none absolute inset-x-0 top-0 z-30">
@@ -55,7 +60,7 @@ export default async function OnboardingLayout({
                             <span className="sm:hidden">Back</span>
                         </Link>
                         <span className="h-4 w-px bg-stone-300" aria-hidden="true" />
-                        <form action={signOut}>
+                        <form action={handleSignOut}>
                             <button
                                 type="submit"
                                 className="inline-flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium text-stone-500 transition-colors hover:bg-white/80 hover:text-stone-950 sm:px-4 sm:text-sm"
