@@ -20,15 +20,15 @@ export default function FounderNote() {
                 <div className="flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end mb-16 w-full px-4 md:px-8">
                     <div className="flex-1">
                         <span className="font-sans text-xs font-bold tracking-widest text-brand-500 uppercase mb-4 block">
-                            A Personal Note
+                            The Audit Is On Me
                         </span>
                         <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-                            Let's build this  <br /><span className='italic text-stone-500'>Together.</span>
+                            See the evidence  <br /><span className='italic text-stone-500'>before you pay.</span>
                         </h2>
                     </div>
                     <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
                         <p className="font-sans text-stone-500 text-lg leading-relaxed">
-                            FlipAEO isn't just an automated tool. It's a genuine partnership designed to help you capture the most valuable real estate on the internet.
+                            The initial audit is free for a reason: you should be able to inspect the opportunity and verify its sources before I ask you to buy the delivery program.
                         </p>
                     </div>
                 </div>
@@ -58,10 +58,10 @@ export default function FounderNote() {
                         {/* The Message */}
                         <blockquote className="mb-20">
                             <p className="font-serif text-3xl md:text-5xl lg:text-[54px] leading-[1.2] text-stone-900 mb-8 tracking-tight">
-                                "Your first two articles are on me. If you love the quality, we can talk business."
+                                "Your full evidence audit is on me. I want you to see every source-linked content gap before I ask you to pay."
                             </p>
                             <p className="font-serif text-xl md:text-2xl leading-relaxed text-stone-500 italic">
-                                "If not — no hard feelings. That’s okay too."
+                                "If six clusters qualify, you choose how quickly we deliver them. If they do not, checkout stays closed."
                             </p>
                         </blockquote>
 
@@ -109,16 +109,16 @@ export default function FounderNote() {
 
                             {/* CTA Action */}
                             <div className="flex flex-col items-center md:items-end gap-3">
-                                <Link href="/login">
+                                <Link href="/login?next=/onboarding">
                                     <Button
                                         variant="primary"
                                         className="px-8 py-3.5 text-sm"
                                     >
-                                        Claim My 2 Free Articles
+                                        Find My Content Gaps
                                     </Button>
                                 </Link>
                                 <p className="text-[9px] text-stone-400 font-bold uppercase tracking-widest text-center">
-                                    No credit card required
+                                    Full audit, free &middot; no credit card
                                 </p>
                             </div>
 

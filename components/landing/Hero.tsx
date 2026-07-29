@@ -45,7 +45,7 @@ export default function Hero() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-brand-500">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" stroke="none" />
         </svg>
-        <span>TOPICAL AUTHORITY PROGRAMS</span>
+        <span>FOR FOUNDER-LED B2B SAAS</span>
       </div>
 
       {/* Main Headline */}
@@ -56,20 +56,20 @@ export default function Hero() {
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-FlipAEO finds every question your market asks that your site cannot answer, then fills the gaps with interlinked clusters until your coverage is complete.
-        <strong className="text-black font-normal">{" "}That completeness is what Google — and the AI tools built on top of it — use to decide which sites are worth trusting.</strong>
+        Built for SaaS teams with a real product and website, but no dedicated content strategy team.
+        <strong className="text-black font-normal">{" "}See the source-linked gaps first, then get the six highest-priority clusters delivered as one finite program.</strong>
       </p>
 
       {/* CTA Button Container */}
       <div className="relative group z-10">
-        <Link href="/login">
+        <Link href="/login?next=/onboarding">
           <Button variant="primary" className="text-brand-600">
-            Show me what my site is missing
+            Find My Content Gaps
           </Button>
         </Link>
 
         <p className="mt-4 text-[11px] text-stone-400 tracking-wide">
-          Free audit &middot; no card &middot; no rankings or traffic promised
+          Full evidence audit, free &middot; verify every source before you pay
         </p>
       </div>
 

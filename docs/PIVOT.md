@@ -52,6 +52,35 @@ The three velocity tiers are defined once in `config/product-truth.ts`:
 These are delivery speeds for the same finite six-cluster scope. They are not
 article quotas and do not promise rankings, traffic, citations, or domination.
 
+### 1.1 Locked buyer
+
+The primary customer is a **founder-led B2B SaaS company with an existing
+product and website, a lean growth team, and no dedicated content strategy
+function**.
+
+- In the smallest companies, the buyer is the founder or CEO.
+- In a slightly larger lean team, the buyer may be the Head of Growth or
+  content lead, but the public page speaks to the founder-led company rather
+  than changing personas mid-page.
+- Agencies are not the primary customer. The product does not provide
+  multi-client workspaces, white-label reporting, or agency approvals.
+- Enterprise content teams are not the primary customer. The product does not
+  provide procurement, complex roles, or multi-stage editorial governance.
+- Pre-launch projects and generic bloggers are poor fits: they often cannot
+  qualify for six evidence-backed clusters and are disproportionately seeking
+  free or individual articles.
+
+This choice matches the actual contract: one website, one source-linked audit,
+one fixed six-cluster scope, and a $249+ delivery decision. Public positioning
+must say “founder-led B2B SaaS”; it must not alternate between founders,
+agencies, marketers, and bloggers.
+
+The old “two free articles/credits” offer is retired. The free product is the
+evidence audit. Paid article generation begins only after an eligible audit and
+purchase intent. `subscription_period_grants` is the authoritative paid
+allowance; any `credits` balance is an internal compatibility mirror, never a
+customer-facing wallet.
+
 ## 2. Implementation status
 
 ### 2.0 Why the v2 SQL migration is long
@@ -407,6 +436,27 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-30 - buyer lock, CTA cleanup, and free-credit retirement
+
+- Locked the public buyer to founder-led B2B SaaS teams with an existing
+  product/site and no dedicated content strategy function.
+- Standardized the result-led call to action as “Find My Content Gaps” (with the
+  compact navbar variant “Find my gaps”). All routes preserve the onboarding
+  destination through login.
+- Replaced the founder’s obsolete “two free articles” promise with the actual
+  free evidence audit: customers can verify source-linked gaps before paying.
+  Removed unprovable citation/autopilot language from the final and blog CTAs.
+- Replaced the active delivery illustration’s stale Shopify/Webflow destinations
+  with the supported WordPress, manual-review, and export paths.
+- Corrected public scope from 48-90 articles to 25-90: each selected cluster has
+  3-15 articles and the six-cluster program has a minimum of 25.
+- Added `20260730_retire_free_signup_credits.sql`. It sets both legacy signup
+  defaults to zero, removes only unbacked historical two-credit grants, and
+  guards the compatibility balance against future free grants while continuing
+  to allow balances backed by a paid `subscription_period_grants` row.
+- Extended the pivot contract suite so retired offers, stale promises, unnamed
+  positioning, and a reintroduced free-credit default fail validation.
+
 ### 2026-07-30 - pricing coherence, landing restore, positioning
 
 **Pricing — Dominate 4x$799 -> 3x$599.** Every tier's cluster count must divide
@@ -451,11 +501,11 @@ promise about the customer's site.
 **Pricing section rebuilt for comprehension** — three tiers, and each card shows
 payments, total, and derived per-cluster price so no visitor has to do arithmetic.
 A three-panel strip above states what you buy (6 clusters), how many articles
-(48–90, exact count from the free audit) and when it ends (after cluster 6).
+(25–90, exact count from the free audit) and when it ends (after cluster 6).
 
 **Hero mobile fixes.** Decorative crosshairs were colliding with the badge below
 `md`; now desktop-only. Sub-headline cut from 7 rendered lines to 4. Navbar CTA
-"Start Ranking in AI" -> "Run a free audit" (unprovable claim removed).
+"Start Ranking in AI" -> "Free site audit" (unprovable claim removed).
 
 
 ### 2026-07-30 - scale hardening (autocomplete resilience, IO bounds, solo gate)

@@ -34,24 +34,24 @@ export function BlogCTABanner() {
                         {/* The Hook - Instrument Serif */}
                         <div className="max-w-2xl mb-4">
                             <h3 className="font-serif text-3xl md:text-[42px] leading-[1.15] text-stone-800 tracking-tight">
-                                "Stop fighting for keywords. Start becoming the <span className="italic font-light text-stone-400">source of truth</span> for AI search."
+                                Your next six clusters should come from <span className="italic font-light text-stone-400">evidence, not a prompt.</span>
                             </h3>
                         </div>
 
                         {/* The Solution - Clean Sans */}
                         <p className="max-w-xl text-stone-500 font-sans text-base md:text-lg leading-relaxed mb-12">
-                            FlipAEO engineers the authority signals required to make your brand the #1 cited source in <span className="text-stone-900 font-medium">ChatGPT, Perplexity, and Gemini.</span>
+                            FlipAEO audits your existing B2B SaaS site, shows source-linked gaps, and offers a finite delivery program only when six qualified clusters exist.
                         </p>
 
                         {/* CTA Block - Integrated but direct */}
                         <div className="flex flex-col items-center w-full border-t border-stone-200/50 pt-4">
-                            <Link href="/login">
+                            <Link href="/login?next=/onboarding">
                                 <button className="
                     cursor-pointer group relative inline-flex items-center gap-3 bg-stone-900 text-white 
                     px-8 py-4 rounded-lg text-base font-medium text-sm
                     transition-all hover:bg-stone-700 hover:shadow-xl active:scale-95
                   ">
-                                    Claim My 2 Free Articles
+                                    Find My Content Gaps
                                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                                 </button>
                             </Link>

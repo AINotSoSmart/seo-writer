@@ -86,7 +86,7 @@ export const Navbar: React.FC = () => {
             </div>
 
             {/* CTA Button */}
-            <Link href="/content-plan">
+            <Link href="/login?next=/onboarding">
               <button
                 id="nav-cta-btn"
                 className="
@@ -98,7 +98,7 @@ export const Navbar: React.FC = () => {
                        px-2 sm:px-5 pt-1 sm:pt-2 pb-2 sm:pb-3 rounded-lg
                        transition-all duration-150 ease-out
                      ">
-                <span className="text-gray-600 font-semibold text-xs sm:text-sm">Run a free audit</span>
+                <span className="text-gray-600 font-semibold text-xs sm:text-sm">Find my gaps</span>
               </button>
             </Link>
             {/* Mobile Menu Toggle (only visible on mobile) */}

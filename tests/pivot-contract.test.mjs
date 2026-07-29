@@ -352,7 +352,14 @@ test("active product copy has no retired contract claims", async () => {
         "app/llms.txt/route.ts",
         "config/seo.ts",
         "config/product-truth.ts",
+        "components/blog-cta-banner.tsx",
+        "components/landing/CTASection.tsx",
+        "components/landing/FeaturesSection.tsx",
+        "components/landing/FounderNote.tsx",
+        "components/landing/Hero.tsx",
+        "components/landing/HowItWorksSection.tsx",
         "components/landing/Navbar.tsx",
+        "components/landing/PricingSection.tsx",
         "components/landing/Footer.tsx",
         "components/audit/scope-results.tsx",
         "components/subscribe/ProgramCheckout.tsx",
@@ -365,6 +372,13 @@ test("active product copy has no retired contract claims", async () => {
         /\bforces structured data\b/i,
         /\bniche (?:complete|closed)\b/i,
         /\bevery gap closed\b/i,
+        /\bclaim my 2 free articles\b/i,
+        /\byour first two articles are on me\b/i,
+        /\bget cited by\b/i,
+        /\b(?:become|becoming) (?:the )?(?:AI(?:'s)? )?source of truth\b/i,
+        /\bpublish content\b[\s\S]{0,20}\bon autopilot\b/i,
+        /\bcoverage is complete\b/i,
+        /\btopic is genuinely yours\b/i,
         /\bShopify\b/i,
         /\bWebflow\b/i,
     ]
@@ -374,6 +388,24 @@ test("active product copy has no retired contract claims", async () => {
             assert.doesNotMatch(source, pattern, `${file} contains ${pattern}`)
         }
     }
+})
+
+test("the public buyer is founder-led B2B SaaS and signup credits are retired", async () => {
+    const [hero, founderNote, seo, migration] = await Promise.all([
+        text("components/landing/Hero.tsx"),
+        text("components/landing/FounderNote.tsx"),
+        text("config/seo.ts"),
+        text("supabase/migrations/20260730_retire_free_signup_credits.sql"),
+    ])
+
+    assert.match(hero, /FOR FOUNDER-LED B2B SAAS/)
+    assert.match(founderNote, /full evidence audit is on me/i)
+    assert.match(seo, /founder-led B2B SaaS/i)
+    assert.match(migration, /ALTER COLUMN credits SET DEFAULT 0/)
+    assert.match(migration, /ALTER COLUMN credits_remaining SET DEFAULT 0/)
+    assert.match(migration, /subscription_period_grants/)
+    assert.match(migration, /guard_legacy_credit_mirror/)
+    assert.match(migration, /c\.credits <= 2/)
 })
 
 test("onboarding uses a focused authenticated shell outside the dashboard sidebar", async () => {

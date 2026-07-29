@@ -14,9 +14,9 @@ export interface SEOConfig {
 }
 
 export const defaultSEO: SEOConfig = {
-  title: "FlipAEO — Build Topical Authority With Evidence-Backed Content Clusters",
+  title: "FlipAEO — Evidence-Backed Content Clusters for Founder-Led B2B SaaS",
   description:
-    "FlipAEO maps every question your market asks, finds the ones your site cannot answer, and fills them with interlinked topic clusters until your coverage is complete. Every gap links to the source we observed it on.",
+    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers the six highest-priority qualified clusters as one finite, interlinked program.",
   keywords: [
     "topical authority",
     "how to build topical authority",
@@ -67,7 +67,7 @@ export const organizationSchema = {
 
 export const pageSEO = {
   home: {
-    title: "Topical Authority Tool & Content Cluster Builder",
+    title: "Content Clusters for Founder-Led B2B SaaS",
     description: defaultSEO.description,
     keywords: defaultSEO.keywords,
   },

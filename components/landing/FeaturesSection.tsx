@@ -333,21 +333,21 @@ const CMSVisual = () => (
           <div className="w-10 h-10 bg-white border-2 border-stone-800 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
             <span className="font-serif font-bold text-xl text-stone-800">W</span>
           </div>
-          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Wordpress</span>
+          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">WordPress</span>
         </div>
 
         <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 bg-green-50 border-2 border-green-600 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
-            <ShoppingBag size={18} className="text-green-700" />
+          <div className="w-10 h-10 bg-stone-50 border-2 border-stone-500 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
+            <MousePointer2 size={18} className="text-stone-700" />
           </div>
-          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Shopify</span>
+          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Manual</span>
         </div>
 
         <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 bg-blue-50 border-2 border-blue-600 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
-            <div className="font-bold text-blue-700 italic text-sm">wf</div>
+          <div className="w-10 h-10 bg-brand-50 border-2 border-brand-500 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
+            <FileText size={18} className="text-brand-700" />
           </div>
-          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Webflow</span>
+          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Export</span>
         </div>
       </div>
     </div>

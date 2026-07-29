@@ -192,7 +192,7 @@ const HowItWorksSection: React.FC = () => {
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              Four steps, no invented topics. We read your site, map the real questions in your market, show you exactly where your coverage breaks, then close those gaps cluster by cluster until the topic is genuinely yours.
+              Four steps, no invented topics. We read your site, map the real questions in your market, show where your coverage breaks, then deliver the six highest-priority qualified clusters as one fixed program.
             </p>
           </div>
         </div>

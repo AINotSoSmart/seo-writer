@@ -18,28 +18,19 @@ const CTASection: React.FC = () => {
 
         <div className="flex flex-col items-center justify-center">
           <h2 className="font-serif text-xl md:text-5xl text-stone-900 mb-16 tracking-tight font-normal text-center">
-            Find out what your site is missing
+            See if your site has six clusters worth building
           </h2>
 
           <div className="relative group">
 
             {/* The Main Button */}
             <div className="relative z-10">
-              <Link href="/login">
+              <Link href="/login?next=/onboarding">
                 <Button
                   variant="primary"
-                  className="text-3xl md:text-5xl px-6 py-4 md:px-40 md:py-10 rounded-xl"
-
+                  className="text-xl md:text-3xl px-10 py-5 md:px-20 md:py-7 rounded-xl"
                 >
-                  <div className="flex items-center gap-2 md:gap-6">
-                    {/* Custom Keycap for "Press B" */}
-                    <span className="text-brand-800 font-medium tracking-tight">Show</span>
-                    <div className="flex flex-col items-center justify-center w-12 h-12 md:w-14 md:h-14 bg-brand-500 rounded-lg border-b-4 border-brand-800 shadow-inner text-white leading-none transform translate-y-0.5">
-                      <span className="text-lg md:text-xl font-semibold">Me</span>
-                    </div>
-
-                    <span className="text-brand-800 font-medium tracking-tight">The Gaps</span>
-                  </div>
+                  <span className="text-brand-800 font-medium tracking-tight">Find My Content Gaps</span>
                 </Button>
               </Link>
             </div>
@@ -53,7 +44,7 @@ const CTASection: React.FC = () => {
 
               {/* 1. Top Left: Land more clients */}
               <div className="absolute -top-14 sm:-top-8 -left-[120px] sm:-left-[200px] w-48 flex flex-col items-end">
-                <span className="font-hand text-[14px] sm:text-2xl text-stone-500 mb-1 -rotate-6 leading-none">Get cited by <br />ChatGPT & Gemini</span>
+                <span className="font-hand text-[14px] sm:text-2xl text-stone-500 mb-1 -rotate-6 leading-none">See source-linked <br />gaps</span>
                 <span className="text-stone-500 rotate-180">
                   <svg className="w-[20px] h-[22px] sm:w-[39px] sm:h-[43px]" viewBox="0 0 39 43" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M35.3098 41.3831C38.805 33.6161 39.7653 17.8871 22.106 16.5287C12.0089 15.752 15.1157 28.9559 24.4361 27.4025C32.203 26.108 39.5817 5.6549 1.52344 4.1015M1.52344 4.1015L4.63023 7.59665M1.52344 4.1015L5.40693 1.38305" stroke="#767676ff" strokeWidth="2" strokeLinecap="round" />
@@ -63,7 +54,7 @@ const CTASection: React.FC = () => {
 
               {/* 2. Top Right: Outsource your work */}
               <div className="absolute -top-14 sm:-top-8 -right-[120px] sm:-right-[200px] w-48 flex flex-col items-start">
-                <span className="font-hand text-[14px] sm:text-2xl text-stone-500 mb-1 rotate-6 leading-none">Become the AI's <br />'Source of Truth'</span>
+                <span className="font-hand text-[14px] sm:text-2xl text-stone-500 mb-1 rotate-6 leading-none">Know the six <br />priorities</span>
                 <span className="text-stone-500 rotate-x-180">
                   <svg className="w-[20px] h-[22px] sm:w-[39px] sm:h-[43px]" viewBox="0 0 39 43" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M35.3098 41.3831C38.805 33.6161 39.7653 17.8871 22.106 16.5287C12.0089 15.752 15.1157 28.9559 24.4361 27.4025C32.203 26.108 39.5817 5.6549 1.52344 4.1015M1.52344 4.1015L4.63023 7.59665M1.52344 4.1015L5.40693 1.38305" stroke="#767676ff" strokeWidth="2" strokeLinecap="round" />
@@ -79,7 +70,7 @@ const CTASection: React.FC = () => {
                   </svg>
                 </span>
                 <span className="font-hand text-[14px] sm:text-2xl text-stone-500 leading-none text-center">
-                  Capture high-intent <br /> AI traffic
+                  No rankings <br /> promised
                 </span>
               </div>
 
@@ -91,7 +82,7 @@ const CTASection: React.FC = () => {
                   </svg>
 
                 </span>
-                <span className="font-hand text-[14px] sm:text-2xl text-center text-stone-500 leading-none">Publish content <br /> on autopilot</span>
+                <span className="font-hand text-[14px] sm:text-2xl text-center text-stone-500 leading-none">Complete cluster <br /> delivery</span>
               </div>
 
               {/* 5. Bottom Right: Increase conversion */}
@@ -102,7 +93,7 @@ const CTASection: React.FC = () => {
                   </svg>
                 </span>
                 <span className="font-hand text-[14px] sm:text-2xl text-stone-500 leading-none text-center">
-                  Future-proof your <br />SEO
+                  Billing stops with <br />the scope
                 </span>
               </div>
 

@@ -107,9 +107,9 @@ const PricingSection: React.FC = () => {
                     </div>
                     <div className="p-4 md:p-8 md:border-r border-b md:border-b-0 border-stone-200">
                         <span className="font-sans text-[10px] font-bold text-brand-500 uppercase tracking-widest">How many articles</span>
-                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">48&ndash;90</p>
+                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">25&ndash;90</p>
                         <p className="text-sm text-stone-500 leading-relaxed">
-                            Between 8 and 15 per cluster, decided by what your niche actually contains. Your free audit shows the exact number per cluster before you pay.
+                            Between 3 and 15 per cluster, with at least 25 across the selected six. Your free audit shows the exact scope before you pay.
                         </p>
                     </div>
                     <div className="p-4 md:p-8">
@@ -194,12 +194,12 @@ const PricingSection: React.FC = () => {
                             </p>
 
                             <div className="mt-auto">
-                                <Link href="/login" className="w-full block">
+                                <Link href="/login?next=/onboarding" className="w-full block">
                                     <Button
                                         variant={tier.featured ? 'primary' : 'secondary'}
                                         className="w-full px-6 py-3.5"
                                     >
-                                        Start with the free audit
+                                        Find my content gaps
                                     </Button>
                                 </Link>
                             </div>
