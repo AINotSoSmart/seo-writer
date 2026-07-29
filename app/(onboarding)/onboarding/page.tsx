@@ -309,7 +309,7 @@ export default function OnboardingPage() {
 
 
     return (
-        <div className="min-h-[80vh] flex flex-col items-center justify-center py-12 font-sans">
+        <div className="flex min-h-[calc(100vh-73px)] flex-col items-center justify-center px-4 py-12 font-sans sm:px-6">
             {/* Show loading while checking access */}
             {isCheckingAccess ? (
                 <div className="flex flex-col items-center gap-3 text-stone-500">

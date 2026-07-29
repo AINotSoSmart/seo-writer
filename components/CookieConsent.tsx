@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Clarity from "@microsoft/clarity"
+import { usePathname } from "next/navigation"
 
 type Consent = {
     analytics: boolean
@@ -29,6 +30,8 @@ export function CookieConsent({
     analyticsId?: string
     crispWebsiteId?: string
 }) {
+    const pathname = usePathname()
+    const isFocusedOnboarding = pathname.startsWith("/onboarding")
     const [consent, setConsent] = useState<Consent | null>(null)
     const [open, setOpen] = useState(false)
     const [analytics, setAnalytics] = useState(false)
@@ -70,16 +73,31 @@ export function CookieConsent({
                 Clarity.init(clarityProjectId)
             }
         }
-        if (consent.support && crispWebsiteId) {
+        if (consent.support && crispWebsiteId && !isFocusedOnboarding) {
             const crispWindow = window as typeof window & {
-                $crisp?: unknown[]
+                $crisp?: Array<unknown[]>
                 CRISP_WEBSITE_ID?: string
             }
             crispWindow.$crisp = crispWindow.$crisp || []
             crispWindow.CRISP_WEBSITE_ID = crispWebsiteId
             loadScript("flipaeo-crisp", "https://client.crisp.chat/l.js")
+            crispWindow.$crisp.push(["do", "chat:show"])
         }
-    }, [analyticsId, clarityProjectId, consent, crispWebsiteId])
+    }, [
+        analyticsId,
+        clarityProjectId,
+        consent,
+        crispWebsiteId,
+        isFocusedOnboarding,
+    ])
+
+    useEffect(() => {
+        if (!isFocusedOnboarding) return
+        const crispWindow = window as typeof window & {
+            $crisp?: Array<unknown[]>
+        }
+        crispWindow.$crisp?.push(["do", "chat:hide"])
+    }, [isFocusedOnboarding])
 
     function save(next: Pick<Consent, "analytics" | "support">) {
         const value: Consent = { ...next, updatedAt: new Date().toISOString() }
@@ -96,7 +114,7 @@ export function CookieConsent({
 
     return (
         <>
-            {!open && (
+            {!open && !isFocusedOnboarding && (
                 <button
                     type="button"
                     onClick={() => setOpen(true)}

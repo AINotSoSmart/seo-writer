@@ -369,6 +369,23 @@ test("active product copy has no retired contract claims", async () => {
     }
 })
 
+test("onboarding uses a focused authenticated shell outside the dashboard sidebar", async () => {
+    await assert.rejects(
+        access(path.join(root, "app/(protected)/onboarding/page.tsx")),
+    )
+    const [layout, page, consent] = await Promise.all([
+        text("app/(onboarding)/layout.tsx"),
+        text("app/(onboarding)/onboarding/page.tsx"),
+        text("components/CookieConsent.tsx"),
+    ])
+    assert.match(layout, /supabase\.auth\.getUser\(\)/)
+    assert.match(layout, /redirect\("\/login\?next=\/onboarding"\)/)
+    assert.doesNotMatch(layout, /AppSidebar|SidebarProvider|DynamicBreadcrumb/)
+    assert.match(page, /min-h-\[calc\(100vh-73px\)\]/)
+    assert.match(consent, /isFocusedOnboarding/)
+    assert.match(consent, /\["do", "chat:hide"\]/)
+})
+
 test("checkout remains disabled by default and consent gates optional analytics", async () => {
     const [checkout, consent, layout] = await Promise.all([
         text("app/api/dodopayments/checkout/route.ts"),
