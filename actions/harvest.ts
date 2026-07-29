@@ -219,11 +219,21 @@ export async function getProgramProgress(brandId: string): Promise<ProgramProgre
 
     if (!program) return null
 
-    const { data: remainingClusters } = await (supabase as any)
+    const includedClusterIds = Array.isArray(program.clusters_included)
+        ? program.clusters_included
+        : []
+
+    let remainingQuery = (supabase as any)
         .from("planned_articles")
         .select("cluster_id")
         .eq("brand_id", brandId)
         .in("status", ["pending", "scheduled"])
+
+    if (includedClusterIds.length > 0) {
+        remainingQuery = remainingQuery.in("cluster_id", includedClusterIds)
+    }
+
+    const { data: remainingClusters } = await remainingQuery
 
     const clustersRemaining = new Set(
         (remainingClusters || []).map((r: any) => r.cluster_id).filter(Boolean)

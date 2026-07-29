@@ -42,24 +42,20 @@ export async function POST(req: NextRequest) {
             })
         }
 
-        // Create or reset the audit row
+        // Create or reset the audit row. The result columns describe the
+        // evidence-backed closed pool; the former blueprint columns are gone.
         const { error: upsertError } = await supabase
             .from("topical_audits")
             .upsert({
                 user_id: user.id,
                 brand_id: brandId,
                 generation_status: "running",
-                generation_phase: "niche_mapping",
+                generation_phase: "competitor_discovery",
                 generation_error: null,
-                // Clear previous results with valid empty values (NOT NULL constraints)
-                niche_blueprint: {},
-                user_coverage: {},
-                competitor_coverages: [],
                 authority_score: 0,
-                pillar_scores: [],
-                gap_matrix: [],
-                pillar_suggestions: [],
-                projected_score: 0,
+                pool_size: 0,
+                article_count: 0,
+                cluster_count: 0,
                 competitors_scanned: 0,
                 topics_analyzed: 0,
                 user_pages_scanned: 0,
@@ -115,7 +111,19 @@ export async function GET(req: NextRequest) {
 
         const { data: audit, error } = await supabase
             .from("topical_audits")
-            .select("*")
+            .select(`
+                generation_status,
+                generation_phase,
+                generation_error,
+                pool_size,
+                article_count,
+                cluster_count,
+                authority_score,
+                competitors_scanned,
+                topics_analyzed,
+                user_pages_scanned,
+                public_token
+            `)
             .eq("user_id", user.id)
             .eq("brand_id", brandId)
             .single()
@@ -133,27 +141,20 @@ export async function GET(req: NextRequest) {
             phase: audit.generation_phase,
             error: audit.generation_error,
             audit: audit.generation_status === "completed" ? {
-                niche_blueprint: audit.niche_blueprint,
-                user_coverage: audit.user_coverage,
-                competitor_coverages: audit.competitor_coverages || [],
+                pool_size: audit.pool_size || 0,
+                article_count: audit.article_count || 0,
+                cluster_count: audit.cluster_count || 0,
                 authority_score: audit.authority_score,
-                pillar_scores: audit.pillar_scores || [],
-                gap_matrix: audit.gap_matrix || [],
-                pillar_suggestions: audit.pillar_suggestions || [],
-                projected_score_after_plan: audit.projected_score,
-                audit_meta: {
-                    competitors_scanned: audit.competitors_scanned || 0,
-                    topics_analyzed: audit.topics_analyzed || 0,
-                    user_pages_scanned: audit.user_pages_scanned || 0,
-                    duration_ms: 0
-                }
+                public_token: audit.public_token || null,
             } : null,
             // Partial data for progress display
             partial: {
                 topics_analyzed: audit.topics_analyzed || 0,
                 user_pages_scanned: audit.user_pages_scanned || 0,
                 competitors_scanned: audit.competitors_scanned || 0,
-                authority_score: audit.authority_score
+                pool_size: audit.pool_size || 0,
+                article_count: audit.article_count || 0,
+                cluster_count: audit.cluster_count || 0,
             }
         })
 

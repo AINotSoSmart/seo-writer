@@ -2,6 +2,12 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
+  // Product surfaces archived by the closed-pool pivot. Keep their code and
+  // tables reversible, but do not expose the old GSC product by direct URL.
+  if (['/action-board', '/seo-health'].includes(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL('/content-plan', request.url))
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,

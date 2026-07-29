@@ -6,7 +6,7 @@
 > change you make.** That instruction is load-bearing — this doc is the only
 > continuity between sessions.
 
-Branch: `pivot/closed-pool-harvest` · Started 2026-07-28 · Status: **Phase A (engine) — near complete**
+Branch: `pivot/closed-pool-harvest` · Started 2026-07-28 · Status: **Engine + product complete; Dodo IDs and end-to-end validation remain**
 
 ---
 
@@ -259,9 +259,9 @@ it verified it.
 
 ### Phase B — mostly done
 - [x] **Cadence: cluster batches.** `trigger/ship-cluster.ts` (`clusterShipper`) ships
-      one complete cluster at a time from `planned_articles`, pillar first, credits
-      charged per cluster. When nothing is left it marks the program `completed` and
-      reports "niche complete" rather than re-shipping.
+      one complete cluster at a time from `planned_articles`, pillar first, with a
+      batch credit preflight and per-article deduction. It only marks the sold
+      cluster subset complete after generation finishes, and pauses on failures.
 - [x] **Legacy watchman guarded.** `dailyContentWatchman` skips any brand with an
       active program, so the two schedulers never double-charge.
 - [x] **`generate-plan.ts` rewired.** Runs `runHarvestAudit` and mirrors
@@ -276,14 +276,24 @@ it verified it.
 - [ ] **Pricing rows — needs you.** `supabase/migrations/20260729_velocity_pricing.sql`
       is written but **deliberately fails until the three Dodo product IDs are filled in**.
       Create the products, replace the placeholders, verify `credits` against measured COGS.
-- [ ] **Wire `ScopeResults` into onboarding.** `app/(protected)/onboarding/page.tsx`
-      still renders the old `AuditResults`. The new component and its data loaders are
-      ready; this is a swap plus fetching `getAuditScope` / `getGapEvidence`.
-- [ ] Landing page copy — still advertises "30 Citation-Optimized Authority Articles",
-      the GSC Action Board, and Webflow/Shopify publishing.
-- [ ] Drop deprecated `topical_audits` columns once the old `AuditResults` is gone
-      (migration is deliberately non-breaking; see §9).
-- [ ] Retire `components/audit/audit-results.tsx` and `actions/audit.ts` after the swap.
+- [x] **Onboarding uses `ScopeResults`.** The console follows the seven real
+      harvest phases; completion loads `getAuditScope`, `getGapEvidence`, and
+      `getProgramProgress`. Refresh recovery no longer depends on a legacy JSON blob.
+- [x] **Plan handoff reuses the audit.** `/api/content-plan/start-background`
+      mirrors existing `planned_articles` and does not run the Tavily-heavy
+      harvest twice.
+- [x] **Commerce lifecycle is connected.** Active Dodo velocity subscriptions
+      provision/reschedule the latest audited brand; cancellations pause it.
+- [x] **Content-plan dashboard reads clusters.** The retired 12/8/6/4 categories
+      made harvested plans render empty. It now groups the authoritative rows by
+      harvested cluster and shows unscheduled work honestly before purchase.
+- [x] Landing and pricing copy now sell finite scope + delivery velocity. GSC,
+      quota-of-30, Shopify, and Webflow promises are removed from active surfaces.
+- [x] Deprecated `topical_audits` columns are dropped by
+      `20260729_drop_legacy_audit_columns.sql`; the old result component and action
+      are deleted.
+- [x] Archived routes redirect out of SEO Health / Action Board; comparison pages
+      for the retired quota product are `noindex` and excluded from the sitemap.
 
 ---
 
@@ -298,10 +308,8 @@ it verified it.
 4. **Do not add regex blocklists for content quality.** That was tried twice; each
    round caught the previous examples and missed the next. Prefer evidential
    tests (does anyone search it? is the term actually on the page?).
-5. **The migration is non-breaking on purpose.** `niche_blueprint` and
-   `projected_score` are `COMMENT`-marked deprecated, not dropped, because
-   `actions/audit.ts` and `components/audit/audit-results.tsx` still read them.
-   Drop them *with* the UI rewrite, not before.
+5. **The legacy audit shape is gone.** Do not re-add `niche_blueprint`,
+   `projected_score`, `gap_matrix`, or the retired `actions/audit.ts` read path.
 6. **Provenance is the product.** A gap without a working `source_url` is a bug,
    not a tuning issue. This is the only thing separating FlipAEO from a $19
    competitor.
@@ -312,12 +320,34 @@ it verified it.
 
 ## 10. Changelog
 
+### 2026-07-29 — Phase B/C completion: product seam and commerce
+- Replaced the legacy onboarding result and four fictional progress phases with
+  `ScopeResults` and the seven closed-pool phases emitted by `run-audit.ts`.
+- `/api/topical-audit` now returns only scope fields. Deleted `actions/audit.ts`
+  and `components/audit/audit-results.tsx`; added the legacy-column drop migration.
+- `/api/content-plan/start-background` now mirrors the completed harvest instead
+  of paying for a duplicate crawl, competitor scan, and Tavily harvest.
+- Replaced the dashboard's fixed 12/8/6/4 categories with dynamic harvested
+  clusters. Added an explicit cluster-delivery marker and honest pre-purchase
+  scheduling state.
+- Connected subscription activation, renewal, plan change, and cancellation to
+  program provisioning. Scheduling is idempotent, restricted to the sold
+  clusters, and synchronized into the compatibility `content_plans` read model.
+- Corrected delivery state: `planned_articles` reaches `published` only when the
+  generation task succeeds; failures pause the program; burn-down is derived
+  from finished rows; the legacy watchman skips active, paused, and completed
+  closed-pool programs.
+- Rebuilt active landing/pricing/checkout copy around finite scope and velocity;
+  checkout renders all DB-driven tiers instead of `plans[0]`.
+- Archived old GSC routes by redirect, stopped loading hidden CMS integrations,
+  and removed stale comparison pages from the sitemap while keeping their code.
+
 ### 2026-07-29 — Phase B: delivery, UI, and archiving
 - **`trigger/ship-cluster.ts`** — new `clusterShipper` scheduled task. Ships a whole
-  cluster per run (pillar first), charges credits per cluster, marks the program
+  cluster per run (pillar first), preflights the cluster credit requirement, marks the program
   complete when the niche is closed instead of re-shipping.
-- **`trigger/scheduler.ts`** — legacy `dailyContentWatchman` now skips brands with an
-  active program, preventing double-charging.
+- **`trigger/scheduler.ts`** — legacy `dailyContentWatchman` now skips brands with a
+  closed-pool program, preventing double-charging and quota refills after completion.
 - **`trigger/generate-plan.ts`** — rewired to `runHarvestAudit`. Removed the five-stage
   LLM chain and `deduplicateWithReplacementLoop(..., { targetCount: 30 })`; mirrors
   `planned_articles` into `content_plans.plan_data` for the existing dashboard.

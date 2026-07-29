@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createHmac, timingSafeEqual, createHash } from 'crypto'
 import { Webhook } from 'standardwebhooks'
+import { provisionProgramForSubscription } from '@/lib/harvest/program-provisioning'
 
 export const runtime = 'nodejs'
 
@@ -618,6 +619,11 @@ export async function POST(req: NextRequest) {
             if (status === 'active' || remoteStatus === 'active') {
                 // Non-rollover: reset to plan credits
                 await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits ?? null)
+                await provisionProgramForSubscription(
+                    supabase,
+                    effective_user_id,
+                    pricing_plan_id ?? null,
+                )
             }
             // Persist service-management fields for reporting/operations
             await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
@@ -644,6 +650,11 @@ export async function POST(req: NextRequest) {
                 return Number.isFinite(n) ? n : null
             })()
             await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits)
+            await provisionProgramForSubscription(
+                supabase,
+                effective_user_id,
+                activeSub?.pricing_plan_id || null,
+            )
             // Also complete the latest pending change if any
             try {
                 await completeLatestPendingChange(supabase, effective_user_id, null, { completed_by: eventType })
@@ -705,6 +716,11 @@ export async function POST(req: NextRequest) {
                 currency_snapshot,
             })
             await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
+            await (supabase as any)
+                .from('programs')
+                .update({ status: 'paused', updated_at: new Date().toISOString() })
+                .eq('user_id', effective_user_id)
+                .eq('status', 'active')
         } else if (eventType === 'subscription.plan_changed') {
             // Plan changed mid-cycle: update mapping/status, do not reset credits
             if (effective_user_id && dodo_subscription_id) {
@@ -735,6 +751,11 @@ export async function POST(req: NextRequest) {
                             { completed_by: eventType },
                         )
                     } catch { }
+                    await provisionProgramForSubscription(
+                        supabase,
+                        effective_user_id,
+                        pricing_plan_id ?? null,
+                    )
                 }
                 await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
             }
@@ -762,6 +783,11 @@ export async function POST(req: NextRequest) {
                 if (mapped === 'active') {
                     await setUserCreditsToPlanCredits(supabase, effective_user_id, planCredits ?? null)
                     await reactivateUserPlans(supabase, effective_user_id)
+                    await provisionProgramForSubscription(
+                        supabase,
+                        effective_user_id,
+                        pricing_plan_id ?? null,
+                    )
                     try {
                         await completeLatestPendingChange(
                             supabase,

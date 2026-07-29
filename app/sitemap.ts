@@ -2,7 +2,6 @@ import { MetadataRoute } from 'next'
 import { defaultSEO } from '@/config/seo'
 import { getAllPostSlugs } from '@/lib/wordpress'
 import { getAllToolSlugs } from '@/lib/tools'
-import { comparisons } from '@/app/compare/data'
 import { solutions } from '@/app/solutions/data'
 import { features } from '@/app/features/data'
 // Regenerate sitemap periodically to auto-include newly published WordPress posts
@@ -77,17 +76,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }]
 
-  // Dynamically include Comparisons
-  const compareSlugs = Object.entries(comparisons)
-    .filter(([, comparison]) => !comparison.seo?.noindex && !comparison.seo?.redirectTo)
-    .map(([slug]) => slug)
-  const comparePages: MetadataRoute.Sitemap = compareSlugs.map((slug) => ({
-    url: `${baseUrl}/compare/${slug}`,
-    lastModified: currentDate,
-    changeFrequency: 'weekly' as const,
-    priority: 0.8,
-  }))
-
   // Dynamically include Solutions
   const solutionSlugs = Object.keys(solutions)
   const solutionPages: MetadataRoute.Sitemap = solutionSlugs.map((slug) => ({
@@ -120,5 +108,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Note: Protected pages like /blog-writer, /account are intentionally excluded
 
-  return [...staticPages, ...additionalPages, ...blogPages, ...toolPages, ...toolsIndexPage, ...comparePages, ...solutionsIndexPage, ...solutionPages, ...featuresIndexPage, ...featurePages]
+  return [...staticPages, ...additionalPages, ...blogPages, ...toolPages, ...toolsIndexPage, ...solutionsIndexPage, ...solutionPages, ...featuresIndexPage, ...featurePages]
 }

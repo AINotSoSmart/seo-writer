@@ -1,165 +1,129 @@
-import React from 'react';
-import { Bot, Zap, Globe, Image as ImageIcon, Link2, ShieldCheck, Target } from 'lucide-react';
-import Button from './Button';
-import Link from 'next/link';
-import { CornerSquare } from './CornerSquare';
+import Link from "next/link"
+import { CalendarClock, Check, Layers3, SearchCheck } from "lucide-react"
+import Button from "./Button"
+import { CornerSquare } from "./CornerSquare"
 
-const FeatureItem = ({ icon: Icon, title, description }: { icon: any, title: string, description: string }) => (
-    <div className="flex gap-4 items-start group">
-        <div className="flex-shrink-0 w-10 h-10 rounded-[6px] bg-stone-50 border border-stone-200 flex items-center justify-center text-">
-            <Icon size={20} strokeWidth={1.5} />
-        </div>
-        <div className="flex-1">
-            <h4 className="font-serif text-lg text-stone-900 leading-tight mb-1">
-                {title}
-            </h4>
-            <p className="font-sans text-sm text-stone-500 leading-relaxed">
-                {description}
-            </p>
-        </div>
-    </div>
-);
+const tiers = [
+    {
+        name: "Close",
+        price: 249,
+        velocity: "1 cluster / month",
+        description: "Close the highest-priority part of your map at a steady pace.",
+    },
+    {
+        name: "Accelerate",
+        price: 449,
+        velocity: "2 clusters / month",
+        description: "Move through the same verified scope twice as fast.",
+        featured: true,
+    },
+    {
+        name: "Dominate",
+        price: 799,
+        velocity: "4 clusters / month",
+        description: "Ship four complete, interlinked clusters every month.",
+    },
+]
 
-const PricingSection: React.FC = () => {
+const sharedFeatures = [
+    "A finite, evidence-backed content scope",
+    "Every gap linked to the page where it was observed",
+    "Complete clusters shipped together",
+    "Research, citations, internal links, and on-brand images",
+    "WordPress-ready drafts and manual export",
+]
+
+export default function PricingSection() {
     return (
-        <section id="pricing" className="w-full py-24 relative z-10">
-            <div className="w-full max-w-[1250px] mx-auto px-3 sm:px-5">
+        <section id="pricing" className="relative z-10 w-full py-24">
+            <div className="mx-auto w-full max-w-[1250px] px-3 sm:px-5">
+                <div
+                    className="mb-16 h-3 w-full border-y border-stone-200 sm:h-4"
+                    style={{ backgroundImage: "repeating-linear-gradient(-45deg, transparent, transparent 6px, #e7e5e4 6px, #e7e5e4 7px)" }}
+                />
 
-                {/* Horizontal Pattern Bar Above Header */}
-                <div className="w-full h-3 sm:h-4 border-y border-stone-200 mb-16" style={{ backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 6px, #e7e5e4 6px, #e7e5e4 7px)' }}></div>
-
-                {/* Header - Left/Right Premium Setup */}
-                <div className="flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end mb-16 w-full px-4 md:px-8">
+                <div className="mb-14 flex w-full flex-col items-start justify-between gap-8 px-4 md:flex-row md:items-end md:gap-16 md:px-8">
                     <div className="flex-1">
-                        <span className="font-sans text-xs font-bold tracking-widest text-brand-500 uppercase mb-4 block">
-                            Pricing
+                        <span className="mb-4 block text-xs font-bold uppercase tracking-widest text-brand-500">
+                            Price the finish line, choose the speed
                         </span>
-                        <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-                            Stop Renting SEO Writers.  <br /><span className='italic text-stone-500'>Own an AI Engine.</span>
+                        <h2 className="font-serif text-4xl font-normal leading-[1] tracking-tight text-stone-900 md:text-5xl lg:text-6xl">
+                            One verified scope. <br />
+                            <span className="italic text-stone-500">Three delivery velocities.</span>
                         </h2>
                     </div>
-                    <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
-                        <p className="font-sans text-stone-500 text-lg leading-relaxed">
-                            Get the output of a $2,500/mo SEO Agency for the price of a dinner. We don't just write 'blogs'—we build the Strategic Content Infrastructure your brand needs.
-                        </p>
-                    </div>
+                    <p className="max-w-xl flex-1 text-lg leading-relaxed text-stone-500">
+                        We do not invent 30 topics to fill a monthly quota. Your audit reveals the
+                        finite opportunity first; your plan only changes how quickly complete
+                        clusters are researched, written, and delivered.
+                    </p>
                 </div>
 
-                {/* Horizontal Pattern Bar Top (Grid Boundary) */}
-                <div className="relative w-full h-3 sm:h-4 border-y border-stone-200" style={{ backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 6px, #e7e5e4 6px, #e7e5e4 7px)' }}>
+                <div
+                    className="relative h-3 w-full border-y border-stone-200 sm:h-4"
+                    style={{ backgroundImage: "repeating-linear-gradient(-45deg, transparent, transparent 6px, #e7e5e4 6px, #e7e5e4 7px)" }}
+                >
                     <CornerSquare className="-left-[5px] -bottom-[5px]" />
                     <CornerSquare className="-right-[5px] -bottom-[5px]" />
                 </div>
 
-                {/* Premium Wireframe Grid */}
-                <div className="w-full grid grid-cols-1 md:grid-cols-2 border-x border-stone-200  relative">
-
-                    {/* Main Grid Corners */}
-                    <CornerSquare className="-left-[5px] -top-[5px]" />
-                    <CornerSquare className="-right-[5px] -top-[5px]" />
-                    <CornerSquare className="-left-[5px] -bottom-[5px]" />
-                    <CornerSquare className="-right-[5px] -bottom-[5px]" />
-
-                    {/* Junctions */}
-                    <div className="hidden md:block absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30">
-                        <CornerSquare className="-left-[4px] -top-[4px]" />
-                    </div>
-                    <div className="hidden md:block absolute bottom-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30">
-                        <CornerSquare className="-left-[4px] -top-[4px]" />
-                    </div>
-
-                    {/* Left Side: Pricing & CTA */}
-                    <div className="w-full border-b md:border-b-0 md:border-r border-stone-200 p-4 md:p-8 flex flex-col justify-center items-center text-center ">
-
-                        <div className="mb-8">
-                            <span className="inline-block px-3 py-1 bg-stone-100 text-stone-600 text-[10px] font-bold uppercase tracking-widest mb-6 border border-stone-200 rounded-sm">
-                                All In One
-                            </span>
-                            <h3 className="font-serif text-3xl md:text-4xl lg:text-5xl text-stone-900 leading-none">
-                                The Authority Engine
-                            </h3>
-                        </div>
-
-                        <div className="flex items-baseline justify-center gap-4 mb-2">
-                            <span className="text-2xl text-stone-400 line-through decoration-stone-300 decoration-2">
-                                $149
-                            </span>
-                            <span className="text-[80px] font-serif text-stone-900 tracking-tighter leading-none">
-                                $79
-                            </span>
-                        </div>
-                        <p className="text-stone-500 text-sm font-bold tracking-widest uppercase mb-12">per month</p>
-
-
-                        <div className="flex flex-col items-center w-full max-w-sm">
-                            <Link href="/login" className="w-full">
-                                <Button variant="primary" className="w-full px-10 py-5 text-lg">
-                                    Deploy My Content Engine
+                <div className="grid border-x border-stone-200 md:grid-cols-3">
+                    {tiers.map((tier) => (
+                        <article
+                            key={tier.name}
+                            className={`relative flex flex-col border-b border-stone-200 p-7 md:border-r md:last:border-r-0 ${
+                                tier.featured ? "bg-brand-50/40" : "bg-white/60"
+                            }`}
+                        >
+                            {tier.featured && (
+                                <span className="absolute right-5 top-5 rounded-full bg-stone-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+                                    Recommended
+                                </span>
+                            )}
+                            <div className="mb-8">
+                                <h3 className="font-serif text-3xl text-stone-900">{tier.name}</h3>
+                                <p className="mt-2 min-h-10 text-sm leading-relaxed text-stone-500">{tier.description}</p>
+                            </div>
+                            <div className="mb-2 flex items-end gap-1">
+                                <span className="font-serif text-5xl tracking-tight text-stone-900">${tier.price}</span>
+                                <span className="pb-1.5 text-sm text-stone-500">/ month</span>
+                            </div>
+                            <div className="mb-7 flex items-center gap-2 text-sm font-semibold text-stone-700">
+                                <CalendarClock size={16} />
+                                {tier.velocity}
+                            </div>
+                            <ul className="mb-8 flex-1 space-y-3">
+                                {sharedFeatures.map((feature) => (
+                                    <li key={feature} className="flex items-start gap-2 text-sm leading-relaxed text-stone-600">
+                                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" strokeWidth={2.5} />
+                                        {feature}
+                                    </li>
+                                ))}
+                            </ul>
+                            <Link href="/login">
+                                <Button variant="primary" className="w-full py-4">
+                                    Audit My Site First
                                 </Button>
                             </Link>
-
-                            <div className="mt-8 flex items-center justify-center gap-2 text-[10px] text-stone-500 font-bold uppercase tracking-widest">
-                                <ShieldCheck size={14} className="text-stone-400" />
-                                14-day money-back guarantee
-                            </div>
-                        </div>
-
-                    </div>
-
-                    {/* Right Side: Features */}
-                    <div className="w-full p-4 md:p-8 border-b border-stone-200 bg-stone-50/50">
-                        <h3 className="font-sans text-[10px] font-bold text-brand-500 uppercase tracking-widest mb-8 border-b border-stone-100 pb-4 inline-block w-full">
-                            Included Powerhouse Access
-                        </h3>
-                        <div className="space-y-8 mt-4">
-                            <FeatureItem
-                                icon={Bot}
-                                title="30 Citation-Optimized Authority Articles"
-                                description="Generated and published on auto-pilot. High quality, human-like output that passes AI detection."
-                            />
-                            <FeatureItem
-                                icon={Zap}
-                                title="Competitor Research & Gap-Analysis"
-                                description="Hands-free planning based on competitor gaps and real-time search intent analysis."
-                            />
-                            <FeatureItem
-                                icon={Target}
-                                title="The GSC Strategic Action Board"
-                                description="While we handle the complex math in the background, you get clear, actionable directives to fix cannibalization and reverse traffic decay."
-                            />
-                            <FeatureItem
-                                icon={Link2}
-                                title="Semantic Internal Linking"
-                                description="Powerful semantic suggestions to boost site structure and topical authority."
-                            />
-                            <FeatureItem
-                                icon={ShieldCheck}
-                                title="Google and LLM-Ready Structure"
-                                description="Answer-first content optimized for Perplexity, ChatGPT, and Google featured snippets."
-                            />
-                            <FeatureItem
-                                icon={Globe}
-                                title="1-Click CMS Publishing"
-                                description="Connects directly with WordPress, Webflow, and Shopify. We handle the formatting."
-                            />
-                            <FeatureItem
-                                icon={ImageIcon}
-                                title="On-Brand AI Images"
-                                description="Visuals generated to match your brand's unique style automatically for every post." />
-                        </div>
-                    </div>
-
+                        </article>
+                    ))}
                 </div>
 
-                {/* Horizontal Pattern Bar Bottom (Grid Boundary) */}
-                <div className="relative w-full h-3 sm:h-4 border-y border-stone-200" style={{ backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 6px, #e7e5e4 6px, #e7e5e4 7px)' }}>
-                    <CornerSquare className="-left-[5px] -top-[5px]" />
-                    <CornerSquare className="-right-[5px] -top-[5px]" />
+                <div className="grid border-x border-b border-stone-200 bg-stone-50/60 md:grid-cols-3">
+                    <div className="flex gap-3 p-6 md:border-r md:border-stone-200">
+                        <SearchCheck className="mt-0.5 h-5 w-5 shrink-0 text-stone-700" />
+                        <p className="text-sm text-stone-600">No gap enters the plan without a source URL.</p>
+                    </div>
+                    <div className="flex gap-3 p-6 md:border-r md:border-stone-200">
+                        <Layers3 className="mt-0.5 h-5 w-5 shrink-0 text-stone-700" />
+                        <p className="text-sm text-stone-600">No duplicate is added just to hit a quota.</p>
+                    </div>
+                    <div className="flex gap-3 p-6">
+                        <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-stone-700" />
+                        <p className="text-sm text-stone-600">When the disclosed scope is closed, the program ends.</p>
+                    </div>
                 </div>
-
             </div>
         </section>
-    );
-};
-
-export default PricingSection;
+    )
+}

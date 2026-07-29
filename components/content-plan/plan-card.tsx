@@ -354,7 +354,9 @@ export const PlanCard = memo(function PlanCard({
                     <div className="mt-auto pt-4 flex items-center justify-between border-t border-black/[0.04]">
                         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-400 uppercase tracking-wider">
                             <Calendar className="w-3.5 h-3.5" />
-                            {new Date(item.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {item.scheduled_date
+                                ? new Date(item.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                : "Scheduled after purchase"}
                         </div>
 
                         {item.status === 'writing' ? (
@@ -369,6 +371,11 @@ export const PlanCard = memo(function PlanCard({
                             <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg">
                                 <CheckCircle2 className="w-3 h-3" />
                                 Live
+                            </span>
+                        ) : item.delivery_model === "cluster" && item.scheduled_date ? (
+                            <span className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-[11px] font-bold text-stone-600">
+                                <Calendar className="h-3 w-3" />
+                                Scheduled
                             </span>
                         ) : (
                             <Tooltip>

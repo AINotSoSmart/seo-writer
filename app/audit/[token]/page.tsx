@@ -151,6 +151,7 @@ export default async function PublicAuditPage({ params }: PageProps) {
                     scope={data.scope}
                     gaps={data.gaps}
                     brandName={data.brandName}
+                    showShareLink={false}
                 />
 
                 <div className="mt-12 rounded-lg border border-stone-200 bg-white p-6 text-center">

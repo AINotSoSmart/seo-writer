@@ -12,6 +12,7 @@ export const ContentPlanItemSchema = z.object({
     // intent is for user display/categorization
     intent: z.enum(["informational", "comparison", "tutorial", "commercial", "transactional", "howto"]).optional(),
     cluster: z.string().optional(),
+    delivery_model: z.literal("cluster").optional(),
     scheduled_date: z.string(), // ISO date string
     status: z.enum(["pending", "writing", "published", "skipped"]).default("pending"),
     // Pre-created article ID for automation (Watchman pattern)

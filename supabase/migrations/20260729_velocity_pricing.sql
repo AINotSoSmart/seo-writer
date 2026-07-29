@@ -31,9 +31,9 @@ DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM (VALUES
-            ('REPLACE_WITH_DODO_PRODUCT_ID_CLOSE'),
-            ('REPLACE_WITH_DODO_PRODUCT_ID_ACCELERATE'),
-            ('REPLACE_WITH_DODO_PRODUCT_ID_DOMINATE')
+            ('pdt_0NV99DNFmUKedWmvYBY6o'),
+            ('pdt_0NkDNwESspunBR7xh0JCL'),
+            ('pdt_0NkDO0sMN9Lu8VQKdhM7I')
         ) AS t(id)
         WHERE t.id LIKE 'REPLACE_WITH_%'
     ) THEN
@@ -59,7 +59,7 @@ VALUES
         249,
         15,
         'USD',
-        'REPLACE_WITH_DODO_PRODUCT_ID_CLOSE',
+        'pdt_0NV99DNFmUKedWmvYBY6o',
         true,
         '{"tier": "close", "clusters_per_month": 1}'::jsonb
     ),
@@ -69,7 +69,7 @@ VALUES
         449,
         30,
         'USD',
-        'REPLACE_WITH_DODO_PRODUCT_ID_ACCELERATE',
+        'pdt_0NkDNwESspunBR7xh0JCL',
         true,
         '{"tier": "accelerate", "clusters_per_month": 2}'::jsonb
     ),
@@ -79,7 +79,7 @@ VALUES
         799,
         60,
         'USD',
-        'REPLACE_WITH_DODO_PRODUCT_ID_DOMINATE',
+        'pdt_0NkDO0sMN9Lu8VQKdhM7I',
         true,
         '{"tier": "dominate", "clusters_per_month": 4}'::jsonb
     )

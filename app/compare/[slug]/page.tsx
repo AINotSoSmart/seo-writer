@@ -66,10 +66,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         alternates: {
             canonical: `${defaultSEO.siteUrl}/compare/${slug}`
         },
-        robots: comparison.seo?.noindex ? {
+        robots: {
             index: false,
             follow: true,
-        } : undefined,
+        },
     };
 }
 

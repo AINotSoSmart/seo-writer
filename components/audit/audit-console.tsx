@@ -1,366 +1,340 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, AnimatePresence } from "motion/react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { motion } from "motion/react"
 import {
-    Map,
-    Search,
-    Users,
     BarChart3,
     CheckCircle2,
+    Database,
+    GitMerge,
+    Globe2,
+    Layers3,
     Loader2,
+    Search,
     ShieldCheck,
-    AlertTriangle,
-    ArrowRight
+    Users,
 } from "lucide-react"
-import { BrandDetails } from "@/lib/schemas/brand"
-import { TopicalAuditResult } from "@/lib/audit/types"
+import type { BrandDetails } from "@/lib/schemas/brand"
 import { cn } from "@/lib/utils"
 
 interface AuditConsoleProps {
     brandData: BrandDetails
     brandId: string
     brandUrl: string
-    onComplete: (auditResult: TopicalAuditResult) => void
+    onComplete: () => void
     onError: (message: string) => void
 }
 
-type AuditPhase = "niche_mapping" | "user_scanning" | "competitor_scanning" | "scoring"
+type AuditPhase =
+    | "competitor_discovery"
+    | "harvesting"
+    | "scanning_user_site"
+    | "scanning_competitors"
+    | "computing_gaps"
+    | "clustering"
+    | "persisting"
 
-const PHASE_ORDER: AuditPhase[] = ["niche_mapping", "user_scanning", "competitor_scanning", "scoring"]
-
-interface PhaseState {
-    status: 'pending' | 'active' | 'complete'
-    data: any
+type PhaseState = {
+    status: "pending" | "active" | "complete"
 }
 
-const PHASE_LABELS: Record<AuditPhase, string> = {
-    niche_mapping: "Mapping Niche Topics",
-    user_scanning: "Analyzing Your Content",
-    competitor_scanning: "Scanning Competitive Landscape",
-    scoring: "Calculating Authority Score"
+type AuditStatusResponse = {
+    status: "not_found" | "running" | "completed" | "failed"
+    phase?: AuditPhase | null
+    error?: string | null
+    audit?: {
+        pool_size: number
+        article_count: number
+        cluster_count: number
+        authority_score: number
+    } | null
+    partial?: {
+        topics_analyzed: number
+        user_pages_scanned: number
+        competitors_scanned: number
+        pool_size: number
+        article_count: number
+        cluster_count: number
+    }
 }
 
-const PHASE_DESCRIPTIONS: Record<AuditPhase, string> = {
-    niche_mapping: "Identifying core topics and semantic clusters...",
-    user_scanning: "Crawling your site for existing coverage...",
-    competitor_scanning: "Checking how competitors rank for these topics...",
-    scoring: "Finalizing your Topical Authority Score..."
+const PHASE_ORDER: AuditPhase[] = [
+    "competitor_discovery",
+    "harvesting",
+    "scanning_user_site",
+    "scanning_competitors",
+    "computing_gaps",
+    "clustering",
+    "persisting",
+]
+
+const PHASE_COPY: Record<AuditPhase, {
+    label: string
+    description: string
+    icon: React.ElementType
+}> = {
+    competitor_discovery: {
+        label: "Finding the competitive set",
+        description: "Resolving the sites that compete for the same search demand.",
+        icon: Users,
+    },
+    harvesting: {
+        label: "Harvesting observed searches",
+        description: "Collecting real queries and preserving where each one was found.",
+        icon: Search,
+    },
+    scanning_user_site: {
+        label: "Scanning your published coverage",
+        description: "Checking which harvested searches your current pages already cover.",
+        icon: Globe2,
+    },
+    scanning_competitors: {
+        label: "Scanning competitor coverage",
+        description: "Verifying which gaps are already supported by competitor pages.",
+        icon: BarChart3,
+    },
+    computing_gaps: {
+        label: "Computing verified gaps",
+        description: "Subtracting your coverage from the observed query pool.",
+        icon: Database,
+    },
+    clustering: {
+        label: "Collapsing gaps into article clusters",
+        description: "Removing overlap and grouping articles that should ship together.",
+        icon: GitMerge,
+    },
+    persisting: {
+        label: "Saving your finite scope",
+        description: "Writing the evidence, clusters, and planned articles to your account.",
+        icon: Layers3,
+    },
 }
 
-const PHASE_ICONS: Record<AuditPhase, React.ElementType> = {
-    niche_mapping: Map,
-    user_scanning: Search,
-    competitor_scanning: Users,
-    scoring: BarChart3
-}
+const emptyPhases = (): Record<AuditPhase, PhaseState> =>
+    Object.fromEntries(PHASE_ORDER.map((phase) => [phase, { status: "pending" }])) as Record<AuditPhase, PhaseState>
 
-const POLL_INTERVAL = 3000 // 3 seconds
+const POLL_INTERVAL = 3000
 
 export function AuditConsole({
     brandData,
     brandId,
     brandUrl,
     onComplete,
-    onError
+    onError,
 }: AuditConsoleProps) {
-    const [phases, setPhases] = useState<Record<AuditPhase, PhaseState>>({
-        niche_mapping: { status: 'pending', data: {} },
-        user_scanning: { status: 'pending', data: {} },
-        competitor_scanning: { status: 'pending', data: {} },
-        scoring: { status: 'pending', data: {} }
-    })
+    const [phases, setPhases] = useState<Record<AuditPhase, PhaseState>>(emptyPhases)
+    const [summary, setSummary] = useState<AuditStatusResponse["audit"]>(null)
     const [isRunning, setIsRunning] = useState(false)
     const hasStartedRef = useRef(false)
+    const completionSentRef = useRef(false)
     const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    // Update phase indicators based on current phase from server
-    const updatePhasesFromServer = useCallback((currentPhase: string | null) => {
+    const stopPolling = useCallback(() => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+        }
+    }, [])
+
+    const completeOnce = useCallback(() => {
+        if (completionSentRef.current) return
+        completionSentRef.current = true
+        window.setTimeout(onComplete, 600)
+    }, [onComplete])
+
+    const updatePhasesFromServer = useCallback((currentPhase?: AuditPhase | null) => {
         if (!currentPhase) return
+        const currentIndex = PHASE_ORDER.indexOf(currentPhase)
+        if (currentIndex < 0) return
 
-        setPhases(prev => {
-            const updated = { ...prev }
-            const currentIdx = PHASE_ORDER.indexOf(currentPhase as AuditPhase)
-
-            for (let i = 0; i < PHASE_ORDER.length; i++) {
-                const phase = PHASE_ORDER[i]
-                if (i < currentIdx) {
-                    updated[phase] = { ...updated[phase], status: 'complete' }
-                } else if (i === currentIdx) {
-                    updated[phase] = { ...updated[phase], status: 'active' }
+        setPhases(() => {
+            const next = emptyPhases()
+            PHASE_ORDER.forEach((phase, index) => {
+                next[phase] = {
+                    status: index < currentIndex ? "complete" : index === currentIndex ? "active" : "pending",
                 }
-                // phases after current stay 'pending'
-            }
-            return updated
+            })
+            return next
         })
     }, [])
 
-    // Poll the audit status
+    const handleStatus = useCallback((data: AuditStatusResponse) => {
+        if (data.status === "running") {
+            setIsRunning(true)
+            updatePhasesFromServer(data.phase)
+            return
+        }
+
+        if (data.status === "completed") {
+            setPhases(Object.fromEntries(
+                PHASE_ORDER.map((phase) => [phase, { status: "complete" }])
+            ) as Record<AuditPhase, PhaseState>)
+            setSummary(data.audit ?? null)
+            setIsRunning(false)
+            stopPolling()
+            completeOnce()
+            return
+        }
+
+        if (data.status === "failed") {
+            setIsRunning(false)
+            stopPolling()
+            onError(data.error || "Audit failed")
+        }
+    }, [completeOnce, onError, stopPolling, updatePhasesFromServer])
+
     const pollStatus = useCallback(async () => {
         try {
-            const res = await fetch(`/api/topical-audit?brandId=${brandId}`)
-            if (!res.ok) return
-
-            const data = await res.json()
-
-            if (data.status === "running") {
-                updatePhasesFromServer(data.phase)
-
-                // Update stats from partial data
-                if (data.partial) {
-                    setPhases(prev => {
-                        const updated = { ...prev }
-                        if (data.partial.topics_analyzed > 0 && prev.niche_mapping.status === 'complete') {
-                            updated.niche_mapping = {
-                                status: 'complete',
-                                data: { topic_count: data.partial.topics_analyzed }
-                            }
-                        }
-                        if (data.partial.user_pages_scanned > 0 && prev.user_scanning.status === 'complete') {
-                            updated.user_scanning = {
-                                status: 'complete',
-                                data: { pages_analyzed: data.partial.user_pages_scanned }
-                            }
-                        }
-                        if (data.partial.competitors_scanned > 0 && prev.competitor_scanning.status === 'complete') {
-                            updated.competitor_scanning = {
-                                status: 'complete',
-                                data: { competitor_count: data.partial.competitors_scanned }
-                            }
-                        }
-                        return updated
-                    })
-                }
-            } else if (data.status === "completed" && data.audit) {
-                // Mark all phases complete
-                setPhases({
-                    niche_mapping: { status: 'complete', data: { topic_count: data.partial?.topics_analyzed } },
-                    user_scanning: { status: 'complete', data: { pages_analyzed: data.partial?.user_pages_scanned } },
-                    competitor_scanning: { status: 'complete', data: { competitor_count: data.partial?.competitors_scanned } },
-                    scoring: { status: 'complete', data: { authority_score: data.audit.authority_score } }
-                })
-                setIsRunning(false)
-                if (pollIntervalRef.current) {
-                    clearInterval(pollIntervalRef.current)
-                    pollIntervalRef.current = null
-                }
-                setTimeout(() => onComplete(data.audit), 1000)
-            } else if (data.status === "failed") {
-                setIsRunning(false)
-                if (pollIntervalRef.current) {
-                    clearInterval(pollIntervalRef.current)
-                    pollIntervalRef.current = null
-                }
-                onError(data.error || 'Audit failed')
-            }
+            const response = await fetch(`/api/topical-audit?brandId=${brandId}`, { cache: "no-store" })
+            if (!response.ok) return
+            handleStatus(await response.json())
         } catch (error) {
-            console.error("Poll error:", error)
+            console.error("[Audit Console] Status check failed:", error)
         }
-    }, [brandId, updatePhasesFromServer, onComplete, onError])
+    }, [brandId, handleStatus])
 
-    // Start the audit
+    const beginPolling = useCallback(() => {
+        stopPolling()
+        pollIntervalRef.current = setInterval(pollStatus, POLL_INTERVAL)
+    }, [pollStatus, stopPolling])
+
     const startAudit = useCallback(async () => {
         try {
-            const response = await fetch('/api/topical-audit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ brandId, brandData, brandUrl })
+            const response = await fetch("/api/topical-audit", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ brandId, brandData, brandUrl }),
             })
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-                throw new Error(errorData.error || 'Audit failed to start')
+                const body = await response.json().catch(() => ({ error: "Audit failed to start" }))
+                throw new Error(body.error || "Audit failed to start")
             }
 
-            const result = await response.json()
-
-            if (result.status === "running") {
-                setIsRunning(true)
-                setPhases(prev => ({
-                    ...prev,
-                    niche_mapping: { status: 'active', data: {} }
-                }))
-                // Start polling
-                pollIntervalRef.current = setInterval(pollStatus, POLL_INTERVAL)
-            }
-        } catch (error: any) {
-            console.error('Audit start error:', error)
-            onError(error.message)
+            setIsRunning(true)
+            updatePhasesFromServer("competitor_discovery")
+            beginPolling()
+        } catch (error) {
+            onError(error instanceof Error ? error.message : "Audit failed to start")
         }
-    }, [brandId, brandData, brandUrl, onError, pollStatus])
+    }, [beginPolling, brandData, brandId, brandUrl, onError, updatePhasesFromServer])
 
-    // Check for existing audit on mount, or start new one
     useEffect(() => {
         if (hasStartedRef.current) return
         hasStartedRef.current = true
 
-        const checkExistingAudit = async () => {
+        const recoverOrStart = async () => {
             try {
-                const res = await fetch(`/api/topical-audit?brandId=${brandId}`)
-                if (!res.ok) {
-                    startAudit()
+                const response = await fetch(`/api/topical-audit?brandId=${brandId}`, { cache: "no-store" })
+                if (!response.ok) {
+                    await startAudit()
                     return
                 }
-                const data = await res.json()
 
-                if (data.status === "running") {
-                    setIsRunning(true)
-                    updatePhasesFromServer(data.phase)
-                    pollIntervalRef.current = setInterval(pollStatus, POLL_INTERVAL)
-                } else if (data.status === "completed" && data.audit) {
-                    setPhases({
-                        niche_mapping: { status: 'complete', data: { topic_count: data.partial?.topics_analyzed } },
-                        user_scanning: { status: 'complete', data: { pages_analyzed: data.partial?.user_pages_scanned } },
-                        competitor_scanning: { status: 'complete', data: { competitor_count: data.partial?.competitors_scanned } },
-                        scoring: { status: 'complete', data: { authority_score: data.audit.authority_score } }
-                    })
-                    setTimeout(() => onComplete(data.audit), 500)
-                } else if (data.status === "failed") {
-                    onError(data.error || 'Audit failed')
+                const data: AuditStatusResponse = await response.json()
+                if (data.status === "not_found") {
+                    await startAudit()
                 } else {
-                    startAudit()
+                    handleStatus(data)
+                    if (data.status === "running") beginPolling()
                 }
             } catch {
-                startAudit()
+                await startAudit()
             }
         }
-        checkExistingAudit()
-        return () => {
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-        }
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+        void recoverOrStart()
+        return stopPolling
+    }, [beginPolling, brandId, handleStatus, startAudit, stopPolling])
 
-    const currentPhaseKey = PHASE_ORDER.find(p => phases[p].status === 'active') ||
-        (phases.scoring.status === 'complete' ? 'scoring' : null)
+    const currentPhase = PHASE_ORDER.find((phase) => phases[phase].status === "active")
+    const isComplete = phases.persisting.status === "complete"
 
     return (
         <div className="w-full max-w-2xl mx-auto py-8">
-
-            {/* Header: Pulsing Brand Analysis */}
-            <div className="text-center mb-12">
+            <div className="text-center mb-10">
                 <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border border-stone-200 shadow-xs mb-6">
                     <ShieldCheck className="w-10 h-10 text-stone-900" strokeWidth={1.5} />
                     {isRunning && (
                         <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white"></span>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white" />
                         </span>
                     )}
                 </div>
                 <h3 className="font-serif text-3xl text-stone-900 mb-2">
-                    {isRunning ? "Running Topical Audit" : phases.scoring.status === 'complete' ? "Audit Complete" : "Initializing..."}
+                    {isComplete ? "Scope verified" : isRunning ? "Mapping real search demand" : "Preparing your audit"}
                 </h3>
-                <p className="text-stone-500 text-lg max-w-md mx-auto leading-relaxed">
-                    {currentPhaseKey
-                        ? PHASE_DESCRIPTIONS[currentPhaseKey]
-                        : "Preparing to analyze your brand's authority..."}
+                <p className="text-stone-500 text-base max-w-lg mx-auto leading-relaxed">
+                    {currentPhase
+                        ? PHASE_COPY[currentPhase].description
+                        : isComplete
+                            ? "Your finite content scope and its source evidence are ready."
+                            : "Preparing the closed-pool audit."}
                 </p>
             </div>
 
-            {/* Progress Steps */}
-            <div className="space-y-4 mb-12 px-4 sm:px-0">
+            <div className="space-y-3 px-2 sm:px-0">
                 {PHASE_ORDER.map((phase, index) => {
-                    const status = phases[phase].status
-                    const Icon = PHASE_ICONS[phase]
-                    const isComplete = status === 'complete'
-                    const isActive = status === 'active'
-                    const isPending = status === 'pending'
-
+                    const { status } = phases[phase]
+                    const copy = PHASE_COPY[phase]
+                    const Icon = copy.icon
                     return (
                         <motion.div
                             key={phase}
-                            initial={{ opacity: 0, y: 10 }}
+                            initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
+                            transition={{ delay: index * 0.04 }}
                             className={cn(
-                                "relative flex items-center p-4 rounded-xl border transition-all duration-500",
-                                isActive ? "bg-white border-stone-300 scale-[1.02]"
-                                    : isComplete ? "bg-stone-50/50 border-stone-200 opacity-60" // Dim completed steps slightly
-                                        : "bg-transparent border-transparent opacity-40 grayscale"
+                                "flex items-center gap-4 rounded-xl border p-4 transition-colors",
+                                status === "active" && "border-stone-300 bg-white",
+                                status === "complete" && "border-stone-200 bg-stone-50/60",
+                                status === "pending" && "border-transparent opacity-45"
                             )}
                         >
-                            {/* Icon Box */}
                             <div className={cn(
-                                "w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors duration-300 shrink-0",
-                                isActive ? "bg-stone-900 text-white"
-                                    : isComplete ? "bg-emerald-100 text-emerald-600"
-                                        : "bg-stone-100 text-stone-400"
+                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg",
+                                status === "active" && "bg-stone-900 text-white",
+                                status === "complete" && "bg-emerald-100 text-emerald-700",
+                                status === "pending" && "bg-stone-100 text-stone-400"
                             )}>
-                                {isActive ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : isComplete ? (
-                                    <CheckCircle2 className="w-6 h-6" />
-                                ) : (
-                                    <Icon className="w-5 h-5" />
+                                {status === "active"
+                                    ? <Loader2 className="h-5 w-5 animate-spin" />
+                                    : status === "complete"
+                                        ? <CheckCircle2 className="h-5 w-5" />
+                                        : <Icon className="h-5 w-5" />}
+                            </div>
+                            <div className="min-w-0">
+                                <div className="text-sm font-medium text-stone-900">{copy.label}</div>
+                                {status === "active" && (
+                                    <div className="mt-1 text-xs text-stone-500">{copy.description}</div>
                                 )}
                             </div>
-
-                            {/* Text Content */}
-                            <div className="flex-1 min-w-0">
-                                <h4 className={cn(
-                                    "font-medium text-base mb-0.5",
-                                    isActive ? "text-stone-900" : "text-stone-500"
-                                )}>
-                                    {PHASE_LABELS[phase]}
-                                </h4>
-                                {isActive && (
-                                    <motion.div
-                                        layoutId="active-indicator"
-                                        className="h-1 w-12 bg-stone-200 rounded-full overflow-hidden mt-2"
-                                    >
-                                        <motion.div
-                                            className="h-full bg-stone-900"
-                                            initial={{ x: "-100%" }}
-                                            animate={{ x: "0%" }} // Simple infinite load bar
-                                            transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                                        />
-                                    </motion.div>
-                                )}
-                            </div>
-
-                            {/* Data Stats (if complete) */}
-                            {isComplete && phases[phase].data && (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    className="px-3 py-1 bg-white border border-stone-200 rounded-full"
-                                >
-                                    <span className="text-xs font-bold text-stone-700">
-                                        {phase === 'niche_mapping' && `${phases[phase].data.topic_count || 0} Topics`}
-                                        {phase === 'user_scanning' && `${phases[phase].data.pages_analyzed || 0} Pages`}
-                                        {phase === 'competitor_scanning' && `${phases[phase].data.competitor_count || 0} Competitors`}
-                                        {phase === 'scoring' && `${phases[phase].data.authority_score || 0}/100 Score`}
-                                    </span>
-                                </motion.div>
-                            )}
                         </motion.div>
                     )
                 })}
             </div>
 
-            {/* Grid Stats for Final Summary view */}
-            {phases.niche_mapping.status === 'complete' && (
+            {isComplete && summary && (
                 <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="grid grid-cols-3 gap-4 border-t border-stone-100 pt-8"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-8 grid grid-cols-3 gap-3 border-t border-stone-100 pt-7 text-center"
                 >
-                    <div className="text-center">
-                        <div className="text-sm text-stone-400 uppercase tracking-wider mb-1 font-medium">Topics</div>
-                        <div className="text-2xl font-serif text-stone-900">{phases.niche_mapping.data?.topic_count || '—'}</div>
+                    <div>
+                        <div className="text-xs uppercase tracking-wide text-stone-400">Queries</div>
+                        <div className="mt-1 font-serif text-2xl text-stone-900">{summary.pool_size}</div>
                     </div>
-                    <div className="text-center border-l border-stone-100">
-                        <div className="text-sm text-stone-400 uppercase tracking-wider mb-1 font-medium">Competitors</div>
-                        <div className="text-2xl font-serif text-stone-900">{phases.competitor_scanning.data?.competitor_count || '—'}</div>
+                    <div className="border-x border-stone-100">
+                        <div className="text-xs uppercase tracking-wide text-stone-400">Articles</div>
+                        <div className="mt-1 font-serif text-2xl text-stone-900">{summary.article_count}</div>
                     </div>
-                    <div className="text-center border-l border-stone-100">
-                        <div className="text-sm text-stone-400 uppercase tracking-wider mb-1 font-medium">Pages</div>
-                        <div className="text-2xl font-serif text-stone-900">{phases.user_scanning.data?.pages_analyzed || '—'}</div>
+                    <div>
+                        <div className="text-xs uppercase tracking-wide text-stone-400">Clusters</div>
+                        <div className="mt-1 font-serif text-2xl text-stone-900">{summary.cluster_count}</div>
                     </div>
                 </motion.div>
             )}
-
         </div>
     )
 }

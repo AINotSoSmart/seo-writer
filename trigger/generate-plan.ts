@@ -304,8 +304,9 @@ export const generatePlanTask = task({
                 supporting_keywords: row.supporting_keywords || [],
                 article_type: row.article_type,
                 cluster: row.audit_clusters?.name || "",
+                delivery_model: "cluster",
                 is_pillar: row.is_pillar,
-                scheduled_date: row.scheduled_date,
+                scheduled_date: row.scheduled_date || "",
                 status: row.status === "scheduled" ? "pending" : row.status,
             }))
 

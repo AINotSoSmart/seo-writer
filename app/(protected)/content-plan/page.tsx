@@ -20,8 +20,6 @@ import {
     MousePointerClick,
     Play,
     Layers,
-    Award,
-    Waypoints,
     LayoutGrid,
     Network,
 } from "lucide-react"
@@ -87,49 +85,6 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
     pending: { label: "Planned", icon: Calendar, className: "text-stone-500" },
     writing: { label: "Writing", icon: PenTool, className: "text-stone-900" },
     published: { label: "Published", icon: CheckCircle2, className: "text-stone-900" },
-}
-
-// Article Category Configuration for Strategic 12-8-6-4 Distribution
-const ARTICLE_CATEGORY_CONFIG: Record<string, {
-    label: string;
-    icon: any;
-    tagline: string;
-    color: string;
-    bgColor: string;
-    targetCount: number;
-}> = {
-    "Core Answers": {
-        label: "Core Answers",
-        icon: Layers,
-        tagline: "Direct answers to your customers' most burning questions.",
-        color: "text-stone-700",
-        bgColor: "bg-stone-100 border-stone-200",
-        targetCount: 12
-    },
-    "Supporting Articles": {
-        label: "Supporting Articles",
-        icon: Waypoints,
-        tagline: "Comprehensive guides that build depth and trust.",
-        color: "text-stone-700",
-        bgColor: "bg-stone-100 border-stone-200",
-        targetCount: 8
-    },
-    "Conversion Pages": {
-        label: "Conversion Pages",
-        icon: MousePointerClick,
-        tagline: "High-intent content designed to drive signups.",
-        color: "text-stone-700",
-        bgColor: "bg-stone-100 border-stone-200",
-        targetCount: 6
-    },
-    "Authority Plays": {
-        label: "Authority Plays",
-        icon: Award,
-        tagline: "Thought leadership to establish industry expertise.",
-        color: "text-stone-700",
-        bgColor: "bg-stone-100 border-stone-200",
-        targetCount: 4
-    }
 }
 
 export default function ContentPlanPage() {
@@ -253,6 +208,7 @@ export default function ContentPlanPage() {
                     cluster: item.cluster || "",
                     planId: plan?.id,
                     itemId: item.id,
+                    plannedArticleId: item.delivery_model === "cluster" ? item.id : undefined,
                     instructions: item.user_instructions,
                 }),
             })
@@ -471,14 +427,15 @@ export default function ContentPlanPage() {
     if (plan.generation_status === 'pending' || plan.generation_status === 'generating') {
         const phaseLabels: Record<string, { title: string; description: string }> = {
             sitemap: { title: "Syncing Your Content", description: "Fetching existing pages from your sitemap..." },
-            seeds: { title: "Setting Up Your Strategy", description: "Preparing your content strategy foundation..." },
-            intelligence: { title: "Analyzing Market Landscape", description: "Discovering competitors and market trends..." },
-            serp: { title: "Analyzing Market Landscape", description: "Scanning competitors and SERP patterns..." },
-            gap: { title: "Finding Blue Ocean Opportunities", description: "Identifying content gaps your competitors missed..." },
-            hierarchy: { title: "Building Topic Hierarchy", description: "Organizing topics by strategic importance..." },
-            plan: { title: "Generating Your 30-Day Plan", description: "Creating your personalized content roadmap..." }
+            competitor_discovery: { title: "Resolving Competitors", description: "Finding sites competing for the same demand..." },
+            harvesting: { title: "Harvesting Search Demand", description: "Collecting observed queries and preserving their sources..." },
+            scanning_user_site: { title: "Checking Your Coverage", description: "Verifying what your existing pages already answer..." },
+            scanning_competitors: { title: "Checking Competitor Coverage", description: "Finding pages that provide evidence for each gap..." },
+            computing_gaps: { title: "Computing Verified Gaps", description: "Subtracting your coverage from the observed query pool..." },
+            clustering: { title: "Building Article Clusters", description: "Collapsing overlap into a finite content scope..." },
+            persisting: { title: "Saving Your Plan", description: "Writing the evidence and planned articles to your account..." },
         }
-        const phaseOrder = ['sitemap', 'intelligence', 'plan']
+        const phaseOrder = ['sitemap', 'harvesting', 'clustering']
         const currentPhase = plan.generation_phase ? phaseLabels[plan.generation_phase] || phaseLabels.sitemap : phaseLabels.sitemap
 
         return (
@@ -767,7 +724,7 @@ export default function ContentPlanPage() {
                             </div>
                             <h2 className="text-xl font-bold text-stone-900 mb-2">No Content Plan Yet</h2>
                             <p className="text-stone-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
-                                Generate a data-driven 30-day content plan based on your competitors and search trends.
+                                Run an evidence-backed audit to map the finite content gaps in your niche.
                             </p>
                             <Button onClick={() => router.push("/onboarding")} className="h-10 px-6 font-semibold shadow-md active:scale-95 transition-transform">
                                 <Sparkles className="w-4 h-4 mr-2" />
@@ -782,29 +739,44 @@ export default function ContentPlanPage() {
                                     const today = new Date()
                                     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-                                    // Sort categories: the one containing today's article comes first
-                                    const sortedCategories = Object.entries(ARTICLE_CATEGORY_CONFIG).sort(([keyA], [keyB]) => {
-                                        const hasToday = (key: string) => filteredPlan.some(
-                                            item => item.article_category === key &&
-                                                item.scheduled_date.split('T')[0] === todayStr
+                                    // The harvest defines the product in clusters. Group by those
+                                    // real cluster names instead of the retired fixed 12/8/6/4
+                                    // article categories (which made harvested plans render empty).
+                                    const clusterGroups = new Map<string, ContentPlanItem[]>()
+                                    for (const item of filteredPlan) {
+                                        const clusterName = item.cluster?.trim() || "Unclustered articles"
+                                        clusterGroups.set(clusterName, [...(clusterGroups.get(clusterName) || []), item])
+                                    }
+
+                                    const sortedClusters = Array.from(clusterGroups.entries()).sort(([, itemsA], [, itemsB]) => {
+                                        const hasToday = (items: ContentPlanItem[]) => items.some(
+                                            item => item.scheduled_date?.split('T')[0] === todayStr
                                         )
-                                        const aHasToday = hasToday(keyA)
-                                        const bHasToday = hasToday(keyB)
+                                        const aHasToday = hasToday(itemsA)
+                                        const bHasToday = hasToday(itemsB)
                                         if (aHasToday && !bHasToday) return -1
                                         if (!aHasToday && bHasToday) return 1
-                                        return 0
+                                        const firstA = itemsA[0]?.scheduled_date || ""
+                                        const firstB = itemsB[0]?.scheduled_date || ""
+                                        return firstA.localeCompare(firstB)
                                     })
 
-                                    return sortedCategories.map(([categoryKey, categoryConfig], categoryIndex) => {
-                                        // Get items for this category and sort by date
-                                        const rawCategoryItems = filteredPlan
-                                            .filter(item => item.article_category === categoryKey)
+                                    return sortedClusters.map(([categoryKey, clusterItems], categoryIndex) => {
+                                        const categoryConfig = {
+                                            label: categoryKey,
+                                            icon: Layers,
+                                            tagline: "A complete group of related articles designed to ship together.",
+                                            color: "text-stone-700",
+                                            bgColor: "bg-stone-100 border-stone-200",
+                                            targetCount: clusterItems.length,
+                                        }
+                                        const rawCategoryItems = [...clusterItems]
                                             .sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())
 
                                         // Circular rotation: find today's article index and rotate
                                         // So today's article is first, older ones wrap to end
                                         const todayIndex = rawCategoryItems.findIndex(
-                                            item => item.scheduled_date.split('T')[0] === todayStr
+                                            item => item.scheduled_date?.split('T')[0] === todayStr
                                         )
 
                                         const categoryItems = todayIndex > 0

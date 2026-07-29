@@ -11,6 +11,7 @@ import {
     CheckCircle2,
     AlertCircle,
     Link2,
+    Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -37,6 +38,7 @@ interface ScopeResultsProps {
     progress?: ProgramProgress | null
     onStartProgram?: (tier: "close" | "accelerate" | "dominate") => void
     isStarting?: boolean
+    showShareLink?: boolean
 }
 
 const TIER_LABELS: Record<string, { name: string; price: string }> = {
@@ -75,9 +77,11 @@ export function ScopeResults({
     progress,
     onStartProgram,
     isStarting,
+    showShareLink = true,
 }: ScopeResultsProps) {
     const [showAllClusters, setShowAllClusters] = useState(false)
     const [showEvidence, setShowEvidence] = useState(true)
+    const [copied, setCopied] = useState(false)
 
     const recommended = scope.clusters.filter((c) => scope.recommendedClusterIds.includes(c.id))
     const remainder = scope.clusters.filter((c) => !scope.recommendedClusterIds.includes(c.id))
@@ -87,11 +91,28 @@ export function ScopeResults({
         <div className="w-full space-y-8">
             {/* --- Scope headline --- */}
             <div>
-                <h2 className="font-serif text-3xl md:text-4xl text-stone-900 tracking-tight">
-                    {brandName}&rsquo;s niche:{" "}
-                    <span className="text-brand-600">{scope.articleCount} articles</span> across{" "}
-                    {scope.clusterCount} clusters
-                </h2>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <h2 className="font-serif text-3xl md:text-4xl text-stone-900 tracking-tight">
+                        {brandName}&rsquo;s niche:{" "}
+                        <span className="text-brand-600">{scope.articleCount} articles</span> across{" "}
+                        {scope.clusterCount} clusters
+                    </h2>
+                    {showShareLink && scope.publicToken && (
+                        <Button
+                            variant="outline"
+                            className="shrink-0"
+                            onClick={async () => {
+                                const url = `${window.location.origin}/audit/${scope.publicToken}`
+                                await navigator.clipboard.writeText(url)
+                                setCopied(true)
+                                window.setTimeout(() => setCopied(false), 1800)
+                            }}
+                        >
+                            <Copy className="mr-2 h-4 w-4" />
+                            {copied ? "Copied" : "Copy public audit"}
+                        </Button>
+                    )}
+                </div>
                 <p className="text-sm text-stone-500 mt-2">
                     Harvested from {scope.poolSize} real search queries. Every one carries the URL it
                     was observed on — open any of them below.

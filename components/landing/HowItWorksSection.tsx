@@ -187,7 +187,7 @@ const HowItWorksSection: React.FC = () => {
               HOW WE SOLVE IT
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1.1]">
-              The Topical <br /><span className='italic text-stone-500'>Authority Engine</span>
+              The Closed-Pool <br /><span className='italic text-stone-500'>Content Audit</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
@@ -222,10 +222,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                Sitemap Sync & Embedding
+                Scan Your Existing Coverage
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                We crawl your live website, convert your existing articles into vector embeddings, and guarantee we never suggest writing a duplicate topic (AEO penalizes redundancy).
+                We crawl your live site and represent each page by its actual title, description, headings, and body evidence—not a title alone.
               </p>
             </div>
           </div>
@@ -240,10 +240,11 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                The "Gap Matrix" Audit
+                Harvest Real Search Demand
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                We scan the entire SERP landscape to uncover exactly where your competitors are dominating, the gaps they’ve left wide open, and the high-intent keywords you're completely missing out on.              </p>
+                Queries come from autocomplete, ranking pages, and competitor sites. Every candidate retains the exact page or request where it was observed.
+              </p>
             </div>
           </div>
 
@@ -257,10 +258,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                Pillar Page Strategy
+                Verify the Gaps
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                Not all topics are created equal. We prescribe exactly which foundational "Pillar Pages" you must build to establish domain authority before we start writing long-tail content.
+                Your pages and competitor pages are checked against the same closed pool. A gap only survives when your site lacks evidence for it.
               </p>
             </div>
           </div>
@@ -275,10 +276,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                The Deduplication Loop
+                Collapse and Ship Clusters
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                The generated 30-article roadmap is aggressively checked against your sitemap vectors. If an LLM suggests a covered topic, it's rejected until the plan is 100% net-new value.
+                Overlapping searches collapse into finite article units. Related articles ship together so their internal-link graph is complete on day one.
               </p>
             </div>
           </div>

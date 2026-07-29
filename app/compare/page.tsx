@@ -9,6 +9,7 @@ import { StructuredData } from '@/components/seo/StructuredData';
 export const metadata: Metadata = {
     title: 'FlipAEO vs. The Competition — Honest Comparisons | FlipAEO',
     description: 'Head-to-head comparisons of FlipAEO against traditional SEO tools and bulk AI writers. See exactly where we win, where we don\'t, and who each tool is best for.',
+    robots: { index: false, follow: true },
 };
 
 const comparisonData = [

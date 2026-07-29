@@ -1,19 +1,19 @@
-import { createClient } from '@/utils/supabase/server'
-import Image from 'next/image'
-import { cookies } from 'next/headers'
-import SubscribeButton from '@/components/subscribe/SubscribeButton'
-import ManageSubscription from '@/components/subscribe/ManageSubscription'
-import RealtimeSubscriptionSync from '@/components/subscribe/RealtimeSubscriptionSync'
-import { Check, Loader2, Sparkles, Zap } from 'lucide-react'
-import { GlobalCard } from '@/components/ui/global-card'
+import { cookies } from "next/headers"
+import Image from "next/image"
+import { Check, Sparkles, Zap } from "lucide-react"
+import { createClient } from "@/utils/supabase/server"
+import SubscribeButton from "@/components/subscribe/SubscribeButton"
+import ManageSubscription from "@/components/subscribe/ManageSubscription"
+import RealtimeSubscriptionSync from "@/components/subscribe/RealtimeSubscriptionSync"
+import { GlobalCard } from "@/components/ui/global-card"
 import { CustomSpinner } from "@/components/CustomSpinner"
 
 function formatPrice(value: number | string, currency: string) {
-    const n = typeof value === 'number' ? value : Number(value || 0)
+    const amount = typeof value === "number" ? value : Number(value || 0)
     try {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(n)
+        return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount)
     } catch {
-        return `$${n.toFixed(2)}`
+        return `$${amount.toFixed(2)}`
     }
 }
 
@@ -30,12 +30,12 @@ type PlanRow = {
 async function getPlans(): Promise<PlanRow[]> {
     const supabase = await createClient()
     const { data, error } = await supabase
-        .from('dodo_pricing_plans')
-        .select('id, name, description, price, credits, currency, dodo_product_id')
-        .eq('is_active', true)
-        .order('price', { ascending: true })
-    if (error) return []
-    return (data || []) as PlanRow[]
+        .from("dodo_pricing_plans")
+        .select("id, name, description, price, credits, currency, dodo_product_id")
+        .eq("is_active", true)
+        .order("price", { ascending: true })
+
+    return error ? [] : (data || []) as PlanRow[]
 }
 
 async function getUser() {
@@ -46,55 +46,55 @@ async function getUser() {
 
 async function getLatestSubscription(userId: string) {
     const supabase = await createClient()
+    const fields = "dodo_subscription_id, status, pricing_plan_id, next_billing_date, cancel_at_period_end, current_period_end, canceled_at, price_snapshot, currency_snapshot"
 
-    // Priority 1: Look for an active subscription first
-    const { data: activeSub, error: activeError } = await supabase
-        .from('dodo_subscriptions')
-        .select('dodo_subscription_id, status, pricing_plan_id, next_billing_date, cancel_at_period_end, current_period_end, canceled_at, price_snapshot, currency_snapshot')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+    for (const status of ["active", "pending"] as const) {
+        const { data, error } = await supabase
+            .from("dodo_subscriptions")
+            .select(fields)
+            .eq("user_id", userId)
+            .eq("status", status)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
 
-    if (activeError) return null
-    if (activeSub) return activeSub
+        if (error) return null
+        if (data) return data
+    }
 
-    // Priority 2: Look for a pending subscription (checkout in progress)
-    const { data: pendingSub, error: pendingError } = await supabase
-        .from('dodo_subscriptions')
-        .select('dodo_subscription_id, status, pricing_plan_id, next_billing_date, cancel_at_period_end, current_period_end, canceled_at, price_snapshot, currency_snapshot')
-        .eq('user_id', userId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-    if (pendingError) return null
-    if (pendingSub) return pendingSub
-
-    // Priority 3: Fall back to most recent subscription (for cancelled/expired states)
     const { data, error } = await supabase
-        .from('dodo_subscriptions')
-        .select('dodo_subscription_id, status, pricing_plan_id, next_billing_date, cancel_at_period_end, current_period_end, canceled_at, price_snapshot, currency_snapshot')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+        .from("dodo_subscriptions")
+        .select(fields)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle()
 
-    if (error) return null
-    return data
+    return error ? null : data
+}
+
+const tierCopy: Record<string, { velocity: string; description: string }> = {
+    close: {
+        velocity: "1 complete cluster / month",
+        description: "Close the highest-priority part of your map at a steady pace.",
+    },
+    accelerate: {
+        velocity: "2 complete clusters / month",
+        description: "Move through the same verified scope twice as fast.",
+    },
+    dominate: {
+        velocity: "4 complete clusters / month",
+        description: "Ship four complete, interlinked clusters every month.",
+    },
 }
 
 export default async function SubscribePage() {
-    // Touch cookies to enable RSC auth context
     await cookies()
     const [plans, user] = await Promise.all([getPlans(), getUser()])
 
-    // If user is available, try pulling their latest subscription
     let subscriptionSummary: {
         subscription_id: string
-        status: 'pending' | 'active' | 'cancelled' | 'expired'
+        status: "pending" | "active" | "cancelled" | "expired"
         plan_name?: string
         next_billing_date?: string
         cancel_at_period_end?: boolean
@@ -107,23 +107,21 @@ export default async function SubscribePage() {
     if (user) {
         const row = await getLatestSubscription(user.id)
         if (row?.dodo_subscription_id) {
-            const planName = plans.find(p => p.id === (row as any).pricing_plan_id)?.name
-            // Normalize status
-            const rawStatus = String(row.status || '').toLowerCase()
-            const status = (rawStatus === 'active'
-                ? 'active'
-                : rawStatus === 'pending'
-                    ? 'pending'
-                    : rawStatus === 'cancelled' || rawStatus === 'canceled'
-                        ? 'cancelled'
-                        : 'expired') as 'pending' | 'active' | 'cancelled' | 'expired'
+            const rawStatus = String(row.status || "").toLowerCase()
+            const status = rawStatus === "active"
+                ? "active"
+                : rawStatus === "pending"
+                    ? "pending"
+                    : rawStatus === "cancelled" || rawStatus === "canceled"
+                        ? "cancelled"
+                        : "expired"
 
             subscriptionSummary = {
                 subscription_id: row.dodo_subscription_id,
                 status,
-                plan_name: planName || undefined,
+                plan_name: plans.find((plan) => plan.id === row.pricing_plan_id)?.name,
                 next_billing_date: row.next_billing_date || undefined,
-                cancel_at_period_end: !!row.cancel_at_period_end,
+                cancel_at_period_end: Boolean(row.cancel_at_period_end),
                 current_period_end: row.current_period_end || undefined,
                 canceled_at: row.canceled_at || undefined,
                 price_snapshot: row.price_snapshot ?? null,
@@ -132,13 +130,11 @@ export default async function SubscribePage() {
         }
     }
 
-    // If user has an active subscription, show management instead of checkout
-    if (subscriptionSummary?.status === 'active') {
+    if (subscriptionSummary?.status === "active") {
         return (
-            <main className="min-h-screen font-sans text-stone-900 flex flex-col items-center">
-                {/* Live updates for webhook-driven lifecycle changes */}
+            <main className="flex min-h-screen flex-col items-center font-sans text-stone-900">
                 <RealtimeSubscriptionSync userId={user?.id} />
-                <div className="w-full ">
+                <div className="w-full">
                     <ManageSubscription
                         subscription={subscriptionSummary}
                         plans={plans}
@@ -149,128 +145,113 @@ export default async function SubscribePage() {
         )
     }
 
-    // Otherwise, render subscribe/checkout UI (marketing + CTA)
-    const plan = plans?.[0]
-
     return (
-        <main className="min-h-screen font-sans text-stone-900 flex flex-col items-center justify-center py-4">
-            {/* After returning from hosted checkout (?subscribed=1), auto-refresh and poll until active */}
+        <main className="flex min-h-screen flex-col items-center justify-center py-8 font-sans text-stone-900">
             <RealtimeSubscriptionSync userId={user?.id} />
-
-            {/* ISLAND CARD CONTAINER */}
-            <GlobalCard className="w-full max-w-2xl" contentClassName="overflow-hidden">
-
-                {/* Header Section */}
-                <div className="text-center pt-10 pb-6 border-b border-stone-100 px-6">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 border border-stone-200 mb-4">
-                        <Sparkles className="w-3.5 h-3.5 text-stone-600 fill-stone-600/20" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-600">Early Bird Pricing</span>
+            <GlobalCard className="w-full max-w-6xl" contentClassName="overflow-hidden">
+                <div className="border-b border-stone-100 px-6 pb-7 pt-10 text-center">
+                    <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-100 px-3 py-1">
+                        <Sparkles className="h-3.5 w-3.5 fill-stone-600/20 text-stone-600" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-600">
+                            Choose delivery velocity
+                        </span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-stone-900 mb-3">
-                        Stop publishing generic fluff.
+                    <h1 className="mb-3 text-3xl font-bold tracking-tight text-stone-900 sm:text-4xl">
+                        Your scope is fixed. Choose the speed.
                     </h1>
-                    <p className="text-stone-500 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
-                        Get the only AI that researches like an expert and writes in <i>your</i> voice.
-                        <br className="hidden sm:block" />
-                        Start ranking with content that actually converts.
+                    <p className="mx-auto max-w-2xl text-sm leading-relaxed text-stone-500 sm:text-base">
+                        Every tier closes the same evidence-backed map. Faster tiers ship more
+                        complete, interlinked clusters each month.
                     </p>
                 </div>
 
-                {/* Content Section */}
-                {plan ? (
-                    <div className="p-4 sm:p-6">
+                {plans.length > 0 ? (
+                    <div className="grid gap-px bg-stone-200 sm:grid-cols-3">
+                        {plans.map((plan) => {
+                            const key = plan.name.toLowerCase()
+                            const copy = tierCopy[key] || {
+                                velocity: `${plan.credits ?? 0} generation credits / month`,
+                                description: plan.description || "Evidence-backed content delivery.",
+                            }
+                            const featured = key === "accelerate"
 
-                        {/* Price Block */}
-                        <div className="flex flex-col items-center mb-8">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="text-base text-stone-400 line-through">
-                                    $149/mo
-                                </span>
+                            return (
+                                <section
+                                    key={plan.id}
+                                    className={`flex flex-col bg-white p-6 ${featured ? "ring-2 ring-inset ring-brand-300" : ""}`}
+                                >
+                                    <div className="mb-6">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <h2 className="font-serif text-3xl text-stone-900">{plan.name}</h2>
+                                            {featured && (
+                                                <span className="rounded-full bg-stone-900 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-white">
+                                                    Recommended
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="mt-2 min-h-10 text-sm leading-relaxed text-stone-500">
+                                            {copy.description}
+                                        </p>
+                                    </div>
+                                    <div className="mb-1 flex items-baseline gap-1">
+                                        <span className="text-4xl font-bold tracking-tighter text-stone-900">
+                                            {formatPrice(plan.price, plan.currency ?? "USD")}
+                                        </span>
+                                        <span className="text-sm font-medium text-stone-400">/mo</span>
+                                    </div>
+                                    <p className="mb-6 text-sm font-semibold text-stone-700">{copy.velocity}</p>
 
-                            </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-5xl font-bold tracking-tighter text-stone-900">
-                                    {formatPrice(plan.price, plan.currency ?? 'USD')}
-                                </span>
-                                <span className="text-stone-400 font-medium">/mo</span>
-                            </div>
-                            <p className="text-xs text-stone-400 mt-2 font-medium bg-stone-50 px-3 py-1 rounded-full border border-stone-100">
-                                Include {plan.credits ?? 0} article credits
-                            </p>
-                        </div>
+                                    <div className="mb-7 flex-1 space-y-3">
+                                        <FeatureItem text="Finite scope disclosed before purchase" />
+                                        <FeatureItem text="Source URL for every claimed gap" />
+                                        <FeatureItem text="Whole clusters shipped together" />
+                                        <FeatureItem text="Research, citations, links, and images" />
+                                        <FeatureItem text="WordPress-ready drafts and manual export" />
+                                    </div>
 
-                        {/* Features Grid */}
-                        <div className="grid sm:grid-cols-2 gap-y-3 gap-x-6 mb-8 max-w-lg mx-auto text-left">
-                            <FeatureItem text="30 articles every month" />
-                            <FeatureItem text="Strategic content planning" />
-                            <FeatureItem text="Daily autopilot writing" />
-                            <FeatureItem text="Writes in your brand voice" />
-                            <FeatureItem text="Smart internal & external linking" />
-                            <FeatureItem text="1-click publish to your CMS" />
-                            <FeatureItem text="On-brand cover and blog images" />
-                            <FeatureItem text="Cancel anytime, no lock-in" />
-                        </div>
-
-                        {/* Button Section */}
-                        <div className="max-w-xs mx-auto flex flex-col items-center">
-                            <SubscribeButton
-                                productId={plan.dodo_product_id}
-                                isAuthenticated={!!user}
-                                className="
-                    cursor-pointer w-full sm:w-full rounded-lg text-base font-semibold text-white shadow-xs
-                    bg-gradient-to-b from-stone-800 to-stone-950
-                    hover:from-stone-700 hover:to-stone-900
-                    shadow-[0_0_1px_1px_rgba(255,255,255,0.08)_inset,0_1px_1.5px_0_rgba(0,0,0,0.32)]
-                    active:scale-[0.98] transition-all
-                  "
-                            >
-                                <span className="flex items-center gap-2">
-                                    <Zap className="w-4 h-4 fill-white/20" />
-                                    Subscribe to Pro
-                                </span>
-                            </SubscribeButton>
-                            <p className="text-center text-[10px] text-stone-400 mt-3 font-medium">
-                                30 articles/mo · No lock-in · 14-day money-back guarantee
-                            </p>
-                        </div>
-
+                                    <SubscribeButton
+                                        productId={plan.dodo_product_id}
+                                        isAuthenticated={Boolean(user)}
+                                        className="w-full cursor-pointer rounded-lg bg-gradient-to-b from-stone-800 to-stone-950 text-sm font-semibold text-white transition-all hover:from-stone-700 hover:to-stone-900 active:scale-[0.98]"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <Zap className="h-4 w-4 fill-white/20" />
+                                            Choose {plan.name}
+                                        </span>
+                                    </SubscribeButton>
+                                </section>
+                            )
+                        })}
                     </div>
                 ) : (
                     <div className="p-12 text-center text-stone-500">
-                        <CustomSpinner className="w-10 h-10 mx-auto mb-2" />
-                        <p>Loading plan...</p>
+                        <CustomSpinner className="mx-auto mb-2 h-10 w-10" />
+                        <p>No purchasable plans are active yet.</p>
                     </div>
                 )}
 
-                {/* Footer Info */}
-                <div className="bg-stone-50/50 border-t border-stone-100 p-4 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8">
-
-                    <div className="flex items-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
-                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">
-                            Secure payments by{' '}
-                            <Image
-                                src="/dodo-logo.png"
-                                alt="Dodo Payments"
-                                width={70}
-                                height={14}
-                                className="inline-block align-middle ml-1"
-                            />
-                        </span>
-                    </div>
+                <div className="flex items-center justify-center border-t border-stone-100 bg-stone-50/50 p-4">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                        Secure payments by{" "}
+                        <Image
+                            src="/dodo-logo.png"
+                            alt="Dodo Payments"
+                            width={70}
+                            height={14}
+                            className="ml-1 inline-block align-middle"
+                        />
+                    </span>
                 </div>
             </GlobalCard>
-
-
-
         </main>
     )
 }
 
 function FeatureItem({ text }: { text: string }) {
     return (
-        <div className="flex items-center gap-2.5">
-            <Check className="w-4 h-4 text-stone-900 flex-shrink-0" strokeWidth={3} />
-            <span className="text-sm text-stone-700 font-medium">{text}</span>
+        <div className="flex items-start gap-2.5">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-stone-900" strokeWidth={3} />
+            <span className="text-sm font-medium leading-relaxed text-stone-700">{text}</span>
         </div>
     )
 }

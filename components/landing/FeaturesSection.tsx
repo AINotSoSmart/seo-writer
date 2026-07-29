@@ -337,17 +337,10 @@ const CMSVisual = () => (
         </div>
 
         <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 bg-green-50 border-2 border-green-600 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
-            <ShoppingBag size={18} className="text-green-700" />
+          <div className="w-10 h-10 bg-stone-50 border-2 border-stone-500 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
+            <FileText size={18} className="text-stone-700" />
           </div>
-          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Shopify</span>
-        </div>
-
-        <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 bg-blue-50 border-2 border-blue-600 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
-            <div className="font-bold text-blue-700 italic text-sm">wf</div>
-          </div>
-          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Webflow</span>
+          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Copy / Export</span>
         </div>
       </div>
     </div>
@@ -358,43 +351,43 @@ const CMSVisual = () => (
 const FEATURES = [
   {
     id: '01',
-    title: 'Broad Landscape Search',
-    description: "Instead of guessing what to write, our agent first reads the top ranking competitor articles for your keyword. It extracts thousands of words of their raw content to understand exactly what information search engines are currently rewarding.",
+    title: 'Observed Query Harvest',
+    description: "The plan starts with queries observed in autocomplete, ranking pages, and competitor sites. Each row keeps its source URL, so the input pool can be inspected instead of trusted blindly.",
     visual: BroadSearchVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '02',
-    title: 'The "Critic Agent" Gap Analysis',
-    description: "A specialized 'Critic' agent scans the competitor data to find exactly what they missed. Rather than summarizing the internet, it hunts for critical gaps like missing pricing tiers, exact statistics, or user reviews. This ensures your article provides unique, high-value answers.",
+    title: 'Evidence-Checked Coverage',
+    description: "Retrieval finds the most relevant pages, then a second evidence check verifies that a page actually answers the query. Topic similarity alone never counts as coverage.",
     visual: CriticVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '03',
-    title: 'The "Sniper Search"',
-    description: "Once the gaps are identified, a secondary agent fires highly targeted web searches to hunt down the exact missing statistics or facts. This guarantees your final article contains the highest 'Information Gain' possible to outrank generic AI content.",
+    title: 'Source-Backed Article Research',
+    description: "Once a verified gap becomes an article, focused live research gathers the facts, examples, and citations needed to answer it completely.",
     visual: SniperVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '04',
-    title: 'Smart Outline & Semantic Linking',
-    description: "As your outline is built, our engine scans your entire website's history. Whenever a new section matches a topic you've already covered, it automatically injects a natural internal link. This builds a massive, compounding map of topical authority.",
+    title: 'Cluster-Wide Internal Linking',
+    description: "Related articles are planned and shipped as a complete cluster, so their internal links can resolve together instead of pointing at pages that do not exist yet.",
     visual: SemanticLinkingVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '05',
-    title: 'The "Anti-Fluff" AEO Writing Loop',
-    description: "We write section-by-section using a 'Context Snowball' so the LLM never repeats itself. The engine enforces strict formatting mandates, breaking complex data into Markdown tables, bulleted lists, and bolded entities for maximum machine-readability.",
+    title: 'Publication-Ready Writing',
+    description: "The writing loop uses the accumulated research and brand profile to create answer-first sections, useful tables, lists, citations, and custom images without padding a word count.",
     visual: AntiFluffVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '06',
     title: 'Ready For Human Review',
-    description: "Finalized articles are delivered to your inbox for review, complete with optimized headings, markdown tables, and custom images. We believe AI is powerful, but serious growth requires a personal human touch before exporting to your CMS.",
+    description: "Finalized articles are delivered for review with headings, tables, citations, internal links, and images. Publish to WordPress or copy the finished draft into any CMS.",
     visual: CMSVisual,
     colSpan: 'col-span-1'
   }
@@ -450,12 +443,13 @@ const FeaturesSection: React.FC = () => {
               Phase 2
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-              The Daily Autonomous <br /><span className='italic text-stone-500'>AI SEO Writer</span>
+              The Cluster Delivery <br /><span className='italic text-stone-500'>Content Engine</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              This entire sequence runs automatically in the background every single day. No loading screens. Set it, forget it, and simply get an email when your highly-structured article is ready for human review.
+              Your audit discloses the finish line. FlipAEO then researches, writes,
+              links, and delivers whole clusters at the velocity you selected.
             </p>
           </div>
         </div>

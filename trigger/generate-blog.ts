@@ -1412,6 +1412,7 @@ export const generateBlogPost = task({
     cluster?: string;
     planId?: string;
     itemId?: string;
+    plannedArticleId?: string;
     instructions?: string;
   }) => {
     const {
@@ -1425,6 +1426,7 @@ export const generateBlogPost = task({
       cluster = '',
       planId,
       itemId,
+      plannedArticleId,
       instructions
     } = payload
     const supabase = createAdminClient()
@@ -2209,6 +2211,41 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
         }
       }
 
+      // Closed-pool delivery state is authoritative in planned_articles. Mark
+      // the row complete only after the article itself has finished, then
+      // derive burn-down progress from completed rows to avoid counting failed
+      // Trigger jobs as "closed".
+      if (plannedArticleId) {
+        await (supabase as any)
+          .from("planned_articles")
+          .update({ status: "published", updated_at: new Date().toISOString() })
+          .eq("id", plannedArticleId)
+
+        const { data: program } = await (supabase as any)
+          .from("programs")
+          .select("id, clusters_included")
+          .eq("brand_id", brandId)
+          .eq("status", "active")
+          .maybeSingle()
+
+        if (program?.id && Array.isArray(program.clusters_included)) {
+          const { count } = await (supabase as any)
+            .from("planned_articles")
+            .select("id", { count: "exact", head: true })
+            .eq("brand_id", brandId)
+            .in("cluster_id", program.clusters_included)
+            .eq("status", "published")
+
+          await (supabase as any)
+            .from("programs")
+            .update({
+              completed_count: count || 0,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", program.id)
+        }
+      }
+
 
       // --- PHASE 5: TOPIC MEMORY SAVE ---
       // Upgrade: Use "Title + Keyword" for rich semantic signal
@@ -2257,6 +2294,17 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
         .from("articles")
         .update({ status: "failed", error_message: msg, failed_at_phase: phase })
         .eq("id", payload.articleId)
+      if (payload.plannedArticleId) {
+        await (supabase as any)
+          .from("planned_articles")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", payload.plannedArticleId)
+        await (supabase as any)
+          .from("programs")
+          .update({ status: "paused", updated_at: new Date().toISOString() })
+          .eq("brand_id", payload.brandId)
+          .eq("status", "active")
+      }
       throw e
     }
   },

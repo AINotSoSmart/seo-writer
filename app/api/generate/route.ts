@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       cluster = '',
       planId,
       itemId,
+      plannedArticleId,
       instructions
     } = await req.json()
 
@@ -31,6 +32,20 @@ export async function POST(req: NextRequest) {
     const userId = userData?.user?.id
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (plannedArticleId) {
+      const { data: plannedRow } = await (supabase as any)
+        .from("planned_articles")
+        .select("id")
+        .eq("id", plannedArticleId)
+        .eq("user_id", userId)
+        .eq("brand_id", brandId)
+        .maybeSingle()
+
+      if (!plannedRow) {
+        return NextResponse.json({ error: "Planned article does not belong to this brand" }, { status: 403 })
+      }
     }
 
     // 1. Verify credits BEFORE creating article to prevent zombie records
@@ -78,6 +93,7 @@ export async function POST(req: NextRequest) {
         cluster,
         planId,
         itemId,
+        plannedArticleId,
         instructions
       })
       return NextResponse.json({ jobId: handle.id, articleId: article.id })

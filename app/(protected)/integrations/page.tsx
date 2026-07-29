@@ -130,15 +130,17 @@ export default function IntegrationsPage() {
     }, [])
 
     const loadConnections = async () => {
-        const [wpResult, wfResult, spResult] = await Promise.all([
+        const archivedConnections = SHOW_ARCHIVED_INTEGRATIONS
+            ? Promise.all([getWebflowConnections(), getShopifyConnections()])
+            : Promise.resolve([null, null] as const)
+        const [wpResult, [wfResult, spResult]] = await Promise.all([
             getWordPressConnections(),
-            getWebflowConnections(),
-            getShopifyConnections()
+            archivedConnections,
         ])
 
         if (!wpResult.error) setWpConnections(wpResult.connections)
-        if (!wfResult.error) setWfConnections(wfResult.connections)
-        if (!spResult.error) setSpConnections(spResult.connections)
+        if (wfResult && !wfResult.error) setWfConnections(wfResult.connections)
+        if (spResult && !spResult.error) setSpConnections(spResult.connections)
         setLoading(false)
     }
 

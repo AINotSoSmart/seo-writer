@@ -10,7 +10,7 @@ const FAQS = [
   },
   {
     question: "How is this different from other AI blog writers?",
-    answer: "Other AI writers are just tools. FlipAEO is a system that grows your SEO muscle over time. Every article we create links back to your previous articles, cites authoritative sources, and strengthens your entire site's authority. The more you publish, the more powerful each new article becomes. It's not just writing—it's a system that grows your SEO muscle over time."
+    answer: "Most writers begin with a prompt or a fixed monthly quota. FlipAEO begins with a closed pool of observed searches, checks your site and competitors against that same pool, and keeps the source URL for every claimed gap. We sell the speed at which complete clusters are closed, not an arbitrary number of articles."
   },
   {
     question: "Why does the content feel so human?",
@@ -22,7 +22,7 @@ const FAQS = [
   },
   {
     question: "Does it integrate with my site?",
-    answer: "Yes. We have direct 1-click publishing integrations for WordPress, Shopify and Webflow. Images, formatting, and meta tags are all synced automatically."
+    answer: "WordPress publishing is supported. You can also review and copy the finished, formatted article into any other CMS."
   },
   {
     question: "Can I cancel if it's not for me?",
@@ -34,7 +34,15 @@ const FAQS = [
   },
   {
     question: "What languages do you support?",
-    answer: "Currently, we specialize in high-quality English (US/UK) content to ensure maximum nuance and authority. Multi-language support is on our roadmap for Q4."
+    answer: "FlipAEO currently specializes in English-language research and content so the evidence and writing quality remain consistent."
+  },
+  {
+    question: "Why does the monthly article count vary?",
+    answer: "Because clusters are real units of coverage, not equal-sized bundles. We show your total article and cluster scope before purchase. Each tier changes how many complete clusters ship per month; it never forces filler into the plan."
+  },
+  {
+    question: "What happens when my niche is complete?",
+    answer: "The program reports that the agreed scope is complete and stops reissuing old topics. Running out of verified gaps is a successful finish, not a reason to manufacture duplicates."
   },
 ];
 

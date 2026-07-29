@@ -45,26 +45,26 @@ export default function Hero() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-brand-500">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" stroke="none" />
         </svg>
-        <span>THE POST-SEO ERA</span>
+        <span>THE EVIDENCE-BACKED CONTENT PROGRAM</span>
       </div>
 
       {/* Main Headline */}
       <h1 className="font-serif text-4xl md:text-7xl lg:text-8xl text-stone-900 leading-[1.1] mb-6 tracking-tight">
-        Don’t just rank <br />
-        <span className="italic font-light">Be the Source AI cites</span>
+        Stop guessing what to publish. <br />
+        <span className="italic font-light">Close every proven content gap.</span>
       </h1>
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-        FlipAEO is the Strategic Content Engine for dominating AEO and GEO. We engineer the exact content required to
-        <strong className="text-black font-normal">{" "}make your brand the #1 citation in AI search results.</strong>
+        FlipAEO harvests real search demand, verifies what your site is missing, and
+        <strong className="text-black font-normal">{" "}ships complete, interlinked clusters until the disclosed scope is finished.</strong>
       </p>
 
       {/* CTA Button Container */}
       <div className="relative group z-10">
         <Link href="/login">
           <Button variant="primary" className="text-brand-600">
-            Audit My Authority Gaps
+            Map My Content Gaps
           </Button>
         </Link>
 

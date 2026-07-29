@@ -49,7 +49,7 @@ export const clusterShipper = schedules.task({
 
         const { data: programs, error } = await supabase
             .from("programs")
-            .select("id, user_id, brand_id, tier, clusters_per_month, total_articles, completed_count")
+            .select("id, user_id, brand_id, tier, clusters_per_month, total_articles, completed_count, clusters_included")
             .eq("status", "active")
 
         if (error) {
@@ -66,17 +66,60 @@ export const clusterShipper = schedules.task({
         let articlesTriggered = 0
 
         for (const program of programs) {
-            const due = await findDueCluster(supabase, program.brand_id, today)
+            const includedClusterIds = Array.isArray(program.clusters_included)
+                ? program.clusters_included
+                : []
+            if (includedClusterIds.length === 0) {
+                console.warn(`Program ${program.id} has no included clusters; pausing it.`)
+                await supabase
+                    .from("programs")
+                    .update({ status: "paused", updated_at: new Date().toISOString() })
+                    .eq("id", program.id)
+                continue
+            }
+
+            const due = await findDueCluster(
+                supabase,
+                program.brand_id,
+                today,
+                includedClusterIds,
+            )
 
             if (!due) {
                 // Nothing due. If nothing is left at all, the niche is complete.
-                const { count: remaining } = await supabase
-                    .from("planned_articles")
-                    .select("id", { count: "exact", head: true })
-                    .eq("brand_id", program.brand_id)
-                    .in("status", ["pending", "scheduled"])
+                const [{ count: remaining }, { count: writing }, { count: failed }] = await Promise.all([
+                    supabase
+                        .from("planned_articles")
+                        .select("id", { count: "exact", head: true })
+                        .eq("brand_id", program.brand_id)
+                        .in("cluster_id", includedClusterIds)
+                        .in("status", ["pending", "scheduled"]),
+                    supabase
+                        .from("planned_articles")
+                        .select("id", { count: "exact", head: true })
+                        .eq("brand_id", program.brand_id)
+                        .in("cluster_id", includedClusterIds)
+                        .eq("status", "writing"),
+                    supabase
+                        .from("planned_articles")
+                        .select("id", { count: "exact", head: true })
+                        .eq("brand_id", program.brand_id)
+                        .in("cluster_id", includedClusterIds)
+                        .eq("status", "failed"),
+                ])
 
                 if ((remaining ?? 0) === 0) {
+                    if ((writing ?? 0) > 0) continue
+
+                    if ((failed ?? 0) > 0) {
+                        await supabase
+                            .from("programs")
+                            .update({ status: "paused", updated_at: new Date().toISOString() })
+                            .eq("id", program.id)
+                        console.warn(`Program ${program.id} paused with ${failed} failed article(s).`)
+                        continue
+                    }
+
                     await supabase
                         .from("programs")
                         .update({
@@ -98,7 +141,9 @@ export const clusterShipper = schedules.task({
 
             const batch = due.articles.slice(0, MAX_ARTICLES_PER_CLUSTER_RUN)
 
-            // Credits are charged per cluster, matching how the plan is sold
+            // Preflight the whole cluster before starting it. Credits remain
+            // article-denominated internally so a 15-article cluster cannot
+            // overdraw a tier funded for fewer generation jobs.
             const { hasCredits, currentBalance, error: creditError } = await adminHasCredits(
                 program.user_id,
                 batch.length
@@ -126,6 +171,14 @@ export const clusterShipper = schedules.task({
             )
 
             const shippedIds: string[] = []
+            const { data: contentPlan } = await supabase
+                .from("content_plans")
+                .select("id")
+                .eq("user_id", program.user_id)
+                .eq("brand_id", program.brand_id)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle()
 
             for (const article of batch) {
                 const { success: deducted } = await adminDeductCredits(
@@ -164,6 +217,9 @@ export const clusterShipper = schedules.task({
                         articleType: (article.article_type as any) || "informational",
                         supportingKeywords: article.supporting_keywords || [],
                         cluster: due.clusterName,
+                        planId: contentPlan?.id,
+                        itemId: article.id,
+                        plannedArticleId: article.id,
                     })
 
                     await supabase
@@ -186,13 +242,6 @@ export const clusterShipper = schedules.task({
 
             if (shippedIds.length > 0) {
                 clustersShipped++
-                await supabase
-                    .from("programs")
-                    .update({
-                        completed_count: (program.completed_count || 0) + shippedIds.length,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq("id", program.id)
             }
         }
 
@@ -212,12 +261,14 @@ export const clusterShipper = schedules.task({
 async function findDueCluster(
     supabase: any,
     brandId: string,
-    today: string
+    today: string,
+    includedClusterIds: string[],
 ): Promise<DueCluster | null> {
     const { data: dueArticles } = await supabase
         .from("planned_articles")
         .select("cluster_id")
         .eq("brand_id", brandId)
+        .in("cluster_id", includedClusterIds)
         .in("status", ["pending", "scheduled"])
         .lte("scheduled_date", today)
         .limit(200)

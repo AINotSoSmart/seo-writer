@@ -6,22 +6,28 @@ import { motion, AnimatePresence } from "motion/react"
 import { Loader2, ChevronUp, ArrowRight, Sparkles, Eye, Globe, Globe2, Plus } from "lucide-react"
 import { saveBrandAction } from "@/actions/brand"
 import { canAccessOnboarding } from "@/actions/onboarding"
+import {
+    getAuditScope,
+    getGapEvidence,
+    getProgramProgress,
+    type AuditScope,
+    type GapEvidence,
+    type ProgramProgress,
+} from "@/actions/harvest"
 import { BrandDetails } from "@/lib/schemas/brand"
-import { TopicalAuditResult } from "@/lib/audit/types"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { CustomSpinner } from "@/components/CustomSpinner"
 import { PillInput } from "@/components/ui/pill-input"
 import { AuditConsole } from "@/components/audit/audit-console"
-import { AuditResults } from "@/components/audit/audit-results"
+import { ScopeResults } from "@/components/audit/scope-results"
 
 const STORAGE_KEYS = {
     STEP: 'onboarding_step',
     BRAND_URL: 'onboarding_brand_url',
     BRAND_DATA: 'onboarding_brand_data',
     BRAND_ID: 'onboarding_brand_id',
-    AUDIT_RESULT: 'onboarding_audit_result',
 } as const
 
 type Step = "brand" | "audit" | "audit-results"
@@ -53,7 +59,10 @@ export default function OnboardingPage() {
     const [brandData, setBrandData] = useState<BrandDetails | null>(null)
     const [savingBrand, setSavingBrand] = useState(false)
     const [brandId, setBrandId] = useState<string | null>(null)
-    const [auditResult, setAuditResult] = useState<TopicalAuditResult | null>(null)
+    const [auditScope, setAuditScope] = useState<AuditScope | null>(null)
+    const [gapEvidence, setGapEvidence] = useState<GapEvidence[]>([])
+    const [programProgress, setProgramProgress] = useState<ProgramProgress | null>(null)
+    const [isLoadingScope, setIsLoadingScope] = useState(false)
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
 
     const [error, setError] = useState("")
@@ -216,12 +225,7 @@ export default function OnboardingPage() {
     }
 
     // Audit completion handler
-    const handleAuditComplete = (result: TopicalAuditResult) => {
-        setAuditResult(result)
-        // Persist audit result for page refresh recovery
-        try {
-            localStorage.setItem(STORAGE_KEYS.AUDIT_RESULT, JSON.stringify(result))
-        } catch { /* too large for localStorage, skip */ }
+    const handleAuditComplete = () => {
         setStep("audit-results")
     }
 
@@ -265,28 +269,44 @@ export default function OnboardingPage() {
         }
     }
 
-    // New Effect: Fetch audit result if on results page but missing data (e.g. refresh)
+    // Load the closed-pool read model after completion and on refresh.
     useEffect(() => {
-        if (!isHydrated || !brandId || step !== 'audit-results' || auditResult) return
+        if (!isHydrated || !brandId || step !== 'audit-results' || auditScope || isLoadingScope) return
 
-        const fetchAudit = async () => {
+        const fetchScope = async () => {
+            setIsLoadingScope(true)
             try {
-                const res = await fetch(`/api/topical-audit?brandId=${brandId}`)
-                if (!res.ok) return
-                const data = await res.json()
-
-                if (data.status === 'completed' && data.audit) {
-                    setAuditResult(data.audit)
-                } else if (data.status === 'running') {
-                    // If still running, go back to console
+                const statusResponse = await fetch(`/api/topical-audit?brandId=${brandId}`, {
+                    cache: "no-store",
+                })
+                const status = statusResponse.ok ? await statusResponse.json() : null
+                if (status?.status === "running") {
                     setStep('audit')
+                    return
                 }
+
+                const [scope, gaps, progress] = await Promise.all([
+                    getAuditScope(brandId),
+                    getGapEvidence(brandId),
+                    getProgramProgress(brandId),
+                ])
+
+                if (!scope) {
+                    throw new Error("The audit finished, but its scope could not be loaded. Please run it again.")
+                }
+
+                setAuditScope(scope)
+                setGapEvidence(gaps)
+                setProgramProgress(progress)
             } catch (e) {
-                console.error("Failed to recover audit:", e)
+                console.error("Failed to load audit scope:", e)
+                setError(e instanceof Error ? e.message : "Failed to load audit scope")
+            } finally {
+                setIsLoadingScope(false)
             }
         }
-        fetchAudit()
-    }, [brandId, step, auditResult, isHydrated])
+        void fetchScope()
+    }, [auditScope, brandId, isHydrated, isLoadingScope, step])
 
     // NOTE: Plan generation is now fully handled in Trigger.dev
 
@@ -719,29 +739,40 @@ export default function OnboardingPage() {
                                         exit={{ opacity: 0, x: 20 }}
                                         className="p-6"
                                     >
-                                        {auditResult ? (
-                                            <AuditResults
-                                                auditResult={auditResult}
+                                        {auditScope ? (
+                                            <div className="space-y-8">
+                                                <ScopeResults
+                                                scope={auditScope}
+                                                gaps={gapEvidence}
                                                 brandName={brandData?.product_name || "Your Site"}
-                                                onGeneratePlan={handleGeneratePlan}
-                                                isGeneratingPlan={isGeneratingPlan}
-                                            />
+                                                progress={programProgress}
+                                                />
+                                                <div className="flex flex-col items-center gap-3 border-t border-stone-200 pt-7 text-center">
+                                                    <p className="max-w-xl text-sm text-stone-500">
+                                                        Your evidence-backed clusters are ready. Continue to review the
+                                                        articles before choosing a delivery velocity.
+                                                    </p>
+                                                    <Button
+                                                        onClick={handleGeneratePlan}
+                                                        disabled={isGeneratingPlan}
+                                                        className="bg-stone-900 text-white hover:bg-stone-800"
+                                                    >
+                                                        {isGeneratingPlan ? (
+                                                            <><Loader2 className="w-4 h-4 animate-spin mr-2" />Preparing plan...</>
+                                                        ) : (
+                                                            <>Review Planned Articles <ArrowRight className="w-4 h-4 ml-2" /></>
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </div>
                                         ) : (
                                             <div className="text-center py-8 space-y-4">
                                                 <p className="text-stone-500 text-sm">
-                                                    Audit data not available. You can still generate a content plan.
+                                                    {isLoadingScope
+                                                        ? "Loading the verified scope and source evidence..."
+                                                        : "Audit scope is not available yet."}
                                                 </p>
-                                                <Button
-                                                    onClick={handleGeneratePlan}
-                                                    disabled={isGeneratingPlan}
-                                                    className="bg-stone-900 text-white hover:bg-stone-800"
-                                                >
-                                                    {isGeneratingPlan ? (
-                                                        <><Loader2 className="w-4 h-4 animate-spin mr-2" />Generating...</>
-                                                    ) : (
-                                                        <>Generate Content Plan <ArrowRight className="w-4 h-4 ml-2" /></>
-                                                    )}
-                                                </Button>
+                                                {isLoadingScope && <Loader2 className="mx-auto h-5 w-5 animate-spin text-stone-500" />}
                                             </div>
                                         )}
                                     </motion.div>

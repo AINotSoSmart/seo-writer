@@ -38,23 +38,53 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Brand ID and data required" }, { status: 400 })
         }
 
+        // Onboarding has already run the closed-pool harvest. Reuse its
+        // authoritative planned_articles instead of paying for the exact same
+        // crawl and Tavily work a second time.
+        const { data: harvestedRows, error: harvestReadError } = await (supabase as any)
+            .from("planned_articles")
+            .select("id, title, main_keyword, supporting_keywords, article_type, is_pillar, cluster_id, status, scheduled_date, audit_clusters(name)")
+            .eq("user_id", user.id)
+            .eq("brand_id", brandId)
+            .in("status", ["pending", "scheduled"])
+
+        if (harvestReadError) {
+            return NextResponse.json({ error: harvestReadError.message }, { status: 500 })
+        }
+
+        const harvestedPlan = (harvestedRows || []).map((row: any) => ({
+            id: row.id,
+            title: row.title,
+            main_keyword: row.main_keyword,
+            supporting_keywords: row.supporting_keywords || [],
+            article_type: row.article_type,
+            cluster: row.audit_clusters?.name || "",
+            delivery_model: "cluster",
+            is_pillar: row.is_pillar,
+            scheduled_date: row.scheduled_date || "",
+            status: row.status === "scheduled" ? "pending" : row.status,
+        }))
+
         // Delete any existing plans for this user
         await supabase
             .from("content_plans")
             .delete()
             .eq("user_id", user.id)
 
-        // Create new plan with pending status
+        // Existing harvest rows make this a cheap mirror. The Trigger task is
+        // retained as a recovery path for legacy entry points without a harvest.
+        const canReuseHarvest = harvestedPlan.length > 0
+
         const { data: plan, error: insertError } = await supabase
             .from("content_plans")
             .insert({
                 user_id: user.id,
                 brand_id: brandId,
-                plan_data: [], // Empty, will be filled by background task
-                competitor_seeds: [], // Will be populated by trigger task
+                plan_data: canReuseHarvest ? harvestedPlan : [],
+                competitor_seeds: [],
                 gsc_enhanced: false,
-                generation_status: "pending",
-                generation_phase: "sitemap" // First phase: sitemap sync
+                generation_status: canReuseHarvest ? "complete" : "pending",
+                generation_phase: canReuseHarvest ? null : "sitemap"
             })
             .select()
             .single()
@@ -62,6 +92,16 @@ export async function POST(req: NextRequest) {
         if (insertError || !plan) {
             console.error("[Start Background Plan] Insert error:", insertError)
             return NextResponse.json({ error: insertError?.message || "Failed to create plan" }, { status: 500 })
+        }
+
+        if (canReuseHarvest) {
+            return NextResponse.json({
+                success: true,
+                planId: plan.id,
+                generation_status: "complete",
+                reusedHarvest: true,
+                articleCount: harvestedPlan.length,
+            })
         }
 
         // Trigger background task - all intelligence gathering happens there

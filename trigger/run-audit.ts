@@ -67,10 +67,9 @@ export const runAuditTask = task({
                         user_id: userId,
                         brand_id: brandId,
                         ...updatePayload,
-                        user_coverage: updatePayload.user_coverage || {},
-                        competitor_coverages: updatePayload.competitor_coverages || [],
-                        gap_matrix: updatePayload.gap_matrix || [],
-                        pillar_suggestions: updatePayload.pillar_suggestions || [],
+                        pool_size: updatePayload.pool_size || 0,
+                        article_count: updatePayload.article_count || 0,
+                        cluster_count: updatePayload.cluster_count || 0,
                         authority_score: updatePayload.authority_score || 0
                     })
 
