@@ -337,10 +337,17 @@ const CMSVisual = () => (
         </div>
 
         <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 bg-stone-50 border-2 border-stone-500 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
-            <FileText size={18} className="text-stone-700" />
+          <div className="w-10 h-10 bg-green-50 border-2 border-green-600 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
+            <ShoppingBag size={18} className="text-green-700" />
           </div>
-          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Copy / Export</span>
+          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Shopify</span>
+        </div>
+
+        <div className="flex flex-col items-center gap-1">
+          <div className="w-10 h-10 bg-blue-50 border-2 border-blue-600 rounded-lg flex items-center justify-center shadow-sm group hover:-translate-y-1 transition-transform">
+            <div className="font-bold text-blue-700 italic text-sm">wf</div>
+          </div>
+          <span className="text-[8px] font-bold border border-stone-200 px-1 py-0.5 rounded bg-white">Webflow</span>
         </div>
       </div>
     </div>
@@ -351,43 +358,43 @@ const CMSVisual = () => (
 const FEATURES = [
   {
     id: '01',
-    title: 'Observed Query Harvest',
-    description: "The plan starts with queries observed in autocomplete, ranking pages, and competitor sites. Each row keeps its source URL, so the input pool can be inspected instead of trusted blindly.",
+    title: 'Every topic traced to a source',
+    description: "Each gap we show you carries a link to the page or search where we observed it. Open it and check. No other tool in this category will let you audit its own homework, because most of them are guessing.",
     visual: BroadSearchVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '02',
-    title: 'Evidence-Checked Coverage',
-    description: "Retrieval finds the most relevant pages, then a second evidence check verifies that a page actually answers the query. Topic similarity alone never counts as coverage.",
+    title: 'Coverage measured, not assumed',
+    description: "We do not mark a topic covered because your site is vaguely about that subject. We check that a specific page actually addresses it, using the words that make the question that question. Being roughly related is not coverage.",
     visual: CriticVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '03',
-    title: 'Source-Backed Article Research',
-    description: "Once a verified gap becomes an article, focused live research gathers the facts, examples, and citations needed to answer it completely.",
+    title: 'A scope that ends',
+    description: "Six batches, then your subscription cancels itself. We would rather tell you the work is done and lose the monthly fee than bill you for rewrites of articles you already own.",
     visual: SniperVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '04',
-    title: 'Cluster-Wide Internal Linking',
-    description: "Related articles are planned and shipped as a complete cluster, so their internal links can resolve together instead of pointing at pages that do not exist yet.",
+    title: 'Batches arrive whole',
+    description: "Articles in a batch link to each other, so a half-delivered batch is a broken web of dead links. If one article fails, the whole batch waits. You never receive something you have to go and repair.",
     visual: SemanticLinkingVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '05',
-    title: 'Publication-Ready Writing',
-    description: "The writing loop uses the accumulated research and brand profile to create answer-first sections, useful tables, lists, citations, and custom images without padding a word count.",
+    title: 'We turn down bad fits',
+    description: "If your niche cannot fill six real batches, the system refuses the sale rather than selling you a plan that runs dry in month two. A no now is cheaper for both of us than a refund later.",
     visual: AntiFluffVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '06',
-    title: 'Ready For Human Review',
-    description: "Finalized articles are delivered for review with headings, tables, citations, internal links, and images. Publish to WordPress or copy the finished draft into any CMS.",
+    title: 'Yours to edit and own',
+    description: "Drafts arrive with headings, tables and images, ready for your edit before anything goes live. Publish straight to WordPress or export and take them anywhere. No lock-in, no plugin on your server.",
     visual: CMSVisual,
     colSpan: 'col-span-1'
   }
@@ -440,16 +447,15 @@ const FeaturesSection: React.FC = () => {
         <div className="flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end mb-16 w-full px-4 md:px-8">
           <div className="flex-1">
             <span className="font-sans text-xs font-bold tracking-widest text-brand-500 uppercase mb-4 block">
-              Phase 2
+              What You Get
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-              The Cluster Delivery <br /><span className='italic text-stone-500'>Content Engine</span>
+              Authority you can <br /><span className='italic text-stone-500'>actually audit</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              Your audit discloses the finish line. FlipAEO then researches, writes,
-              links, and delivers whole clusters at the velocity you selected.
+              Plenty of tools claim to build topical authority. FlipAEO is the one that shows you the evidence behind every topic it picked, and lets you open it before you pay.
             </p>
           </div>
         </div>

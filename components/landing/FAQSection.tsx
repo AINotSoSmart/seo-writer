@@ -5,44 +5,36 @@ import { Plus, X } from 'lucide-react';
 
 const FAQS = [
   {
-    question: "Will Google penalize this content?",
-    answer: "No. Google rewards helpful, authoritative content regardless of how it's produced. Unlike generic AI that hallucinates, our engine performs deep research, cites real sources, and focuses on 'Information Gain'—the exact signals Google's algorithms prioritize."
+    question: "How do I know the gaps you find are real?",
+    answer: "Check them. Every gap in your report links to the page or the search where we observed that question. Open a few at random. We built the audit this way because the honest answer to 'trust us' is that you should not have to."
   },
   {
     question: "How is this different from other AI blog writers?",
-    answer: "Most writers begin with a prompt or a fixed monthly quota. FlipAEO begins with a closed pool of observed searches, checks your site and competitors against that same pool, and keeps the source URL for every claimed gap. We sell the speed at which complete clusters are closed, not an arbitrary number of articles."
+    answer: "Most of them will write about anything you type in. The hard part is not writing, it is knowing what to write and being able to prove it was worth writing. We show you the finite list of what your site is missing, back each item with a source, deliver it in complete batches, and then stop billing you."
   },
   {
-    question: "Why does the content feel so human?",
-    answer: "We built an 'Anti-AI Filter' into every article. It blocks robotic words like 'unleash', 'seamless', and 'cutting-edge'. It forces sentence variety—short punches mixed with longer thoughts. Every paragraph starts with a direct answer, not fluff. And we pull real data from live research, so there's no hallucination. The result? Content that reads like a senior marketer wrote it, not a chatbot."
+    question: "What happens when you run out of topics?",
+    answer: "We tell you, and the subscription cancels itself. That is the whole point. Tools that bill monthly forever cannot admit the useful topics ran out, so around month three they quietly start rewriting what you already published. We would rather lose the fee than do that."
   },
   {
     question: "Do I need to edit the articles?",
-    answer: "Our users typically spend 2-5 minutes polishing. Because we handle the research, formatting, and internal linking automatically, you're acting more like an Editor-in-Chief than a writer. The heavy lifting is 100% done for you."
+    answer: "Read them before publishing, always. Research, structure, internal links and images are done, so you are editing rather than writing. Anyone promising zero human review is selling you something they have not read either."
   },
   {
-    question: "Does it integrate with my site?",
-    answer: "WordPress publishing is supported. You can also review and copy the finished, formatted article into any other CMS."
+    question: "Can you work on my clients' sites?",
+    answer: "Yes. Each site gets its own audit and its own program. Publish straight to WordPress or export the drafts and put them anywhere. There is nothing to install on a client server."
   },
   {
-    question: "Can I cancel if it's not for me?",
-    answer: "Absolutely. We offer a 14-day money-back guarantee. If you don't see the quality in your initial articles, we'll refund you. No questions asked."
+    question: "What if my niche is too small?",
+    answer: "Then we will not sell you a program. If your site cannot fill six real batches, the audit says so and checkout stays closed. A refund in month two costs us both more than a no today."
   },
   {
-    question: "Is the content plagiarism-free?",
-    answer: "Yes. Every article is generated from scratch based on real-time research. We also run a built-in uniqueness check to ensure your content is original and safe to publish."
+    question: "Do you promise rankings or traffic?",
+    answer: "No, and be careful with anyone who does. We can prove which questions your market searches, which ones your site does not answer, and that we delivered publishable articles for them. What search engines do next is not ours to guarantee."
   },
   {
     question: "What languages do you support?",
-    answer: "FlipAEO currently specializes in English-language research and content so the evidence and writing quality remain consistent."
-  },
-  {
-    question: "Why does the monthly article count vary?",
-    answer: "Because clusters are real units of coverage, not equal-sized bundles. We show your total article and cluster scope before purchase. Each tier changes how many complete clusters ship per month; it never forces filler into the plan."
-  },
-  {
-    question: "What happens when my niche is complete?",
-    answer: "The program reports that the agreed scope is complete and stops reissuing old topics. Running out of verified gaps is a successful finish, not a reason to manufacture duplicates."
+    answer: "Currently, we specialize in high-quality English (US/UK) content to ensure maximum nuance and authority. Multi-language support is on our roadmap for Q4."
   },
 ];
 

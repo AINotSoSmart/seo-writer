@@ -14,15 +14,23 @@ export interface SEOConfig {
 }
 
 export const defaultSEO: SEOConfig = {
-  title: "FlipAEO — Evidence-backed topic-cluster delivery",
+  title: "FlipAEO — Build Topical Authority With Evidence-Backed Content Clusters",
   description:
-    "FlipAEO measures source-linked search gaps, freezes six qualified topic clusters and their internal-link graph, then delivers each cluster as a complete batch.",
+    "FlipAEO maps every question your market asks, finds the ones your site cannot answer, and fills them with interlinked topic clusters until your coverage is complete. Every gap links to the source we observed it on.",
   keywords: [
-    "topic cluster software",
-    "content gap audit",
-    "internal linking",
-    "content program",
-    "SEO content clusters",
+    "topical authority",
+    "how to build topical authority",
+    "topical authority tool",
+    "content gap analysis",
+    "content gap analysis tool",
+    "topical map generator",
+    "topic cluster tool",
+    "topic cluster generator",
+    "SEO content plan",
+    "what to write next SEO",
+    "content strategy tool",
+    "AI internal linking",
+    "semantic content map",
   ],
   author: "FlipAEO",
   siteUrl: process.env.NEXT_PUBLIC_APP_URL || "https://flipaeo.com",
@@ -59,7 +67,7 @@ export const organizationSchema = {
 
 export const pageSEO = {
   home: {
-    title: "Evidence-backed topic-cluster delivery",
+    title: "Topical Authority Tool & Content Cluster Builder",
     description: defaultSEO.description,
     keywords: defaultSEO.keywords,
   },

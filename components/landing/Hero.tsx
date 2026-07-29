@@ -45,30 +45,32 @@ export default function Hero() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-brand-500">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" stroke="none" />
         </svg>
-        <span>THE EVIDENCE-BACKED CONTENT PROGRAM</span>
+        <span>TOPICAL AUTHORITY PROGRAMS</span>
       </div>
 
       {/* Main Headline */}
       <h1 className="font-serif text-4xl md:text-7xl lg:text-8xl text-stone-900 leading-[1.1] mb-6 tracking-tight">
-        Stop guessing what to publish. <br />
-        <span className="italic font-light">Close every proven content gap.</span>
+        Own your topic, <br />
+        <span className="italic font-light">not just a keyword</span>
       </h1>
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-        FlipAEO harvests real search demand, verifies what your site is missing, and
-        <strong className="text-black font-normal">{" "}ships complete, interlinked clusters until the disclosed scope is finished.</strong>
+        FlipAEO maps every question your market asks, finds the ones your site cannot answer, and fills them with interlinked clusters until your coverage of that topic is complete. That completeness is what Google — and the AI tools built on top of it — use to decide which sites are worth trusting.
+        <strong className="text-black font-normal">{" "}And every gap we show you links to the page we observed it on, so you can check the work before you pay.</strong>
       </p>
 
       {/* CTA Button Container */}
       <div className="relative group z-10">
         <Link href="/login">
           <Button variant="primary" className="text-brand-600">
-            Map My Content Gaps
+            Show me what my site is missing
           </Button>
         </Link>
 
-
+        <p className="mt-4 text-[11px] text-stone-400 tracking-wide">
+          Free audit &middot; no card &middot; no rankings or traffic promised
+        </p>
       </div>
 
       {/* Testimonial */}

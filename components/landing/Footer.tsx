@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail } from 'lucide-react';
+import { X, Mail } from 'lucide-react';
 import Link from 'next/link';
 
 export function Footer() {
@@ -40,7 +40,7 @@ export function Footer() {
               </div>
 
               <p className="font-sans text-stone-500 text-sm leading-relaxed max-w-sm">
-                Source-linked evidence audits and finite six-cluster delivery with frozen internal links.
+                The first strategic content engine designed to reverse-engineer AI search models. Win the answer, not just the link.
               </p>
 
 
@@ -54,9 +54,9 @@ export function Footer() {
               <div className="flex flex-col gap-4">
                 <h4 className="font-serif text-lg text-stone-900 font-medium">Product</h4>
                 <nav className="flex flex-col gap-3">
-                  <Link href="/features" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Product Contract</Link>
-                  <Link href="/features/evidence-backed-topical-audit" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Evidence Audit</Link>
-                  <Link href="/pricing" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Delivery Speeds</Link>
+                  <Link href="/#features" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Features</Link>
+                  <Link href="/case-studies/bringback" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Live Case Study</Link>
+                  <Link href="/#pricing" className="font-sans text-sm text-stone-500 hover:text-brand-600 transition-colors duration-200 w-fit">Pricing</Link>
                 </nav>
               </div>
 

@@ -18,7 +18,7 @@ const CTASection: React.FC = () => {
 
         <div className="flex flex-col items-center justify-center">
           <h2 className="font-serif text-xl md:text-5xl text-stone-900 mb-16 tracking-tight font-normal text-center">
-            My Competitors Are Already Ranking
+            Find out what your site is missing
           </h2>
 
           <div className="relative group">
@@ -33,12 +33,12 @@ const CTASection: React.FC = () => {
                 >
                   <div className="flex items-center gap-2 md:gap-6">
                     {/* Custom Keycap for "Press B" */}
-                    <span className="text-brand-800 font-medium tracking-tight">Help</span>
+                    <span className="text-brand-800 font-medium tracking-tight">Show</span>
                     <div className="flex flex-col items-center justify-center w-12 h-12 md:w-14 md:h-14 bg-brand-500 rounded-lg border-b-4 border-brand-800 shadow-inner text-white leading-none transform translate-y-0.5">
                       <span className="text-lg md:text-xl font-semibold">Me</span>
                     </div>
 
-                    <span className="text-brand-800 font-medium tracking-tight">Grow my Brand</span>
+                    <span className="text-brand-800 font-medium tracking-tight">The Gaps</span>
                   </div>
                 </Button>
               </Link>

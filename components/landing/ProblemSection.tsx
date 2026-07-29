@@ -26,15 +26,15 @@ const ProblemSection: React.FC = () => {
         <div className="border-t border-stone-200 flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end py-16 w-full px-4 md:px-8">
           <div className="flex-1">
             <span className="font-sans text-xs font-bold tracking-widest text-stone-400 uppercase mb-4 block">
-              The Hard Reality
+              Why Content Fails
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-              Why AI Engines are <br /><span className='italic text-stone-500'>Ghosting Your Brand</span>
+              Scattered articles don’t <br /><span className='italic text-stone-500'>add up to authority.</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              You’re publishing more than ever, yet your brand is nowhere to be found in ChatGPT, Perplexity, or Gemini. You aren’t just losing rankings; you’re losing the trust of the engines that control the answers.
+              A hundred posts spread thinly across sixty unrelated topics makes you a shallow source on all of them. Depth on one subject is what earns trust — and depth means covering a topic completely, not publishing near it.
             </p>
           </div>
         </div>
@@ -71,10 +71,10 @@ const ProblemSection: React.FC = () => {
             </div>
             <div className="mt-auto">
               <h3 className="font-serif text-2xl text-stone-900 mb-4 tracking-tight">
-                Tracking your failure won't fix it
+                You have articles, not coverage
               </h3>
               <p className="text-stone-500 leading-relaxed text-sm lg:text-base">
-                Knowing you are invisible in a "Visibility Tracker" is like weighing yourself every hour while you're starving. A scorecard doesn't tell you how to be found, it just confirms you’re being ignored while your competitors take the traffic.
+                Most sites are not short of content. They are short of depth. Publishing one post each about sixty things leaves you the authority on none of them, and every one of those posts cost real money.
               </p>
             </div>
           </div>
@@ -86,10 +86,10 @@ const ProblemSection: React.FC = () => {
             </div>
             <div className="mt-auto">
               <h3 className="font-serif text-2xl text-stone-900 mb-4 tracking-tight">
-                Your Authority has "Holes."
+                One missing piece breaks the cluster
               </h3>
               <p className="text-stone-500 leading-relaxed text-sm lg:text-base">
-                AI search engines ignore you because your topical coverage is incomplete. When a user asks a real question, the LLM spots a "semantic gap" in your content and recommends a competitor who sounds more like an expert. You’re a partial source in a world that only cites the "Guru".
+                Authority comes from answering a question and everything around it. Miss the sub-topics and the cluster reads as incomplete — to a reader, to Google, and to any AI system deciding which source to lean on.
               </p>
             </div>
           </div>
@@ -101,10 +101,10 @@ const ProblemSection: React.FC = () => {
             </div>
             <div className="mt-auto">
               <h3 className="font-serif text-2xl text-stone-900 mb-4 tracking-tight">
-                Generic content is just background noise.
+                Nobody shows their working
               </h3>
               <p className="text-stone-500 leading-relaxed text-sm lg:text-base">
-                One-click AI articles that read like Wikipedia summaries are killing your growth. They have no unique data, no brand voice, and no "soul". LLMs spot generic bot-filler in 3 seconds and skip you for content that actually provides a real answer.
+                Ask most tools where a suggested topic came from and there is no answer, because a model imagined it. You cannot tell a real gap from a confident hallucination, and you are the one paying to find out.
               </p>
             </div>
           </div>

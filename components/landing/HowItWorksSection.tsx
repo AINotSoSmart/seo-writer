@@ -184,15 +184,15 @@ const HowItWorksSection: React.FC = () => {
         <div className="flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end mb-16 w-full px-4 md:px-8">
           <div className="flex-1">
             <span className="font-sans text-xs font-bold tracking-widest text-brand-500 uppercase mb-4 block">
-              HOW WE SOLVE IT
+              HOW IT WORKS
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1.1]">
-              The Closed-Pool <br /><span className='italic text-stone-500'>Content Audit</span>
+              How FlipAEO builds <br /><span className='italic text-stone-500'>your topical authority</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              AI search engines only cite authoritative domain clusters. Here is exactly how we build a mathematically perfect content roadmap for your domain before writing a single word.
+              Four steps, no invented topics. We read your site, map the real questions in your market, show you exactly where your coverage breaks, then close those gaps cluster by cluster until the topic is genuinely yours.
             </p>
           </div>
         </div>
@@ -222,10 +222,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                Scan Your Existing Coverage
+                We read your site first
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                We crawl your live site and represent each page by its actual title, description, headings, and body evidence—not a title alone.
+                Every page you have already published is read and indexed. Nothing we propose later will repeat work you have already paid for.
               </p>
             </div>
           </div>
@@ -240,11 +240,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                Harvest Real Search Demand
+                We collect real questions
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                Queries come from autocomplete, ranking pages, and competitor sites. Every candidate retains the exact page or request where it was observed.
-              </p>
+                Questions people actually search, plus the ones your competitors already answer. Each one is stored with a link to where we saw it, so you can check any claim we make.              </p>
             </div>
           </div>
 
@@ -258,10 +257,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                Verify the Gaps
+                You see the scope and price
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                Your pages and competitor pages are checked against the same closed pool. A gap only survives when your site lacks evidence for it.
+                The gaps are grouped into themed batches. You see the whole map, the six batches worth doing first, and exactly how long each pricing option takes to finish them.
               </p>
             </div>
           </div>
@@ -276,10 +275,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                Collapse and Ship Clusters
+                We deliver complete batches
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                Overlapping searches collapse into finite article units. Related articles ship together so their internal-link graph is complete on day one.
+                A batch arrives whole, with its internal links already working. If one article fails, the batch waits rather than shipping you a half-built set. After the last one, billing stops.
               </p>
             </div>
           </div>
