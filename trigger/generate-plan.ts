@@ -1,9 +1,7 @@
 import { task } from "@trigger.dev/sdk/v3"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { BrandDetails } from "@/lib/schemas/brand"
-import { generateStrategicPlan } from "@/lib/plans/strategic-planner"
-import { deduplicateWithReplacementLoop } from "@/lib/plans/plan-deduplication"
-import { runAuditTask } from "@/trigger/run-audit"
+import { runHarvestAudit } from "@/lib/harvest/run-harvest"
 import Sitemapper from "sitemapper"
 import { extractTitleFromUrl, generateEmbedding } from "@/lib/internal-linking"
 import { PlanRefilledEmail } from "@/lib/emails/templates/plan-refilled"
@@ -227,22 +225,12 @@ async function syncSitemapToInternalLinks(
  */
 export const generatePlanTask = task({
     id: "generate-content-plan",
-    maxDuration: 900, // 15 minutes max (includes audit + plan generation)
+    maxDuration: 1200, // 20 minutes — the harvest makes many outbound requests
     retry: {
-        maxAttempts: 2,
-        minTimeoutInMs: 5000,
-        maxTimeoutInMs: 30000,
+        maxAttempts: 1, // No retries — the harvest is expensive
     },
     run: async (payload: GeneratePlanPayload) => {
-        const {
-            planId,
-            userId,
-            brandId,
-            brandData,
-            brandUrl,
-            competitorBrands: passedCompetitors,
-            existingContent
-        } = payload
+        const { planId, userId, brandId, brandData, brandUrl } = payload
         const supabase = createAdminClient()
 
         console.log(`[Generate Plan Task] Starting for plan: ${planId}`)
@@ -259,184 +247,74 @@ export const generatePlanTask = task({
         }
 
         try {
-            // === PHASE 0: SITEMAP SYNC (Save internal links + get existing content) ===
-            let sitemapTitles: string[] = []
+            // === PHASE 0: SITEMAP SYNC ===
+            // Populates internal_links, which the writer uses for link injection.
             if (brandUrl) {
                 await updateStatus("generating", "sitemap")
-                console.log(`[Generate Plan Task] Phase 0: Syncing sitemap...`)
-
                 try {
                     const syncResult = await syncSitemapToInternalLinks(brandUrl, userId, brandId)
-                    sitemapTitles = syncResult.titles
-                    console.log(`[Generate Plan Task] Sitemap sync: ${syncResult.syncedCount} new links, ${sitemapTitles.length} total titles`)
+                    console.log(`[Generate Plan Task] Sitemap sync: ${syncResult.syncedCount} new links`)
                 } catch (e) {
                     console.warn(`[Generate Plan Task] Sitemap sync failed (non-blocking):`, e)
                 }
             }
 
-            // Merge existing content: passed content + sitemap titles (deduplicated)
-            const allExistingContent = Array.from(new Set([
-                ...(existingContent || []),
-                ...sitemapTitles
-            ]))
-            console.log(`[Generate Plan Task] Total existing content for deduplication: ${allExistingContent.length}`)
-
-            // === PHASE 1: FRESH TOPICAL AUDIT ===
-            // Run a fresh audit every time — this produces real gap data,
-            // competitor analysis, and pillar suggestions that drive the plan.
+            // === PHASE 1: THE HARVEST IS THE PLAN ===
+            //
+            // This task used to run a five-stage LLM chain (SERP intelligence →
+            // gap analysis → hierarchy → strategic planner → dedup loop with
+            // `targetCount: 30`). That quota is exactly what made the engine
+            // ship rewrites once a niche ran dry.
+            //
+            // The harvest produces `planned_articles` directly, sized to the
+            // real gaps that exist. There is no target count.
             await updateStatus("generating", "audit")
-            console.log(`[Generate Plan Task] Phase 1: Running fresh topical authority audit...`)
 
-            let competitorBrands = passedCompetitors || []
-            let auditGaps: any[] | undefined
-            let auditPillarSuggestions: any[] | undefined
-
-            try {
-                // Ensure audit row exists (upsert — create if missing, reset if exists)
-                await (supabase as any)
-                    .from("topical_audits")
-                    .upsert({
-                        user_id: userId,
-                        brand_id: brandId,
-                        generation_status: "running",
-                        generation_phase: "niche_mapping",
-                        generation_error: null,
-                        niche_blueprint: null,
-                        user_coverage: null,
-                        competitor_coverages: null,
-                        authority_score: null,
-                        pillar_scores: null,
-                        gap_matrix: null,
-                        pillar_suggestions: null,
-                        projected_score: null,
-                        competitors_scanned: 0,
-                        topics_analyzed: 0,
-                        user_pages_scanned: 0,
-                        updated_at: new Date().toISOString()
-                    }, {
-                        onConflict: "user_id,brand_id"
-                    })
-
-                // Run the audit and WAIT for it to complete
-                console.log(`[Generate Plan Task] Triggering audit task and waiting...`)
-                const auditResult = await runAuditTask.triggerAndWait({
-                    userId,
-                    brandId,
-                    brandData,
-                    brandUrl: brandUrl || ''
-                })
-
-                console.log(`[Generate Plan Task] Audit task completed. Fetching fresh data...`)
-
-                // Fetch the fresh audit data that was just saved
-                const { data: auditData } = await (supabase as any)
-                    .from("topical_audits")
-                    .select("gap_matrix, pillar_suggestions")
-                    .eq("user_id", userId)
-                    .eq("brand_id", brandId)
-                    .single()
-
-                if (auditData?.gap_matrix) {
-                    auditGaps = auditData.gap_matrix
-                        .filter((g: any) => !g.user_covered)
-                        .map((g: any) => ({
-                            topic: g.topic,
-                            importance: g.importance,
-                            pillar: g.pillar,
-                            competitors_covering: g.competitors_covering || []
-                        }))
-                    console.log(`[Generate Plan Task] Fresh audit: ${auditGaps!.length} gaps to address`)
-                }
-
-                if (auditData?.pillar_suggestions) {
-                    auditPillarSuggestions = auditData.pillar_suggestions
-                    console.log(`[Generate Plan Task] Fresh audit: ${auditPillarSuggestions!.length} pillar suggestions`)
-                }
-
-                // Get competitors from audit (saved to brand_details by audit task)
-                const { data: brandRecord } = await (supabase as any)
-                    .from("brand_details")
-                    .select("discovered_competitors")
-                    .eq("id", brandId)
-                    .single()
-
-                if (competitorBrands.length === 0 && brandRecord?.discovered_competitors?.length > 0) {
-                    competitorBrands = brandRecord.discovered_competitors
-                    console.log(`[Generate Plan Task] Using ${competitorBrands.length} competitors from audit`)
-                }
-            } catch (auditError: any) {
-                // Audit failed — continue without gap data (graceful degradation)
-                console.warn(`[Generate Plan Task] Audit failed (non-blocking):`, auditError.message || auditError)
-                console.log(`[Generate Plan Task] Continuing plan generation without audit gap data`)
-
-                // Still try to get any existing competitors from brand_details
-                try {
-                    const { data: brandRecord } = await (supabase as any)
-                        .from("brand_details")
-                        .select("discovered_competitors")
-                        .eq("id", brandId)
-                        .single()
-                    if (competitorBrands.length === 0 && brandRecord?.discovered_competitors?.length > 0) {
-                        competitorBrands = brandRecord.discovered_competitors
-                    }
-                } catch (e) {
-                    // Truly no data — plan will use LLM knowledge only
-                }
+            if (!brandUrl) {
+                throw new Error("brandUrl is required — coverage cannot be measured without it")
             }
 
-            console.log(`[Generate Plan Task] Using ${competitorBrands.length} competitors`)
-
-            // === PHASE 2: STRATEGIC PLAN GENERATION ===
-            await updateStatus("generating", "plan")
-            console.log(`[Generate Plan Task] Phase 2: Strategic plan generation...`)
-
-            const result = await generateStrategicPlan({
+            const result = await runHarvestAudit(
+                userId,
+                brandId,
                 brandData,
                 brandUrl,
-                competitorBrands,
-                existingContent: allExistingContent,
-                auditGaps,
-                auditPillarSuggestions
-            })
-
-            console.log(`[Generate Plan Task] Plan generated: ${result.plan.length} articles`)
-
-            // === PHASE 3: SEMANTIC DEDUPLICATION WITH REPLACEMENT LOOP ===
-            await updateStatus("generating", "deduplication")
-            console.log(`[Generate Plan Task] Phase 3: Deduplication with replacement loop...`)
-
-            const {
-                finalPlan: filteredPlan,
-                totalRejected,
-                replacementsGenerated,
-                attempts
-            } = await deduplicateWithReplacementLoop(
-                result.plan,
-                userId,
-                brandData,
-                {
-                    brandId,
-                    targetCount: 30, // Always aim for exactly 30 articles
-                    maxAttempts: 3
-                }
+                { onPhase: async (phase) => { await updateStatus("generating", phase) } }
             )
 
-            // Detailed logging for Trigger.dev dashboard
-            console.log(`[Generate Plan Task] Deduplication Loop Results:`)
-            console.log(`  - Original articles: ${result.plan.length}`)
-            console.log(`  - Final article count: ${filteredPlan.length}`)
-            console.log(`  - Total rejected: ${totalRejected}`)
-            console.log(`  - Replacements generated: ${replacementsGenerated}`)
-            console.log(`  - Attempts taken: ${attempts}`)
+            console.log(
+                `[Generate Plan Task] Harvest: ${result.poolSize} queries -> ` +
+                `${result.articleCount} articles across ${result.clusterCount} clusters`
+            )
 
-            // === SAVE PLAN ===
+            // === PHASE 2: MIRROR INTO content_plans ===
+            // The existing dashboard reads `content_plans.plan_data`. Mirroring
+            // keeps it working until the scope/burn-down UI replaces it; the
+            // authoritative rows are in `planned_articles`.
+            const { data: plannedRows } = await (supabase as any)
+                .from("planned_articles")
+                .select("id, title, main_keyword, supporting_keywords, article_type, is_pillar, cluster_id, status, scheduled_date, audit_clusters(name)")
+                .eq("brand_id", brandId)
+                .in("status", ["pending", "scheduled"])
+
+            const planData = (plannedRows || []).map((row: any) => ({
+                id: row.id,
+                title: row.title,
+                main_keyword: row.main_keyword,
+                supporting_keywords: row.supporting_keywords || [],
+                article_type: row.article_type,
+                cluster: row.audit_clusters?.name || "",
+                is_pillar: row.is_pillar,
+                scheduled_date: row.scheduled_date,
+                status: row.status === "scheduled" ? "pending" : row.status,
+            }))
+
             const { error: updateError } = await (supabase as any)
                 .from("content_plans")
                 .update({
-                    plan_data: filteredPlan,
-                    competitor_seeds: competitorBrands.map(c => c.name),
+                    plan_data: planData,
                     generation_status: "complete",
-                    generation_phase: undefined,
+                    generation_phase: null,
                     updated_at: new Date().toISOString()
                 })
                 .eq("id", planId)
@@ -445,7 +323,14 @@ export const generatePlanTask = task({
                 throw new Error(`Failed to save plan: ${updateError.message}`)
             }
 
-            console.log(`[Generate Plan Task] Complete! Plan saved.`)
+            if (result.belowViableThreshold) {
+                console.warn(
+                    `[Generate Plan Task] Niche yields only ${result.articleCount} articles — ` +
+                    `below the threshold for a recurring program. Offer a one-off.`
+                )
+            }
+
+            console.log(`[Generate Plan Task] Complete.`)
 
             // --- NOTIFICATION: SEND REFILL EMAIL (only for auto-refill) ---
             if (payload.isAutoRefill) {
@@ -455,18 +340,18 @@ export const generatePlanTask = task({
 
                     if (user?.email) {
                         const emailHtml = await render(PlanRefilledEmail({
-                            articleCount: filteredPlan.length,
+                            articleCount: planData.length,
                             userName: user.user_metadata?.full_name || user.email.split('@')[0] || "there"
                         }))
 
                         await resend.emails.send({
                             from: EMAIL_FROM,
                             to: user.email,
-                            subject: `Your content plan was auto-refilled! 📅`,
+                            subject: `Your content plan was refreshed`,
                             html: emailHtml,
                             replyTo: EMAIL_REPLY_TO
                         })
-                        console.log(`[Generate Plan Task] 📧 Refill email sent to ${user.email}`)
+                        console.log(`[Generate Plan Task] Refill email sent to ${user.email}`)
                     }
                 } catch (emailErr) {
                     console.error("[Generate Plan Task] Failed to send refill email:", emailErr)
@@ -476,11 +361,12 @@ export const generatePlanTask = task({
             return {
                 success: true,
                 planId,
-                articleCount: filteredPlan.length,
-                originalCount: result.plan.length,
-                removedCount: totalRejected,
-                replacementsGenerated,
-                categoryDistribution: result.categoryDistribution
+                poolSize: result.poolSize,
+                articleCount: result.articleCount,
+                clusterCount: result.clusterCount,
+                authorityScore: result.authorityScore,
+                belowViableThreshold: result.belowViableThreshold,
+                publicToken: result.publicToken,
             }
 
         } catch (error: any) {

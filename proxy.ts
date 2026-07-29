@@ -65,7 +65,14 @@ export async function proxy(request: NextRequest) {
     '/api/dodopayments/webhook',
     '/api/images',
   ]
-  const isPublicApiRoute = publicApiRoutes.some(route =>
+  // Dev-only harvest test harnesses. Exact matches, never prefixes, so that
+  // e.g. /api/harvest/verify-anything stays behind auth. Both routes also
+  // return 404 when NODE_ENV === 'production', so this is defence in depth.
+  const devOnlyApiRoutes = ['/api/harvest/verify', '/api/harvest/calibrate']
+  const isDevHarvestRoute =
+    process.env.NODE_ENV !== 'production' &&
+    devOnlyApiRoutes.includes(request.nextUrl.pathname)
+  const isPublicApiRoute = isDevHarvestRoute || publicApiRoutes.some(route =>
     request.nextUrl.pathname.startsWith(route)
   )
 

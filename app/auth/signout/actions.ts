@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { safeError } from '@/lib/safe-log'
 
 export async function signOut() {
   const supabase = await createClient()
@@ -20,7 +21,8 @@ export async function signOut() {
     revalidatePath('/', 'layout')
     
   } catch (error) {
-    console.error('Unexpected sign out error:', error)
+    // Redacted: a thrown Supabase auth error can carry session material
+    console.error('Unexpected sign out error:', safeError(error))
     return { error: 'An unexpected error occurred. Please try again.' }
   }
   
@@ -45,7 +47,8 @@ export async function signOutWithScope(scope: 'global' | 'local' | 'others' = 'g
     revalidatePath('/', 'layout')
     
   } catch (error) {
-    console.error('Unexpected sign out error:', error)
+    // Redacted: a thrown Supabase auth error can carry session material
+    console.error('Unexpected sign out error:', safeError(error))
     return { error: 'An unexpected error occurred. Please try again.' }
   }
   

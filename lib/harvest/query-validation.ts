@@ -1,0 +1,191 @@
+/**
+ * Search-demand validation for page-derived strings.
+ *
+ * WHY THIS EXISTS: reading headings and titles off real pages gives perfect
+ * provenance but poor precision. Alongside genuine questions it picks up
+ * navigation labels, testimonial headers, marketing fragments and service FAQs —
+ * "Why Our Photo Repair Service", "What Creators Say About Animate Photo",
+ * "When it comes to amazing videos, all you need is V...". Each of these was
+ * genuinely observed on a page, so provenance cannot reject them.
+ *
+ * Two rounds of regex blocklists caught the previous round's examples and
+ * missed the next, which is the signature of the wrong approach. The structural
+ * test is evidential rather than lexical:
+ *
+ *     does Google Autocomplete suggest anything close to this string?
+ *
+ * If nobody types it, it is page furniture regardless of how it reads. This
+ * reuses the harvest's own autocomplete client, so it costs one free request
+ * per candidate and no API budget.
+ *
+ * Autocomplete-sourced rows skip this check — they came from autocomplete.
+ */
+
+import { HarvestedQuery, HarvestOptions, mapWithConcurrency, normalizeQuery } from "./types"
+
+const AUTOCOMPLETE_URL = "https://suggestqueries.google.com/complete/search"
+const CONCURRENCY = 6
+
+/**
+ * Share of the candidate's content words that must appear in a single
+ * autocomplete suggestion for it to count as a real search.
+ *
+ * CALIBRATION STATUS: PROVISIONAL. 0.6 keeps long-tail questions whose wording
+ * differs slightly from the suggestion while rejecting strings that share only
+ * a topic word or two.
+ */
+export const DEMAND_OVERLAP_THRESHOLD = 0.6
+
+/**
+ * Longest query this test is valid for.
+ *
+ * Autocomplete's suggestion index is biased toward short head and mid-tail
+ * strings; it rarely returns anything for an eight-word question. Applying the
+ * test anyway does not measure demand, it measures the oracle's coverage — and
+ * it cut legitimate long-tail questions wholesale on pixreunion.com ("Can I
+ * include pets in my family portrait?", "What photo quality do I need for
+ * uploads?", "Can I customize backgrounds in the AI family portraits?").
+ *
+ * Longer strings bypass this gate and are left to the niche filter and the
+ * coverage evidence stage. Short furniture — "What Our Users Say" — is still
+ * caught here, and possessive marketing copy is rejected upstream by
+ * `isPlausibleQuery`.
+ */
+export const MAX_WORDS_FOR_DEMAND_CHECK = 7
+
+/** Words too common to count as evidence of a shared query */
+const STOPWORDS = new Set([
+    "a", "an", "the", "of", "to", "in", "on", "for", "and", "or", "is", "are",
+    "do", "does", "did", "can", "how", "what", "why", "when", "where", "who",
+    "my", "your", "our", "it", "this", "that", "with", "from", "at", "by",
+])
+
+function contentWords(text: string): string[] {
+    return normalizeQuery(text)
+        .split(/\s+/)
+        .map((w) => w.replace(/[^a-z0-9]/g, ""))
+        .filter((w) => w.length > 2 && !STOPWORDS.has(w))
+}
+
+interface SuggestOutcome {
+    suggestions: string[]
+    /**
+     * False only when the request itself failed. A successful response with an
+     * empty array is real evidence of no demand and must not be conflated with
+     * a network error — doing so let 72 checks resolve as "inconclusive" and
+     * pass page furniture straight through.
+     */
+    ok: boolean
+}
+
+async function fetchSuggestions(
+    query: string,
+    options: HarvestOptions
+): Promise<SuggestOutcome> {
+    const params = new URLSearchParams({
+        client: "chrome",
+        q: query,
+        hl: options.language || "en",
+    })
+    if (options.countryCode) params.set("gl", options.countryCode)
+
+    try {
+        const response = await fetch(`${AUTOCOMPLETE_URL}?${params.toString()}`)
+        if (!response.ok) return { suggestions: [], ok: false }
+
+        const data = await response.json()
+        // Malformed payload is a failure; a well-formed empty array is a result.
+        if (!Array.isArray(data) || !Array.isArray(data[1])) {
+            return { suggestions: [], ok: false }
+        }
+        return { suggestions: data[1], ok: true }
+    } catch {
+        return { suggestions: [], ok: false }
+    }
+}
+
+/**
+ * True when autocomplete offers something substantially overlapping the
+ * candidate — evidence that people actually search it.
+ */
+function hasSearchDemand(candidate: string, suggestions: string[]): boolean {
+    const candidateWords = contentWords(candidate)
+    if (candidateWords.length === 0) return false
+
+    for (const suggestion of suggestions) {
+        const suggestionWords = new Set(contentWords(suggestion))
+        const matched = candidateWords.filter((w) => suggestionWords.has(w)).length
+        if (matched / candidateWords.length >= DEMAND_OVERLAP_THRESHOLD) return true
+    }
+
+    return false
+}
+
+export interface DemandFilterResult {
+    kept: HarvestedQuery[]
+    dropped: Array<{ query: string; source: string }>
+    /** Requests that failed — those candidates are kept, not silently cut */
+    checkFailures: number
+}
+
+/**
+ * Drops page-derived strings that show no autocomplete demand.
+ *
+ * Fails open per candidate: a failed request keeps the row, because dropping
+ * real queries on a network blip is worse than admitting a little furniture.
+ */
+export async function filterToSearchedQueries(
+    queries: HarvestedQuery[],
+    options: HarvestOptions = {}
+): Promise<DemandFilterResult> {
+    // Exempt: autocomplete rows (already proven searched) and long questions
+    // (autocomplete is not a valid oracle for them)
+    const testable = (q: HarvestedQuery) =>
+        q.source !== "autocomplete" &&
+        q.query.trim().split(/\s+/).length <= MAX_WORDS_FOR_DEMAND_CHECK
+
+    const exempt = queries.filter((q) => !testable(q))
+    const candidates = queries.filter(testable)
+
+    if (candidates.length === 0) {
+        return { kept: exempt, dropped: [], checkFailures: 0 }
+    }
+
+    console.log(`[DemandFilter] Checking ${candidates.length} page-derived strings`)
+
+    const results = await mapWithConcurrency(candidates, CONCURRENCY, async (q) => {
+        const { suggestions, ok } = await fetchSuggestions(q.query, options)
+
+        // Request failed: inconclusive, keep the row rather than cut it blind.
+        if (!ok) return { q, searched: true, failed: true }
+
+        // Request succeeded with nothing to offer: that is evidence of no
+        // demand, not an error. Drop it.
+        return { q, searched: hasSearchDemand(q.query, suggestions), failed: false }
+    })
+
+    const kept: HarvestedQuery[] = [...exempt]
+    const dropped: DemandFilterResult["dropped"] = []
+    let checkFailures = 0
+
+    for (const result of results) {
+        if (!result) {
+            checkFailures++
+            continue
+        }
+        if (result.failed) checkFailures++
+
+        if (result.searched) {
+            kept.push(result.q)
+        } else {
+            dropped.push({ query: result.q.query, source: result.q.source })
+        }
+    }
+
+    console.log(
+        `[DemandFilter] Kept ${kept.length} (${exempt.length} autocomplete-exempt), ` +
+        `dropped ${dropped.length} with no search demand, ${checkFailures} checks inconclusive`
+    )
+
+    return { kept, dropped, checkFailures }
+}

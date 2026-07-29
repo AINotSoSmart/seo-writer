@@ -82,6 +82,16 @@ interface ShopifyBlog {
     title: string
 }
 
+/**
+ * Webflow and Shopify are archived, not removed.
+ *
+ * Every paying customer to date copy-pasted articles manually; neither
+ * integration was ever used. WordPress stays because that is what content
+ * operators actually run. All the connection code, server actions and tables
+ * remain intact — flip this to `true` to bring the UI back.
+ */
+const SHOW_ARCHIVED_INTEGRATIONS = false
+
 export default function IntegrationsPage() {
     // WordPress state
     const [wpConnections, setWpConnections] = useState<WordPressConnection[]>([])
@@ -436,8 +446,8 @@ export default function IntegrationsPage() {
                         emptyText="No WordPress sites connected yet"
                     />
 
-                    {/* Webflow Section */}
-                    <IntegrationSection
+                    {/* Webflow Section — ARCHIVED, see SHOW_ARCHIVED_INTEGRATIONS */}
+                    {SHOW_ARCHIVED_INTEGRATIONS && <IntegrationSection
                         title="Webflow"
                         description="Publish articles to your Webflow CMS collections"
                         iconBg="#ffffffff"
@@ -533,10 +543,10 @@ export default function IntegrationsPage() {
                             />
                         ))}
                         emptyText="No Webflow sites connected yet"
-                    />
+                    />}
 
-                    {/* Shopify Section */}
-                    <IntegrationSection
+                    {/* Shopify Section — ARCHIVED, see SHOW_ARCHIVED_INTEGRATIONS */}
+                    {SHOW_ARCHIVED_INTEGRATIONS && <IntegrationSection
                         title="Shopify"
                         description="Publish articles to your Shopify store blog"
                         iconBg="#96bf48"
@@ -655,7 +665,7 @@ export default function IntegrationsPage() {
                             />
                         ))}
                         emptyText="No Shopify stores connected yet"
-                    />
+                    />}
 
                     {/* More integrations */}
                     <div className="border-t border-stone-200  pt-6">

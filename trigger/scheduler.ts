@@ -49,8 +49,26 @@ export const dailyContentWatchman = schedules.task({
         let triggeredCount = 0
         let completedPlans = 0
 
+        // Brands running a closed-pool program are shipped by `clusterShipper`
+        // (trigger/ship-cluster.ts) in whole-cluster batches. Skipping them here
+        // stops the two schedulers double-charging the same brand.
+        const { data: activePrograms } = await supabase
+            .from("programs")
+            .select("brand_id")
+            .eq("status", "active")
+
+        const brandsOnPrograms = new Set(
+            (activePrograms || []).map((p: any) => p.brand_id).filter(Boolean)
+        )
+
+        if (brandsOnPrograms.size > 0) {
+            console.log(`⏭️ Watchman: ${brandsOnPrograms.size} brand(s) handled by the cluster shipper`)
+        }
+
         // Loop through every user's plan
         for (const plan of plans) {
+            if (plan.brand_id && brandsOnPrograms.has(plan.brand_id)) continue
+
             const items = (plan.plan_data as any[]) || []
             const catchUpMode = plan.catch_up_mode || "gradual"
 

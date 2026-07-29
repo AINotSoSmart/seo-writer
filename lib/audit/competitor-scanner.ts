@@ -1,11 +1,13 @@
 import { tavily } from "@tavily/core"
 import { BrandDetails } from "@/lib/schemas/brand"
-import { NicheBlueprint, SiteCoverage, TopicEmbedding } from "./types"
-import { fetchAllSitemapUrls, batchExtractTitles, mapCoverageWithEmbeddings } from "./site-scanner"
 import { buildTavilySearchOptions, TavilySearchPrefs } from "@/lib/tavily-search"
 
 // ============================================================
-// Competitor Scanner — Discovers and scans competitor content
+// Competitor Scanner — Discovers competitor domains
+//
+// Scanning moved to lib/harvest/coverage.ts, which runs the same coverage
+// computation for competitors as for the user's own site. Discovery stays here
+// because it is real Tavily search plus an LLM filter over actual results.
 // ============================================================
 
 interface DiscoveredCompetitor {
@@ -201,136 +203,3 @@ Be very selective. 3-5 truly relevant competitors is better than 10 loosely rela
  * First tries sitemap → title extraction.
  * Falls back to Tavily search if sitemap is unavailable.
  */
-async function scanCompetitorSite(
-    competitor: DiscoveredCompetitor,
-    blueprintEmbeddings: TopicEmbedding[],
-    blueprint: NicheBlueprint,
-    searchPrefs?: TavilySearchPrefs
-): Promise<SiteCoverage> {
-    console.log(`[Competitor Scanner] Scanning ${competitor.name} (${competitor.url})...`)
-
-    // Strategy 1: Try sitemap
-    let urls = await fetchAllSitemapUrls(competitor.url)
-
-    // Strategy 2: If sitemap fails, use Tavily to discover content pages
-    if (urls.length === 0) {
-        console.log(`[Competitor Scanner] No sitemap for ${competitor.name}, falling back to Tavily`)
-        urls = await discoverContentViaTavily(competitor.domain, competitor.name, searchPrefs)
-    }
-
-    if (urls.length === 0) {
-        console.warn(`[Competitor Scanner] No content found for ${competitor.name}`)
-        return {
-            site_url: competitor.url,
-            site_name: competitor.name,
-            pages_analyzed: 0,
-            pillar_coverage: blueprint.pillars.map(p => ({
-                pillar_name: p.name,
-                pillar_weight: p.weight,
-                covered_topics: [],
-                missing_topics: p.required_topics,
-                score: 0
-            })),
-            overall_score: 0
-        }
-    }
-
-    // Filter non-content URLs
-    const contentUrls = urls.filter(url => {
-        const lower = url.toLowerCase()
-        return !lower.match(/\.(jpg|jpeg|png|gif|svg|pdf|css|js|woff|woff2|ttf|ico|xml|json)$/)
-            && !lower.includes('/wp-admin/')
-            && !lower.includes('/tag/')
-            && !lower.includes('/category/')
-            && !lower.includes('/author/')
-    })
-
-    // Cap at 150 pages per competitor (less than user's 200)
-    const pagesToScan = contentUrls.slice(0, 150)
-    console.log(`[Competitor Scanner] ${competitor.name}: scanning ${pagesToScan.length} pages`)
-
-    // Extract titles
-    const pages = await batchExtractTitles(pagesToScan)
-    const meaningfulPages = pages.filter(p =>
-        p.title.length > 5
-        && !['home', 'about', 'contact', 'privacy policy', 'terms of service', 'login', 'sign up', 'careers', 'jobs', 'team']
-            .includes(p.title.toLowerCase())
-    )
-
-    // Map to blueprint using shared embeddings
-    return mapCoverageWithEmbeddings(
-        meaningfulPages,
-        blueprintEmbeddings,
-        competitor.url,
-        competitor.name,
-        blueprint
-    )
-}
-
-/**
- * Fallback: use Tavily search to discover competitor content pages
- * when sitemap is not available.
- */
-async function discoverContentViaTavily(
-    domain: string,
-    brandName: string,
-    searchPrefs?: TavilySearchPrefs
-): Promise<string[]> {
-    const apiKey = process.env.TAVILY_API_KEY
-    if (!apiKey) return []
-
-    try {
-        const tvly = tavily({ apiKey })
-
-        // Search for blog/content pages on the competitor's site
-        const { modifiedQuery, options } = buildTavilySearchOptions(`site:${domain} guide how to`, searchPrefs, {
-            maxResults: 10,
-            searchDepth: "basic"
-        })
-        const response = await tvly.search(modifiedQuery, options)
-
-        const urls = (response.results || [])
-            .map(r => r.url)
-            .filter((url): url is string => !!url)
-
-        console.log(`[Competitor Scanner] Tavily found ${urls.length} pages for ${brandName}`)
-        return Array.from(new Set(urls))
-
-    } catch (error) {
-        console.error(`[Competitor Scanner] Tavily fallback failed for ${brandName}:`, error)
-        return []
-    }
-}
-
-/**
- * Scans all competitors in parallel (limited to 3 concurrent).
- */
-export async function scanAllCompetitors(
-    competitors: DiscoveredCompetitor[],
-    blueprintEmbeddings: TopicEmbedding[],
-    blueprint: NicheBlueprint,
-    maxConcurrent: number = 2,
-    searchPrefs?: TavilySearchPrefs
-): Promise<SiteCoverage[]> {
-    const results: SiteCoverage[] = []
-
-    // Process in batches to avoid overwhelming APIs
-    for (let i = 0; i < competitors.length; i += maxConcurrent) {
-        const batch = competitors.slice(i, i + maxConcurrent)
-        const batchResults = await Promise.allSettled(
-            batch.map(comp => scanCompetitorSite(comp, blueprintEmbeddings, blueprint, searchPrefs))
-        )
-
-        for (const result of batchResults) {
-            if (result.status === "fulfilled") {
-                results.push(result.value)
-            }
-        }
-    }
-
-    // Sort by score descending (strongest competitor first)
-    results.sort((a, b) => b.overall_score - a.overall_score)
-
-    console.log(`[Competitor Scanner] Scanned ${results.length} competitors. Scores: ${results.map(r => `${r.site_name}: ${r.overall_score}`).join(', ')}`)
-    return results
-}

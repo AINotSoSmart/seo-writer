@@ -1,10 +1,15 @@
 import Sitemapper from "sitemapper"
-import { generateEmbedding } from "@/lib/gemini-embedding"
 import { extractTitleFromUrl } from "@/lib/internal-linking"
-import { NicheBlueprint, SiteCoverage, PillarCoverage, CoveredTopic, PageInfo, TopicEmbedding } from "./types"
+import { PageInfo } from "./types"
 
 // ============================================================
-// Site Scanner — Crawls a website and maps coverage to blueprint
+// Site Scanner — sitemap discovery and page-metadata utilities.
+//
+// The blueprint-mapping functions that used to live here (scanSite,
+// mapCoverageWithEmbeddings, generateBlueprintEmbeddings) are gone: they
+// scored sites against an LLM-invented topic list and matched on page titles
+// alone. Coverage now lives in lib/harvest/coverage.ts, which matches against
+// the harvested query pool using full page documents.
 // ============================================================
 
 /**
@@ -182,7 +187,7 @@ export async function extractPageTitle(url: string): Promise<PageInfo> {
  * Cleans a page title by removing common suffixes like "| Brand Name", "- Company"
  * AND sanitizes control characters (null bytes) that crash Postgres.
  */
-function cleanPageTitle(title: string): string {
+export function cleanPageTitle(title: string): string {
     // 1. Remove control characters (null bytes, etc) - CRITICAL for Postgres
     // eslint-disable-next-line no-control-regex
     title = title.replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
@@ -248,55 +253,6 @@ export async function batchExtractTitles(
 }
 
 /**
- * Generates embeddings for all blueprint topics.
- * These are cached and reused across user site + competitor scans.
- */
-export async function generateBlueprintEmbeddings(
-    blueprint: NicheBlueprint
-): Promise<TopicEmbedding[]> {
-    const topicEmbeddings: TopicEmbedding[] = []
-
-    // Flatten all topics from all pillars
-    const allTopics: { question: string; pillar_name: string; importance: "critical" | "important" | "supporting" }[] = []
-
-    for (const pillar of blueprint.pillars) {
-        for (const topic of pillar.required_topics) {
-            allTopics.push({
-                question: topic.question,
-                pillar_name: pillar.name,
-                importance: topic.importance
-            })
-        }
-    }
-
-    // Generate embeddings in batches of 5 (rate limit friendly)
-    const BATCH_SIZE = 5
-    for (let i = 0; i < allTopics.length; i += BATCH_SIZE) {
-        const batch = allTopics.slice(i, i + BATCH_SIZE)
-        const embeddings = await Promise.allSettled(
-            batch.map(t => generateEmbedding(t.question))
-        )
-
-        for (let j = 0; j < batch.length; j++) {
-            const embResult = embeddings[j]
-            if (embResult.status === "fulfilled") {
-                topicEmbeddings.push({
-                    question: batch[j].question,
-                    pillar_name: batch[j].pillar_name,
-                    importance: batch[j].importance,
-                    embedding: embResult.value
-                })
-            } else {
-                console.warn(`[Site Scanner] Failed to embed topic: "${batch[j].question}"`)
-            }
-        }
-    }
-
-    console.log(`[Site Scanner] Generated ${topicEmbeddings.length}/${allTopics.length} blueprint embeddings`)
-    return topicEmbeddings
-}
-
-/**
  * Cosine similarity between two vectors.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -314,176 +270,14 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
- * Maps a site's pages to the niche blueprint using embedding similarity.
- * 
- * Thresholds:
- * - >= 0.78: strong coverage
- * - 0.60-0.78: partial coverage  
- * - < 0.60: not covered
+ * Filters a sitemap's URLs down to plausible content pages.
+ *
+ * Extracted from the deleted `scanSite()` so the harvest coverage scanner
+ * reuses the same rules instead of scanning assets, admin paths, and taxonomy
+ * archives.
  */
-export async function mapCoverageWithEmbeddings(
-    pages: PageInfo[],
-    blueprintEmbeddings: TopicEmbedding[],
-    siteUrl: string,
-    siteName: string,
-    blueprint: NicheBlueprint
-): Promise<SiteCoverage> {
-    // Generate embeddings for page titles
-    const pageEmbeddings: { page: PageInfo; embedding: number[] }[] = []
-
-    const BATCH_SIZE = 5
-    for (let i = 0; i < pages.length; i += BATCH_SIZE) {
-        const batch = pages.slice(i, i + BATCH_SIZE)
-        const embeddings = await Promise.allSettled(
-            batch.map(p => generateEmbedding(p.title))
-        )
-
-        for (let j = 0; j < batch.length; j++) {
-            const embResult = embeddings[j]
-            if (embResult.status === "fulfilled") {
-                pageEmbeddings.push({
-                    page: batch[j],
-                    embedding: embResult.value
-                })
-            }
-        }
-    }
-
-    console.log(`[Site Scanner] Generated ${pageEmbeddings.length} page embeddings for ${siteName}`)
-
-    // Build coverage map: for each blueprint topic, find the best-matching page
-    const pillarCoverageMap = new Map<string, { covered: CoveredTopic[], missing: typeof blueprint.pillars[0]["required_topics"] }>()
-
-    // Initialize for each pillar
-    for (const pillar of blueprint.pillars) {
-        pillarCoverageMap.set(pillar.name, { covered: [], missing: [] })
-    }
-
-    for (const topicEmb of blueprintEmbeddings) {
-        let bestMatch: { page: PageInfo; similarity: number } | null = null
-
-        for (const pageEmb of pageEmbeddings) {
-            const sim = cosineSimilarity(topicEmb.embedding, pageEmb.embedding)
-            if (!bestMatch || sim > bestMatch.similarity) {
-                bestMatch = { page: pageEmb.page, similarity: sim }
-            }
-        }
-
-        const pillarData = pillarCoverageMap.get(topicEmb.pillar_name)
-        if (!pillarData) continue
-
-        // Tightened thresholds: 0.82+ strong, 0.72+ partial
-        if (bestMatch && bestMatch.similarity >= 0.72) {
-            const quality = bestMatch.similarity >= 0.82 ? "strong" as const
-                : "partial" as const
-            pillarData.covered.push({
-                topic_question: topicEmb.question,
-                covered_by_url: bestMatch.page.url,
-                covered_by_title: bestMatch.page.title,
-                coverage_quality: quality,
-                similarity_score: Math.round(bestMatch.similarity * 100) / 100
-            })
-            // Debug: log exactly what matched
-            console.log(`[Coverage] ✓ ${quality.toUpperCase()} (${(bestMatch.similarity * 100).toFixed(1)}%) "${topicEmb.question}" → "${bestMatch.page.title}"`)
-        } else {
-            // Not covered — add to missing
-            pillarData.missing.push({
-                question: topicEmb.question,
-                intent: "informational",
-                importance: topicEmb.importance
-            })
-            // Debug: log what failed to match and why
-            if (bestMatch) {
-                console.log(`[Coverage] ✗ MISS (${(bestMatch.similarity * 100).toFixed(1)}%) "${topicEmb.question}" — best: "${bestMatch.page.title}"`)
-            } else {
-                console.log(`[Coverage] ✗ MISS (no pages) "${topicEmb.question}"`)
-            }
-        }
-    }
-
-    // Build pillar coverage scores
-    const pillarCoverages: PillarCoverage[] = blueprint.pillars.map(pillar => {
-        const data = pillarCoverageMap.get(pillar.name)!
-        const totalTopics = pillar.required_topics.length
-        if (totalTopics === 0) {
-            return {
-                pillar_name: pillar.name,
-                pillar_weight: pillar.weight,
-                covered_topics: [],
-                missing_topics: [],
-                score: 0
-            }
-        }
-
-        // Weighted score: strong = 1.0, partial = 0.5
-        const strongCount = data.covered.filter(c => c.coverage_quality === "strong").length
-        const partialCount = data.covered.filter(c => c.coverage_quality === "partial").length
-        const effectiveCoverage = strongCount + (partialCount * 0.5)
-        const score = Math.round((effectiveCoverage / totalTopics) * 100)
-
-        // Debug: log pillar breakdown
-        console.log(`[Coverage] Pillar "${pillar.name}": ${strongCount} strong + ${partialCount} partial / ${totalTopics} topics = ${Math.min(100, score)}/100 (weight: ${pillar.weight})`)
-
-        return {
-            pillar_name: pillar.name,
-            pillar_weight: pillar.weight,
-            covered_topics: data.covered,
-            missing_topics: data.missing,
-            score: Math.min(100, score)
-        }
-    })
-
-    // Calculate weighted overall score
-    const totalWeight = pillarCoverages.reduce((sum, p) => sum + p.pillar_weight, 0)
-    const weightedScore = totalWeight > 0
-        ? pillarCoverages.reduce((sum, p) => sum + (p.score * p.pillar_weight), 0) / totalWeight
-        : 0
-    const overallScore = Math.round(weightedScore)
-
-    console.log(`[Coverage] Overall score for ${siteName}: ${overallScore}/100 (${pillarCoverages.length} pillars, totalWeight: ${totalWeight})`)
-
-    return {
-        site_url: siteUrl,
-        site_name: siteName,
-        pages_analyzed: pages.length,
-        pillar_coverage: pillarCoverages,
-        overall_score: overallScore
-    }
-}
-
-/**
- * Full site scan: fetch sitemap → extract titles → map to blueprint.
- * 
- * Requires pre-generated blueprint embeddings (from generateBlueprintEmbeddings).
- */
-export async function scanSite(
-    websiteUrl: string,
-    siteName: string,
-    blueprintEmbeddings: TopicEmbedding[],
-    blueprint: NicheBlueprint
-): Promise<SiteCoverage> {
-    // 1. Fetch sitemap URLs
-    const urls = await fetchAllSitemapUrls(websiteUrl)
-
-    if (urls.length === 0) {
-        console.warn(`[Site Scanner] No URLs found for ${websiteUrl}, returning empty coverage`)
-        return {
-            site_url: websiteUrl,
-            site_name: siteName,
-            pages_analyzed: 0,
-            pillar_coverage: blueprint.pillars.map(p => ({
-                pillar_name: p.name,
-                pillar_weight: p.weight,
-                covered_topics: [],
-                missing_topics: p.required_topics,
-                score: 0
-            })),
-            overall_score: 0
-        }
-    }
-
-    // Filter out obvious non-content pages (assets, images, etc.)
-    const contentUrls = urls.filter(url => {
+export function filterContentUrls(urls: string[]): string[] {
+    return urls.filter(url => {
         const lower = url.toLowerCase()
         return !lower.match(/\.(jpg|jpeg|png|gif|svg|pdf|css|js|woff|woff2|ttf|ico|xml|json)$/)
             && !lower.includes('/wp-admin/')
@@ -494,27 +288,17 @@ export async function scanSite(
             && !lower.includes('/author/')
             && !lower.includes('/page/')
     })
+}
 
-    // Cap at 200 pages to keep costs/time reasonable
-    const pagesToScan = contentUrls.slice(0, 200)
-    console.log(`[Site Scanner] Scanning ${pagesToScan.length} content pages (filtered from ${urls.length} total) for ${siteName}`)
+/** Titles too generic to carry any topical signal */
+const GENERIC_TITLES = new Set([
+    'home', 'about', 'contact', 'privacy policy', 'terms of service',
+    'login', 'sign up', 'register', 'careers', 'jobs', 'team', 'sitemap'
+])
 
-    // 2. Extract titles
-    const pages = await batchExtractTitles(pagesToScan)
-
-    // Filter out pages with very generic titles (like "Home", "About", "Contact")
-    const meaningfulPages = pages.filter(p =>
-        p.title.length > 5
-        && !['home', 'about', 'contact', 'privacy policy', 'terms of service', 'login', 'sign up', 'register', 'careers', 'jobs', 'team', 'sitemap']
-            .includes(p.title.toLowerCase())
-    )
-
-    // 3. Map to blueprint using embeddings
-    return mapCoverageWithEmbeddings(
-        meaningfulPages,
-        blueprintEmbeddings,
-        websiteUrl,
-        siteName,
-        blueprint
-    )
+/**
+ * True when a page title carries enough signal to be worth matching against.
+ */
+export function hasMeaningfulTitle(title: string): boolean {
+    return title.length > 5 && !GENERIC_TITLES.has(title.toLowerCase())
 }

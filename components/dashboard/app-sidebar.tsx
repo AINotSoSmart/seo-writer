@@ -114,16 +114,11 @@ export function AppSidebar({
       url: "/articles",
       icon: FeatherIcon,
     },
-    {
-      title: "SEO Health",
-      url: "/seo-health",
-      icon: SyringeIcon,
-    },
-    {
-      title: "Action Board",
-      url: "/action-board",
-      icon: Target,
-    },
+    // ARCHIVED — "SEO Health" and "Action Board" are hidden, not deleted.
+    // They were a GSC tracking product bolted onto a writing product, nobody
+    // paid for either, and their content pulled the site's own SEO toward
+    // rank-tracking queries that could never convert. Routes and code remain
+    // under app/(protected)/ in case an agency asks for GSC reporting later.
     {
       title: "Settings",
       url: "/settings",
