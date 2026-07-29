@@ -69,7 +69,7 @@ export default function Hero() {
         </Link>
 
         <p className="mt-4 text-[11px] text-stone-400 tracking-wide">
-          Full evidence audit, free &middot; verify every source before you pay
+          Full evidence audit, free &middot; valid for 30 days &middot; verify every source
         </p>
       </div>
 

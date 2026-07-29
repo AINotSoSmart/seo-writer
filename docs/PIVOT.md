@@ -79,7 +79,9 @@ The old “two free articles/credits” offer is retired. The free product is th
 evidence audit. Paid article generation begins only after an eligible audit and
 purchase intent. `subscription_period_grants` is the authoritative paid
 allowance; any `credits` balance is an internal compatibility mirror, never a
-customer-facing wallet.
+customer-facing wallet. A completed free audit is reused for 30 days, matching
+the checkout-validity window; the public endpoint cannot create unlimited
+same-site reruns during that period.
 
 ## 2. Implementation status
 
@@ -454,6 +456,9 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
   defaults to zero, removes only unbacked historical two-credit grants, and
   guards the compatibility balance against future free grants while continuing
   to allow balances backed by a paid `subscription_period_grants` row.
+- Added a server-side 30-day reuse guard for completed customer audits. The free
+  audit is a deliberate risk-reversal offer, not an unlimited external-API
+  allowance.
 - Extended the pivot contract suite so retired offers, stale promises, unnamed
   positioning, and a reintroduced free-credit default fail validation.
 

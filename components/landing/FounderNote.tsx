@@ -118,7 +118,7 @@ export default function FounderNote() {
                                     </Button>
                                 </Link>
                                 <p className="text-[9px] text-stone-400 font-bold uppercase tracking-widest text-center">
-                                    Full audit, free &middot; no credit card
+                                    Full audit, free &middot; one current audit per site
                                 </p>
                             </div>
 

@@ -73,6 +73,36 @@ export async function POST(req: NextRequest) {
             })
         }
 
+        // The evidence audit is free, but the external crawl/search work is
+        // expensive. Reuse a still-current completed run instead of allowing
+        // repeated POSTs (including crafted requests) to burn the same cost.
+        // This matches the checkout freshness window: after 30 days a fresh
+        // immutable run may be created.
+        const freshAfter = new Date(
+            Date.now() - HARVEST_POLICY.checkoutFreshnessDays * 24 * 60 * 60 * 1000,
+        ).toISOString()
+        const { data: recentCompleted } = await db
+            .from("topical_audits")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("brand_id", brandId)
+            .eq("audit_kind", "customer")
+            .eq("run_status", "completed")
+            .eq("requires_reaudit", false)
+            .gte("completed_at", freshAfter)
+            .order("completed_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (recentCompleted?.id) {
+            return NextResponse.json({
+                message: "Your current evidence audit is still valid",
+                status: "completed",
+                auditId: recentCompleted.id,
+                reused: true,
+            })
+        }
+
         const publicToken = randomBytes(24).toString("hex")
         const { data: audit, error: insertError } = await db
             .from("topical_audits")

@@ -391,11 +391,13 @@ test("active product copy has no retired contract claims", async () => {
 })
 
 test("the public buyer is founder-led B2B SaaS and signup credits are retired", async () => {
-    const [hero, founderNote, seo, migration] = await Promise.all([
+    const [hero, founderNote, seo, migration, auditRoute, harvestPolicy] = await Promise.all([
         text("components/landing/Hero.tsx"),
         text("components/landing/FounderNote.tsx"),
         text("config/seo.ts"),
         text("supabase/migrations/20260730_retire_free_signup_credits.sql"),
+        text("app/api/topical-audit/route.ts"),
+        text("lib/harvest/policy.ts"),
     ])
 
     assert.match(hero, /FOR FOUNDER-LED B2B SAAS/)
@@ -406,6 +408,10 @@ test("the public buyer is founder-led B2B SaaS and signup credits are retired", 
     assert.match(migration, /subscription_period_grants/)
     assert.match(migration, /guard_legacy_credit_mirror/)
     assert.match(migration, /c\.credits <= 2/)
+    assert.match(harvestPolicy, /checkoutFreshnessDays:\s*30/)
+    assert.match(auditRoute, /HARVEST_POLICY\.checkoutFreshnessDays/)
+    assert.match(auditRoute, /\.eq\("requires_reaudit", false\)/)
+    assert.match(auditRoute, /reused:\s*true/)
 })
 
 test("onboarding uses a focused authenticated shell outside the dashboard sidebar", async () => {
