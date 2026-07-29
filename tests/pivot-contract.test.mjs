@@ -205,7 +205,14 @@ test("verify and production use the same authoritative assembly function", async
     assert.match(policy, /maxCompetitors:\s*4/)
     assert.match(policy, /maxQueries:\s*400/)
     assert.match(policy, /maxCompetitorCorpusPages:\s*120/)
-    assert.match(policy, /maxCoveragePages:\s*250/)
+    // Bounded so the worst-case audit fits the 900s task budget:
+    // 150 subject + 4x80 competitor coverage + 120 corpus = 590 page fetches.
+    assert.match(policy, /maxCoveragePages:\s*150/)
+    assert.match(policy, /maxCompetitorCoveragePages:\s*80/)
+    assert.match(
+        await text("lib/harvest/assembly.ts"),
+        /scanCoverage\([\s\S]{0,120}"competitor",/,
+    )
     assert.match(policy, /maxSitemapFiles:\s*20/)
     assert.match(policy, /maxSitemapUrls:\s*5000/)
     assert.match(policy, /maxClusterArticles:\s*15/)

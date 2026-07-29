@@ -6,6 +6,10 @@
 
 Branch: `pivot/closed-pool-harvest`
 
+Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
+plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
+for what to do next.
+
 Last implementation update: 2026-07-30
 
 Status: **application contract implemented and locally validated; checkout remains
@@ -402,6 +406,36 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 12. Keep checkout disabled until the manual external gate passes.
 
 ## 7. Changelog
+
+### 2026-07-30 - scale hardening (autocomplete resilience, IO bounds, solo gate)
+
+- **`lib/harvest/suggest-client.ts`** (new). The harvester and the demand filter
+  now share one Google Suggest client with retry, exponential backoff + jitter,
+  explicit 429/5xx handling honouring `retry-after`, and a process cache (1h TTL,
+  5k entries). Each module previously had a bare `fetch` with no retry, and ~300
+  requests per audit go to an undocumented endpoint that the entire provenance
+  claim depends on. Provenance is unchanged: `requestUrl` is still the exact URL
+  that produced each string.
+  - For context, measured load is ~200 requests/day at 20 customers. Throttling
+    is a customer-50 concern, not a customer-1 concern. This is insurance.
+- **Bounded worst-case IO.** `maxCoveragePages` 250 -> 150, new
+  `maxCompetitorCoveragePages: 80`, and `scanCoverage` now takes a `role`
+  argument. Worst case per audit drops from 1,370 page fetches to 590 (~74s of
+  fetching against a 900s task budget). Competitors need only enough depth to
+  establish who owns a gap. Policy version -> `closed-pool-v2.3.0`.
+- **`tests/pivot-contract.test.mjs`** updated. The policy-value pin caught this
+  change, which is the pin doing its job. It now also asserts the competitor
+  coverage cap and that `assembly.ts` passes the `"competitor"` role.
+- **`docs/SOLO_LAUNCH_GATE.md`** (new). Six-item gate for customers 1-3 with an
+  explicit trigger condition for each deferred item from the 24-item gate. The
+  full gate is right for a product with revenue at risk; it is the wrong
+  sequencing for a solo founder with zero paying customers and an untested
+  distribution channel. Selling does not require checkout to be enabled — the
+  public audit route works today and the first three can pay by invoice.
+- Verified after all changes: `tsc` clean, 14/14 contract tests, and a live
+  `/api/harvest/verify` run passing all four checks (395 pool, 225 gaps, 28.4%
+  collapse, 105s).
+
 
 ### 2026-07-30 - final local contract pass
 

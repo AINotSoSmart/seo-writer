@@ -3,11 +3,17 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "closed-pool-v2.2.0",
+    version: "closed-pool-v2.3.0",
     maxCompetitors: 4,
     maxQueries: 400,
     maxCompetitorCorpusPages: 120,
-    maxCoveragePages: 250,
+    maxCoveragePages: 150,
+    /**
+     * Competitors only need enough depth to establish who owns a gap, not the
+     * full-depth scan the customer's own site gets. Without a separate cap the
+     * worst case was 250 + 4x250 page fetches inside a 900s task budget.
+     */
+    maxCompetitorCoveragePages: 80,
     maxSitemapFiles: 20,
     maxSitemapUrls: 5000,
     maxClusterArticles: 15,

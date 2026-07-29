@@ -316,6 +316,7 @@ export async function assembleHarvest(
                 competitor,
                 competitor,
                 poolQueries,
+                "competitor",
             )
             if (coverage.pagesScanned === 0) {
                 throw new Error("no readable content pages")

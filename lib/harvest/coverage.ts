@@ -172,7 +172,9 @@ function percentile(sorted: number[], p: number): number {
 export async function scanCoverage(
     siteUrl: string,
     siteName: string,
-    poolQueries: PoolQuery[]
+    poolQueries: PoolQuery[],
+    /** Competitor scans use a smaller page budget — see HARVEST_POLICY */
+    role: "subject" | "competitor" = "subject"
 ): Promise<SiteCoverageResult> {
     const urls = await fetchAllSitemapUrls(siteUrl)
 
@@ -207,7 +209,11 @@ export async function scanCoverage(
         `[Coverage] ${siteName}: ${contentUrls.length} content pages (from ${urls.length} sitemap URLs)`
     )
 
-    const attemptedUrls = contentUrls.slice(0, HARVEST_POLICY.maxCoveragePages)
+    const pageBudget =
+        role === "competitor"
+            ? HARVEST_POLICY.maxCompetitorCoveragePages
+            : HARVEST_POLICY.maxCoveragePages
+    const attemptedUrls = contentUrls.slice(0, pageBudget)
     const allDocuments = await batchExtractDocuments(attemptedUrls)
 
     // Drop pages whose titles carry no topical signal ("Home", "Contact", ...)

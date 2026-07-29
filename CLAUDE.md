@@ -2,6 +2,16 @@
 
 ## Read this first
 
+If the founder is asking "how does this actually work", point them at
+**[`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** — plain-language, no jargon.
+Keep it in sync when behaviour changes; if it disagrees with the code, the code
+is right and the doc is a bug.
+
+If the founder is asking "what do I do next", the answer is
+**[`docs/SOLO_LAUNCH_GATE.md`](docs/SOLO_LAUNCH_GATE.md)** — a six-item gate for
+customers 1-3. `docs/CLOSED_POOL_RELEASE_GATE.md` is the full 24-item version;
+it is correct but sequenced for a product that already has revenue at risk.
+
 This repo is mid-pivot. **[`docs/PIVOT.md`](docs/PIVOT.md) is the source of truth**
 for what is being built, why, how it works, what is calibrated, and what is still
 open. Read it fully before changing anything under `lib/harvest/`, `lib/audit/`,

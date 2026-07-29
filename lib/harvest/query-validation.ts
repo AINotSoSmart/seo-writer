@@ -22,8 +22,8 @@
  */
 
 import { HarvestedQuery, HarvestOptions, mapWithConcurrency, normalizeQuery } from "./types"
+import { fetchSuggest } from "./suggest-client"
 
-const AUTOCOMPLETE_URL = "https://suggestqueries.google.com/complete/search"
 const CONCURRENCY = 6
 
 /**
@@ -67,41 +67,23 @@ function contentWords(text: string): string[] {
         .filter((w) => w.length > 2 && !STOPWORDS.has(w))
 }
 
-interface SuggestOutcome {
-    suggestions: string[]
-    /**
-     * False only when the request itself failed. A successful response with an
-     * empty array is real evidence of no demand and must not be conflated with
-     * a network error — doing so let 72 checks resolve as "inconclusive" and
-     * pass page furniture straight through.
-     */
-    ok: boolean
-}
-
+/**
+ * Demand checks share the resilient client in ./suggest-client, so they inherit
+ * retry, backoff, 429 handling, and the process cache. The cache matters here:
+ * this stage and the harvester query overlapping prefixes within one audit, and
+ * a re-audit repeats them entirely.
+ *
+ * `ok` is false only when the request itself failed. A successful response with
+ * an empty array is real evidence of no demand and must not be conflated with a
+ * network error — conflating them once let 72 checks resolve as "inconclusive"
+ * and passed page furniture straight through.
+ */
 async function fetchSuggestions(
     query: string,
     options: HarvestOptions
-): Promise<SuggestOutcome> {
-    const params = new URLSearchParams({
-        client: "chrome",
-        q: query,
-        hl: options.language || "en",
-    })
-    if (options.countryCode) params.set("gl", options.countryCode)
-
-    try {
-        const response = await fetch(`${AUTOCOMPLETE_URL}?${params.toString()}`)
-        if (!response.ok) return { suggestions: [], ok: false }
-
-        const data = await response.json()
-        // Malformed payload is a failure; a well-formed empty array is a result.
-        if (!Array.isArray(data) || !Array.isArray(data[1])) {
-            return { suggestions: [], ok: false }
-        }
-        return { suggestions: data[1], ok: true }
-    } catch {
-        return { suggestions: [], ok: false }
-    }
+): Promise<{ suggestions: string[]; ok: boolean }> {
+    const result = await fetchSuggest(query, options)
+    return { suggestions: result.suggestions, ok: result.ok }
 }
 
 /**

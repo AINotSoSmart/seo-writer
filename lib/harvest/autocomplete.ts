@@ -27,8 +27,7 @@ import {
     mapWithConcurrency,
     buildSourceReport,
 } from "./types"
-
-const AUTOCOMPLETE_URL = "https://suggestqueries.google.com/complete/search"
+import { fetchSuggest, type SuggestResult } from "./suggest-client"
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("")
 
@@ -41,71 +40,18 @@ const CONCURRENCY = 6
 /** Cap on level-2 expansions — this is where the request count explodes */
 const LEVEL_TWO_LIMIT = 20
 
-interface SuggestResponse {
-    /** The full request URL — this is the provenance record */
-    requestUrl: string
-    prefix: string
-    suggestions: string[]
-    ok: boolean
-    error?: string
-}
-
 /**
- * Builds the exact Suggest URL for a prefix.
- * Kept separate so the stored provenance URL is byte-identical to the one used.
+ * Suggest requests go through the shared client in ./suggest-client, which adds
+ * retry, backoff, 429 handling, and a process cache. Provenance is unchanged:
+ * `requestUrl` on the result is still the exact URL that produced the string.
  */
-function buildSuggestUrl(prefix: string, options: HarvestOptions): string {
-    const params = new URLSearchParams({
-        client: "chrome",
-        q: prefix,
-        hl: options.language || "en",
-    })
-    if (options.countryCode) {
-        params.set("gl", options.countryCode)
-    }
-    return `${AUTOCOMPLETE_URL}?${params.toString()}`
-}
+type SuggestResponse = SuggestResult
 
-/**
- * Fetches raw autocomplete suggestions for a single prefix.
- * Reports failure rather than hiding it, so the caller can tell an empty
- * response from a broken endpoint.
- */
 async function fetchSuggestions(
     prefix: string,
     options: HarvestOptions
 ): Promise<SuggestResponse> {
-    const requestUrl = buildSuggestUrl(prefix, options)
-
-    try {
-        const response = await fetch(requestUrl)
-        if (!response.ok) {
-            return {
-                requestUrl,
-                prefix,
-                suggestions: [],
-                ok: false,
-                error: `HTTP ${response.status}`,
-            }
-        }
-
-        // Response shape: ["prefix", ["suggestion1", "suggestion2", ...], ...]
-        const data = await response.json()
-        return {
-            requestUrl,
-            prefix,
-            suggestions: Array.isArray(data?.[1]) ? data[1] : [],
-            ok: true,
-        }
-    } catch (error: any) {
-        return {
-            requestUrl,
-            prefix,
-            suggestions: [],
-            ok: false,
-            error: error?.message || "fetch failed",
-        }
-    }
+    return fetchSuggest(prefix, options)
 }
 
 /**
