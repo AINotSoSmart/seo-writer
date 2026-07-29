@@ -144,14 +144,35 @@ customer who'd churn in two months.
 The customer sees: *"Your niche is 63 articles across 5 clusters. Here are the
 six best. Choose how fast you want them."*
 
-| Tier | Price/month | Speed | Finishes in |
-|---|---|---|---|
-| Close | $249 | 1 cluster/month | 6 months |
-| Accelerate | $449 | 2 clusters/month | 3 months |
-| Dominate | $799 | 4 clusters/month | ~2 months |
+| Tier | Price/month | Speed | Payments | **Total** | Per cluster |
+|---|---|---|---|---|---|
+| Close | $249 | 1 cluster/month | 6 | **$1,494** | $249.00 |
+| Accelerate | $449 | 2 clusters/month | 3 | **$1,347** | $224.50 |
+| Dominate | $599 | 3 clusters/month | 2 | **$1,198** | $199.67 |
 
 **Same work. Same six clusters. Only the speed differs.** You're selling
 delivery rate, not quantity — that's why a big niche doesn't cost you money.
+
+### Why the cluster counts are 1, 2 and 3 — never 4
+
+Every tier's cluster count **must divide 6 exactly**, so the subscription ends on
+a whole billing period.
+
+Dominate used to ship 4 clusters a month. Six doesn't divide by four, so the
+second period delivered only 2 clusters but still charged a full $799 — which
+made the *fastest* tier the *most expensive overall* ($1,598), and made Close
+strictly worse than Accelerate on both price and speed. Nobody could explain the
+table, including the people who wrote it.
+
+With 1, 2 and 3 the periods come out at 6, 3 and 2, the per-cluster price falls
+as speed rises (an ordinary volume discount), and the subscription always ends
+cleanly.
+
+This matters technically too: **Dodo has no "limit the number of billing cycles"
+field** on subscription creation. A program ends by calling
+`cancel_at_next_billing_date` after cluster six (see
+`lib/harvest/billing-lifecycle.ts`). Landing on a whole period is what keeps that
+from becoming a partial-period refund problem.
 
 ### What "freezing" means
 
@@ -234,18 +255,24 @@ real.
 
 ## 10. What it costs you per customer
 
-| Item | Rough cost |
+Calculated from your provider rates (Gemini $0.50/M in, $3.00/M out; Tavily
+$0.008/credit; images $0.005/megapixel):
+
+| Item | Cost |
 |---|---|
-| One audit | Cents (Tavily + embeddings) |
-| One article | **Not yet measured** |
-| One cluster (12 articles) | **Not yet measured** |
+| One audit | ~$0.20 |
+| One article | **$0.13 – $0.33** |
+| One cluster (12 articles) | **~$2 – $4** |
+| Fixed monthly stack | $95 (Supabase $25 + Vercel $20 + Trigger $50) |
 
-**This is the last unknown that can change your pricing.** The system now records
-every AI call's real token usage into a `program_cost_events` table. Generate one
-real cluster, add up the costs, and compare against $249.
+Even taking a very conservative $1.00 per article, a 12-article cluster costs
+about $12 against $249 of revenue — **95% gross margin**. One customer's first
+cluster covers the entire monthly infrastructure bill.
 
-If a cluster costs more than about $60, the tier prices go up. Don't sell before
-you know this number.
+**Cost does not constrain your price.** Price is a positioning and volume
+decision, not a cost-recovery one. `program_cost_events` still records real token
+usage per call, so verify this against a live cluster before scaling — but the
+order of magnitude is settled.
 
 ---
 

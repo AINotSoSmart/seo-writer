@@ -47,7 +47,7 @@ The three velocity tiers are defined once in `config/product-truth.ts`:
 |---|---:|---|
 | Close | $249 | One cluster per 30-day period |
 | Accelerate | $449 | Two clusters per 30-day period, 15 days apart |
-| Dominate | $799 | Four clusters per 30-day period, spaced 7/8 days apart |
+| Dominate | $599 | Three clusters per 30-day period, spaced ~10 days apart |
 
 These are delivery speeds for the same finite six-cluster scope. They are not
 article quotas and do not promise rankings, traffic, citations, or domination.
@@ -406,6 +406,57 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 12. Keep checkout disabled until the manual external gate passes.
 
 ## 7. Changelog
+
+### 2026-07-30 - pricing coherence, landing restore, positioning
+
+**Pricing — Dominate 4x$799 -> 3x$599.** Every tier's cluster count must divide
+`programClusters` (6) exactly. Four does not, so Dominate's second period shipped
+2 clusters at a full $799 charge, totalling $1,598 — making the fastest tier the
+most expensive and leaving Close strictly dominated by Accelerate. Now:
+
+| Tier | Clusters/mo | Periods | Monthly | Total | Per cluster |
+|---|---|---|---|---|---|
+| Close | 1 | 6 | $249 | $1,494 | $249.00 |
+| Accelerate | 2 | 3 | $449 | $1,347 | $224.50 |
+| Dominate | 3 | 2 | $599 | $1,198 | $199.67 |
+
+Per-cluster price now falls monotonically with speed. Changed in
+`config/product-truth.ts`, `actions/harvest.ts`, `app/audit/[token]/page.tsx`,
+and `supabase/migrations/20260730_fix_dominate_tier.sql` (guarded — needs the new
+$599 Dodo product id before it will run).
+
+**Dodo capability check.** Verified against the API docs: subscription creation
+has **no** billing-cycle-limit field, so programs must end via
+`cancel_at_next_billing_date` on a whole period boundary. Discounts *do* support
+`subscription_cycles` (set to 1 for a first-period-only discount) and
+`trial_period_days` exists — so an intro offer is technically possible, but was
+rejected: the discount applies per *period* while value accrues per *cluster*, so
+the same $99 would buy 1 cluster on Close and 3 on Dominate.
+
+**Unit economics settled.** ~$0.13–0.33 per article at current provider rates;
+~95% margin at $249/cluster even assuming $1/article. Cost does not constrain
+price. See §10 of `HOW_IT_WORKS.md`.
+
+**Landing page restored.** Commits `4cafa1b`–`b71db31` had reduced `app/page.tsx`
+from 11 rendered sections to 3, replacing the design system with inline JSX while
+leaving the component files orphaned on disk. All 8 files restored from `2378a11`
+with **zero structural drift** — only text differs.
+
+**Positioning rewritten** around topical authority (the outcome) rather than
+content-gap analysis (the mechanism), after the earlier framing proved to be a
+diagnosis nobody pays for. Title, meta and keywords now target searched terms.
+AI-search relevance is stated as *how retrieval systems behave*, never as a
+promise about the customer's site.
+
+**Pricing section rebuilt for comprehension** — three tiers, and each card shows
+payments, total, and derived per-cluster price so no visitor has to do arithmetic.
+A three-panel strip above states what you buy (6 clusters), how many articles
+(48–90, exact count from the free audit) and when it ends (after cluster 6).
+
+**Hero mobile fixes.** Decorative crosshairs were colliding with the badge below
+`md`; now desktop-only. Sub-headline cut from 7 rendered lines to 4. Navbar CTA
+"Start Ranking in AI" -> "Run a free audit" (unprovable claim removed).
+
 
 ### 2026-07-30 - scale hardening (autocomplete resilience, IO bounds, solo gate)
 

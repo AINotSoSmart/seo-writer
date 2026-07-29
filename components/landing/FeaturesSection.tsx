@@ -455,7 +455,7 @@ const FeaturesSection: React.FC = () => {
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              Plenty of tools claim to build topical authority. FlipAEO is the one that shows you the evidence behind every topic it picked, and lets you open it before you pay.
+              Plenty of tools claim to build topical authority. Every gap we show you links to the page we observed it on — so you can check the work before you pay.
             </p>
           </div>
         </div>

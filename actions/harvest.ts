@@ -118,7 +118,7 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
     const velocity = [
         { tier: "close", clustersPerMonth: 1 },
         { tier: "accelerate", clustersPerMonth: 2 },
-        { tier: "dominate", clustersPerMonth: 4 },
+        { tier: "dominate", clustersPerMonth: 3 },
     ].map(({ tier, clustersPerMonth }) => ({
         tier,
         clustersPerMonth,

@@ -107,7 +107,7 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
             velocity: [
                 { tier: "close", clustersPerMonth: 1, months: 6 },
                 { tier: "accelerate", clustersPerMonth: 2, months: 3 },
-                { tier: "dominate", clustersPerMonth: 4, months: 2 },
+                { tier: "dominate", clustersPerMonth: 3, months: 2 },
             ],
             checkoutEligible,
             eligibilityReason: selection.reason || freshness.reason,

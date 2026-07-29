@@ -10,7 +10,7 @@ export default function Hero() {
     <section className="relative w-full max-w-5xl mx-auto px-6 py-12 md:pt-24 md:pb-12 flex flex-col items-center text-center">
 
       {/* Decorative Star/Crosshair Left */}
-      <div className="absolute sm:top-1/4 left-4 md:left-0 text-stone-400 ">
+      <div className="hidden md:block absolute sm:top-1/4 left-4 md:left-0 text-stone-400 ">
         <svg width="51" height="50" viewBox="0 0 51 50" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M26 1V20" stroke="black" strokeLinecap="round" />
           <path d="M26 30V49" stroke="black" strokeLinecap="round" />
@@ -25,7 +25,7 @@ export default function Hero() {
       </div>
 
       {/* Decorative Star Right */}
-      <div className="absolute sm:top-1/3 right-4 md:right-0 text-stone-800  animate-pulse">
+      <div className="hidden md:block absolute sm:top-1/3 right-4 md:right-0 text-stone-800  animate-pulse">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 3V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           <path d="M12 17V21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -56,8 +56,8 @@ export default function Hero() {
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-        FlipAEO maps every question your market asks, finds the ones your site cannot answer, and fills them with interlinked clusters until your coverage of that topic is complete. That completeness is what Google — and the AI tools built on top of it — use to decide which sites are worth trusting.
-        <strong className="text-black font-normal">{" "}And every gap we show you links to the page we observed it on, so you can check the work before you pay.</strong>
+FlipAEO finds every question your market asks that your site cannot answer, then fills the gaps with interlinked clusters until your coverage is complete.
+        <strong className="text-black font-normal">{" "}That completeness is what Google — and the AI tools built on top of it — use to decide which sites are worth trusting.</strong>
       </p>
 
       {/* CTA Button Container */}
