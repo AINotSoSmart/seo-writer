@@ -238,12 +238,31 @@ export default function OnboardingPage() {
                     ? data.scope_analysis_issues
                     : [],
             )
-            setSeedsWithoutDemand(
-                Array.isArray(data.seeds_without_demand)
-                    ? data.seeds_without_demand
-                    : [],
-            )
             setBrandData(data)
+
+            // Advisory-only and intentionally NOT awaited before this screen
+            // renders — see the incident note on findSeedsWithoutDemand in
+            // lib/harvest/query-validation.ts. Badges appear a moment later,
+            // or not at all if this is slow or fails.
+            const seeds: string[] = (data.scope_families || []).flatMap(
+                (family: { seed_keywords?: string[] }) => family.seed_keywords || [],
+            )
+            if (seeds.length > 0) {
+                fetch("/api/analyze-brand/demand-check", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ seeds }),
+                })
+                    .then((r) => r.json())
+                    .then((demand) =>
+                        setSeedsWithoutDemand(
+                            Array.isArray(demand.seedsWithoutDemand)
+                                ? demand.seedsWithoutDemand
+                                : [],
+                        ),
+                    )
+                    .catch(() => {})
+            }
         } catch (e: any) {
             setError(e.message || "An error occurred")
         } finally {

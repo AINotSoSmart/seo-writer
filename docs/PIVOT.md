@@ -425,17 +425,20 @@ migration history with `supabase migration repair` is a separate task, listed in
    It owns the final scope-aware `finalize_audit_run` and
    `assert_harvest_schema_ready` definitions. Do not deploy the application
    changes before this succeeds.
-8. Deploy application and Trigger.dev source with
+8. Apply `supabase/migrations/20260801_discard_unpurchased_audit.sql`. Adds the
+   `discard_unpurchased_audit(uuid)` operation; safe to skip only if no audit
+   ever needs discarding, which is not a bet worth making.
+9. Deploy application and Trigger.dev source with
    `CLOSED_POOL_CHECKOUT_ENABLED=false`.
-9. Confirm `program-lifecycle` is healthy.
-10. Only then archive these Trigger.dev schedules:
+10. Confirm `program-lifecycle` is healthy.
+11. Only then archive these Trigger.dev schedules:
    - `daily-content-watchman`
    - `seo-health-auto-refresh`
    - `sitemap-sync-scheduler`
    - `gsc-daily-auto-refresh`
    - `ship-cluster`
-11. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
-12. Enable checkout only on the exact commit that passed all gates.
+12. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
+13. Enable checkout only on the exact commit that passed all gates.
 
 Required server environment:
 
@@ -450,7 +453,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **28/28 test groups passed**.
+- `npm run test:pivot-contract`: **30/30 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -534,6 +537,152 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     business family; malformed strings may still receive structural sanitation.
 
 ## 7. Changelog
+
+### 2026-07-30 - checkout guided to test-mode enablement
+
+Founder asked to enable `/subscribe` after a full audit ran cleanly for the
+first time. Flagged before proceeding: an audit succeeding exercises none of
+the payment path — purchase intent, webhook handling, provisioning, cluster
+delivery, cancellation have never run once, not even in sandbox, and
+`docs/SOLO_LAUNCH_GATE.md` lists 6 checks against this exact flag, 0 completed.
+
+`CLOSED_POOL_CHECKOUT_ENABLED` is not in `.env.local`, so production reads it
+from the hosting platform (Vercel) directly — outside this session's reach.
+Founder confirmed production `DODO_ENVIRONMENT=test_mode`, which changes the
+risk profile entirely: enabling now charges nothing real, and doubles as the
+sandbox run that items 2-4 of the solo gate call for. Guided the founder to set
+the flag in Vercel and run one real checkout through it before treating those
+items as done.
+
+**Still open, called out explicitly:** the Dominate tier's
+`dodo_product_id` (`pdt_0NkDO0sMN9Lu8VQKdhM7I`) previously belonged to the
+retired $799 plan. Our own price check (`recognizedPlans` in
+`app/(protected)/subscribe/page.tsx`) only compares against
+`dodo_pricing_plans.price`, so this cannot block the page from rendering — but
+if that product was never repriced inside Dodo's own dashboard, a real charge
+on Dominate would not match the displayed $599. Must be confirmed before
+`DODO_ENVIRONMENT` ever moves to live.
+
+No code changed this entry — the checkout gate in code
+(`app/api/dodopayments/checkout/route.ts`, `app/(protected)/subscribe/page.tsx`,
+`app/pricing/page.tsx`) is unchanged and correct as designed; only the external
+env var moves.
+
+### 2026-07-30 - two production incidents, both mine, both fixed live
+
+Two separate failures hit production back to back.
+
+**1. Every audit returned 503 "temporarily unavailable."** Root cause:
+`20260801_discard_unpurchased_audit.sql` re-declared `guard_audit_snapshot_row`
+(to add the discard escape hatch) with a bare `SET search_path = public`.
+`CREATE OR REPLACE FUNCTION` replaces a function's search_path along with its
+body, so this silently undid the pgvector fix `20260731` had already applied —
+the exact same class of bug as the `finalize_audit_run` incident earlier this
+week, reintroduced by my own follow-up migration:
+
+```
+assert_harvest_schema_ready() -> cannot resolve pgvector: guard_audit_snapshot_row
+POST /api/topical-audit       -> 503 "temporarily unavailable"
+```
+
+**Fixed live first, source second.** Ran `ALTER FUNCTION
+public.guard_audit_snapshot_row() SET search_path = public, extensions;`
+directly against production and confirmed `assert_harvest_schema_ready()`
+passes — audits work again without waiting for a deploy. Then corrected
+`20260801_discard_unpurchased_audit.sql` itself: the `CREATE OR REPLACE` is
+immediately followed by a `DO` block that resolves the pgvector schema
+dynamically and restores it via `ALTER FUNCTION`, so the file is self-correcting
+if replayed.
+
+Added a contract test that replays every migration in filename order and
+tracks the *last* event affecting `guard_audit_snapshot_row`'s search_path —
+whether a `CREATE`'s own clause or a later `ALTER` — and fails if that last
+event is a bare `CREATE ... SET search_path = public` with nothing after it to
+restore the vector schema. Verified in both directions without touching the
+real file: simulated stripping the `ALTER` block in an isolated in-memory copy
+and confirmed the test fails exactly as expected, then confirmed it passes on
+the real, fixed file.
+
+**2. Onboarding's "Analyzing..." step hung for three minutes.** Root cause:
+`findSeedsWithoutDemand` was awaited inline in `POST /api/analyze-brand`, over
+every seed keyword across every extracted family — up to ~90 on a multi-family
+brand — via a bare `Promise.all` with no concurrency limit. That is a burst of
+near-simultaneous requests to an undocumented, rate-limit-prone Google
+endpoint, exactly what `suggest-client.ts`'s own module comment warns against.
+Google throttled the burst; the retry/backoff in `fetchSuggest` correctly
+waited out the throttle on every request in the burst; the response didn't
+return until the slowest one finished.
+
+This was a design mistake, not a code bug: an advisory, best-effort signal
+(which product areas look mispositioned) was made a hard blocking dependency
+of the single most important step in onboarding.
+
+Fixed:
+
+- `lib/harvest/query-validation.ts` — `findSeedsWithoutDemand` now uses
+  `mapWithConcurrency` (concurrency 6, matching the harvest's own demand
+  filter) instead of raw `Promise.all`, and hard-caps input to
+  `MAX_SEEDS_PER_DEMAND_CHECK` (30) regardless of what the caller passes in.
+- `app/api/analyze-brand/demand-check/route.ts` (new) — the check now lives
+  behind its own endpoint. It never throws to the caller; any failure returns
+  `{ seedsWithoutDemand: [] }`, which just means no badges render.
+- `app/api/analyze-brand/route.ts` no longer imports or calls the demand
+  check at all.
+- Both call sites (`app/(onboarding)/onboarding/page.tsx` and
+  `components/brand-onboarding.tsx`) call the new endpoint *after*
+  `setBrandData()` has already rendered the confirmation screen, and swallow
+  any failure. Badges appear a moment later, or never — the screen itself is
+  never gated on this again.
+
+Contract suite pins all of it: the blocking route must not reference
+`findSeedsWithoutDemand` as a call or import (a regex distinguishes that from
+this very changelog's incident comment, which does name it), the shared
+function must use bounded concurrency and the input cap, the new endpoint must
+fail open, and both client call sites must fire the demand-check fetch
+strictly after `setBrandData(data)`, never before.
+
+30/30 contract tests pass; `tsc` clean on every touched file.
+
+
+`20260731_confirmed_business_scope.sql` applied successfully. Deleting the
+mispositioned bringback.pro audit afterwards was impossible:
+
+```
+DELETE FROM query_pool     -> Completed audit evidence cannot be deleted
+DELETE FROM topical_audits -> still referenced from table query_pool
+```
+
+Every child FK on `topical_audits` is `RESTRICT` and every child DELETE is
+blocked by `guard_audit_snapshot_row` / `guard_audit_scope_snapshot`. The guards
+were correct; the gap was that **no legitimate discard operation existed**, so a
+completed audit was permanent even with zero programs, zero purchase intents and
+zero generated articles. A founder audit that came back mispositioned is not
+history worth protecting — it is a bad measurement.
+
+`20260801_discard_unpurchased_audit.sql` adds the missing operation:
+
+- `discard_unpurchased_audit(uuid)` — `SECURITY DEFINER`, `service_role` only.
+  Locks the audit, then refuses if a program exists, if a purchase intent
+  exists, or if any planned article already has a generated article. Otherwise
+  clears `brand_details.current_audit_id` and deletes children in FK order
+  (`planned_article_links`, `program_cost_events`,
+  `subscription_credit_consumptions`, `program_clusters`, `planned_articles`,
+  `audit_clusters`, `query_pool`, `audit_scope_families`, `audit_claims`) before
+  the audit row. Returns per-table counts.
+- `audit_discard_in_progress(uuid)` — the escape hatch, backed by
+  `set_config(..., is_local => true)` so it expires with the transaction and
+  cannot leak into another statement or session. Both guards yield on DELETE
+  only for the exact audit id being discarded; every other row stays protected
+  throughout.
+
+Explicitly rejected: switching the FKs to `ON DELETE CASCADE`. Cascade would let
+a careless `DELETE FROM topical_audits` destroy a purchased program, which is
+precisely what `RESTRICT` is there to stop. The rule the guards enforce is not
+"nothing may be deleted" but **work somebody bought must never disappear**, and
+that condition now lives in the function instead of in whoever holds the console.
+
+All 16 table/column references were verified against the live schema before the
+migration was handed over. 28/28 contract groups pass.
 
 ### 2026-07-30 - scope extraction rebuilt after a mispositioned audit
 

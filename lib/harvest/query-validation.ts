@@ -100,6 +100,17 @@ function hasSearchDemand(candidate: string, suggestions: string[]): boolean {
 }
 
 /**
+ * Highest number of seeds this will ever check in one call, regardless of how
+ * many the caller passes. A scope-confirmation screen has no legitimate reason
+ * to need more than this many demand signals at once; the cap exists so a
+ * caller that forgets to bound its input still cannot burst the endpoint.
+ */
+export const MAX_SEEDS_PER_DEMAND_CHECK = 30
+
+/** Concurrent requests in flight at once. Matches the harvest's own demand filter. */
+const DEMAND_CHECK_CONCURRENCY = 6
+
+/**
  * Which of these phrases does Google actually suggest?
  *
  * Used on the scope-confirmation screen. A product area whose search phrases
@@ -110,25 +121,32 @@ function hasSearchDemand(candidate: string, suggestions: string[]): boolean {
  *
  * Advisory, never a gate: it fails open on a request error, and the founder is
  * always free to keep a phrase we could not verify.
+ *
+ * MUST NOT be awaited in the request path of a user-facing endpoint. It once
+ * was, called with an unbounded `Promise.all` over every seed across every
+ * extracted family (up to ~90 on a multi-family brand) — a burst of near-
+ * simultaneous requests to an undocumented, rate-limit-prone endpoint. Google
+ * throttled it, `fetchSuggest`'s retry/backoff (correctly) waited out the
+ * throttle on each one, and the onboarding "Analyzing..." screen hung for
+ * three minutes in production. Concurrency is now bounded the same way the
+ * harvest's own demand filter already bounds it, the input is hard-capped, and
+ * the check itself lives behind a separate, non-blocking endpoint
+ * (POST /api/analyze-brand/demand-check) that the client calls after the
+ * brand-analysis response has already rendered.
  */
 export async function findSeedsWithoutDemand(
     seeds: string[],
     options: HarvestOptions = {},
 ): Promise<string[]> {
-    const testable = seeds.filter(
-        (seed) => seed.trim().split(/\s+/).length <= MAX_WORDS_FOR_DEMAND_CHECK,
-    )
-    const results = await Promise.all(
-        testable.map(async (seed) => {
-            try {
-                const { suggestions, ok } = await fetchSuggestions(seed, options)
-                if (!ok) return null
-                return hasSearchDemand(seed, suggestions) ? null : seed
-            } catch {
-                return null
-            }
-        }),
-    )
+    const testable = Array.from(new Set(seeds))
+        .filter((seed) => seed.trim().split(/\s+/).length <= MAX_WORDS_FOR_DEMAND_CHECK)
+        .slice(0, MAX_SEEDS_PER_DEMAND_CHECK)
+
+    const results = await mapWithConcurrency(testable, DEMAND_CHECK_CONCURRENCY, async (seed) => {
+        const { suggestions, ok } = await fetchSuggestions(seed, options)
+        if (!ok) return null
+        return hasSearchDemand(seed, suggestions) ? null : seed
+    })
     return results.filter((seed): seed is string => seed !== null)
 }
 

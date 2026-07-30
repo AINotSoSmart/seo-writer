@@ -484,6 +484,121 @@ test("multi-table trigger functions dispatch on TG_TABLE_NAME before touching fi
     assert.match(effective.body, /IF\s+TG_TABLE_NAME\s*=\s*'query_pool'\s*THEN/)
 })
 
+test("the demand check never blocks the brand-analysis response", async () => {
+    // findSeedsWithoutDemand was awaited inline in POST /api/analyze-brand,
+    // unbounded, over every seed across every extracted family (up to ~90 on a
+    // multi-family brand) — a burst of near-simultaneous requests to an
+    // undocumented, rate-limit-prone Google endpoint. Google throttled it, the
+    // retry/backoff correctly waited out the throttle on each one, and
+    // onboarding's "Analyzing..." screen hung for three minutes in production.
+    const [analyzeBrandRoute, queryValidation, demandCheckRoute] = await Promise.all([
+        text("app/api/analyze-brand/route.ts"),
+        text("lib/harvest/query-validation.ts"),
+        text("app/api/analyze-brand/demand-check/route.ts"),
+    ])
+
+    // Matches an import or a call, not the incident comment that names the
+    // function to explain why it is deliberately absent from this file.
+    assert.doesNotMatch(
+        analyzeBrandRoute,
+        /findSeedsWithoutDemand\(|import\s*\{[^}]*findSeedsWithoutDemand/,
+        "app/api/analyze-brand/route.ts must not call the demand check inline — " +
+        "it belongs in the separate, non-blocking /demand-check endpoint",
+    )
+
+    // Bounded concurrency and a hard input cap so a burst can never recur,
+    // regardless of what any future caller passes in.
+    assert.doesNotMatch(
+        queryValidation,
+        /Promise\.all\(\s*testable\.map/,
+        "findSeedsWithoutDemand must use bounded concurrency (mapWithConcurrency), not a raw Promise.all",
+    )
+    assert.match(queryValidation, /mapWithConcurrency\(testable,/)
+    assert.match(queryValidation, /MAX_SEEDS_PER_DEMAND_CHECK/)
+    assert.match(queryValidation, /\.slice\(0, MAX_SEEDS_PER_DEMAND_CHECK\)/)
+
+    // The endpoint must fail open — a slow or broken Google Suggest must never
+    // surface as a user-visible error, only as the absence of a badge.
+    assert.match(demandCheckRoute, /catch/)
+    assert.match(demandCheckRoute, /seedsWithoutDemand:\s*\[\]/)
+
+    for (const [file, client] of [
+        ["app/(onboarding)/onboarding/page.tsx", await text("app/(onboarding)/onboarding/page.tsx")],
+        ["components/brand-onboarding.tsx", await text("components/brand-onboarding.tsx")],
+    ]) {
+        assert.match(
+            client,
+            /\/api\/analyze-brand\/demand-check/,
+            `${file}: must call the decoupled demand-check endpoint`,
+        )
+        // setBrandData must not be waiting on the demand-check fetch — the
+        // fetch call must appear strictly after setBrandData(data) is invoked,
+        // not be awaited before it.
+        const setBrandDataIdx = client.indexOf("setBrandData(data)")
+        const demandFetchIdx = client.indexOf("/api/analyze-brand/demand-check")
+        assert.ok(setBrandDataIdx !== -1 && demandFetchIdx !== -1)
+        assert.ok(
+            setBrandDataIdx < demandFetchIdx,
+            `${file}: setBrandData must render before the demand-check fetch starts`,
+        )
+    }
+})
+
+test("guard_audit_snapshot_row's effective search_path resolves pgvector", async () => {
+    // CREATE OR REPLACE FUNCTION overwrites a function's search_path along with
+    // its body. 20260731 added the pgvector extension schema so this trigger
+    // could compare `embedding` values with IS DISTINCT FROM. 20260801 then
+    // re-emitted the same function, to add a discard escape hatch, with a bare
+    // `public` — silently undoing that fix in production:
+    //
+    //   assert_harvest_schema_ready() -> 'cannot resolve pgvector: guard_audit_snapshot_row'
+    //   POST /api/topical-audit       -> 503 'temporarily unavailable'
+    //
+    // Any migration that re-declares this function must be followed —
+    // anywhere later in file-sorted order, same file or a later one — by an
+    // ALTER restoring the vector-visible search_path.
+    const names = (await readdir(path.join(root, "supabase/migrations")))
+        .filter((name) => name.endsWith(".sql"))
+        .sort()
+
+    let lastEvent = null
+
+    for (const name of names) {
+        const sql = await text(`supabase/migrations/${name}`)
+        const events = []
+
+        for (const match of sql.matchAll(
+            /CREATE OR REPLACE FUNCTION public\.guard_audit_snapshot_row\(\)[\s\S]*?SET search_path\s*=\s*([^\n]+)\nAS \$\$/g,
+        )) {
+            events.push({ index: match.index, kind: "create", searchPath: match[1].trim() })
+        }
+        for (const match of sql.matchAll(
+            /ALTER FUNCTION public\.guard_audit_snapshot_row\(\)\s+SET search_path/g,
+        )) {
+            events.push({ index: match.index, kind: "alter" })
+        }
+        for (const match of sql.matchAll(
+            /format\(\s*['"]ALTER FUNCTION public\.guard_audit_snapshot_row\(\) SET search_path/g,
+        )) {
+            events.push({ index: match.index, kind: "alter-dynamic" })
+        }
+
+        events.sort((a, b) => a.index - b.index)
+        for (const event of events) lastEvent = { file: name, ...event }
+    }
+
+    assert.ok(lastEvent, "guard_audit_snapshot_row is never defined or altered by any migration")
+    if (lastEvent.kind === "create") {
+        assert.notEqual(
+            lastEvent.searchPath.replace(/\s+/g, ""),
+            "public",
+            `${lastEvent.file}: guard_audit_snapshot_row was (re-)declared with a bare "public" ` +
+            `search_path and nothing after it restores the pgvector schema — this exact ` +
+            `regression broke every audit in production`,
+        )
+    }
+})
+
 test("every pivot migration survives being re-run", async () => {
     // A migration is not write-once. It gets pasted into the SQL editor twice,
     // replayed onto a fresh branch, or run against a database that is already

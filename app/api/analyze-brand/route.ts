@@ -9,7 +9,6 @@ import {
 } from "@/lib/brand-scope"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { extractScopeFamilies } from "@/lib/scope-extraction"
-import { findSeedsWithoutDemand } from "@/lib/harvest/query-validation"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -293,18 +292,15 @@ ${page.rawContent || page.markdown || page.content || ''}
       )
     }
 
-    // Advisory only, and free — Google Suggest, not a paid API. A product area
-    // whose phrases nobody searches is a mispositioning, and it is far cheaper
-    // to say so here than to discover it in a delivered content plan.
-    const seedsWithoutDemand = await findSeedsWithoutDemand(
-      grounded.families.flatMap((family) => family.seed_keywords),
-    )
-
+    // Demand-checking seed keywords against Google Suggest is advisory only and
+    // must never sit in this request's critical path — see the incident note
+    // on findSeedsWithoutDemand in lib/harvest/query-validation.ts. The client
+    // fetches it separately, after this response has already rendered, from
+    // POST /api/analyze-brand/demand-check.
     return NextResponse.json({
       ...validated.data,
       scope_analysis_issues: grounded.issues,
       unassigned_target_seeds: grounded.unassignedTargetSeeds,
-      seeds_without_demand: seedsWithoutDemand,
     })
 
   } catch (e: unknown) {
