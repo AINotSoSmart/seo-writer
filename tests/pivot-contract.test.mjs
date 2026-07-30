@@ -484,6 +484,176 @@ test("multi-table trigger functions dispatch on TG_TABLE_NAME before touching fi
     assert.match(effective.body, /IF\s+TG_TABLE_NAME\s*=\s*'query_pool'\s*THEN/)
 })
 
+test("every brand field the writer reads exists on BrandDetailsSchema", async () => {
+    // `brandDetails.features` and `brandDetails.unique_value_proposition` were
+    // read for months by the outline prompt. The real schema names are
+    // `core_features` and `uvp`, so the model was handed "Features: N/A" and
+    // "UVP: undefined" in the same block instructing it to position the product
+    // against competitors. TypeScript could not catch it: brandDetails is typed
+    // `any` in the prompt builders, so every access silently returns undefined.
+    //
+    // This closes that hole for good — the writer may only read fields the
+    // schema actually declares.
+    const [writer, schema] = await Promise.all([
+        text("trigger/generate-blog.ts"),
+        text("lib/schemas/brand.ts"),
+    ])
+
+    // Top-level keys declared on BrandDetailsSchema.
+    const schemaBody = schema.slice(schema.indexOf("BrandDetailsSchema = z.object({"))
+    const declared = new Set(
+        [...schemaBody.matchAll(/^\s{2}([a-z_]+):\s/gm)].map((match) => match[1]),
+    )
+    assert.ok(declared.has("core_features"), "schema parse failed — expected core_features")
+    assert.ok(declared.has("uvp"), "schema parse failed — expected uvp")
+    assert.ok(declared.size > 10, `schema parse found only ${declared.size} fields`)
+
+    // Strip comments first: prose explaining the bug names the very fields it
+    // warns about, and a comment is not an access.
+    const writerCode = writer
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "")
+
+    const accessed = new Set(
+        [...writerCode.matchAll(/brandDetails\??\.([a-z_]+)/g)].map((match) => match[1]),
+    )
+    assert.ok(accessed.size > 0, "found no brandDetails accesses — regex is wrong")
+
+    const unknown = [...accessed].filter((field) => !declared.has(field)).sort()
+    assert.deepEqual(
+        unknown,
+        [],
+        `trigger/generate-blog.ts reads brand fields that BrandDetailsSchema does not declare: ` +
+        `${unknown.join(", ")}. brandDetails is typed \`any\` there, so these return undefined ` +
+        `silently and reach the model as the string "undefined".`,
+    )
+
+    // A missing brand fact must read as missing, never as "undefined" or blank.
+    assert.match(writer, /const brandList = /)
+    assert.match(writer, /'Not provided'/)
+    for (const field of ["core_features", "pricing", "uvp", "how_it_works"]) {
+        assert.match(
+            writer,
+            new RegExp(`brandList\\(brandDetails\\.${field}\\)`),
+            `${field} must render through brandList so an empty value cannot render blank`,
+        )
+    }
+})
+
+test("audit evidence reaches the writer and degrades safely without it", async () => {
+    const [shipCluster, writer, dryRun] = await Promise.all([
+        text("trigger/ship-cluster.ts"),
+        text("trigger/generate-blog.ts"),
+        text("app/api/writer/dry-run/route.ts"),
+    ])
+
+    // The audit's claim is that every query is real and traceable. Until this
+    // was wired the writer never saw one: it received a title and keyword, then
+    // re-researched the topic with a generic Tavily search, so the evidence the
+    // customer paid for stopped at the plan.
+    assert.match(shipCluster, /source_query_ids/)
+    assert.match(shipCluster, /async function loadClusterEvidence/)
+    for (const field of ["cluster:", "sourceQueries:", "clusterCompetitorUrls:", "isPillar:"]) {
+        assert.ok(
+            shipCluster.includes(field),
+            `ship-cluster must forward ${field} in the generate-blog payload`,
+        )
+    }
+
+    // Batched: two queries per cluster, not per article.
+    assert.match(shipCluster, /\.in\("id", wantedIds\)/)
+
+    // Losing enrichment must never block a paid cluster that is ready to run.
+    assert.match(
+        shipCluster,
+        /catch \(evidenceError\)[\s\S]{0,220}return empty/,
+        "loadClusterEvidence must degrade to empty rather than throw",
+    )
+
+    // Writer accepts them, and they are optional so a run without them behaves
+    // exactly as before.
+    assert.match(writer, /sourceQueries\?: string\[\]/)
+    assert.match(writer, /sourceQueries = \[\]/)
+    assert.match(writer, /clusterCompetitorUrls = \[\]/)
+    assert.match(writer, /MEASURED SEARCH DEMAND/)
+    // The whole block is conditional on evidence existing.
+    assert.match(writer, /auditEvidence\.sourceQueries\?\.length \?/)
+    // Pillar vs supporting must change the instruction, or cluster structure is
+    // just a label.
+    assert.match(writer, /auditEvidence\.isPillar \?/)
+    // Never recommend the competitors we surface as ranking rivals.
+    assert.match(writer, /never recommend them/)
+
+    // The dry-run harness must assemble the prompt through the real builder,
+    // or it proves nothing about production.
+    assert.match(dryRun, /generateOutlineSystemPrompt\(/)
+    assert.match(dryRun, /NODE_ENV === "production"/)
+    // It must never call a paid provider or write anything.
+    for (const forbidden of ["generateBlogPost.trigger", ".insert(", ".update("]) {
+        assert.ok(
+            !dryRun.includes(forbidden),
+            `dry-run must not ${forbidden} — it is read-only by contract`,
+        )
+    }
+})
+
+test("the writer's other input surfaces fail loudly, not silently", async () => {
+    const [writer, outlineSchema] = await Promise.all([
+        text("trigger/generate-blog.ts"),
+        text("lib/schemas/outline.ts"),
+    ])
+    const writerCode = writer
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "")
+
+    // 1. THE OUTLINE is Zod-validated, so a renamed key throws instead of
+    //    quietly producing empty sections. Every field the writer reads off it
+    //    must therefore be declared, or validation passes and the read still
+    //    returns undefined.
+    const declared = new Set(
+        [...outlineSchema.matchAll(/^\s+([a-z_]+):\s/gm)].map((match) => match[1]),
+    )
+    for (const extra of ["sections", "intro", "title"]) {
+        assert.ok(declared.has(extra), `outline schema parse failed — missing ${extra}`)
+    }
+    const readOffSection = new Set(
+        [...writerCode.matchAll(/\bsection\??\.([a-z_]+)/g)].map((match) => match[1]),
+    )
+    const unknownSection = [...readOffSection].filter(
+        (field) => !declared.has(field) && field !== "length",
+    ).sort()
+    assert.deepEqual(
+        unknownSection,
+        [],
+        `writer reads outline section fields not declared in ArticleOutlineSchema: ${unknownSection.join(", ")}`,
+    )
+    assert.match(writer, /cleanParseAndValidate\(outlineText, dynamicOutlineSchema/)
+
+    // 2. FROZEN LINKS are a delivery contract: a cluster is withheld if the
+    //    exact anchor and destination are not present as real anchors. The
+    //    model omitting one must not cost a paid cluster, so the edge is
+    //    appended deterministically before HTML is saved.
+    assert.match(writer, /function ensureFrozenLinksInMarkdown/)
+    assert.match(
+        writer,
+        /frozenLinks\.length > 0\s*\?\s*ensureFrozenLinksInMarkdown\(currentDraft, frozenLinks\)/,
+        "the frozen-link safety net must remain wired into the final markdown path",
+    )
+    // ship-cluster sends { title: anchor_text }, and the anchor is derived from
+    // `title`. If either side is renamed the contract breaks silently.
+    assert.match(writer, /anchor: link\.title\.replace/)
+    const shipCluster = await text("trigger/ship-cluster.ts")
+    assert.match(shipCluster, /title: row\.anchor_text/)
+
+    // 3. ANGLE INSIGHTS are enrichment. They must degrade to null, never
+    //    half-apply or abort a paid generation.
+    assert.match(
+        writer,
+        /catch[\s\S]{0,200}angleInsights = null/,
+        "angle insights must fail closed to null rather than aborting generation",
+    )
+})
+
 test("scope classification rejects undeliverable topics, not just irrelevant ones", async () => {
     // Imported from types.ts, not scope-classifier.ts: the classifier is
     // server-only and cannot be loaded under plain node.

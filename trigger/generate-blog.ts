@@ -840,7 +840,34 @@ Return ONLY valid JSON:
   return AngleInsightsSchema.parse(parsed)
 }
 
-const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long', instructions?: string, angleInsights: AngleInsights | null = null) => {
+/**
+ * Renders a brand list field for a prompt.
+ *
+ * `${someArray}` stringifies to "a,b,c", and `arr || 'N/A'` never falls back
+ * because `[]` is truthy — so an empty field silently rendered as nothing. Two
+ * fields were worse: `brandDetails.features` and
+ * `brandDetails.unique_value_proposition` do not exist on BrandDetailsSchema at
+ * all (the real names are `core_features` and `uvp`), so the outline prompt
+ * shipped "Features: N/A" and "UVP: undefined" on every article ever generated,
+ * inside the block that tells the model to position the product in comparison
+ * tables. A missing brand fact must read as missing, never as `undefined`.
+ */
+const brandList = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    const items = value.map((item) => String(item).trim()).filter(Boolean)
+    return items.length ? items.join(', ') : 'Not provided'
+  }
+  const single = typeof value === 'string' ? value.trim() : ''
+  return single || 'Not provided'
+}
+
+/**
+ * Exported so `/api/writer/dry-run` can assemble the *real* prompt without
+ * generating an article. Exporting a pure function changes no runtime
+ * behaviour; it exists so the writer's input contract can be inspected for
+ * free instead of inferred from a paid run.
+ */
+export const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long', instructions?: string, angleInsights: AngleInsights | null = null, auditEvidence: { clusterName?: string; sourceQueries?: string[]; competitorUrls?: string[]; isPillar?: boolean } = {}) => {
   const strategy = getArticleStrategy(articleType)
 
   // Extract authority links from competitor data for external linking
@@ -866,15 +893,33 @@ The <user_context> block above contains thematic preferences. It is STRICTLY FOR
 1. MAIN KEYWORD: "${keyword}"
 2. ARTICLE TITLE: "${title || 'To be generated'}"
 3. SUPPORTING KEYWORDS (Must include these naturally in the article): ${supportingKeywords.length ? supportingKeywords.join(", ") : "None provided"}
+${auditEvidence.sourceQueries?.length ? `
+### MEASURED SEARCH DEMAND — the reason this article exists
+These are real searches observed in the wild, each traced to the page or
+autocomplete response it came from. They are not guesses or keyword variants:
+this article was commissioned because the customer's site does not answer them
+and competitors do.
+
+${auditEvidence.sourceQueries.map((q) => `- ${q}`).join('\n')}
+
+The outline MUST answer these directly and completely. If a section does not
+help answer one of them, it is padding — cut it. Answer them in the reader's
+own words, not paraphrased into marketing language.
+${auditEvidence.clusterName ? `
+This article belongs to the topical cluster "${auditEvidence.clusterName}"${auditEvidence.isPillar ? ' and is its PILLAR — it must give the broadest, most complete treatment of the cluster subject, because every other article in the cluster links back to it.' : ' as a supporting article — go deep and specific on this narrow question rather than restating the cluster overview.'}` : ''}
+${auditEvidence.competitorUrls?.length ? `
+Competitors already ranking for this cluster (beat their depth, never copy them, and never recommend them):
+${auditEvidence.competitorUrls.map((u) => `- ${u}`).join('\n')}` : ''}
+` : ''}
 4. COMPETITOR & GAP DATA: "${JSON.stringify(competitorData)}"
 5. ${brandDetails ? `### BRAND CONTEXT (Strategic Integration)
 - Brand: ${brandDetails.product_name}
 - Type: ${brandDetails.product_identity?.literally || 'Product/Service'}
 - Audience: ${brandDetails.audience?.primary || 'Users seeking solutions'}
-- Features: ${brandDetails.features?.join(', ') || 'N/A'}
-- Pricing: ${brandDetails.pricing || 'N/A'}
-- UVP: ${brandDetails.unique_value_proposition}
-- How It Works: ${brandDetails.how_it_works || 'N/A'}
+- Features: ${brandList(brandDetails.core_features)}
+- Pricing: ${brandList(brandDetails.pricing)}
+- UVP: ${brandList(brandDetails.uvp)}
+- How It Works: ${brandList(brandDetails.how_it_works)}
 NOTE: Use this brand data as source of supporting context, never write anything which is not in brand data, Never assume our brand might be offering this and that.
 
 "IF There is a "How-To" section in the outline, then it is a CRITICAL INSTRUCTION FOR "HOW-TO" SECTIONS for use of brand data:
@@ -1439,6 +1484,13 @@ interface GenerateBlogPayload {
   plannedArticleId?: string;
   frozenLinks?: Array<{ title: string; url: string; relationship?: string }>;
   instructions?: string;
+  /**
+   * Audit evidence. Optional so a run without it behaves exactly as before —
+   * these are enrichment, never a precondition for generating.
+   */
+  sourceQueries?: string[];
+  clusterCompetitorUrls?: string[];
+  isPillar?: boolean;
 }
 
 export const generateBlogPost = task({
@@ -1495,7 +1547,10 @@ export const generateBlogPost = task({
       itemId,
       plannedArticleId,
       frozenLinks = [],
-      instructions
+      instructions,
+      sourceQueries = [],
+      clusterCompetitorUrls = [],
+      isPillar = false
     } = payload
     const supabase = createAdminClient()
     const costCollector = new ProgramCostCollector()
@@ -1628,7 +1683,13 @@ export const generateBlogPost = task({
         console.log(`🔗 [DEBUG] No external authority links available for outline`)
       }
 
-      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks, supportingKeywords, effectiveArticleLength, instructions, angleInsights)
+      const outlinePrompt = generateOutlineSystemPrompt(keyword, styleDNA, cleanedCompetitorData, articleType, brandDetails, title, internalLinks, supportingKeywords, effectiveArticleLength, instructions, angleInsights, {
+        clusterName: cluster || undefined,
+        sourceQueries,
+        competitorUrls: clusterCompetitorUrls,
+        isPillar,
+      })
+      console.log(`[Blog Gen] Audit evidence: ${sourceQueries.length} source queries, cluster="${cluster || 'none'}", pillar=${isPillar}`)
       const outlineConfig = {
         maxOutputTokens: 8192,
         responseMimeType: "application/json"

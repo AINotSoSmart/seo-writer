@@ -109,10 +109,16 @@ export async function proxy(request: NextRequest) {
     '/api/dodopayments/webhook',
     '/api/images',
   ]
-  // Dev-only harvest test harnesses. Exact matches, never prefixes, so that
-  // e.g. /api/harvest/verify-anything stays behind auth. Both routes also
-  // return 404 when NODE_ENV === 'production', so this is defence in depth.
-  const devOnlyApiRoutes = ['/api/harvest/verify', '/api/harvest/calibrate']
+  // Dev-only test harnesses. Exact matches, never prefixes, so that e.g.
+  // /api/harvest/verify-anything stays behind auth. Every route here also
+  // returns 404 when NODE_ENV === 'production', so this is defence in depth.
+  const devOnlyApiRoutes = [
+    '/api/harvest/verify',
+    '/api/harvest/calibrate',
+    // Inspects what the article writer receives for a real planned article.
+    // Reads only; calls no paid API and generates nothing.
+    '/api/writer/dry-run',
+  ]
   const isDevHarvestRoute =
     process.env.NODE_ENV !== 'production' &&
     devOnlyApiRoutes.includes(request.nextUrl.pathname)

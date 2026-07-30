@@ -126,7 +126,7 @@ async function advanceCluster(
     const { data: plannedRows, error } = await supabase
         .from("planned_articles")
         .select(
-            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, article_id, generation_status, retry_count",
+            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, article_id, generation_status, retry_count, source_query_ids, is_pillar",
         )
         .eq("audit_id", program.audit_id)
         .eq("cluster_id", auditClusterId)
@@ -158,6 +158,17 @@ async function advanceCluster(
 
     const candidates = plannedRows.filter((article: any) =>
         ["planned", "queued", "failed"].includes(article.generation_status),
+    )
+
+    // The audit's own evidence, loaded once per cluster and batched rather than
+    // per article. Until this existed the writer researched every topic from
+    // scratch with a generic Tavily search, while the exact real searches that
+    // justified the article sat unused in query_pool — the product's entire
+    // claim is that those searches are real and traceable.
+    const clusterEvidence = await loadClusterEvidence(
+        supabase,
+        auditClusterId,
+        candidates,
     )
     const exhausted = candidates.filter(
         (article: any) =>
@@ -264,6 +275,10 @@ async function advanceCluster(
                 supportingKeywords: planned.supporting_keywords || [],
                 plannedArticleId: planned.id,
                 frozenLinks,
+                cluster: clusterEvidence.clusterName || "",
+                sourceQueries: clusterEvidence.queriesByArticle.get(planned.id) || [],
+                clusterCompetitorUrls: clusterEvidence.competitorUrls,
+                isPillar: Boolean(planned.is_pillar),
             }, {
                 idempotencyKey: `${planned.id}:${nextRetryCount}`,
             })
@@ -278,6 +293,97 @@ async function advanceCluster(
     }
 
     return { triggered, blocked: false, ready: false }
+}
+
+/** Most observed searches to hand one article. Enough to steer, not a dump. */
+const MAX_SOURCE_QUERIES_PER_ARTICLE = 8
+
+type ClusterEvidence = {
+    clusterName: string | null
+    competitorUrls: string[]
+    /** planned_article.id -> the real searches that article exists to answer */
+    queriesByArticle: Map<string, string[]>
+}
+
+/**
+ * Loads the audit evidence behind a cluster in two queries total, regardless of
+ * how many articles it holds.
+ *
+ * Failure here is deliberately non-fatal: this enriches the writer's context,
+ * and losing it must degrade article quality rather than block a paid cluster
+ * that is otherwise ready to generate.
+ */
+async function loadClusterEvidence(
+    supabase: any,
+    auditClusterId: string,
+    candidates: Array<{ id: string; source_query_ids?: string[] | null }>,
+): Promise<ClusterEvidence> {
+    const empty: ClusterEvidence = {
+        clusterName: null,
+        competitorUrls: [],
+        queriesByArticle: new Map(),
+    }
+
+    try {
+        const { data: cluster } = await supabase
+            .from("audit_clusters")
+            .select("name, competitor_urls")
+            .eq("id", auditClusterId)
+            .maybeSingle()
+
+        const wantedIds = Array.from(
+            new Set(
+                candidates.flatMap((article) =>
+                    (article.source_query_ids || []).slice(
+                        0,
+                        MAX_SOURCE_QUERIES_PER_ARTICLE,
+                    ),
+                ),
+            ),
+        )
+
+        const { data: queryRows } = wantedIds.length
+            ? await supabase
+                  .from("query_pool")
+                  .select("id, query")
+                  .in("id", wantedIds)
+            : { data: [] }
+
+        const queryById = new Map<string, string>(
+            (queryRows || []).map((row: any) => [row.id, row.query]),
+        )
+        const queriesByArticle = new Map<string, string[]>()
+        for (const article of candidates) {
+            const queries = (article.source_query_ids || [])
+                .slice(0, MAX_SOURCE_QUERIES_PER_ARTICLE)
+                .map((id: string) => queryById.get(id))
+                .filter((query: string | undefined): query is string => Boolean(query))
+            if (queries.length > 0) queriesByArticle.set(article.id, queries)
+        }
+
+        const competitorUrls = Array.isArray(cluster?.competitor_urls)
+            ? (cluster.competitor_urls as unknown[])
+                  .map((entry) =>
+                      typeof entry === "string"
+                          ? entry
+                          : String((entry as any)?.url || ""),
+                  )
+                  .filter(Boolean)
+                  .slice(0, 6)
+            : []
+
+        return {
+            clusterName: cluster?.name || null,
+            competitorUrls,
+            queriesByArticle,
+        }
+    } catch (evidenceError) {
+        console.warn(
+            "[ShipCluster] Could not load audit evidence; generating without it:",
+            evidenceError,
+        )
+        return empty
+    }
 }
 
 async function loadFrozenLinks(

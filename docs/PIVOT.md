@@ -453,7 +453,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **31/31 test groups passed**.
+- `npm run test:pivot-contract`: **34/34 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -535,11 +535,104 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 14. Do not repair relevance incidents with domain-word, generic-word, or
     language-word blacklists. A query must positively belong to one confirmed
     business family; malformed strings may still receive structural sanitation.
-15. Relevance is not sufficiency. A query must also be *deliverable*: not
+15. The writer's inputs are a contract. `brandDetails` is typed `any` in every
+    prompt builder, so a renamed field returns `undefined` silently and reaches
+    the model as the string "undefined". Verify writer inputs with
+    `/api/writer/dry-run` before trusting a paid run, and never add a
+    `brandDetails.X` read without a matching field on `BrandDetailsSchema`.
+16. Relevance is not sufficiency. A query must also be *deliverable*: not
     centred on a third party's product, and not dependent on the publishing
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-01 - the article writer's inputs, audited and connected
+
+Nobody had ever looked at what the writer actually receives. Four findings, in
+order of severity.
+
+**1. Two brand fields never existed.** `trigger/generate-blog.ts` read
+`brandDetails.features` and `brandDetails.unique_value_proposition`. The real
+schema names are `core_features` and `uvp`, so **every article ever generated**
+was outlined against:
+
+```
+- Features: N/A
+- UVP: undefined
+```
+
+inside the same block instructing the model to position the product in
+comparison tables and How-To sections. TypeScript could not catch it:
+`brandDetails` is typed `any` in every prompt builder, so each access silently
+returned `undefined`. `pricing` and `how_it_works` had a softer version — they
+are arrays, so `arr || 'N/A'` never fires on an empty one and rendered blank.
+
+Fixed with a `brandList()` helper that prints `Not provided` for a genuinely
+absent fact, plus a contract test that parses `BrandDetailsSchema` and asserts
+**every** `brandDetails.X` in the writer is a declared field. Verified in both
+directions: clean on the real file, and it reproduces `features,
+unique_value_proposition` when the historical bug is reintroduced in an
+in-memory copy.
+
+**2. The other three input surfaces were already safe.** Audited rather than
+assumed: the outline is validated by `ArticleOutlineSchema` so a renamed key
+throws instead of degrading; `frozenLinks` derives its anchor from `title`,
+matching what ship-cluster sends, and `ensureFrozenLinksInMarkdown` appends any
+edge the model omits before HTML is saved; `angleInsights` already fails closed
+to `null`. All three are now pinned by tests.
+
+**3. `/api/writer/dry-run` (new, dev-only).** Answers "what does the writer
+receive for this planned article?" for free — no Gemini, Tavily or fal.ai call,
+no article row written, the research slot stubbed and labelled. It assembles the
+prompt through the *real* builder (`generateOutlineSystemPrompt` is now
+exported; exporting a pure function changes no runtime behaviour) so it proves
+something about production rather than approximating it. Added to
+`devOnlyApiRoutes` in `proxy.ts`; returns 404 when `NODE_ENV=production`.
+
+Its first real run was the proof of finding 1 — `missingBrandFacts: []`, with
+`core_features` and `uvp` populated — and it surfaced this planned article:
+
+```
+title:      "Step-by-Step Picsart Tutorial for Restoring Vintage Pictures"
+keyword:    "How to restore an old photo with Picsart"
+supporting: photoshop elements / photoshop 2023 / photoshop cs6 / picsart download
+```
+
+Every source query names a competitor tool. The deliverability gate now rejects
+all five, so that article cannot form — but it was planned before the gate
+existed, which is why re-auditing matters before selling.
+
+**4. The audit's evidence stopped at the plan.** The writer got a title, a
+keyword, supporting keywords and frozen links — then re-researched the topic
+from scratch with a generic Tavily search. `source_query_ids`,
+`competitor_matches`, the cluster name and the pillar role all sat unused in the
+database. The product's entire claim is that those queries are real and
+traceable, and the article answering them had never seen one.
+
+`ship-cluster.ts` now loads them in two batched queries per cluster (not per
+article) and forwards `cluster`, `sourceQueries`, `clusterCompetitorUrls` and
+`isPillar`. The outline prompt gained a `MEASURED SEARCH DEMAND` block that
+names the real searches, tells the model to cut any section that does not help
+answer one, distinguishes pillar from supporting treatment, and lists the
+ranking competitors as depth to beat and never to recommend.
+
+Every field is optional and the block is conditional, so a run without evidence
+behaves exactly as before. `loadClusterEvidence` catches its own failure and
+returns empty — losing enrichment must degrade article quality, never block a
+paid cluster that is otherwise ready.
+
+Verified live against a real planned article:
+
+```
+cluster:      "Photo Restoration Service Overview"   isPillar: true
+sourceQueries: "What if I want to restore a photo from a negative?"
+               "Who can restore an old picture?"
+competitors:   https://www.pixreunion.com/old-photo-restoration
+```
+
+all present in the assembled prompt.
+
+34/34 contract groups pass; `tsc` clean on every touched path.
 
 ### 2026-08-01 - deliverability gate: relevance was never the problem
 
