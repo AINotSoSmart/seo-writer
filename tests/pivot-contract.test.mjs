@@ -540,6 +540,156 @@ test("every brand field the writer reads exists on BrandDetailsSchema", async ()
     }
 })
 
+test("no two articles in a cluster get the same intro shape", async () => {
+    // Imported from lib/writer/composition.ts, not the trigger task: that file
+    // uses "@/..." aliases which plain node cannot resolve.
+    const { selectIntroPattern } = await import("../lib/writer/composition.ts")
+
+    // INTRO_TEMPLATES mandated one fixed "GOLDEN ORDER" per article type, so
+    // every article in a delivered cluster opened identically — definition,
+    // bulleted list, "By the end of this guide...". Variety must be structural,
+    // not a hope.
+    const MAX_CLUSTER_ARTICLES = 15
+    for (const clusterId of ["cluster-a", "d308da5a-af56-42fe-9bdc-9d5206b04538", ""]) {
+        for (const type of ["informational", "commercial", "howto"]) {
+            const seen = new Set()
+            for (let position = 0; position < MAX_CLUSTER_ARTICLES; position++) {
+                const pattern = selectIntroPattern(type, position, clusterId)
+                const combo = `${pattern.framing}+${pattern.secondMove}`
+                assert.ok(
+                    !seen.has(combo),
+                    `${type} in ${clusterId || "(no cluster)"}: position ${position} repeats "${combo}"`,
+                )
+                seen.add(combo)
+            }
+        }
+    }
+
+    // Deterministic: a retry must not change an article's opening.
+    const first = selectIntroPattern("informational", 3, "cluster-a")
+    const again = selectIntroPattern("informational", 3, "cluster-a")
+    assert.deepEqual(first, again)
+
+    // Answer-first is an INVARIANT, not one option among many. ~44% of AI
+    // citations come from the first 30% of a page; a pattern that delays the
+    // answer to build tension would cost citations.
+    for (const type of ["informational", "commercial", "howto"]) {
+        const { brief } = selectIntroPattern(type, 0, "c")
+        assert.match(brief, /THE ANSWER \(first, always\)/)
+        assert.match(brief, /NON-NEGOTIABLE/)
+    }
+
+    // The "By the end of this guide" promise was mandatory in all three old
+    // templates and is the most recognisable tell. It must not come back.
+    const informational = selectIntroPattern("informational", 0, "c").brief
+    assert.match(informational, /Do not write one/)
+    assert.match(informational, /never use the phrase "by the end of this guide"|by the end of this guide/i)
+
+    // Rules decomposed out of INTRO_TEMPLATES must still exist somewhere.
+    const writer = await text("trigger/generate-blog.ts")
+    for (const preserved of [
+        "Visual Speed Bumps",
+        "3 lines",
+        "Let's dive in",
+        "Top 10 Best",
+        "Getting started is easy",
+    ]) {
+        assert.ok(writer.includes(preserved), `invariant lost from INTRO_TEMPLATES: "${preserved}"`)
+    }
+})
+
+test("the two protocol blocks stay distinct and headings are unique", async () => {
+    const writer = await text("trigger/generate-blog.ts")
+
+    // These govern completely different things and were only ever confusable
+    // because they shared the "ANTI-FLUFF" name. Merging them would destroy
+    // both. The citation block is renamed; neither block's rules change.
+    for (const citationRule of [
+        "NEVER CITE COMPETITORS",
+        "SUPER-AUTHORITIES",
+        "FIRST-PARTY",
+    ]) {
+        assert.ok(writer.includes(citationRule), `citation policy rule lost: ${citationRule}`)
+    }
+    for (const verbosityRule of ["THE STOP RULE", "DENSITY > LENGTH"]) {
+        assert.ok(writer.includes(verbosityRule), `verbosity rule lost: ${verbosityRule}`)
+    }
+    assert.match(writer, /### 4\. CITATION & ATTRIBUTION POLICY/)
+    assert.match(writer, /### 9\. ANTI-FLUFF PROTOCOL — LENGTH & DENSITY/)
+
+    // Intro strategy must not be injected into every section's prompt.
+    assert.match(writer, /\$\{isIntro \? introStrategy : ''\}/)
+
+    // The intro must not be told the whole article is "already covered".
+    assert.match(writer, /const isIntro = currentSectionIndex < 0/)
+})
+
+test("required links are retried in place, never appended as a callout", async () => {
+    const { requiredLinksMissingFrom } = await import("../lib/writer/composition.ts")
+
+    const section = {
+        external_link: { url: "https://www.statista.com/photo-restoration" },
+        internal_link: { url: "https://bringback.pro/blog/scanning" },
+    }
+    assert.deepEqual(requiredLinksMissingFrom("no links here", section).length, 2)
+    assert.deepEqual(
+        requiredLinksMissingFrom(
+            "…as [industry data](https://www.statista.com/photo-restoration) shows, and " +
+            "[scanning flat](https://bringback.pro/blog/scanning) avoids glare.",
+            section,
+        ),
+        [],
+    )
+    // Only the destination is checked — the anchor is deliberately the writer's
+    // choice so the link reads naturally.
+    assert.deepEqual(requiredLinksMissingFrom("x", { external_link: null, internal_link: null }), [])
+
+    const writer = await text("trigger/generate-blog.ts")
+    assert.match(writer, /REWRITE — REQUIRED LINK WAS OMITTED/)
+    assert.match(writer, /Do NOT append it as a trailing/)
+    assert.match(writer, /BANNED CONSTRUCTIONS/)
+    // The deterministic append must remain a last resort for frozen links only.
+    assert.match(writer, /LAST RESORT, not the normal path/)
+})
+
+test("competitor URLs can never be offered as citation targets", async () => {
+    const writer = await text("trigger/generate-blog.ts")
+
+    // The research search uses the article's own keyword, so top results ARE
+    // the ranking competitors. They reached `external_link`, where §4 forbids
+    // citing them — the model resolved that contradiction by dropping the link.
+    assert.match(writer, /forbiddenCitationHosts/)
+    assert.match(writer, /clusterCompetitorUrls/)
+    assert.match(writer, /competitorsDropped/)
+    // Host comparison must be www-insensitive or the filter silently misses.
+    assert.match(writer, /replace\(\/\^www\\\.\/, ""\)/)
+})
+
+test("sections only receive the product knowledge they were flagged as needing", async () => {
+    const [writer, outlineSchema] = await Promise.all([
+        text("trigger/generate-blog.ts"),
+        text("lib/schemas/outline.ts"),
+    ])
+
+    // The writer had only product_name + audience — it could not describe how
+    // the product works even when the section was entirely about that. That is
+    // starvation, not overload, and it is also the only first-party originality
+    // lever available against the unoriginal-content penalty.
+    assert.match(outlineSchema, /needs_product_detail/)
+    assert.match(outlineSchema, /product_aspect/)
+    assert.match(outlineSchema, /is_comparison/)
+
+    assert.match(writer, /currentSection\?\.needs_product_detail/)
+    assert.match(writer, /FIRST-PARTY FACTS FOR THIS SECTION/)
+    assert.match(writer, /COMPARISON REQUIREMENT/)
+    // Must render through brandList so an empty field cannot print "undefined".
+    assert.match(writer, /brandList\(brandDetails\[aspect\]\)/)
+    // And must stay silent when the outline did not ask for it.
+    assert.match(writer, /if \(!brandDetails \|\| !currentSection\?\.needs_product_detail\) return ""/)
+    // The outline must be told the writer gets nothing unless it flags the section.
+    assert.match(writer, /The writer receives NO product knowledge unless you flag it here/)
+})
+
 test("audit evidence reaches the writer and degrades safely without it", async () => {
     const [shipCluster, writer, dryRun] = await Promise.all([
         text("trigger/ship-cluster.ts"),

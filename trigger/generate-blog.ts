@@ -6,6 +6,7 @@ import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { CompetitorDataSchema, CompetitorData } from "@/lib/schemas/research"
 import { AngleInsightsSchema, AngleInsights } from "@/lib/schemas/angle-insights"
 import { ArticleOutlineSchema } from "@/lib/schemas/outline"
+import { selectIntroPattern, requiredLinksMissingFrom } from "@/lib/writer/composition"
 import { z } from "zod"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { marked } from "marked"
@@ -125,6 +126,12 @@ const cleanAndParse = (text: string) => {
 /**
  * The model may omit a requested link. Frozen program edges are a delivery
  * contract, so deterministically append any missing edge before HTML is saved.
+ *
+ * This is the LAST RESORT, not the normal path: each section already gets one
+ * targeted rewrite when it omits a required link, so reaching this append means
+ * the model failed twice. The appended block is what reads as a tacked-on
+ * callout, and it only exists because cluster delivery is withheld without the
+ * exact frozen anchor and destination present.
  */
 function ensureFrozenLinksInMarkdown(
   markdown: string,
@@ -1115,6 +1122,9 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
       "keywords_to_include": string[],
       "external_link": { "url": string, "anchor_context": string }, // OPTIONAL
       "internal_link": { "url": string, "title": string, "anchor_context": string }, // OPTIONAL
+      "needs_product_detail": boolean, // true ONLY if this section cannot be written well without real knowledge of OUR product
+      "product_aspect": "how_it_works" | "core_features" | "pricing" | "uvp" | null, // REQUIRED if needs_product_detail is true
+      "is_comparison": boolean, // true if this section compares tools/options — our product MUST appear in it
       "needs_image": boolean, // true if this section should have an in-content image
       "image_type": "concept" | "how_to" | "comparison" | "process" | "insight" // REQUIRED if needs_image is true
     }
@@ -1134,6 +1144,8 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
 - Have you instructed the writer to remove unnecessary fluff?
 - Have you assigned 1-2 external links to relevant sections?
 - Have you marked 3 H2 sections with needs_image: true?
+- **Have you set needs_product_detail + product_aspect on every section that genuinely requires knowing how OUR product works (especially How-To steps)? The writer receives NO product knowledge unless you flag it here — an unflagged How-To section will come out generic.**
+- **Have you set is_comparison: true on every section containing a comparison or table, so our own tool is not omitted from it?**
 `
 }
 
@@ -1145,21 +1157,41 @@ const generateWritingSystemPrompt = (styleDNA: string, outline: any, currentSect
   // Instead of listing all headings, we provide the instruction_notes for adjacent sections.
   // This gives the LLM clear boundaries on what was/will be covered.
 
-  const currentSection = outline.sections[currentSectionIndex]
+  // The intro is written with currentSectionIndex = -1. Guard it explicitly:
+  // `slice(Math.max(0, -3), -1)` returned EVERY section but the last and labelled
+  // them "already covered — do not repeat", which is both wrong for an intro and
+  // a large pointless token cost.
+  const isIntro = currentSectionIndex < 0
+  const currentSection = isIntro ? null : outline.sections[currentSectionIndex]
 
   // Get previous 2 sections with their instruction_notes
-  const prevSections = outline.sections.slice(Math.max(0, currentSectionIndex - 2), currentSectionIndex)
+  const prevSections = isIntro
+    ? []
+    : outline.sections.slice(Math.max(0, currentSectionIndex - 2), currentSectionIndex)
   const prevContext = prevSections.length > 0
     ? prevSections.map((s: any) => `- **${s.heading}**: ${s.instruction_note || 'No specific instructions'}`).join('\n')
     : "(This is the first section)"
 
-  // Get next 2 sections with their instruction_notes  
-  const nextSections = outline.sections.slice(currentSectionIndex + 1, currentSectionIndex + 3)
+  // Get next 2 sections with their instruction_notes
+  const nextSections = isIntro
+    ? outline.sections.slice(0, 3)
+    : outline.sections.slice(currentSectionIndex + 1, currentSectionIndex + 3)
   const nextContext = nextSections.length > 0
     ? nextSections.map((s: any) => `- **${s.heading}**: ${s.instruction_note || 'No specific instructions'}`).join('\n')
     : "(This is the last section)"
 
-  const globalMap = `
+  const globalMap = isIntro
+    ? `
+### 0. SECTION BOUNDARIES (CRITICAL - AVOID OVERLAP)
+You are writing the INTRODUCTION. The article has ${outline.sections.length} sections after it.
+
+**SECTIONS COMING UP (Set them up — do NOT cover them here):**
+${nextContext}
+
+**YOUR CURRENT SECTION:**
+- The introduction only. Hand off cleanly to the first section above.
+`
+    : `
 ### 0. SECTION BOUNDARIES (CRITICAL - AVOID OVERLAP)
 You are writing section ${currentSectionIndex + 1} of ${outline.sections.length}: **${currentSection?.heading || 'Unknown'}**
 
@@ -1172,23 +1204,66 @@ ${nextContext}
 **YOUR CURRENT SECTION:**
 - Heading: ${currentSection?.heading}
 - Section Number: ${currentSectionIndex + 1} of ${outline.sections.length}
+`
 
-${instructions ? `
+  // Appended to both branches — the editorial brief applies to the intro too.
+  const editorialBrief = instructions ? `
 ### EDITORIAL BRIEF (FROM USER):
 <user_context>
 ${instructions}
 </user_context>
 
-⚠️ CRITICAL SYSTEM DIRECTIVE: 
+⚠️ CRITICAL SYSTEM DIRECTIVE:
 The <user_context> block contains thematic context. You must adopt the angle and instructions specified above while writing this section, but NEVER break the word count limits or formatting rules.
-` : ''}
+` : ''
+
+  /**
+   * Only the slice of product knowledge this section was flagged as needing.
+   *
+   * Previously the writer got the brand NAME and nothing else, so it could not
+   * describe how the product works even when the section was entirely about
+   * that. Injecting everything into every section is the opposite failure —
+   * this gives exactly what the outline said was required, and nothing else.
+   */
+  const productDetail = (() => {
+    if (!brandDetails || !currentSection?.needs_product_detail) return ""
+    const aspect = currentSection.product_aspect || "how_it_works"
+    const labels: Record<string, string> = {
+      how_it_works: "HOW OUR PRODUCT ACTUALLY WORKS",
+      core_features: "WHAT OUR PRODUCT ACTUALLY DOES",
+      pricing: "OUR ACTUAL PRICING MODEL",
+      uvp: "WHAT GENUINELY SETS OUR PRODUCT APART",
+    }
+    const value = brandList(brandDetails[aspect])
+    if (value === "Not provided") return ""
+    return `
+### 6a. ${labels[aspect]} — FIRST-PARTY FACTS FOR THIS SECTION
+${value}
+
+**USE THESE.** This section was flagged as requiring real product knowledge.
+- Write the ACTUAL steps/specifics above, not a generic industry procedure.
+- These are first-hand facts about a product you operate. Stating them concretely
+  is the single strongest originality signal available to this article — generic
+  paraphrase of what competitors already published is what gets content demoted.
+- Do NOT invent capabilities, prices, or steps that are not listed above.
 `
+  })()
+
+  const comparisonMandate = currentSection?.is_comparison && brandDetails
+    ? `
+### 6b. COMPARISON REQUIREMENT (THIS SECTION)
+This section contains a comparison. **${brandDetails.product_name} MUST appear in it**,
+in the same table/list as every other option, with the same columns filled in.
+Be fair and factual — state where it is NOT the right choice too. Omitting our own
+product from our own comparison is the single most common failure here.
+`
+    : ""
 
   // Build brand context section with contextual guidelines
   let brandContextSection = ""
   if (brandDetails) {
     brandContextSection = `
-### 5. BRAND MENTION GUIDELINES (USE JUDGMENT - NOT RIGID RULES)
+### 6. BRAND MENTION GUIDELINES (USE JUDGMENT - NOT RIGID RULES)
 
 **Your brand:** ${brandDetails.product_name}
 **Audience:** ${brandDetails.audience?.primary || 'Users seeking solutions'}
@@ -1230,7 +1305,7 @@ Authoritative articles are trusted by search engines. Sales pitches are not.
 
   // Article-type-aware intro strategy
   const introStrategy = `
-### 6. INTRO STRATEGY (ADAPT TO ARTICLE TYPE: ${articleType.toUpperCase()})
+### 5a. INTRO STRATEGY (ADAPT TO ARTICLE TYPE: ${articleType.toUpperCase()})
 
 ${articleType === 'informational' ? `**INFORMATIONAL ARTICLE:**
 - **The "Hook"**: Lead with the direct answer in sentences 1-2 in a surprising statistic, a contrarian take, or a "Hard Truth" about the topic.
@@ -1265,12 +1340,13 @@ ${articleType === 'howto' ? `**HOW-TO/TUTORIAL ARTICLE:**
 You are an expert Blog Writer who knows the autneticity rules for modern ai search engine. You are NOT an AI assistant. You are a Subject Matter Expert (SME). ${getCurrentDateContext()}
 
 ${globalMap}
+${editorialBrief}
 
-### 7. THE CODE OF AUTHENTICITY (NON-NEGOTIABLE)
+### 1. THE CODE OF AUTHENTICITY (NON-NEGOTIABLE)
 **We write for HUMANS, not just algorithms. If you sound like a robot or violate these formatting constraints, the article will fail.**
 "${AUTHENTIC_WRITING_RULES}"
 
-### 8. WRITING STYLE & VOICE OF BRAND YOU ARE WRITING FOR (FOLLOW THESE INSTRUCTIONS PRECISELY)
+### 2. WRITING STYLE & VOICE OF BRAND YOU ARE WRITING FOR (FOLLOW THESE INSTRUCTIONS PRECISELY)
 "${styleDNA}"
 ${(() => {
       const ukSpellingCountries = ["australia", "united kingdom", "new zealand", "south africa", "ireland", "india"]
@@ -1292,11 +1368,11 @@ If you are unsure, default to British English spelling conventions.`
       return ""
     })()}
 
-### 9. STRATEGY & MINDSET
+### 3. STRATEGY & MINDSET
 - **Goal:** Rank #1 on Google and get cited by ai LLMs by being more specific, helpful, and "human" than the competition to answer the user's question.
 - **Method:** High information density, low word count. Every sentence must earn its place.
 
-### 10. THE "ANTI-FLUFF" PROTOCOL (COMPETITOR TRANSFORMATION)
+### 4. CITATION & ATTRIBUTION POLICY (WHO YOU MAY CITE)
 **How to handle data and citations to maximize OUR authority without risking plagiarism:**
 
 1. **NEVER CITE COMPETITORS:**
@@ -1316,11 +1392,13 @@ If you are unsure, default to British English spelling conventions.`
    - Whenever possible, prioritize insights derived from our own tool/platform over external reports.
    - Use phrases like "Our platform handles this by..." or "We built [Brand Name] to solve this specific issue..."
 
-### 11. ARTICLE STRATEGY - supporting data (${articleType.toUpperCase()})
-${introStrategy}
+### 5. ARTICLE STRATEGY - supporting data (${articleType.toUpperCase()})
+${isIntro ? introStrategy : ''}
 ${brandContextSection}
+${productDetail}
+${comparisonMandate}
 
-### 12. THE "VISUAL RHYTHM" MANDATE (SCANNABILITY)
+### 7. THE "VISUAL RHYTHM" MANDATE (SCANNABILITY)
 *The formatting is as important as the text.*
 
 1.  **THE TABLE RULE:** If you equate/compare >2 items (features, pros/cons, prices), you **MUST** use a Markdown Table.
@@ -1336,13 +1414,13 @@ ${brandContextSection}
 3. **BOLDED ENTITIES:** - **Bold** the specific Named Entity (e.g., "**$29/mo**", "**Next.js**", "**HubSpot**").
    - This acts as an "Attention Anchor" for the AI parser.
 
-### 6. OUTPUT FORMAT
+### 8. OUTPUT FORMAT
 Return **Markdown** formatted text. 
 - Make use of proper H2, H3, and H4 headers for SEO appropriately.
 - Do NOT include the main H2 Section Heading (system adds it).
 - Start directly with the body content.
 
-### 7. ANTI-FLUFF PROTOCOL (CRITICAL - READ THIS)
+### 9. ANTI-FLUFF PROTOCOL — LENGTH & DENSITY (CRITICAL - READ THIS)
 **THE STOP RULE:** When the core point of the section is delivered, STOP WRITING.
 - Do NOT add filler paragraphs to "round out" the section.
 - Do NOT repeat what was said in previous sections (you have the Context Snowball for reference).
@@ -1395,11 +1473,22 @@ You MUST include an internal link to our own content in this section.
 5. **FLOW IS KING:** The sentence must be grammatically correct even if the link was removed.
 
 
+6. **PLACEMENT — MID-PARAGRAPH, NEVER TRAILING:** The link must sit inside a
+   sentence that is doing real work in the middle of a paragraph. A link is a
+   cross-reference for a claim you just made, not a footnote.
+   - ⛔️ NEVER end a paragraph or section with a referral sentence.
+   - ⛔️ BANNED CONSTRUCTIONS: "To learn more about X, read our blog on Y.",
+     "For a deeper dive, see our guide to Z.", "Check out our post on…",
+     "Related reading:", "Further reading:".
+   - These read as bolted-on and are the single most common failure here.
+
 **EXAMPLES:**
 ❌ Bad (Using Title): "You should read (How Internal Linking Boosts SEO)[url]."
 ❌ Bad (Click Here): "For more info on SEO, [click here](url)."
+❌ Bad (Trailing callout): "…and that improves rankings. To learn more about internal linking, read our guide on link structure."
 ✅ GOOD (Contextual): "This is why [internal linking strategies](url) are vital for growth."
 ✅ GOOD (Contextual): "Most experts agree that [strategic link placement](url) signals authority."
+✅ GOOD (Mid-paragraph): "Scanning flat removes the glare problem entirely, which is the same reason [scanner resolution matters more than megapixels](url) for archival work — and it costs nothing to fix upfront."
 `
   }
 
@@ -1491,6 +1580,9 @@ interface GenerateBlogPayload {
   sourceQueries?: string[];
   clusterCompetitorUrls?: string[];
   isPillar?: boolean;
+  /** Position within the cluster — drives deterministic intro-pattern rotation. */
+  clusterPosition?: number;
+  clusterId?: string;
 }
 
 export const generateBlogPost = task({
@@ -1550,7 +1642,9 @@ export const generateBlogPost = task({
       instructions,
       sourceQueries = [],
       clusterCompetitorUrls = [],
-      isPillar = false
+      isPillar = false,
+      clusterPosition = 0,
+      clusterId = ""
     } = payload
     const supabase = createAdminClient()
     const costCollector = new ProgramCostCollector()
@@ -1651,7 +1745,31 @@ export const generateBlogPost = task({
       // --- PHASE 3: OUTLINE (The "Architect") ---
       phase = "outline"
 
-      // Filter authority links to exclude social media and generic domains
+      // Competitor hosts we must never offer as a citation target. Derived from
+      // the audit's real competitor list plus the subject's own domain, so this
+      // is evidence rather than a guess.
+      const forbiddenCitationHosts = new Set(
+        clusterCompetitorUrls
+          .map((url: string) => {
+            try {
+              return new URL(url).hostname.toLowerCase().replace(/^www\./, "")
+            } catch {
+              return ""
+            }
+          })
+          .filter(Boolean),
+      )
+
+      /**
+       * Filters citation candidates.
+       *
+       * Social/UGC domains were already excluded. Competitors were NOT — and
+       * because the research search uses the article's own keyword, the top
+       * results ARE the ranking competitors. They flowed into `external_link`,
+       * where the writer was simultaneously told "MANDATORY CITATION" and
+       * "NEVER CITE COMPETITORS" (§4). Facing that contradiction it dropped the
+       * link, which is why external links so rarely appeared.
+       */
       const filterAuthorityLinks = (links: Array<{ url: string, title: string, snippet?: string }>) => {
         const badDomains = [
           "youtube.com", "facebook.com", "twitter.com", "linkedin.com",
@@ -1659,14 +1777,26 @@ export const generateBlogPost = task({
           "medium.com", "quora.com" // Also exclude user-generated content platforms
         ]
 
-        return links.filter(link => {
+        let competitorsDropped = 0
+        const kept = links.filter(link => {
           try {
             const domain = new URL(link.url).hostname.toLowerCase()
-            return !badDomains.some(d => domain.includes(d))
+            if (badDomains.some(d => domain.includes(d))) return false
+            const bare = domain.replace(/^www\./, "")
+            if (forbiddenCitationHosts.has(bare)) {
+              competitorsDropped++
+              return false
+            }
+            return true
           } catch {
             return false // Invalid URL, filter it out
           }
         }).slice(0, 5) // Keep top 5 candidates
+
+        if (competitorsDropped > 0) {
+          console.log(`🔗 [DEBUG] Dropped ${competitorsDropped} competitor URL(s) from citation candidates`)
+        }
+        return kept
       }
 
       // Clean authority links before passing to outline
@@ -1846,19 +1976,21 @@ ${JSON.stringify(outline)}`
       // Only write intro if not resuming (startIndex === 0)
       if (startIndex === 0 && outline.intro) {
         const systemPrompt = generateWritingSystemPrompt(styleDNA, outline, -1, brandDetails, articleType, instructions)
-        const introTemplate = getIntroTemplate(articleType)
+        const introPattern = selectIntroPattern(articleType, clusterPosition, clusterId)
+        console.log(
+          `[Blog Gen] Intro pattern: ${introPattern.framing} + ${introPattern.secondMove} ` +
+          `(cluster position ${clusterPosition})`,
+        )
         const userPrompt = generateWritingUserPrompt(currentDraft, {
           heading: "Introduction / Hook (COLD OPEN)",
           instruction_note: `
-*** STRICT STRUCTURE REQUIREMENT ***
-You MUST follow this specific intro template structure:
-${introTemplate}
+*** INTRO STRUCTURE — FOLLOW THE ASSIGNED SHAPE ***
+${introPattern.brief}
 
 CRITICAL EXECUTION RULES:
 1. Do NOT write a generic "Welcome" or "In this guide". Start in the middle of the action.
-2. Start IMMEDIATELY with the Hook data point, or contrarian opinion.
-3. Make the reader feel the problem before you offer the solution.
-4. ${outline.intro.instruction_note}
+2. The answer comes FIRST, in the assigned framing. Do not delay it to build tension.
+3. ${outline.intro.instruction_note}
 `,
           keywords_to_include: outline.intro.keywords_to_include
         }, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
@@ -1928,6 +2060,47 @@ CRITICAL EXECUTION RULES:
         let writeText = ""
         for await (const c of writeStream) {
           writeText += (c as any).text || ""
+        }
+
+        // A required link the model quietly skipped is the most common failure
+        // here. Re-prompt this ONE section once rather than appending a
+        // tacked-on "read our blog on X" callout at the end, which is what made
+        // the links read as bolted on. Never fabricate a citation.
+        const missingLinks = requiredLinksMissingFrom(writeText, section)
+        if (missingLinks.length > 0) {
+          console.log(`🔗 [Blog Gen] Section "${section.heading}" omitted ${missingLinks.length} required link(s) — retrying once`)
+          try {
+            const retryStream = await genAI.models.generateContentStream({
+              model: "gemini-3-flash-preview",
+              config: writeConfig,
+              contents: [{
+                role: "user",
+                parts: [{
+                  text: `${systemPrompt}\n${userPrompt}\n
+### REWRITE — REQUIRED LINK WAS OMITTED
+Your previous draft of this section left out ${missingLinks.length === 1 ? 'a required link' : 'required links'}:
+${missingLinks.map((url) => `- ${url}`).join('\n')}
+
+Rewrite the section at the same length and quality, weaving ${missingLinks.length === 1 ? 'that link' : 'those links'} into a sentence MID-PARAGRAPH.
+- The anchor must be 2-5 lowercase words that read naturally in the sentence.
+- ⛔️ Do NOT append it as a trailing "To learn more about X, read our guide on Y."
+- ⛔️ Do NOT add a "Related reading" or "Further reading" list.
+- The sentence must still make sense if the link were removed.`,
+                }],
+              }],
+            })
+            let retryText = ""
+            for await (const c of retryStream) {
+              retryText += (c as any).text || ""
+            }
+            if (retryText.trim() && requiredLinksMissingFrom(retryText, section).length < missingLinks.length) {
+              writeText = retryText
+            } else {
+              console.log(`🔗 [Blog Gen] Retry did not add the link(s); keeping original draft`)
+            }
+          } catch (retryError) {
+            console.warn(`🔗 [Blog Gen] Link retry failed (non-blocking):`, retryError)
+          }
         }
 
         // Append to Snowball - Strip any duplicate heading the LLM might have added

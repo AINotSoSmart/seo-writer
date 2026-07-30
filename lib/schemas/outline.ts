@@ -28,6 +28,23 @@ export const ArticleOutlineSchema = z.object({
           title: z.string(),
           anchor_context: z.string().describe("Context for the link anchor"),
         }).nullable().optional(),
+        /**
+         * Does this section need real product knowledge to be written well?
+         *
+         * The section writer is given only the brand name and audience — it has
+         * no features, no how-it-works, no pricing. That is why How-To steps
+         * came out generic and comparison tables omitted our own tool: the
+         * writer literally did not know how the product works. The outline
+         * model DOES have the full brand context, so it marks which sections
+         * need it and only those receive the relevant slice.
+         */
+        needs_product_detail: z.boolean().nullable().optional().transform(v => v ?? false),
+        product_aspect: z
+          .enum(['how_it_works', 'core_features', 'pricing', 'uvp'])
+          .nullable()
+          .optional(),
+        /** True when this section contains a comparison the product must appear in. */
+        is_comparison: z.boolean().nullable().optional().transform(v => v ?? false),
         // Optional: Should this section have an in-content image?
         needs_image: z.boolean().nullable().optional().transform(v => v ?? false),
         // Optional: Type of image if needs_image is true

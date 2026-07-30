@@ -453,7 +453,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **34/34 test groups passed**.
+- `npm run test:pivot-contract`: **39/39 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -540,11 +540,116 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     the model as the string "undefined". Verify writer inputs with
     `/api/writer/dry-run` before trusting a paid run, and never add a
     `brandDetails.X` read without a matching field on `BrandDetailsSchema`.
-16. Relevance is not sufficiency. A query must also be *deliverable*: not
+16. The writer's intro shape is assigned, not chosen. Answer-first is an
+    invariant (44% of AI citations come from the first 30% of a page); variety
+    comes from rotating framing/second-move by cluster position. Never
+    reintroduce a fixed "GOLDEN ORDER" or a mandatory "by the end of this
+    guide" promise.
+17. A section gets product knowledge only when the outline flags it
+    (`needs_product_detail`). Never inject the whole brand blob into every
+    section, and never leave a How-To section unflagged — the writer receives
+    nothing otherwise.
+18. Relevance is not sufficiency. A query must also be *deliverable*: not
     centred on a third party's product, and not dependent on the publishing
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-01 - writer quality: intros, links, brand starvation
+
+Four complaints from reading a real delivered cluster. Root causes were not what
+they looked like.
+
+**Research first (2026 evidence, not assumption).** Two findings reshaped the
+work:
+
+- **Answer-first is worth protecting.** Models extract ~44% of citations from the
+  first 30% of a page, and 97% of AI Overviews cite a top-20 organic result. The
+  existing "Bridge Answer" rule was correct; variety must not come from delaying
+  the answer.
+- **Originality now dominates.** AI-paraphrased content lost ~71% of traffic
+  post-March-2026 while sites with original data gained ~22%. Google's spam
+  policy targets *"large amounts of unoriginal content… no matter how it's
+  created"*. A pipeline that synthesises competitor research produces exactly the
+  "comprehensive but impersonal" category that lost — this is almost certainly
+  why the old FlipAEO content was de-indexed.
+
+**1. Intros were templated by instruction.** `INTRO_TEMPLATES` mandated one
+"GOLDEN ORDER" per type: definition → `**Key Characteristics:**` → hook →
+*"By the end of this guide…"*. Every article of a type opened identically
+because it was told to. Two further defects compounded it: a second, *different*
+mandatory intro recipe (`introStrategy`) was rendered into **every section's**
+prompt, and the intro was built with `currentSectionIndex = -1`, so
+`slice(Math.max(0,-3), -1)` handed it every section but the last labelled
+"already covered — do not repeat".
+
+Replaced with invariants + rotation in `lib/writer/composition.ts`:
+answer-first, bolding rules, paragraph limits and banned openers are now
+invariants; 5 answer framings × 4 second moves rotate deterministically from
+cluster position, seeded by cluster id. 20 combinations against a 15-article
+cluster maximum, so **no two articles in a cluster can share an opening shape**,
+and a retry cannot change one. The mandatory "by the end of this guide" promise
+is gone — no evidence required it and it was the most recognisable tell.
+
+Verified live on a real 5-article cluster: `definition+attribute-list`,
+`verdict+mechanism`, `direct-number+worked-example`, `corrective+common-failure`,
+`conditional+attribute-list`.
+
+**2. External links: a contradiction, not a lazy agent.** `authority_links` come
+from a Tavily search on the article's own keyword — so the top results *are* the
+ranking competitors. `filterAuthorityLinks` stripped only social/UGC domains, and
+the synthesis prompt asked for "non-competitor URLs" while never being told who
+the competitors were. One would land in a section's `external_link`, and the
+writer was then told both "MANDATORY CITATION" and (§4) "NEVER CITE COMPETITORS".
+It resolved the contradiction by dropping the link.
+
+Competitor hosts from the audit (`clusterCompetitorUrls`) are now filtered out of
+citation candidates before the outline sees them, www-insensitively.
+
+**3. Internal links read as bolted on.** Nothing detected an omitted link, and
+the only recovery was `ensureFrozenLinksInMarkdown` appending a
+`## Related reading` block. Now each section is checked after drafting and
+re-prompted **once** to weave the link mid-paragraph, with trailing
+"To learn more about X, read our blog on Y" constructions explicitly banned. The
+deterministic append survives as a last resort for frozen links only, because
+cluster delivery genuinely depends on them.
+
+**4. Brand handling was starvation, not overload.** The section writer received
+only `product_name` and `audience.primary` — no `core_features`, `how_it_works`,
+`uvp` or `pricing`. It wrote generic How-To steps because *it did not know how
+the product works*. Those facts existed only in the outline prompt, which was
+expected to copy them into `instruction_note` and silently didn't.
+
+`ArticleOutlineSchema` gained `needs_product_detail`, `product_aspect` and
+`is_comparison`. The outline model — which has the full brand context — flags
+which sections need product knowledge, and only those receive that one slice.
+Given the originality finding, this is not a polish item: **product knowledge is
+the only genuinely first-party material available**, and the existing
+`FIRST-PARTY PRIORITY` rule could never be obeyed without it.
+
+**Prompt structure.** `### 6` and `### 7` each appeared twice. Critically, the
+two blocks named "ANTI-FLUFF PROTOCOL" are **not duplicates** and were not
+merged — `### 10` contained zero fluff rules; its content is citation policy
+(never cite competitors, always cite super-authorities, first-party priority).
+It was renamed `### 4. CITATION & ATTRIBUTION POLICY`; its rules are untouched.
+Headings are now unique. No cross-references of the form "section N" exist, so
+renumbering was label-only.
+
+**Nothing deleted.** `INTRO_TEMPLATES` and `getIntroTemplate` are retained,
+unused, as the documented provenance of every invariant. A contract test asserts
+the surviving rules ("Visual Speed Bumps", "3 lines", "Let's dive in",
+"Top 10 Best", "Getting started is easy") are all still present, and that both
+protocol blocks still exist independently.
+
+39/39 contract groups pass; `tsc` clean on every touched path.
+
+**Open strategic risk.** This makes the best originality move available, but a
+pipeline whose research input is "what competitors published" has a structural
+ceiling on originality. Worth deciding separately: whether the customer can
+supply genuinely first-hand material, whether author attribution should be real
+and verifiable, and whether cluster composition should shift toward case-study
+and pricing-shaped articles, which reportedly earn more AI citations than
+"what is" guides.
 
 ### 2026-08-01 - the article writer's inputs, audited and connected
 

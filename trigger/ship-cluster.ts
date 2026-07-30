@@ -279,6 +279,12 @@ async function advanceCluster(
                 sourceQueries: clusterEvidence.queriesByArticle.get(planned.id) || [],
                 clusterCompetitorUrls: clusterEvidence.competitorUrls,
                 isPillar: Boolean(planned.is_pillar),
+                // Drives deterministic intro-pattern rotation. Taken from the
+                // full cluster ordering (not the retry-filtered candidate list)
+                // so a retried article keeps the same opening shape it would
+                // have had on the first attempt.
+                clusterPosition: plannedRows.findIndex((row: any) => row.id === planned.id),
+                clusterId: auditClusterId,
             }, {
                 idempotencyKey: `${planned.id}:${nextRetryCount}`,
             })

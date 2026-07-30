@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { generateOutlineSystemPrompt } from "@/trigger/generate-blog"
+import { selectIntroPattern } from "@/lib/writer/composition"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { createAdminClient } from "@/utils/supabase/admin"
 
@@ -83,6 +84,21 @@ export async function GET(req: NextRequest) {
         )
     }
 
+    // Resolve this article's position within its cluster exactly as ship-cluster
+    // does, so the reported intro pattern is the one a real run would use.
+    const { data: siblings } = planned.cluster_id
+        ? await db
+              .from("planned_articles")
+              .select("id")
+              .eq("audit_id", planned.audit_id)
+              .eq("cluster_id", planned.cluster_id)
+              .order("is_pillar", { ascending: false })
+        : { data: [] }
+    const clusterPosition = Math.max(
+        0,
+        (siblings || []).findIndex((row: any) => row.id === planned.id),
+    )
+
     // --- Brand, loaded exactly as the writer loads it -----------------------
     const { data: brandRec } = await db
         .from("brand_details")
@@ -161,7 +177,15 @@ export async function GET(req: NextRequest) {
         sourceQueries: (sourceQueries || []).slice(0, 8).map((row: any) => row.query),
         clusterCompetitorUrls: competitorUrls,
         isPillar: Boolean(planned.is_pillar),
+        clusterPosition,
+        clusterId: planned.cluster_id || "",
     }
+
+    const introPattern = selectIntroPattern(
+        payload.articleType as any,
+        clusterPosition,
+        payload.clusterId,
+    )
 
     // --- Assemble the real outline prompt ----------------------------------
     const outlinePrompt = generateOutlineSystemPrompt(
@@ -249,6 +273,18 @@ export async function GET(req: NextRequest) {
                     ? "No frozen links yet — the graph is frozen at purchase-intent time, so this is expected before checkout."
                     : "Each anchor+URL must appear literally in the finished markdown or the cluster is withheld.",
             links: frozenLinks,
+        },
+
+        /**
+         * The opening shape assigned to this article. Two articles in the same
+         * cluster must never report the same framing+secondMove combination —
+         * that is the acceptance test for "every intro reads identical".
+         */
+        introPattern: {
+            clusterPosition,
+            framing: introPattern.framing,
+            secondMove: introPattern.secondMove,
+            note: "Deterministic from cluster position + cluster id. Stable across retries.",
         },
 
         outlinePrompt: {
