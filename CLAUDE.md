@@ -40,6 +40,19 @@ that was already diagnosed and fixed.
   caught the previous examples and missed the next. Prefer evidential tests.
 - **Provenance is mandatory.** Every harvested query must carry a working
   `source_url`. A gap that cannot be traced to its source is a bug.
+- **Never edit an applied migration.** The closed-pool tables use
+  `CREATE TABLE IF NOT EXISTS`, so editing `20260728_harvest_pool.sql` is a
+  silent no-op against any existing database — the change looks correct in the
+  repo and never reaches Postgres. Add a new migration with
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, then extend
+  `20260730_reconcile_harvest_columns.sql` so `npm run test:pivot-contract`
+  stays green. The one permitted edit is making an existing statement
+  re-runnable — a migration must survive being replayed against a database
+  that is *ahead* of it, which is why every `COMMENT ON` is wrapped in an
+  existence check.
+- **Apply migrations via the Supabase SQL editor, never `supabase db push`.**
+  The CLI's migration history on this project stops at `20260404014829`, so it
+  treats every pivot migration as pending and would replay all of them.
 - Pre-existing TypeScript errors exist in unrelated UI files (`mobile-panel.tsx`,
   `pattern-picker.tsx`, `ContentParser.tsx`, `RelatedPosts.tsx`,
   `mini-stats.tsx`). They are not yours; filter `tsc` output to the paths you

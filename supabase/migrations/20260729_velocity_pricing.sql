@@ -75,16 +75,27 @@ VALUES
     ),
     (
         'Dominate',
-        'Six-cluster program delivered in complete batches, four clusters per 30-day billing period.',
-        799,
-        60,
+        'Six-cluster program delivered in complete batches, three clusters per 30-day billing period.',
+        599,
+        45,
         'USD',
         'pdt_0NkDO0sMN9Lu8VQKdhM7I',
         true,
-        '{"tier": "dominate", "clusters_per_month": 4}'::jsonb
+        '{"tier": "dominate", "clusters_per_month": 3}'::jsonb
     )
 ON CONFLICT DO NOTHING;
 
 
-COMMENT ON TABLE dodo_pricing_plans IS
-    'Finite six-cluster velocity tiers. Pricing changes delivery cadence, not scope.';
+-- Guarded so a replay cannot abort here: COMMENT has no IF EXISTS, and a
+-- comment is documentation, not schema. See the header of
+-- `20260728_harvest_pool.sql` for the failure this pattern prevents.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'dodo_pricing_plans'
+    ) THEN
+        COMMENT ON TABLE dodo_pricing_plans IS
+            'Finite six-cluster velocity tiers. Pricing changes delivery cadence, not scope.';
+    END IF;
+END $$;

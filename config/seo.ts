@@ -16,7 +16,7 @@ export interface SEOConfig {
 export const defaultSEO: SEOConfig = {
   title: "FlipAEO — Evidence-Backed Content Clusters for Founder-Led B2B SaaS",
   description:
-    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers the six highest-priority qualified clusters as one finite, interlinked program.",
+    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers highest-priority qualified clusters as one finite, interlinked program.",
   keywords: [
     "topical authority",
     "how to build topical authority",
@@ -127,7 +127,7 @@ export const openGraphImages = {
     url: `${defaultSEO.siteUrl}/og-image.png`,
     width: 1200,
     height: 630,
-    alt: "FlipAEO evidence-backed topic-cluster delivery",
+    alt: "Content Clusters for Founder-Led B2B SaaS",
   },
   logo: {
     url: `${defaultSEO.siteUrl}/site-logo.png`,

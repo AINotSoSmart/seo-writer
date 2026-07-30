@@ -342,20 +342,33 @@ Public/product cleanup completed:
 
 Do not enable checkout while applying this work.
 
+**Apply migrations by pasting them into the Supabase SQL editor, one file at a
+time. Do not run `supabase db push`.** `supabase_migrations.schema_migrations`
+on the live project has nothing recorded after `20260404014829`, so every pivot
+migration is untracked: `db push` would treat all of them as pending and replay
+the whole set against a database that already has them. Every migration is now
+re-runnable (enforced by `npm run test:pivot-contract`), so a replay should be
+survivable — but it is not a thing to find out during an incident. Repairing the
+migration history with `supabase migration repair` is a separate task, listed in
+§5.
+
 1. Back up the staging database.
 2. Apply `supabase/migrations/20260729_velocity_pricing.sql`.
 3. Apply `supabase/migrations/20260730_closed_pool_v2.sql`.
-4. Deploy application and Trigger.dev source with
+4. Apply `supabase/migrations/20260730_reconcile_harvest_columns.sql`.
+   Required on any database created before 2026-07-30 — see the changelog entry
+   below. It is idempotent, so applying it to a fresh database is a no-op.
+5. Deploy application and Trigger.dev source with
    `CLOSED_POOL_CHECKOUT_ENABLED=false`.
-5. Confirm `program-lifecycle` is healthy.
-6. Only then archive these Trigger.dev schedules:
+6. Confirm `program-lifecycle` is healthy.
+7. Only then archive these Trigger.dev schedules:
    - `daily-content-watchman`
    - `seo-health-auto-refresh`
    - `sitemap-sync-scheduler`
    - `gsc-daily-auto-refresh`
    - `ship-cluster`
-7. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
-8. Enable checkout only on the exact commit that passed all gates.
+8. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
+9. Enable checkout only on the exact commit that passed all gates.
 
 Required server environment:
 
@@ -370,7 +383,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **13/13 test groups passed**.
+- `npm run test:pivot-contract`: **20/20 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **passed** before the instruction to skip further builds.
 - Public checkout remains disabled by default in code.
@@ -387,6 +400,8 @@ The contract suite is `tests/pivot-contract.test.mjs`. It covers:
 - Consent/checkout fail-closed defaults.
 - WordPress permalink protection.
 - Provider usage/cost recording.
+- Migration reconciliation (no base column without a matching `ALTER`).
+- Migration replay safety (no statement that aborts on a second run).
 
 No further build should be run merely for documentation or small copy changes.
 Follow `AGENTS.md`: lint/typecheck/build only after a meaningful code batch or at
@@ -413,6 +428,10 @@ open and must be performed against staging/Dodo sandbox/WordPress:
 - Set real `PROGRAM_COST_RATES_JSON`, complete a cluster, and verify every
   `program_cost_events` row has complete usage and a non-null cost.
 - Archive the retired Trigger.dev schedules only after the replacement is live.
+- Repair `supabase_migrations.schema_migrations`, which records nothing after
+  `20260404014829`. Every pivot migration was applied by hand, so the CLI
+  believes none of them exist. Until `supabase migration repair` backfills them,
+  `supabase db push` must not be run against this project.
 
 See `docs/CLOSED_POOL_RELEASE_GATE.md` for the numbered 24-step evidence record.
 Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
@@ -435,8 +454,118 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 11. A provenance gap, unresolved graph edge, permalink mismatch, billing replay
     failure, or unknown provider cost is a release blocker.
 12. Keep checkout disabled until the manual external gate passes.
+13. **Never edit a migration that has already been applied.** Every table in
+    `20260728_harvest_pool.sql` uses `CREATE TABLE IF NOT EXISTS`, so an edit to
+    it is a silent no-op against any database that already has those tables —
+    the change lands in the repo, passes review, and never reaches Postgres. Add
+    a new migration with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` instead, and
+    extend `20260730_reconcile_harvest_columns.sql` so the contract test passes.
 
 ## 7. Changelog
+
+### 2026-07-30 - schema drift from an edited migration
+
+`observed_value` and `observed_at` were added to `query_pool` by editing
+`20260728_harvest_pool.sql` **after it had already been applied**. Because that
+table is created with `CREATE TABLE IF NOT EXISTS`, re-running the file did
+nothing at all, and `20260730_closed_pool_v2.sql` went on to *reference*
+`observed_value` in a trigger and in `finalize_audit_run` without ever adding it.
+
+The result was the worst possible failure shape: the mismatch was invisible in
+the repo, invisible at deploy, and only surfaced at the very last step of a
+completed audit run.
+
+```
+[Audit Task] Fatal error: Error: Audit finalization failed:
+column "observed_value" of relation "query_pool" does not exist
+```
+
+Confirmed against the live schema — those two columns were the only ones
+missing across all four closed-pool tables, and `query_pool.source_url` was
+nullable when the design requires `NOT NULL`.
+
+Fixed:
+
+- `supabase/migrations/20260730_reconcile_harvest_columns.sql` — idempotent
+  `ADD COLUMN IF NOT EXISTS` for every non-identity column across `query_pool`,
+  `audit_clusters`, `planned_articles` and `programs`; backfill then `SET NOT
+  NULL` for `observed_value` and `source_url` (a bare `ADD COLUMN ... NOT NULL`
+  fails on a populated table); and a closing `DO` block that raises if anything
+  the writer needs is still absent.
+- `supabase/migrations/20260728_harvest_pool.sql` — a do-not-edit header
+  explaining why editing it does nothing.
+- `tests/pivot-contract.test.mjs` — new test parses every `CREATE TABLE` in the
+  base migration and asserts each non-identity column has a matching
+  `ADD COLUMN IF NOT EXISTS` in the reconciliation. **It caught a real gap on
+  first run**: `source_url` was being `SET NOT NULL` without ever being added,
+  which would have failed on a database old enough to lack it.
+
+18/18 contract tests pass.
+
+Two structural lessons, in the same spirit as replacing the collapse ratio with
+a direct duplicate check: the guard belongs on the *class* of mistake, not the
+instance, and a schema referenced by one migration but defined by another must
+be reconciled somewhere that runs.
+
+**Confirmed applied.** `query_pool.observed_value`, `observed_at` and
+`source_url` are all present and `NOT NULL` on the live project. The table held
+zero rows, so no backfill ran and no data was touched.
+
+### 2026-07-30 - migrations must survive a replay
+
+Re-running `20260728_harvest_pool.sql` aborted the whole script:
+
+```
+ERROR: 42703: column "niche_blueprint" of relation "topical_audits" does not exist
+```
+
+Nothing was broken. That file carried a bare `COMMENT ON COLUMN` documenting
+`niche_blueprint` as deprecated, and `20260730_closed_pool_v2.sql` has since
+dropped the column — so the earlier migration could no longer run against a
+database that had moved past it. A migration is not write-once: it gets pasted
+into the SQL editor twice, replayed onto a branch, or run against a database
+that is ahead of it, and it must survive all three.
+
+Fixed:
+
+- `20260728_harvest_pool.sql` — both `COMMENT ON COLUMN` statements moved inside
+  an `information_schema` existence check. Comments are documentation; they must
+  never be able to abort a script. Nothing else in that file was at risk: every
+  other statement is already `IF NOT EXISTS`, `CREATE OR REPLACE`, or
+  `DROP POLICY IF EXISTS`.
+- `20260729_velocity_pricing.sql` — same guard on `COMMENT ON TABLE
+  dodo_pricing_plans`. Not a live hazard (nothing drops that table), but keeping
+  the rule exception-free is worth more than deciding per-object which
+  identifiers are permanent.
+- `20260730_closed_pool_v2.sql` — audited, no change needed. Every
+  `CREATE TRIGGER` already has a matching `DROP TRIGGER IF EXISTS`.
+- `tests/pivot-contract.test.mjs` — new test asserts every pivot migration is
+  replay-safe: no unguarded `COMMENT ON`, no `CREATE TABLE`/`INDEX`/`TYPE`
+  without `IF NOT EXISTS`, and no `CREATE TRIGGER` without a preceding drop.
+  **It found the `velocity_pricing` comment on first run.**
+
+Also recorded in §3: `supabase db push` must not be used on this project. The
+CLI's migration history stops at `20260404014829`, so it considers every pivot
+migration pending and would replay all of them.
+
+Two follow-ons the replay test dragged out, both real:
+
+- The test's first version used a hardcoded file list and so skipped
+  `20260730_fix_dominate_tier.sql` — the same shape of hole as the bug it exists
+  to catch. It now scans the migrations directory, and immediately found an
+  unguarded `COMMENT ON TABLE` in that file.
+- That tier-fix migration is **superseded and now a no-op**. The $599/3-cluster
+  correction was applied to the 07-29 seed before it ran, so its retirement
+  clause matches nothing and its INSERT would have added a second active
+  Dominate row, making plan lookup ambiguous at checkout.
+
+Added alongside: a test asserting
+`clustersPerMonth x billingPeriods == programClusters` for every tier in
+`config/product-truth.ts`. The invariant was documented in a header comment
+there and had already been violated once in shipped pricing; a comment did not
+stop it.
+
+20/20 contract tests pass.
 
 ### 2026-07-30 - duplicate-article gate caught two real bugs
 
@@ -675,8 +804,24 @@ most expensive and leaving Close strictly dominated by Accelerate. Now:
 
 Per-cluster price now falls monotonically with speed. Changed in
 `config/product-truth.ts`, `actions/harvest.ts`, `app/audit/[token]/page.tsx`,
-and `supabase/migrations/20260730_fix_dominate_tier.sql` (guarded — needs the new
-$599 Dodo product id before it will run).
+and the seed in `supabase/migrations/20260729_velocity_pricing.sql`.
+
+**Applied and confirmed live** — `dodo_pricing_plans` holds exactly these three
+active rows with matching `billing_periods` and `clusters_per_month` metadata.
+`npm run test:pivot-contract` now asserts
+`clustersPerMonth x billingPeriods == programClusters` for every tier, so the
+half-empty-final-period bug cannot return.
+
+`supabase/migrations/20260730_fix_dominate_tier.sql` is **superseded and now a
+no-op.** The correction was applied to the 07-29 seed before it was run, so that
+migration's retirement clause matches nothing and its INSERT would add a second
+active Dominate row. Its body was removed; the pricing rationale is retained
+there as comments.
+
+**Still open:** confirm the Dodo product behind `pdt_0NkDO0sMN9Lu8VQKdhM7I`
+actually charges $599. That id previously belonged to the $799 Dominate product.
+If it was not repriced in the Dodo dashboard, the site advertises $599 while
+checkout charges $799.
 
 **Dodo capability check.** Verified against the API docs: subscription creation
 has **no** billing-cycle-limit field, so programs must end via
