@@ -45,7 +45,7 @@ customer's back.
 3. **Read the top-ranking pages** for those seeds and pull out the questions
    those pages answer.
 4. **Read competitor pages** and take their actual headlines.
-5. **Throw away junk** — page furniture, competitor support FAQs, off-topic drift.
+5. **Throw away junk** — page furniture, competitor support FAQs, off-topic drift, and anything not in the site's own language (competitors often publish translated versions).
 6. **Read their site** and work out which questions it already answers.
 7. **Subtract.** Everything left over is a gap.
 8. **Group the gaps** into clusters and give each one a title.
@@ -247,6 +247,7 @@ anything, and 78% of people left at that wall.
 | Customer re-runs their audit mid-program | New audit is stored separately. **Their running program does not change.** |
 | Two planned articles turn out near-identical | **The audit stops.** That means clustering failed to merge them, and shipping both would be selling the same article twice. |
 | An audit fails and the customer refreshes the page | Nothing re-runs. The failure is shown, and a retry is refused for 15 minutes. After 3 failures in that window retries stop entirely. |
+| The background worker never picks the job up | After 20 minutes the audit is marked failed automatically and becomes retryable. Previously it showed a loader forever and blocked every retry. |
 | Cancellation call to Dodo fails | Retries, then emails you. |
 
 The pattern: **when we're unsure, we stop rather than guess.** A wrong audit is

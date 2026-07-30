@@ -438,6 +438,94 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-30 - duplicate-article gate caught two real bugs
+
+The `duplicate_articles` invariant added earlier did its job on its first
+production run and failed the audit with 13 unmerged pairs:
+
+```
+"Alte Fotos animieren" ~ "O Animowaniu Starych Zdjęć"                (0.904)
+"ai powered generator" ~ "ai-powered generation"                     (0.899)
+"Alte Fotos animieren" ~ "As últimas novidades sobre como animar..." (0.867)
+```
+
+Two independent defects, both real.
+
+**1. The merge loop stopped early.** `collapseToArticles` had
+`if (supporting.length >= MAX_SUPPORTING_KEYWORDS) break`. Once a unit collected
+five supporting keywords the loop stopped scanning, so every remaining
+near-duplicate stayed unassigned — and an unassigned query goes on to become its
+own article unit. Eight identical phrasings shipped as one article plus three
+duplicates of it.
+
+The cap belongs on what the writer is shown, never on what the merge step
+consumes. Overflow duplicates are now absorbed: marked assigned and recorded in
+`sourceQueryIds` for traceability, just not listed in `supportingKeywords`.
+
+**2. Foreign-language queries in an English plan.** German, Polish and
+Portuguese titles harvested from a competitor's localised sitemap. The niche
+filter cannot catch these — multilingual embeddings place translations *close
+to* the English centroid by design, which is also exactly why they scored 0.9
+against each other and tripped the duplicate detector.
+
+Relevance and language are orthogonal, so `lib/harvest/language-filter.ts` adds
+a separate gate running before the demand filter (saving a request per foreign
+string). Detection is non-Latin script, foreign function words, and systematic
+morphological suffixes (`-ieren`, `-ção`, `-ość`, `-ement`). Suffixes matter:
+"Alte Fotos animieren" contains no German function word at all, but `-ieren` is
+unambiguous — morphology generalises where a word list only catches the case in
+front of you.
+
+Verified 16/16 against the exact production strings plus English controls,
+including "café website design" which must survive its single loan diacritic.
+Drops are reported as `languageFilter` in `/api/harvest/verify`.
+
+Contract suite pins both: the merge loop must not `break` on the cap, and
+assembly must run `filterByLanguage` before `filterToSearchedQueries`.
+
+
+### 2026-07-30 - abandoned audit runs self-heal
+
+**Reported from production.** Opening the audit page created a `topical_audits`
+row and showed a running loader, but no run appeared in Trigger.dev.
+
+`tasks.trigger()` did not throw — that path is caught and marks the row failed.
+It returned a handle, so the run was accepted somewhere the dashboard was not
+showing. **The most likely cause is environmental, not code:** a
+`TRIGGER_SECRET_KEY` in the deployed app that belongs to a different Trigger
+environment than the one being viewed, or a Trigger deploy that never shipped
+`run-topical-audit`, leaving runs queued against a version no worker serves.
+Application deploys and Trigger deploys are separate commands.
+
+**The application bug that made it unrecoverable is fixed regardless of cause.**
+A row is only ever advanced by the task itself, so when the task never executes
+the row stays `running` forever:
+
+- `GET` reported `running`, so the console rendered an endless loader.
+- `POST` answered "Audit already running", so retry was impossible.
+
+There was no timeout anywhere. The state was permanent and needed manual
+database editing to clear.
+
+`reclaimStaleRuns()` now runs at the start of both handlers. Any `running` row
+whose `started_at` is older than `AUDIT_STALE_AFTER_MINUTES` (20, against the
+task's `maxDuration` of 900s) is marked failed with
+`failure_code: "worker_never_ran"` and a message stating no work was completed
+and nothing was charged. The stuck state becomes an ordinary retryable failure,
+so the retry panel handles it with no intervention.
+
+Pinned in the contract suite: both GET and POST must call `reclaimStaleRuns`
+before reading status or triggering.
+
+**Still to verify in the deployment (not a code fix):**
+
+1. `TRIGGER_SECRET_KEY` in Vercel production belongs to the **prod** Trigger
+   environment, not dev.
+2. `npx trigger.dev@latest deploy` has been run since the task files changed —
+   deploying the Next app does not deploy Trigger tasks.
+3. The Trigger dashboard is being viewed on the same environment the key targets.
+
+
 ### 2026-07-30 - refreshing a failed audit no longer re-runs it
 
 **Reported from production.** An audit failed, the page was left open, and a

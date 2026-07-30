@@ -21,6 +21,59 @@ import { createAdminClient } from "@/utils/supabase/admin"
 const AUDIT_RETRY_COOLDOWN_MINUTES = 15
 const MAX_FAILURES_PER_COOLDOWN = 3
 
+/**
+ * A run older than this cannot still be alive: `runAuditTask` has
+ * `maxDuration: 900` (15 minutes), so 20 gives generous headroom.
+ */
+const AUDIT_STALE_AFTER_MINUTES = 20
+
+/**
+ * Marks abandoned `running` rows as failed.
+ *
+ * A row is only advanced by the Trigger task itself, so if the task never
+ * executes — a hard cancel, an OOM kill, a worker that never picked the run up,
+ * or a `TRIGGER_SECRET_KEY` pointing at a different environment — the row stays
+ * `running` forever. That was a permanent dead end: GET reported "running" so
+ * the UI span an endless loader, and POST answered "Audit already running" so
+ * the customer could never retry.
+ *
+ * Runs before every read and every trigger, so the stuck state self-heals into
+ * a retryable failure instead of needing manual database surgery.
+ */
+async function reclaimStaleRuns(db: any, userId: string, brandId: string): Promise<number> {
+    const staleBefore = new Date(
+        Date.now() - AUDIT_STALE_AFTER_MINUTES * 60 * 1000,
+    ).toISOString()
+
+    const { data: reclaimed } = await db
+        .from("topical_audits")
+        .update({
+            run_status: "failed",
+            generation_status: "failed",
+            generation_phase: null,
+            failure_code: "worker_never_ran",
+            generation_error:
+                "The audit did not start within the expected time and was stopped. " +
+                "No work was completed and nothing was charged.",
+            failed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .eq("brand_id", brandId)
+        .eq("run_status", "running")
+        .lt("started_at", staleBefore)
+        .select("id")
+
+    const count = reclaimed?.length || 0
+    if (count > 0) {
+        console.warn(
+            `[Audit API] Reclaimed ${count} stale run(s) for brand ${brandId} — ` +
+            `the background worker never advanced them.`,
+        )
+    }
+    return count
+}
+
 type RetryState = {
     retryAfterSeconds: number
     attemptsRemaining: number
@@ -112,6 +165,9 @@ export async function POST(req: NextRequest) {
         }
 
         // One immutable run may execute per brand at a time.
+        // Clear abandoned runs first, otherwise a dead row blocks every retry.
+        await reclaimStaleRuns(db, user.id, brandId)
+
         const { data: existing } = await db
             .from("topical_audits")
             .select("id")
@@ -292,6 +348,10 @@ export async function GET(req: NextRequest) {
         }
 
         const db = supabase as any
+        // Self-heal abandoned runs so the UI shows a retryable failure rather
+        // than an endless loader.
+        await reclaimStaleRuns(db, user.id, brandId)
+
         const { data: running } = await db
             .from("topical_audits")
             .select("id")

@@ -121,6 +121,10 @@ export async function POST(req: NextRequest) {
                 dropped: output.droppedByDemandFilter.length,
                 droppedSample: output.droppedByDemandFilter.slice(0, 25),
             },
+            languageFilter: {
+                dropped: output.droppedByLanguageFilter.length,
+                droppedSample: output.droppedByLanguageFilter.slice(0, 25),
+            },
             nicheFilter: {
                 dropped: output.droppedByNicheFilter.length,
                 droppedSample: output.droppedByNicheFilter.slice(0, 25),

@@ -101,23 +101,37 @@ export function collapseToArticles(
 
         assigned.add(gap.queryId)
 
+        // Every near-duplicate is absorbed, but only the first few are listed as
+        // supporting keywords.
+        //
+        // This loop used to `break` once it had MAX_SUPPORTING_KEYWORDS matches,
+        // which left the remaining duplicates unassigned — and an unassigned
+        // query goes on to become its own article. A cluster of eight identical
+        // phrasings therefore shipped as one article plus three duplicates of it.
+        // The cap belongs on what the writer is shown, never on what the merge
+        // step consumes.
         const supporting: GapItem[] = []
+        const absorbed: GapItem[] = []
 
         for (const candidate of ordered) {
             if (assigned.has(candidate.queryId)) continue
-            if (supporting.length >= MAX_SUPPORTING_KEYWORDS) break
 
             const candidateEmbedding = embeddings.get(candidate.queryId)
             if (!candidateEmbedding) continue
 
             const similarity = cosineSimilarity(primaryEmbedding, candidateEmbedding)
             if (similarity >= CLUSTER_THRESHOLDS.ARTICLE_MERGE) {
-                supporting.push(candidate)
                 assigned.add(candidate.queryId)
+                if (supporting.length < MAX_SUPPORTING_KEYWORDS) {
+                    supporting.push(candidate)
+                } else {
+                    // Still merged and still traceable, just not in the prompt.
+                    absorbed.push(candidate)
+                }
             }
         }
 
-        const members = [gap, ...supporting]
+        const members = [gap, ...supporting, ...absorbed]
         const competitorUrls = Array.from(
             new Set(members.flatMap((m) => m.competitors.map((c) => c.matchedUrl)))
         )

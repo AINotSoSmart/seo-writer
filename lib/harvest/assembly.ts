@@ -16,6 +16,7 @@ import {
 } from "./clusterer"
 import { type PoolQuery, scanCoverage, type SiteCoverageResult } from "./coverage"
 import { computeGaps, type GapAnalysisResult, type GapItem } from "./gap-engine"
+import { filterByLanguage } from "./language-filter"
 import { buildNicheCentroid, filterByNicheRelevance } from "./niche-filter"
 import { HARVEST_POLICY } from "./policy"
 import { filterToSearchedQueries } from "./query-validation"
@@ -53,6 +54,7 @@ export interface AssembledQuery {
 export interface HarvestStatistics {
     poolSize: number
     harvestedBeforeDemandFilter: number
+    droppedByLanguageFilter: number
     droppedByDemandFilter: number
     demandCheckFailures: number
     droppedByNicheFilter: number
@@ -88,6 +90,7 @@ export interface HarvestOutput {
     resultHash: string
     droppedByDemandFilter: Array<{ query: string; source: string }>
     droppedByNicheFilter: Array<{ query: string; source: string; similarity: number }>
+    droppedByLanguageFilter: Array<{ query: string; source: string; detected: string }>
 }
 
 export class HarvestAssemblyError extends Error {
@@ -197,7 +200,14 @@ export async function assembleHarvest(
         ...competitorTopics.queries,
         ...autocomplete.queries,
     ])
-    const demandFiltered = await filterToSearchedQueries(deduped, {
+    // Language before demand: a competitor's localised sitemap contributes German
+    // and Polish titles that the niche filter cannot reject, because multilingual
+    // embeddings place translations close to the English centroid on purpose.
+    // Relevance and language are orthogonal, so language needs its own gate —
+    // and doing it first saves a demand request per foreign string.
+    const languageFiltered = filterByLanguage(deduped)
+
+    const demandFiltered = await filterToSearchedQueries(languageFiltered.kept, {
         countryCode: input.countryCode,
     })
     liveLedger.push({
@@ -474,6 +484,7 @@ export async function assembleHarvest(
     const statistics: HarvestStatistics = {
         poolSize: assembledQueries.length,
         harvestedBeforeDemandFilter: deduped.length,
+        droppedByLanguageFilter: languageFiltered.dropped.length,
         droppedByDemandFilter: demandFiltered.dropped.length,
         demandCheckFailures: demandFiltered.checkFailures,
         droppedByNicheFilter: nicheFiltered.dropped.length,
@@ -518,5 +529,6 @@ export async function assembleHarvest(
         resultHash,
         droppedByDemandFilter: demandFiltered.dropped,
         droppedByNicheFilter: nicheFiltered.dropped,
+        droppedByLanguageFilter: languageFiltered.dropped,
     }
 }

@@ -262,6 +262,18 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
     assert.match(route, /async function retryState/)
     assert.equal((route.match(/retryState\(db, user\.id, brandId\)/g) || []).length, 2)
 
+    // An abandoned `running` row must self-heal into a retryable failure.
+    // Without this a stuck row blocked POST ("Audit already running") and made
+    // GET report "running" forever, which the UI rendered as an endless loader.
+    assert.match(route, /async function reclaimStaleRuns/)
+    assert.match(route, /AUDIT_STALE_AFTER_MINUTES\s*=\s*\d+/)
+    assert.match(route, /failure_code:\s*"worker_never_ran"/)
+    assert.equal(
+        (route.match(/reclaimStaleRuns\(db, user\.id, brandId\)/g) || []).length,
+        2,
+        "both GET and POST must reclaim stale runs before reading or triggering",
+    )
+
     // The failure state must offer a deliberate retry, never an automatic one.
     assert.match(console_, /Run the audit again/)
     assert.match(console_, /Refreshing this page will not start a new audit/)
@@ -281,6 +293,30 @@ test("near-duplicate articles are rejected directly, not via the collapse ratio"
     // threshold, because that is the only way a customer receives two articles
     // about the same thing.
     assert.match(clusterer, /export function findDuplicateArticlePairs/)
+
+    // The merge loop must absorb EVERY near-duplicate. It used to `break` at
+    // MAX_SUPPORTING_KEYWORDS, leaving the overflow unassigned — and an
+    // unassigned query becomes its own article, so eight identical phrasings
+    // shipped as one article plus three duplicates of it.
+    assert.doesNotMatch(
+        clusterer,
+        /supporting\.length >= MAX_SUPPORTING_KEYWORDS\) break/,
+        "the merge loop must not stop scanning at the supporting-keyword cap",
+    )
+    assert.match(clusterer, /const absorbed: GapItem\[\] = \[\]/)
+    assert.match(clusterer, /const members = \[gap, \.\.\.supporting, \.\.\.absorbed\]/)
+
+    // Language is orthogonal to relevance: multilingual embeddings place
+    // translations close to the niche centroid on purpose, so a German title
+    // from a competitor's localised sitemap passes the niche filter.
+    const [assemblySource, language] = await Promise.all([
+        text("lib/harvest/assembly.ts"),
+        text("lib/harvest/language-filter.ts"),
+    ])
+    assert.match(language, /export function filterByLanguage/)
+    assert.match(language, /FOREIGN_SUFFIXES/)
+    assert.match(assemblySource, /filterByLanguage\(deduped\)/)
+    assert.match(assemblySource, /filterToSearchedQueries\(languageFiltered\.kept/)
     assert.match(assembly, /findDuplicateArticlePairs\(articleUnits\)/)
     assert.match(assembly, /"duplicate_articles"/)
 
