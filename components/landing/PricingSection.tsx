@@ -109,7 +109,7 @@ const PricingSection: React.FC = () => {
                         <span className="font-sans text-[10px] font-bold text-brand-500 uppercase tracking-widest">How many articles</span>
                         <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">25&ndash;90</p>
                         <p className="text-sm text-stone-500 leading-relaxed">
-                            Between 3 and 15 per cluster, with at least 25 across the selected six. Your free audit shows the exact scope before you pay.
+                            Between 8 and 15 per cluster, with at least 25 across the selected six. Your free audit shows the exact scope before you pay.
                         </p>
                     </div>
                     <div className="p-4 md:p-8">

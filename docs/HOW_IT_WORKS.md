@@ -40,9 +40,20 @@ customer's back.
 
 ### What it does, in order
 
-1. **Confirm the business scope.** Extract distinct product/service families
-   from the site with exact evidence, combine them with founder-provided target
-   searches, and let the customer rename, remove, add, or reprioritize them.
+1. **Confirm the business scope.** Ask what people type into Google to find a
+   tool like theirs, read the product pages, and show the distinct areas we
+   found. Every search they typed becomes an area — if our reading of the site
+   missed it, theirs wins. Areas we could not match to a line on their site are
+   shown marked "not found on your site" rather than quietly dropped, and
+   searches Google has never heard of are marked "rarely searched". They rename,
+   remove, add, and reorder before anything is researched.
+
+   *Why it works this way:* an earlier version buried this in a prompt that also
+   wrote brand-voice prose, required an exact word-for-word quote, and deleted
+   anything it could not match. A tool that turns prompts into mobile app screens
+   came back as one area called "Design Handoff and Implementation" — a step
+   inside the product — which would have pointed the whole audit at the wrong
+   competitors.
 2. **Ask Google Autocomplete** for real searches around the confirmed searches.
 3. **Read the top-ranking pages** for those searches and pull out the questions
    those pages answer.
@@ -289,6 +300,8 @@ competitor with nicer copy.
 1. **Every question must link back to where we saw it.** No source URL, no entry.
 2. **The AI never invents a query or business area.** It may assign observed
    evidence to one customer-confirmed family, reject it, or label/title it.
+   When it cannot verify an area it proposed, it says so and asks — it never
+   deletes the area, and it never overrules a search the customer typed.
 3. **"Covered" means a specific page actually answers it** — not that the site is
    vaguely about the same subject.
 4. **Clusters ship whole or not at all.**

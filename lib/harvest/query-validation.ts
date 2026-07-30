@@ -99,6 +99,39 @@ function hasSearchDemand(candidate: string, suggestions: string[]): boolean {
     return false
 }
 
+/**
+ * Which of these phrases does Google actually suggest?
+ *
+ * Used on the scope-confirmation screen. A product area whose search phrases
+ * have no autocomplete demand is usually a mispositioning — "design handoff and
+ * implementation" describes a mechanism nobody types, while "ai ui design
+ * generator" is what its customers actually search. Reporting that before any
+ * research money is spent is far cheaper than discovering it in the plan.
+ *
+ * Advisory, never a gate: it fails open on a request error, and the founder is
+ * always free to keep a phrase we could not verify.
+ */
+export async function findSeedsWithoutDemand(
+    seeds: string[],
+    options: HarvestOptions = {},
+): Promise<string[]> {
+    const testable = seeds.filter(
+        (seed) => seed.trim().split(/\s+/).length <= MAX_WORDS_FOR_DEMAND_CHECK,
+    )
+    const results = await Promise.all(
+        testable.map(async (seed) => {
+            try {
+                const { suggestions, ok } = await fetchSuggestions(seed, options)
+                if (!ok) return null
+                return hasSearchDemand(seed, suggestions) ? null : seed
+            } catch {
+                return null
+            }
+        }),
+    )
+    return results.filter((seed): seed is string => seed !== null)
+}
+
 export interface DemandFilterResult {
     kept: HarvestedQuery[]
     dropped: Array<{ query: string; source: string }>

@@ -371,6 +371,119 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
     assert.doesNotMatch(console_, /onError/)
 })
 
+test("a founder target search can never be silently dropped from scope", async () => {
+    const { validateGroundedScope, verifyQuote } = await import("../lib/brand-scope.ts")
+
+    const pages = [{ url: "https://drawgle.com/", content: "Turn a prompt into a mobile screen." }]
+
+    // The extractor returns one narrow family that ignores what the founder
+    // said they sell. Previously the founder's searches simply came back as an
+    // "assign these" error and the wrong family owned the whole audit.
+    const result = validateGroundedScope(
+        [
+            {
+                name: "Design Handoff and Implementation",
+                description: "Converting design concepts into developer-ready assets.",
+                seed_keywords: ["design handoff"],
+                evidence: [{ url: "https://drawgle.com/", quote: "Turn a prompt into a mobile screen." }],
+                source: "extracted",
+            },
+        ],
+        pages,
+        "https://drawgle.com",
+        ["ai mobile app ui designer", "text to mobile ui design"],
+    )
+
+    assert.equal(result.unassignedTargetSeeds.length, 0, "founder searches must all be claimed")
+    for (const seed of ["ai mobile app ui designer", "text to mobile ui design"]) {
+        const owner = result.families.find((family) => family.seed_keywords.includes(seed))
+        assert.ok(owner, `no family claimed "${seed}"`)
+        assert.equal(owner.source, "founder")
+    }
+
+    // An extracted family whose quote cannot be verified is kept for the
+    // founder to judge, never deleted — silent deletion is what reduced a
+    // multi-product business to a single vague area.
+    const unverifiable = validateGroundedScope(
+        [
+            {
+                name: "Invented Area",
+                description: "A capability the site never mentions anywhere.",
+                seed_keywords: ["invented area"],
+                evidence: [{ url: "https://drawgle.com/", quote: "we also sell industrial beehives" }],
+                source: "extracted",
+            },
+        ],
+        pages,
+        "https://drawgle.com",
+        [],
+    )
+    assert.equal(unverifiable.families.length, 1, "unverified families must be kept, not deleted")
+    assert.equal(unverifiable.families[0].verified, false)
+    assert.ok(unverifiable.issues.some((issue) => /could not match/i.test(issue.message)))
+
+    // Quote verification must survive paraphrase but still reject invention.
+    const page = "turn any text prompt into a production ready mobile ui screen"
+    assert.equal(verifyQuote("turn any text prompt into a production ready mobile ui screen", page), true)
+    assert.equal(verifyQuote("turn any text prompt into a production-ready mobile UI screen today", page), true)
+    assert.equal(verifyQuote("we manufacture industrial beehives for commercial apiaries", page), false)
+})
+
+test("scope extraction is its own call, not a field on the persona prompt", async () => {
+    const [route, extraction] = await Promise.all([
+        text("app/api/analyze-brand/route.ts"),
+        text("lib/scope-extraction.ts"),
+    ])
+
+    // Scope was field 10 of an 11-field persona prompt that also produced
+    // "Style DNA". The most consequential decision in the product must not
+    // compete for attention with prose about tone of voice.
+    assert.doesNotMatch(route, /Commercial Scope Families/)
+    assert.match(route, /extractScopeFamilies\(/)
+    assert.match(extraction, /gemini-3-flash-preview/)
+
+    // Started before the persona await so the split costs no wall-clock time.
+    assert.ok(
+        route.indexOf("const scopePromise") < route.indexOf("const response = await client"),
+        "scope extraction must start before the persona call is awaited",
+    )
+})
+
+test("multi-table trigger functions dispatch on TG_TABLE_NAME before touching fields", async () => {
+    // `guard_audit_snapshot_row` serves query_pool, audit_clusters and
+    // planned_articles. Written as a flat chain:
+    //
+    //     IF    TG_TABLE_NAME = 'query_pool'     AND (NEW.query ...) THEN
+    //     ELSIF TG_TABLE_NAME = 'audit_clusters' AND (NEW.name  ...) THEN
+    //
+    // PL/pgSQL prepares a branch's whole condition as one SQL statement when
+    // that branch is reached, so `NEW.name` must resolve even though the table
+    // check is false — and NEW is a query_pool record there:
+    //
+    //     ERROR: 42703: record "new" has no field "name"
+    //
+    // Latent from the day it shipped; it only fired the first time an UPDATE
+    // touched a completed audit's rows. The table check must be its own IF.
+    const names = (await readdir(path.join(root, "supabase/migrations")))
+        .filter((name) => name.endsWith(".sql"))
+        .sort()
+
+    let effective = null
+    for (const name of names) {
+        const sql = await text(`supabase/migrations/${name}`)
+        const at = sql.indexOf("CREATE OR REPLACE FUNCTION public.guard_audit_snapshot_row")
+        if (at !== -1) effective = { name, body: sql.slice(at, sql.indexOf("$$;", at)) }
+    }
+
+    assert.ok(effective, "guard_audit_snapshot_row is not defined in any migration")
+    assert.doesNotMatch(
+        effective.body,
+        /TG_TABLE_NAME\s*=\s*'\w+'\s*AND\s*\(/,
+        `${effective.name}: flat TG_TABLE_NAME dispatch evaluates another table's columns`,
+    )
+    assert.match(effective.body, /IF\s+TG_TABLE_NAME\s*=\s*'query_pool'\s*THEN/)
+})
+
 test("every pivot migration survives being re-run", async () => {
     // A migration is not write-once. It gets pasted into the SQL editor twice,
     // replayed onto a fresh branch, or run against a database that is already
@@ -573,9 +686,14 @@ test("confirmed business scope is the only production relevance contract", async
     ])
 
     assert.match(analysis, /Founder-provided target searches/)
-    assert.match(analysis, /Commercial Scope Families/)
-    assert.match(analysis, /EXACT quote and the EXACT crawled URL/)
-    assert.match(onboarding, /What should this audit help you become known for/)
+    // Scope extraction moved out of the persona prompt into its own call.
+    const scopeExtraction = await text("lib/scope-extraction.ts")
+    assert.match(scopeExtraction, /Identify every distinct thing this business sells/)
+    assert.match(scopeExtraction, /EXACT sentence copied character-for-character/)
+    // The question must ask for search phrases. "What should this audit help you
+    // become known for" asked for brand positioning, so founders supplied
+    // positioning and the audit researched the wrong thing.
+    assert.match(onboarding, /What do people type into Google to find a tool like yours/)
     assert.match(onboarding, /Find my business areas/)
     assert.match(onboarding, /<ScopeFamilyReview/)
     assert.match(onboarding, /onboarding_competitors/)
@@ -859,8 +977,9 @@ test("onboarding uses a focused authenticated shell outside the dashboard sideba
     assert.match(layout, /redirect\("\/login\?next=\/onboarding"\)/)
     assert.doesNotMatch(layout, /AppSidebar|SidebarProvider|DynamicBreadcrumb/)
     assert.doesNotMatch(layout, /<header|border-b/)
-    assert.match(layout, /href="\/content-plan"/)
-    assert.match(layout, /Leave setup/)
+    // The "Leave setup" link back to /content-plan was deliberately removed.
+    // What the shell must still guarantee is an exit that is not the browser
+    // back button, so sign-out is now the pinned escape hatch.
     assert.match(layout, /async function handleSignOut\(\): Promise<void>/)
     assert.match(layout, /form action=\{handleSignOut\}/)
     assert.match(page, /min-h-\[calc\(100vh-5rem\)\]/)

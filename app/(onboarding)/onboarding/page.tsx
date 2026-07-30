@@ -67,6 +67,7 @@ export default function OnboardingPage() {
     const [scopeAnalysisIssues, setScopeAnalysisIssues] = useState<
         Array<{ family?: string; message: string }>
     >([])
+    const [seedsWithoutDemand, setSeedsWithoutDemand] = useState<string[]>([])
     const [savingBrand, setSavingBrand] = useState(false)
     const [brandId, setBrandId] = useState<string | null>(null)
     const [auditScope, setAuditScope] = useState<AuditScope | null>(null)
@@ -235,6 +236,11 @@ export default function OnboardingPage() {
             setScopeAnalysisIssues(
                 Array.isArray(data.scope_analysis_issues)
                     ? data.scope_analysis_issues
+                    : [],
+            )
+            setSeedsWithoutDemand(
+                Array.isArray(data.seeds_without_demand)
+                    ? data.seeds_without_demand
                     : [],
             )
             setBrandData(data)
@@ -482,20 +488,19 @@ export default function OnboardingPage() {
 
                                                 <div className="space-y-2">
                                                     <label className="text-xs font-medium text-stone-600">
-                                                        What should this audit help you become known for?
-                                                        <span className="ml-1 text-stone-400">
-                                                            (recommended)
-                                                        </span>
+                                                        What do people type into Google to find a tool like yours?
                                                     </label>
                                                     <PillInput
                                                         value={targetSeeds}
                                                         onChange={setTargetSeeds}
-                                                        placeholder="e.g. old photo restoration (press Enter to add)"
+                                                        placeholder="e.g. ai photo restoration (press Enter to add)"
                                                     />
                                                     <p className="text-[10px] leading-relaxed text-stone-400">
-                                                        Add your main customer searches, not dozens of variations.
-                                                        We will map every one to a product area for you to confirm
-                                                        before research starts.
+                                                        Not your brand name — the words a stranger would search.
+                                                        Two to five words each, and just your main ones rather
+                                                        than dozens of variations. We treat these as the truth
+                                                        about what you sell, so every one becomes a product area
+                                                        you confirm before research starts.
                                                     </p>
                                                 </div>
 
@@ -539,6 +544,7 @@ export default function OnboardingPage() {
                                                 <ScopeFamilyReview
                                                     families={brandData.scope_families || []}
                                                     targetSeeds={brandData.target_seed_keywords || targetSeeds}
+                                                    seedsWithoutDemand={seedsWithoutDemand}
                                                     onChange={(scope_families) =>
                                                         setBrandData((current) =>
                                                             current

@@ -26,6 +26,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
     const [targetSeeds, setTargetSeeds] = useState<string[]>(
         initialData?.target_seed_keywords || [],
     )
+    const [seedsWithoutDemand, setSeedsWithoutDemand] = useState<string[]>([])
     const [error, setError] = useState("")
 
     const handleAnalyze = async () => {
@@ -44,6 +45,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || "Failed to analyze brand")
+            setSeedsWithoutDemand(data.seeds_without_demand || [])
             setBrandData(data)
         } catch (e: any) {
             setError(e.message || "An error occurred")
@@ -167,15 +169,17 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                     />
                     <div>
                         <label className="mb-1 block text-xs font-medium text-stone-600">
-                            Main customer searches
+                            What do people type into Google to find a tool like yours?
                         </label>
                         <PillInput
                             value={targetSeeds}
                             onChange={setTargetSeeds}
-                            placeholder="e.g. old photo restoration"
+                            placeholder="e.g. ai photo restoration"
                         />
                         <p className="mt-1 text-[10px] text-stone-400">
-                            We will map each search to a product area for you to confirm.
+                            Not your brand name — the words a stranger would search. Two to
+                            five words each. These decide what the whole audit researches,
+                            so anything you add here we treat as correct.
                         </p>
                     </div>
                     <Button onClick={handleAnalyze} disabled={analyzing || !url} className="w-full bg-stone-900 text-white">
@@ -232,6 +236,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                 <ScopeFamilyReview
                     families={brandData.scope_families || []}
                     targetSeeds={brandData.target_seed_keywords || targetSeeds}
+                    seedsWithoutDemand={seedsWithoutDemand}
                     onChange={(scope_families) =>
                         setBrandData((current) =>
                             current ? { ...current, scope_families } : current,

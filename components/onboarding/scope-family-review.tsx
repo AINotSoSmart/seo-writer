@@ -24,12 +24,16 @@ const MAX_SEARCH_DIRECTIONS = 12
 export function ScopeFamilyReview({
     families,
     targetSeeds,
+    seedsWithoutDemand = [],
     onChange,
 }: {
     families: ScopeFamily[]
     targetSeeds: string[]
+    /** Advisory: phrases Google Autocomplete does not suggest. */
+    seedsWithoutDemand?: string[]
     onChange: (families: ScopeFamily[]) => void
 }) {
+    const noDemand = new Set(seedsWithoutDemand.map(normalizeSeed))
     const ordered = [...families]
         .filter((family) => family.enabled)
         .sort((a, b) => a.priority - b.priority)
@@ -78,6 +82,9 @@ export function ScopeFamilyReview({
                 seed_keywords: [],
                 evidence: [],
                 source: "user",
+                // Hand-added areas need no site quote — the founder is the
+                // authority on what the business sells.
+                verified: true,
                 priority: ordered.length,
                 enabled: true,
             },
@@ -107,6 +114,23 @@ export function ScopeFamilyReview({
                     <strong>{unassigned.join(", ")}</strong>
                 </div>
             )}
+            {ordered.some((family) => family.verified === false) && (
+                <div className="rounded-lg border border-stone-300 bg-white p-3 text-xs text-stone-700">
+                    Some areas below are marked{" "}
+                    <strong>not found on your site</strong>. We kept them rather
+                    than guessing — keep the ones that are real, remove the rest.
+                </div>
+            )}
+            {ordered.some((family) =>
+                family.seed_keywords.some((seed) => noDemand.has(normalizeSeed(seed))),
+            ) && (
+                <div className="rounded-lg border border-stone-300 bg-white p-3 text-xs text-stone-700">
+                    Searches marked <strong>rarely searched</strong> got no
+                    suggestions from Google. That usually means the wording
+                    describes how the product works rather than what customers
+                    call it. Reword them for better results.
+                </div>
+            )}
             {totalDirections > MAX_SEARCH_DIRECTIONS && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
                     Keep the confirmed scope to {MAX_SEARCH_DIRECTIONS} main
@@ -122,8 +146,25 @@ export function ScopeFamilyReview({
                         className="rounded-lg border border-stone-200 bg-white p-4"
                     >
                         <div className="mb-3 flex items-center justify-between">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+                            <span className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
                                 Priority {index + 1}
+                                {family.source === "founder" && (
+                                    <span className="rounded bg-stone-900 px-1.5 py-0.5 text-white">
+                                        From your search
+                                    </span>
+                                )}
+                                {family.verified === false && (
+                                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">
+                                        Not found on your site
+                                    </span>
+                                )}
+                                {family.seed_keywords.some((seed) =>
+                                    noDemand.has(normalizeSeed(seed)),
+                                ) && (
+                                    <span className="rounded bg-stone-100 px-1.5 py-0.5 text-stone-600">
+                                        Rarely searched
+                                    </span>
+                                )}
                             </span>
                             <div className="flex items-center gap-1">
                                 <Button

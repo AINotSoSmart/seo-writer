@@ -38,8 +38,12 @@ CREATE TABLE IF NOT EXISTS public.brand_scope_families (
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- 'founder' means the family was created from a target search the founder
+    -- typed. It needs no site quote: the founder is authoritative about what
+    -- the business sells, and a crawler that disagrees is the thing that is
+    -- wrong. See lib/brand-scope.ts.
     CONSTRAINT brand_scope_family_source_check
-        CHECK (source IN ('extracted', 'user')),
+        CHECK (source IN ('extracted', 'founder', 'user')),
     CONSTRAINT brand_scope_family_name_check
         CHECK (length(btrim(name)) BETWEEN 2 AND 100),
     CONSTRAINT brand_scope_family_description_check
@@ -70,7 +74,7 @@ CREATE TABLE IF NOT EXISTS public.audit_scope_families (
     priority INTEGER NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT audit_scope_family_source_check
-        CHECK (source IN ('extracted', 'user', 'legacy')),
+        CHECK (source IN ('extracted', 'founder', 'user', 'legacy')),
     CONSTRAINT audit_scope_family_seed_count_check
         CHECK (cardinality(seed_keywords) BETWEEN 1 AND 8),
     CONSTRAINT audit_scope_family_priority_check
@@ -116,6 +120,116 @@ ALTER TABLE public.audit_clusters
     ADD COLUMN IF NOT EXISTS scope_family_id UUID;
 ALTER TABLE public.planned_articles
     ADD COLUMN IF NOT EXISTS scope_family_id UUID;
+
+-- ----------------------------------------------------------------------------
+-- Repair the shared snapshot guard BEFORE the backfill below.
+--
+-- One trigger function serves query_pool, audit_clusters and planned_articles.
+-- Its dispatch was written as a flat chain:
+--
+--     IF     TG_TABLE_NAME = 'query_pool'     AND (NEW.query ...) THEN
+--     ELSIF  TG_TABLE_NAME = 'audit_clusters' AND (NEW.name  ...) THEN
+--
+-- PL/pgSQL prepares each branch's condition as one SQL statement when that
+-- branch is *reached*. `TG_TABLE_NAME = 'audit_clusters'` evaluating false does
+-- not stop `NEW.name` from having to resolve first, and NEW is a query_pool
+-- record there:
+--
+--     ERROR: 42703: record "new" has no field "name"
+--
+-- So an UPDATE on query_pool that changes nothing protected — exactly what the
+-- scope_family_id backfill does — falls through branch one and dies on branch
+-- two. The bug has been latent since `20260730_closed_pool_v2.sql` because no
+-- UPDATE had ever run against a completed audit's rows.
+--
+-- Nesting the table dispatch fixes it: PL/pgSQL prepares statements lazily, so
+-- a branch that is never reached is never planned, and each table's field
+-- references stay inside a branch only that table can enter.
+--
+-- `scope_family_id` is deliberately NOT in the protected lists. The backfill
+-- below must be able to set it, and cross-family integrity is enforced by the
+-- composite foreign keys this migration adds rather than by this trigger.
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.guard_audit_snapshot_row()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+    v_status TEXT;
+    v_audit_id UUID;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        v_audit_id := NEW.audit_id;
+    ELSE
+        v_audit_id := OLD.audit_id;
+    END IF;
+
+    SELECT run_status INTO v_status
+    FROM public.topical_audits
+    WHERE id = v_audit_id;
+
+    IF TG_OP = 'INSERT' AND v_status <> 'running' THEN
+        RAISE EXCEPTION 'Evidence rows may only be inserted while an audit is running';
+    END IF;
+    IF TG_OP = 'DELETE' AND v_status = 'completed' THEN
+        RAISE EXCEPTION 'Completed audit evidence cannot be deleted';
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND v_status = 'completed' THEN
+        IF TG_TABLE_NAME = 'query_pool' THEN
+            IF NEW.audit_id IS DISTINCT FROM OLD.audit_id
+                OR NEW.query IS DISTINCT FROM OLD.query
+                OR NEW.query_norm IS DISTINCT FROM OLD.query_norm
+                OR NEW.source IS DISTINCT FROM OLD.source
+                OR NEW.source_url IS DISTINCT FROM OLD.source_url
+                OR NEW.source_seed IS DISTINCT FROM OLD.source_seed
+                OR NEW.observed_value IS DISTINCT FROM OLD.observed_value
+                OR NEW.observed_at IS DISTINCT FROM OLD.observed_at
+                OR NEW.embedding IS DISTINCT FROM OLD.embedding
+                OR NEW.status IS DISTINCT FROM OLD.status
+                OR NEW.covered_by_url IS DISTINCT FROM OLD.covered_by_url
+                OR NEW.covered_by_title IS DISTINCT FROM OLD.covered_by_title
+                OR NEW.coverage_similarity IS DISTINCT FROM OLD.coverage_similarity
+                OR NEW.competitor_matches IS DISTINCT FROM OLD.competitor_matches
+            THEN
+                RAISE EXCEPTION 'Completed query evidence is immutable';
+            END IF;
+
+        ELSIF TG_TABLE_NAME = 'audit_clusters' THEN
+            IF NEW.audit_id IS DISTINCT FROM OLD.audit_id
+                OR NEW.name IS DISTINCT FROM OLD.name
+                OR NEW.description IS DISTINCT FROM OLD.description
+                OR NEW.priority IS DISTINCT FROM OLD.priority
+                OR NEW.article_count IS DISTINCT FROM OLD.article_count
+                OR NEW.competitor_urls IS DISTINCT FROM OLD.competitor_urls
+            THEN
+                RAISE EXCEPTION 'Completed cluster evidence is immutable';
+            END IF;
+
+        ELSIF TG_TABLE_NAME = 'planned_articles' THEN
+            IF NEW.audit_id IS DISTINCT FROM OLD.audit_id
+                OR NEW.cluster_id IS DISTINCT FROM OLD.cluster_id
+                OR NEW.title IS DISTINCT FROM OLD.title
+                OR NEW.main_keyword IS DISTINCT FROM OLD.main_keyword
+                OR NEW.supporting_keywords IS DISTINCT FROM OLD.supporting_keywords
+                OR NEW.source_query_ids IS DISTINCT FROM OLD.source_query_ids
+                OR NEW.article_type IS DISTINCT FROM OLD.article_type
+                OR NEW.intent_role IS DISTINCT FROM OLD.intent_role
+                OR NEW.is_pillar IS DISTINCT FROM OLD.is_pillar
+            THEN
+                RAISE EXCEPTION 'Completed planned scope is immutable';
+            END IF;
+        END IF;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 
 -- ----------------------------------------------------------------------------
 -- Repair pgvector visibility BEFORE the backfill below.

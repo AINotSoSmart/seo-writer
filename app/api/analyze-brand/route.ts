@@ -8,6 +8,8 @@ import {
   validateGroundedScope,
 } from "@/lib/brand-scope"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
+import { extractScopeFamilies } from "@/lib/scope-extraction"
+import { findSeedsWithoutDemand } from "@/lib/harvest/query-validation"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -118,22 +120,7 @@ ${page.rawContent || page.markdown || page.content || ''}
       7. **Core Features (The "Fixes"):** List permanent product capabilities, not transient UI features.
       8. **Pricing:** High-level model (Subscription, One-time, Free tier).
       9. **Brand Keywords:** Generate 4-5 SHORT search keywords (2-4 words each) that represent what a user would type into Google to find this type of product. NOT the brand name, NOT full sentences — just the search terms. Example: for a photo restoration app, keywords might be: "ai photo restoration", "restore old photos", "fix damaged photos", "old photo animation", "family photo repair".
-      10. **Commercial Scope Families:** Identify every DISTINCT product, service,
-          tool, or use-case family the business actually sells or provides.
-          These are not keyword synonyms and not blog categories. A multi-product
-          website must return multiple families. Each family needs:
-          - A short customer-facing name.
-          - A concrete description of the capability/customer job.
-          - 1-8 direct search phrases for that family.
-          - No more than 12 search phrases across all families.
-          - 1-5 evidence objects containing an EXACT quote and the EXACT crawled URL.
-          Every founder-provided target search must appear verbatim in exactly one
-          family's seed_keywords. A category or implementation label is not
-          itself a commercial family. Create a family only when the site evidence
-          proves a distinct capability or customer job the business actually offers.
-          Do not infer a family from a blog post unless a product, feature, or
-          pricing page proves the business offers it.
-      11. **Style DNA (ROBUST LINGUISTIC GUIDE):**
+      10. **Style DNA (ROBUST LINGUISTIC GUIDE):**
          Create a SINGLE paragraph that defines the LINGUISTIC STYLE. 
          - **Perspective:** (e.g., Second-person addressing user, first-person plural for brand).
          - **Rhetorical Patterns:** (e.g., Do they lead with benefits? Use rhetorical questions? Use active/command verbs?).
@@ -146,6 +133,11 @@ ${page.rawContent || page.markdown || page.content || ''}
 
       Extract into JSON format.
     `
+
+    // Commercial scope is extracted by its own focused call (lib/scope-extraction.ts).
+    // Started before the persona call and awaited after, so the split costs a
+    // few thousand tokens and no wall-clock time.
+    const scopePromise = extractScopeFamilies(url, crawledPages, targetSeeds)
 
     const response = await client.models.generateContent({
       model: "gemini-3.1-flash-lite",
@@ -239,7 +231,7 @@ ${page.rawContent || page.markdown || page.content || ''}
               description: "Complete writing voice and style guide as a single paragraph covering perspective, tone, sentence style, formality, patterns, and words to avoid"
             }
           },
-          required: ["product_name", "product_identity", "mission", "audience", "enemy", "category", "uvp", "core_features", "pricing", "how_it_works", "brand_keywords", "scope_families", "style_dna"]
+          required: ["product_name", "product_identity", "mission", "audience", "enemy", "category", "uvp", "core_features", "pricing", "how_it_works", "brand_keywords", "style_dna"]
         }
       }
     })
@@ -259,8 +251,19 @@ ${page.rawContent || page.markdown || page.content || ''}
       }
     }
 
+    let extractedFamilies
+    try {
+      extractedFamilies = await scopePromise
+    } catch (scopeError) {
+      console.error("[Brand Analysis] Scope extraction failed:", scopeError)
+      return NextResponse.json(
+        { error: "We could not read what your website sells. Please retry." },
+        { status: 422 },
+      )
+    }
+
     const grounded = validateGroundedScope(
-      brandData.scope_families,
+      extractedFamilies,
       crawledPages,
       url,
       targetSeeds,
@@ -270,7 +273,7 @@ ${page.rawContent || page.markdown || page.content || ''}
         {
           error:
             grounded.issues[0]?.message ||
-            "We could not verify any product or service area against the pages we crawled. No audit was started.",
+            "We could not identify what this website sells. Please retry, or add your main customer searches so we can start from those.",
           scopeIssues: grounded.issues,
         },
         { status: 422 },
@@ -290,10 +293,18 @@ ${page.rawContent || page.markdown || page.content || ''}
       )
     }
 
+    // Advisory only, and free — Google Suggest, not a paid API. A product area
+    // whose phrases nobody searches is a mispositioning, and it is far cheaper
+    // to say so here than to discover it in a delivered content plan.
+    const seedsWithoutDemand = await findSeedsWithoutDemand(
+      grounded.families.flatMap((family) => family.seed_keywords),
+    )
+
     return NextResponse.json({
       ...validated.data,
       scope_analysis_issues: grounded.issues,
       unassigned_target_seeds: grounded.unassignedTargetSeeds,
+      seeds_without_demand: seedsWithoutDemand,
     })
 
   } catch (e: unknown) {

@@ -5,7 +5,9 @@ import {
     ScopeFamilySchema,
     type BrandDetails,
     type ScopeFamily,
-} from "@/lib/schemas/brand"
+// Relative, not "@/lib/...": this module is imported directly by the contract
+// suite, which runs under plain node and cannot resolve the tsconfig alias.
+} from "./schemas/brand.ts"
 
 export const SCOPE_CONTRACT_VERSION = "confirmed-business-scope-v1"
 export const MAX_SCOPE_FAMILIES = 12
@@ -62,9 +64,67 @@ function canonicalEvidenceUrl(value: string): string | null {
     }
 }
 
+/** Minimum share of a quote's words that must appear together on the page. */
+export const QUOTE_OVERLAP_THRESHOLD = 0.7
+
+function contentTokens(value: string): string[] {
+    return normalizeText(value).split(" ").filter(Boolean)
+}
+
+/**
+ * Two-stage quote verification, mirroring coverage measurement.
+ *
+ * Stage 1 is an exact substring match — high precision, and the only thing the
+ * original gate did. That alone deleted real product areas, because models
+ * reconstruct quotes rather than copying them: one changed preposition and a
+ * genuine capability vanished from the customer's scope.
+ *
+ * Stage 2 recovers those. It slides a window the length of the quote across the
+ * page and asks how much of the quote appears *together* in one place. A
+ * paraphrase of a real sentence scores high; a fabricated claim whose words are
+ * merely scattered around the site does not.
+ */
+export function verifyQuote(quote: string, pageText: string): boolean {
+    const normalizedQuote = normalizeText(quote)
+    if (normalizedQuote.length < 8) return false
+    if (pageText.includes(normalizedQuote)) return true
+
+    const quoteTokens = contentTokens(quote)
+    const pageTokens = pageText.split(" ").filter(Boolean)
+    if (quoteTokens.length === 0 || pageTokens.length === 0) return false
+
+    // Cap the window at the page length. A quote longer than the page it cites
+    // is normal for a short landing page, and must still be comparable.
+    const windowSize = Math.min(quoteTokens.length, pageTokens.length)
+    const wanted = new Set(quoteTokens)
+    let best = 0
+    for (let start = 0; start + windowSize <= pageTokens.length; start++) {
+        const window = new Set(pageTokens.slice(start, start + windowSize))
+        let matched = 0
+        for (const token of wanted) if (window.has(token)) matched++
+        best = Math.max(best, matched / wanted.size)
+        if (best >= QUOTE_OVERLAP_THRESHOLD) return true
+    }
+    return false
+}
+
+function titleCase(value: string): string {
+    return value
+        .split(" ")
+        .filter(Boolean)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ")
+}
+
 /**
  * Extracted families must cite text that was actually crawled from the audited
- * host. User-created families are authoritative and may have no site quote.
+ * host. Founder- and user-created families are authoritative and need no quote.
+ *
+ * Nothing is deleted here. An extracted family whose quote cannot be verified
+ * is kept and marked `verified: false` for the founder to confirm or remove,
+ * and every founder target search that no family claimed becomes its own
+ * family. Silent removal is what produced a single vague product area for a
+ * business that plainly sells more than one thing.
  */
 export function validateGroundedScope(
     rawFamilies: unknown,
@@ -136,17 +196,16 @@ export function validateGroundedScope(
             const canonical = canonicalEvidenceUrl(item.url)
             const page = canonical ? pageByUrl.get(canonical) : undefined
             if (!page) return false
-            const quote = normalizeText(item.quote)
-            return quote.length >= 8 && page.includes(quote)
+            return verifyQuote(item.quote, page)
         })
 
-        if (family.source === "extracted" && evidence.length === 0) {
+        const verified = family.source !== "extracted" || evidence.length > 0
+        if (!verified) {
             issues.push({
                 family: family.name,
                 message:
-                    "Product area was removed because its claimed website evidence could not be verified.",
+                    "We could not match this product area to an exact line on your site. Confirm it is real, or remove it.",
             })
-            continue
         }
 
         seenNames.add(nameNorm)
@@ -155,8 +214,41 @@ export function validateGroundedScope(
             id: family.id || randomUUID(),
             seed_keywords: seeds,
             evidence,
+            verified,
             priority: families.length,
             enabled: true,
+        })
+    }
+
+    // Any target search still unclaimed becomes its own family. The founder
+    // told us what they sell; refusing to carry that forward is how a tool that
+    // converts prompts into mobile UI got filed under "design handoff".
+    const claimed = new Set(
+        families.flatMap((family) => family.seed_keywords.map(normalizeSeed)),
+    )
+    const orphanSeeds = Array.from(
+        new Set(targetSeeds.map(normalizeSeed).filter(Boolean)),
+    ).filter((seed) => !claimed.has(seed))
+
+    for (const seed of orphanSeeds) {
+        if (families.length >= MAX_SCOPE_FAMILIES) break
+        const name = titleCase(seed).slice(0, 100)
+        if (seenNames.has(normalizeText(name))) continue
+        seenNames.add(normalizeText(name))
+        families.push({
+            id: randomUUID(),
+            name,
+            description: `Searches about ${seed}. Rename this to match how you describe it.`,
+            seed_keywords: [seed],
+            evidence: [],
+            source: "founder",
+            verified: true,
+            priority: families.length,
+            enabled: true,
+        })
+        issues.push({
+            family: name,
+            message: `Created from your target search "${seed}" because the site analysis did not cover it. Rename or merge it.`,
         })
     }
 

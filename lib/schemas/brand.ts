@@ -11,7 +11,21 @@ export const ScopeFamilySchema = z.object({
   description: z.string().trim().min(8).max(500),
   seed_keywords: z.array(z.string().trim().min(2).max(100)).min(1).max(8),
   evidence: z.array(ScopeEvidenceSchema).max(5).default([]),
-  source: z.enum(["extracted", "user"]).default("extracted"),
+  /**
+   * extracted — read off the site by the scope model.
+   * founder   — created from a target search the founder typed. Authoritative:
+   *             the founder knows what they sell better than a crawler does.
+   * user      — added or renamed by hand on the confirmation screen.
+   */
+  source: z.enum(["extracted", "founder", "user"]).default("extracted"),
+  /**
+   * Whether an exact quote from the crawled site backs this family.
+   *
+   * An unverified family is shown for confirmation, never silently deleted.
+   * Deleting on a failed quote match cost real product areas: models paraphrase
+   * when they quote, so the check was rejecting the wording, not the capability.
+   */
+  verified: z.boolean().default(true),
   priority: z.number().int().min(0).max(99).default(0),
   enabled: z.boolean().default(true),
 })

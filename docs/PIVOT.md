@@ -208,6 +208,11 @@ The old `lib/harvest/pool.ts`, blended-centroid `niche-filter.ts`, heuristic
 `language-filter.ts`, and semantic query word lists were deleted. Do not restore
 them as a fallback.
 
+Scope extraction itself lives in `lib/scope-extraction.ts` as a dedicated call —
+never as a field on the brand-persona prompt. Failing quote verification marks a
+family unverified for founder review; it must never delete one. See the
+2026-07-30 scope-extraction changelog entry.
+
 ### 2.1 Immutable audit lifecycle - implemented
 
 `supabase/migrations/20260730_closed_pool_v2.sql` converts the mutable
@@ -445,7 +450,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **25/25 test groups passed**.
+- `npm run test:pivot-contract`: **28/28 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -529,6 +534,158 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     business family; malformed strings may still receive structural sanitation.
 
 ## 7. Changelog
+
+### 2026-07-30 - scope extraction rebuilt after a mispositioned audit
+
+**Production evidence.** drawgle.com is a generative AI mobile-UI engine — text
+prompt in, mobile screens and an agent-ready HTML handoff out. Scope analysis
+returned **one** family: "Design Handoff and Implementation". That names a step
+inside the product and points the entire audit at Zeplin/Locofy's search intent.
+The founder had typed `ai mobile app ui designer` and `text to mobile ui design`
+into onboarding, and the system responded by asking *them* to assign those
+searches to its own wrong family.
+
+**Four independent causes, all structural.**
+
+1. **Scope was field 10 of an 11-field persona prompt.** The same
+   `gemini-3.1-flash-lite` call produced emotional identity, "the enemy",
+   audience psychology, pricing model, and a Style DNA paragraph. The most
+   consequential decision in the product competed for attention with prose about
+   tone of voice.
+2. **The evidence gate was an exact substring match that deleted silently.**
+   A family survived only if the model emitted a quote appearing verbatim in the
+   normalized page text. Models paraphrase when they quote, so real capabilities
+   were deleted for a *formatting* failure, and survivors were biased toward
+   families named after literally-quotable marketing boilerplate. This is the
+   same defect as absolute-threshold-only coverage: high precision, no recall,
+   and no measurement of what was dropped.
+3. **Founder target searches were advisory.** Supplied to the prompt as
+   "authoritative direction, if any", then enforced only as a validation error
+   the founder had to resolve by hand.
+4. **One family silently degrades the whole program.** Portfolio balance takes
+   one cluster per family before depth; with a single family that rule
+   degenerates, so one mispositioning propagates into all six clusters. "One
+   family because the business is focused" and "one family because three were
+   pruned" looked identical on screen.
+
+**Implemented.**
+
+- `lib/scope-extraction.ts` (new). Scope is its own call on
+  `gemini-3-flash-preview`, reading only the pages that say what is sold —
+  homepage and product/pricing/feature paths first, blog and legal last, capped
+  at 12 pages and 24k characters. It is started before the persona call is
+  awaited, so the split costs a few thousand tokens and **no wall-clock time**,
+  and the focused corpus is cheaper than the 50k-character blob it replaced.
+  The prompt names the failure directly: a family is a customer job, and
+  "Design Handoff and Implementation" is a step inside one.
+- `lib/brand-scope.ts` — `verifyQuote()` is now two-stage, mirroring coverage.
+  Exact substring first (precision), then a sliding token-window requiring 70%
+  of the quote to appear *together* in one place (recall). A paraphrase of a
+  real sentence passes; a fabricated claim whose words are merely scattered
+  across the site does not.
+- **Nothing is deleted.** An extracted family that fails verification is kept
+  and marked `verified: false` for the founder to confirm or remove. Every
+  founder target search that no family claims becomes its own `source: "founder"`
+  family, needing no site quote — the founder knows what they sell better than a
+  crawler does.
+- `findSeedsWithoutDemand()` (`lib/harvest/query-validation.ts`) checks confirmed
+  seeds against Google Autocomplete on the confirmation screen. Free, advisory,
+  fails open. A phrase nobody searches is usually a mispositioning, and saying so
+  before research beats discovering it in a delivered plan.
+- The onboarding question changed from *"What should this audit help you become
+  known for? (recommended)"* — which asks for brand positioning and got brand
+  positioning — to *"What do people type into Google to find a tool like yours?"*,
+  with the note that these are treated as the truth about what the business
+  sells. It is no longer marked optional.
+- The review screen badges each area: **From your search**, **Not found on your
+  site**, **Rarely searched**.
+
+**Contract suite** pins that a founder target search can never be silently
+dropped, that an unverified family is kept rather than deleted, that
+`verifyQuote` survives paraphrase but rejects invention, and that scope
+extraction is a separate call started before the persona await. 28/28 pass;
+`tsc` clean on every touched file. Not visually verified — onboarding is behind
+auth and browser navigation was unavailable in that session.
+
+**Unrelated change found in passing.** The "Leave setup" link back to
+`/content-plan` was removed from `app/(onboarding)/layout.tsx` outside this work,
+leaving unused `Link`/`ArrowLeft` imports and a failing contract assertion. The
+dead imports are removed and the test now pins sign-out as the required exit.
+**If removing that link was not deliberate, onboarding no longer has a way back
+to the dashboard except logging out.**
+
+### 2026-07-30 - two latent guard bugs blocked the confirmed-scope migration
+
+`20260731_confirmed_business_scope.sql` aborted twice while backfilling
+`scope_family_id`. Both failures were in `guard_audit_snapshot_row`, both latent
+since `20260730_closed_pool_v2.sql`, and neither had ever executed before: the
+guard's UPDATE path only runs when a completed audit's rows are modified, which
+nothing did until this backfill.
+
+**1. pgvector invisible to the guard.**
+
+```
+ERROR: 42883: operator does not exist: extensions.vector = extensions.vector
+```
+
+`IS DISTINCT FROM` needs the type's `=` operator, and operator lookup goes
+through `search_path` — schema-qualifying the type does not help. pgvector is
+installed in `extensions`; the guard was pinned to `SET search_path = public`.
+
+`20260730_fix_finalize_vector_search_path.sql` had fixed exactly this for
+`finalize_audit_run`, and `assert_harvest_schema_ready` then verified exactly
+that one function — so the preflight built to catch schema drift certified
+"ready" while its sibling was broken. The migration now repairs the guard's
+search_path before the backfill, and the preflight checks every function known
+to manipulate vector values.
+
+**2. Flat trigger dispatch evaluated another table's columns.**
+
+```
+ERROR: 42703: record "new" has no field "name"
+```
+
+One trigger function serves `query_pool`, `audit_clusters` and
+`planned_articles`, dispatching as
+`IF TG_TABLE_NAME = 'x' AND (NEW.<field-of-x> ...)`. PL/pgSQL prepares a
+branch's whole condition as one SQL statement when that branch is reached, so
+`NEW.name` had to resolve even with the table check false — and `NEW` is a
+`query_pool` record there. An UPDATE that changes nothing protected (exactly
+what the backfill does) falls past branch one and dies on branch two.
+
+The table check is now its own `IF`, so an unreached branch is never planned.
+`scope_family_id` is deliberately not protected: the backfill must set it, and
+cross-family integrity is enforced by the composite foreign keys.
+
+**Verified against the live database before recommending the re-run**, having
+twice told the founder to re-run on reasoning alone:
+
+| Check | Result |
+|---|---|
+| Flat dispatch, backfill-shaped UPDATE | reproduces `has no field "name"` |
+| Nested dispatch, same UPDATE | succeeds |
+| `search_path = public` vector compare | reproduces `operator does not exist` |
+| `search_path = public, extensions` | resolves |
+| Nested guard vs. tampering with `query`/`name` | still blocked |
+| Rows that would stay NULL after backfill | 0 of 353 / 13 / 142 |
+
+Contract suite pins the class: the effective definition of
+`guard_audit_snapshot_row` must dispatch on `TG_TABLE_NAME` in its own `IF`.
+26/26 groups pass.
+
+**Also fixed:** `classifyQueriesToScope` allowed two attempts per batch with no
+backoff, and classification runs *after* all Tavily and crawl spend — one
+transient error discarded a paid run. Now four attempts with exponential
+backoff and jitter, matching `suggest-client.ts`. Still fail-closed.
+
+**Open gap, not yet built.** The scope classifier is now the single component
+the entire relevance guarantee rests on, and it has no calibration harness.
+`/api/harvest/calibrate` measures coverage only. Its error rate on the
+BringBack pool is unmeasured, which is the same unfalsifiable position the
+retired authority scorer occupied. Rule 5 of the classifier prompt (assigned
+queries must use a language present in that family's confirmed searches) is
+enforced only by the model; the deterministic language filter it replaced was
+verified 16/16 against the exact production strings.
 
 ### 2026-07-30 - confirmed business scope replaces the blended niche gate
 
