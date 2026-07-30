@@ -249,6 +249,23 @@ export async function POST(req: NextRequest) {
             )
         }
 
+        // Catch migration/schema drift before a new run incurs Tavily, crawl,
+        // and embedding cost. A missing preflight RPC is also a deployment
+        // readiness failure, so it safely blocks the run.
+        const { error: readinessError } = await db.rpc(
+            "assert_harvest_schema_ready",
+        )
+        if (readinessError) {
+            console.error("[Audit API] Database contract is not ready:", readinessError)
+            return NextResponse.json(
+                {
+                    error:
+                        "The audit service is temporarily unavailable while its database is being updated. No audit was started.",
+                },
+                { status: 503 },
+            )
+        }
+
         const publicToken = randomBytes(24).toString("hex")
         const { data: audit, error: insertError } = await db
             .from("topical_audits")

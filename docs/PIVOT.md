@@ -463,6 +463,26 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-30 - pgvector finalization repair and preflight
+
+An audit completed harvesting and clustering but failed inside
+`finalize_audit_run` with `type "vector" does not exist`. The vector extension
+and `query_pool.embedding` column existed. The function was pinned to
+`search_path = public`, while Supabase had installed pgvector in its extension
+schema, so the unqualified JSON-to-vector cast could not resolve the type.
+
+`20260730_fix_finalize_vector_search_path.sql` discovers the extension's real
+schema and adds it to the finalizer's function-level search path. It also adds
+`assert_harvest_schema_ready()`, a read-only service-role RPC that checks all
+columns required by finalization, pgvector installation/type ownership, the
+finalizer function, and its vector visibility.
+
+`POST /api/topical-audit` now calls that readiness RPC before inserting a new
+run or queueing Trigger.dev. Missing migrations therefore return a user-safe
+503 before Tavily, crawling, embeddings, or clustering incur cost. Existing
+running or still-fresh completed audits are recovered/reused before the
+preflight.
+
 ### 2026-07-30 - schema drift from an edited migration
 
 `observed_value` and `observed_at` were added to `query_pool` by editing

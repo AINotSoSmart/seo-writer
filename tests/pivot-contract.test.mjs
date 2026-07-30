@@ -634,6 +634,27 @@ test("the public buyer is founder-led B2B SaaS and signup credits are retired", 
     assert.match(auditRoute, /reused:\s*true/)
 })
 
+test("audit schema drift fails before an expensive task is queued", async () => {
+    const [route, migration] = await Promise.all([
+        text("app/api/topical-audit/route.ts"),
+        text("supabase/migrations/20260730_fix_finalize_vector_search_path.sql"),
+    ])
+
+    const readinessCall = route.indexOf('"assert_harvest_schema_ready"')
+    const taskTrigger = route.indexOf("tasks.trigger")
+    assert.ok(readinessCall >= 0, "audit route does not run the schema preflight")
+    assert.ok(taskTrigger > readinessCall, "audit task is queued before schema readiness")
+    assert.match(route, /No audit was started/)
+    assert.match(migration, /pg_extension/)
+    assert.match(migration, /ALTER FUNCTION public\.finalize_audit_run/)
+    assert.match(migration, /SET search_path = public, %I/)
+    assert.match(migration, /query_pool\.embedding is not pgvector/)
+    assert.match(
+        migration,
+        /GRANT EXECUTE ON FUNCTION public\.assert_harvest_schema_ready\(\)/,
+    )
+})
+
 test("onboarding uses a focused authenticated shell outside the dashboard sidebar", async () => {
     await assert.rejects(
         access(path.join(root, "app/(protected)/onboarding/page.tsx")),
