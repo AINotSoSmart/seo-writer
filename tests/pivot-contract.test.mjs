@@ -484,6 +484,90 @@ test("multi-table trigger functions dispatch on TG_TABLE_NAME before touching fi
     assert.match(effective.body, /IF\s+TG_TABLE_NAME\s*=\s*'query_pool'\s*THEN/)
 })
 
+test("scope classification rejects undeliverable topics, not just irrelevant ones", async () => {
+    // Imported from types.ts, not scope-classifier.ts: the classifier is
+    // server-only and cannot be loaded under plain node.
+    const { findThirdPartyBrand } = await import("../lib/harvest/types.ts")
+    const classifier = await text("lib/harvest/scope-classifier.ts")
+
+    // These ten titles all shipped into a real bringback.pro plan. Every one
+    // passed provenance, demand, family relevance, cluster sizing and the
+    // duplicate check — relevance was never the problem. Four name a third
+    // party's product; six can only be answered by whoever published the page.
+    const thirdPartyBranded = [
+        "Using Adobe Firefly to Colorize and Restore Any Old Image",
+        "Easy Steps to Scan and Upload Photos to Forever Studios",
+        "How to Animate Faded Memories Using Fotor's AI Tools",
+        "Using Clipfly AI to Quickly Add New People to Any Image",
+    ]
+    const publisherSpecific = [
+        "Understanding Our Turnaround Times for Your Photo Projects",
+        "Our Full List of Scannable Media: Photos, Film, and Beyond",
+        "Items We Accept: From Slides and Negatives to Physical Prints",
+        "Real Reviews: See What Our Clients Say About Their Restored Photos",
+        "How We Protect Your Privacy and Uploaded Family Images",
+        "Understanding Our Easy Cancellation Policy and Subscription Terms",
+    ]
+
+    // Both classes must exist as machine-readable decisions, so a drop can be
+    // told apart from a merely-adjacent one in diagnostics.
+    assert.match(classifier, /"third_party_branded"/)
+    assert.match(classifier, /"publisher_specific"/)
+    // Deliverability must outrank relevance, or an on-subject branded topic
+    // still lands in the plan.
+    assert.match(classifier, /Deliverability outranks relevance/)
+    // The model needs the real examples; these classes are easy to get wrong
+    // when described only in the abstract.
+    for (const example of ["Adobe Firefly", "Turnaround Times", "Items We Accept"]) {
+        assert.ok(
+            classifier.includes(example),
+            `classifier prompt must show a worked example containing "${example}"`,
+        )
+    }
+
+    // The deterministic half: a query naming a crawled competitor is rejected
+    // before it costs a classification token.
+    const competitorTokens = ["foreverstudios", "pixreunion", "kinpict"]
+    assert.equal(
+        findThirdPartyBrand(
+            "Easy Steps to Scan and Upload Photos to Forever Studios",
+            competitorTokens,
+        ),
+        "foreverstudios",
+        "a domain token must still match its spaced display form",
+    )
+    assert.equal(
+        findThirdPartyBrand("Can I order prints through PixReunion?", competitorTokens),
+        "pixreunion",
+    )
+    // The customer's own subject brand is never passed in, so their own name
+    // can never be rejected as third-party.
+    assert.equal(findThirdPartyBrand("bringback photo restoration", competitorTokens), null)
+    assert.equal(findThirdPartyBrand("how to restore a faded photograph", competitorTokens), null)
+    // Short tokens collide with ordinary words once spaces are stripped and are
+    // deliberately left to the model.
+    assert.equal(findThirdPartyBrand("best ai photo tools", ["ai"]), null)
+
+    // Brands we never crawled (Adobe, Fotor, Clipfly appear only *on* competitor
+    // pages) cannot be caught deterministically — that is exactly why the LLM
+    // rule exists alongside this check.
+    assert.equal(findThirdPartyBrand(thirdPartyBranded[0], competitorTokens), null)
+
+    // Assembly must pass competitor tokens only — never the subject's own brand.
+    const assembly = await text("lib/harvest/assembly.ts")
+    assert.match(assembly, /brandTokensFromUrls\(input\.competitors\)/)
+    assert.doesNotMatch(
+        assembly,
+        /classifyQueriesToScope\([\s\S]{0,200}excludeBrands/,
+        "excludeBrands includes the subject's own brand and must not be reused as competitor tokens",
+    )
+
+    // A deliverability rejection must not suggest a family to reinstate into.
+    assert.match(classifier, /assignment\.decision === "adjacent" \? familyId : null/)
+
+    assert.ok(thirdPartyBranded.length === 4 && publisherSpecific.length === 6)
+})
+
 test("the demand check never blocks the brand-analysis response", async () => {
     // findSeedsWithoutDemand was awaited inline in POST /api/analyze-brand,
     // unbounded, over every seed across every extracted family (up to ~90 on a

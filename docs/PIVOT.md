@@ -453,7 +453,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **30/30 test groups passed**.
+- `npm run test:pivot-contract`: **31/31 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -535,8 +535,79 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 14. Do not repair relevance incidents with domain-word, generic-word, or
     language-word blacklists. A query must positively belong to one confirmed
     business family; malformed strings may still receive structural sanitation.
+15. Relevance is not sufficiency. A query must also be *deliverable*: not
+    centred on a third party's product, and not dependent on the publishing
+    company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-01 - deliverability gate: relevance was never the problem
+
+**Production evidence.** A completed bringback.pro plan contained these, among
+others:
+
+```
+Using Adobe Firefly to Colorize and Restore Any Old Image
+Easy Steps to Scan and Upload Photos to Forever Studios
+How to Animate Faded Memories Using Fotor's AI Tools
+Using Clipfly AI to Quickly Add New People to Any Image
+Understanding Our Turnaround Times for Your Photo Projects
+Items We Accept: From Slides and Negatives to Physical Prints
+Real Reviews: See What Our Clients Say About Their Restored Photos
+Understanding Our Easy Cancellation Policy and Subscription Terms
+```
+
+Every one passed provenance, demand validation, confirmed-family relevance,
+cluster sizing, and the duplicate check. **Relevance was never the problem** —
+"colorize an old image" genuinely belongs to a confirmed family. The pipeline
+had no concept of whether a relevant topic was *deliverable for this customer*.
+
+**Two structural classes, not one bug.**
+
+| Class | Property | Why it is fatal |
+|---|---|---|
+| `third_party_branded` | Centres on a named company/product that is not this business | Cannot ship a customer an article recommending a rival's tool |
+| `publisher_specific` | Answerable only from the publishing company's private operational facts | Not a topic at all — a company fact every service business has a page for |
+
+Class B is the subtler one. The test is not the first-person wording but the
+dependency: "photo restoration turnaround times" is still publisher-specific
+with the pronoun removed, because no outside writer can answer it correctly.
+
+**Implemented.** The gate lives in the scope classifier, which was already the
+positive relevance gate and already had a reject path — it simply was never
+asked about deliverability.
+
+- `ScopeDecision` replaces the bare `direct | adjacent | unrelated` union with
+  two additional rejection values. Machine-readable rather than free text so
+  drops can be grouped in diagnostics and pinned in tests. `direct` now means
+  relevant **and** deliverable.
+- Prompt gains rules 6 and 7 (deliverability outranks relevance; the
+  outside-writer test) plus twelve worked examples drawn from the real failures
+  above — these classes are easy to misjudge described only in the abstract.
+- `findThirdPartyBrand()` in `lib/harvest/types.ts` is the deterministic half:
+  a query naming a crawled competitor is rejected before it costs a
+  classification token. It flattens non-alphanumerics on both sides so the
+  domain token `foreverstudios` matches the display form "Forever Studios".
+  Tokens under 4 characters are left to the model, since they collide with
+  ordinary words once spaces are stripped.
+- Assembly passes `brandTokensFromUrls(input.competitors)` — competitors only.
+  The pre-existing `excludeBrands` includes the *subject's* own brand for
+  harvest hygiene and must never be reused here, or the customer's own product
+  name would be rejected as third-party. A contract test pins that distinction.
+- A deliverability rejection returns `suggestedFamilyId: null`. Only `adjacent`
+  drops keep it, because suggesting a family invites someone to reinstate a
+  topic that names a competitor.
+- `/api/harvest/verify` now reports `droppedByDecision` counts and an
+  `undeliverableSample`, so the gate is inspectable before spending on a real
+  audit.
+
+**Known limitation, by design.** The deterministic check only knows the
+competitor domains actually crawled. Adobe, Fotor, and Clipfly were never
+competitors — they were third parties *mentioned on* competitor pages, which is
+exactly why they reached the plan. Those depend on the model rule. Evidence
+where evidence exists; judgement only where it does not.
+
+31/31 contract groups pass; `tsc` clean.
 
 ### 2026-07-30 - checkout guided to test-mode enablement
 

@@ -143,6 +143,25 @@ export async function POST(req: NextRequest) {
             },
             scopeFilter: {
                 dropped: output.droppedByScopeFilter.length,
+                // Grouped by rejection class so the deliverability gate can be
+                // eyeballed without reading 25 free-text reasons. A healthy
+                // audit on a niche with active competitors should show non-zero
+                // third_party_branded and publisher_specific counts — those are
+                // topics that used to reach the plan.
+                droppedByDecision: output.droppedByScopeFilter.reduce(
+                    (counts: Record<string, number>, drop) => {
+                        counts[drop.decision] = (counts[drop.decision] || 0) + 1
+                        return counts
+                    },
+                    {},
+                ),
+                undeliverableSample: output.droppedByScopeFilter
+                    .filter(
+                        (drop) =>
+                            drop.decision === "third_party_branded" ||
+                            drop.decision === "publisher_specific",
+                    )
+                    .slice(0, 15),
                 droppedSample: output.droppedByScopeFilter.slice(0, 25),
             },
             provenance: traceableGaps

@@ -21,6 +21,7 @@ import { filterToSearchedQueries } from "./query-validation"
 import {
     classifyQueriesToScope,
     type AuditScopeFamily,
+    type ScopeDecision,
 } from "./scope-classifier"
 import { roundRobinCap, selectSerpSeeds } from "./scope-cap"
 import { harvestSerpQuestions } from "./serp-questions"
@@ -95,6 +96,8 @@ export interface HarvestOutput {
     droppedByScopeFilter: Array<{
         query: string
         source: string
+        /** Machine-readable so /verify can be grouped by rejection class. */
+        decision: ScopeDecision
         reason: string
         suggestedFamilyId: string | null
     }>
@@ -380,9 +383,14 @@ export async function assembleHarvest(
         throw new HarvestAssemblyError("Harvest produced zero queries.", "empty_harvest", reports)
     }
 
+    // Only the competitors' own brand tokens, never the subject's: the customer
+    // naming their own product is fine, a plan telling them to use a rival's is
+    // not. `excludeBrands` above deliberately includes the subject for harvest
+    // hygiene, so it cannot be reused here.
     const scopeClassified = await classifyQueriesToScope(
         preScopeCapped,
         input.scopeFamilies,
+        brandTokensFromUrls(input.competitors),
     )
     liveLedger.push({
         source: "scope_classification",

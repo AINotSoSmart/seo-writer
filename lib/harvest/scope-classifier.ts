@@ -1,7 +1,7 @@
 import "server-only"
 
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
-import type { HarvestedQuery } from "./types"
+import { findThirdPartyBrand, type HarvestedQuery } from "./types"
 
 export type AuditScopeFamily = {
     id: string
@@ -15,9 +15,27 @@ export type ScopedHarvestedQuery = HarvestedQuery & {
     scope_family_id: string
 }
 
+/**
+ * Why a query was let in or kept out.
+ *
+ * `direct` is the only value that enters a content program, and it means both
+ * "belongs to a confirmed family" AND "is deliverable for this customer". The
+ * two deliverability rejections are separate values rather than free text so
+ * drops stay machine-readable in /verify diagnostics and in tests.
+ */
+export type ScopeDecision =
+    | "direct"
+    | "adjacent"
+    | "unrelated"
+    /** Centres on a third party's product — "Using Adobe Firefly to Restore Photos" */
+    | "third_party_branded"
+    /** Answerable only by whoever published it — "Our Turnaround Times" */
+    | "publisher_specific"
+
 export type ScopeRejectedQuery = {
     query: string
     source: string
+    decision: ScopeDecision
     reason: string
     suggestedFamilyId: string | null
 }
@@ -43,9 +61,13 @@ const RETRY_BASE_DELAY_MS = 700
 type RawAssignment = {
     index: number
     family_id?: string | null
-    decision: "direct" | "adjacent" | "unrelated"
+    decision: ScopeDecision
     reason: string
 }
+
+// findThirdPartyBrand lives in ./types.ts beside brandTokensFromUrls and
+// containsExcludedBrand — this module is server-only and cannot be imported by
+// the contract suite, which runs under plain node.
 
 /**
  * Positive business-scope assignment.
@@ -58,6 +80,7 @@ type RawAssignment = {
 export async function classifyQueriesToScope(
     queries: HarvestedQuery[],
     families: AuditScopeFamily[],
+    competitorBrandTokens: string[] = [],
 ): Promise<ScopeClassificationResult> {
     if (families.length === 0) {
         throw new Error("Confirmed audit scope is empty")
@@ -70,8 +93,25 @@ export async function classifyQueriesToScope(
     let callsAttempted = 0
     let callsSucceeded = 0
 
-    for (let offset = 0; offset < queries.length; offset += BATCH_SIZE) {
-        const batch = queries.slice(offset, offset + BATCH_SIZE)
+    // Deterministic pass first, so known-branded queries cost no tokens.
+    const classifiable: HarvestedQuery[] = []
+    for (const query of queries) {
+        const brand = findThirdPartyBrand(query.query, competitorBrandTokens)
+        if (brand) {
+            dropped.push({
+                query: query.query,
+                source: query.source,
+                decision: "third_party_branded",
+                reason: `Names "${brand}", which is not this business.`,
+                suggestedFamilyId: null,
+            })
+        } else {
+            classifiable.push(query)
+        }
+    }
+
+    for (let offset = 0; offset < classifiable.length; offset += BATCH_SIZE) {
+        const batch = classifiable.slice(offset, offset + BATCH_SIZE)
         const prompt = `You are enforcing a customer-confirmed business scope.
 
 Your task is classification, not brainstorming. For every observed search:
@@ -81,8 +121,18 @@ Your task is classification, not brainstorming. For every observed search:
 - "adjacent": it shares technology or vocabulary but concerns another product,
   industry, job, or use case.
 - "unrelated": it does not concern any confirmed family.
+- "third_party_branded": it centres on a named company, product, app, or tool
+  that is not this business. The topic may be perfectly on-subject and still
+  belong here — what disqualifies it is the named third party.
+- "publisher_specific": answering it requires the private operational facts of
+  whichever company published it, so no outside writer could answer it
+  correctly. Company policies, turnaround times, accepted formats, shipping,
+  pricing terms, refund and cancellation rules, privacy handling, staff, and
+  customer testimonials are all publisher-specific.
 
-Only "direct" searches enter the customer's content program.
+Only "direct" searches enter the customer's content program. A search must be
+both relevant AND deliverable: something we could write for THIS business
+without naming somebody else or inventing their internal facts.
 
 Rules:
 1. Assign a direct search to exactly one family_id.
@@ -94,7 +144,29 @@ Rules:
 5. A search must use the same language as at least one confirmed search phrase
    in its assigned family. A translated phrase in an unconfirmed language is
    adjacent, even when its meaning is otherwise direct.
-6. Return exactly one assignment for every numbered query, preserving indexes.
+6. Deliverability outranks relevance. If a search is on-subject but names a
+   third party, it is "third_party_branded", not "direct". If it is on-subject
+   but only its publisher could answer it, it is "publisher_specific".
+7. The publisher-specific test is: "could a competent outside writer answer
+   this correctly from public information?" First-person framing ("our", "we
+   accept", "items we") is a strong signal, but the test is the dependency on
+   private facts, not the wording — "photo restoration turnaround times" is
+   still publisher-specific with the pronoun removed.
+8. Return exactly one assignment for every numbered query, preserving indexes.
+
+WORKED EXAMPLES for a business that restores and animates old family photos:
+- "how to restore a faded photograph"            -> direct
+- "ai photo restoration"                          -> direct
+- "Using Adobe Firefly to Colorize Any Old Image" -> third_party_branded
+- "How to Animate Memories Using Fotor's AI"      -> third_party_branded
+- "Easy Steps to Upload Photos to Forever Studios"-> third_party_branded
+- "Understanding Our Turnaround Times"            -> publisher_specific
+- "Items We Accept: Slides, Negatives, Prints"    -> publisher_specific
+- "Our Easy Cancellation Policy and Terms"        -> publisher_specific
+- "Real Reviews: What Our Clients Say"            -> publisher_specific
+- "How We Protect Your Privacy and Your Images"   -> publisher_specific
+- "best dslr camera for landscapes"               -> adjacent
+- "how to file a tax return"                       -> unrelated
 
 CONFIRMED FAMILIES:
 ${families
@@ -148,7 +220,13 @@ ${batch
                                             },
                                             decision: {
                                                 type: "STRING" as const,
-                                                enum: ["direct", "adjacent", "unrelated"],
+                                                enum: [
+                                                    "direct",
+                                                    "adjacent",
+                                                    "unrelated",
+                                                    "third_party_branded",
+                                                    "publisher_specific",
+                                                ],
                                             },
                                             reason: { type: "STRING" as const },
                                         },
@@ -171,10 +249,12 @@ ${batch
                 )
                     ? parsed.assignments
                     : []
-                const validDecisions = new Set([
+                const validDecisions = new Set<ScopeDecision>([
                     "direct",
                     "adjacent",
                     "unrelated",
+                    "third_party_branded",
+                    "publisher_specific",
                 ])
                 const malformed = assignments.some((assignment) => {
                     const suppliedFamily =
@@ -237,10 +317,16 @@ ${batch
                 dropped.push({
                     query: query.query,
                     source: query.source,
+                    decision: assignment.decision,
                     reason:
                         assignment.reason ||
                         "Search intent does not directly belong to a confirmed product area.",
-                    suggestedFamilyId: familyId,
+                    // A deliverability rejection is not a near-miss: suggesting
+                    // the family it would have joined invites someone to
+                    // reinstate a topic that names a competitor or depends on
+                    // another company's internal facts.
+                    suggestedFamilyId:
+                        assignment.decision === "adjacent" ? familyId : null,
                 })
             }
         }

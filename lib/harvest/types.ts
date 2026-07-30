@@ -121,6 +121,36 @@ export function containsExcludedBrand(query: string, brands: string[]): boolean 
 }
 
 /**
+ * Rejects queries that name a brand we know is not the customer's.
+ *
+ * This is the deterministic half of the deliverability gate, and it is cheap:
+ * a query killed here never costs a classification token. It only knows the
+ * competitor domains actually crawled for this audit, so it catches
+ * "…to Forever Studios" when foreverstudios.com is a listed competitor, and
+ * misses "Using Adobe Firefly" when Adobe was merely mentioned on someone
+ * else's page. The classifier's own rule covers that second case — evidence
+ * where evidence exists, judgement only where it does not.
+ *
+ * Differs from containsExcludedBrand in two ways that matter: it returns *which*
+ * brand matched so the rejection can say so, and it flattens non-alphanumerics
+ * on both sides, so the domain token "foreverstudios" still matches its spaced
+ * display form "Forever Studios".
+ */
+export function findThirdPartyBrand(
+    query: string,
+    competitorBrandTokens: string[],
+): string | null {
+    const flattened = query.toLowerCase().replace(/[^a-z0-9]/g, "")
+    for (const token of competitorBrandTokens) {
+        const needle = token.toLowerCase().replace(/[^a-z0-9]/g, "")
+        // Short tokens ("ai", "hp") collide with ordinary words once spaces are
+        // removed, so they are left to the model rather than guessed at here.
+        if (needle.length >= 4 && flattened.includes(needle)) return token
+    }
+    return null
+}
+
+/**
  * Derives brand tokens from URLs: "https://www.pixreunion.com/" -> "pixreunion".
  */
 export function brandTokensFromUrls(urls: string[]): string[] {
