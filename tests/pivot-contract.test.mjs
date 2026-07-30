@@ -540,6 +540,43 @@ test("every brand field the writer reads exists on BrandDetailsSchema", async ()
     }
 })
 
+test("a purchased audit is never shown as ineligible", async () => {
+    const [scopeAction, scopeResults, publicPage] = await Promise.all([
+        text("actions/harvest.ts"),
+        text("components/audit/scope-results.tsx"),
+        text("app/audit/[token]/page.tsx"),
+    ])
+
+    // selectQualifiedProgramScope filters out SOLD clusters — it answers "can
+    // they buy another program", not "is this audit any good". After a purchase
+    // every cluster is sold, so it returns zero. Rendering that raw told a
+    // paying customer "Not eligible for a program yet. 0 unsold qualified
+    // clusters" and "The selected six contain 0 articles" — directly above the
+    // 58 articles they had just paid for.
+    for (const [file, source] of [
+        ["actions/harvest.ts", scopeAction],
+        ["app/audit/[token]/page.tsx", publicPage],
+    ]) {
+        assert.match(source, /hasActiveProgram/, `${file}: must know a program exists`)
+        assert.match(
+            source,
+            /belowViableThreshold: !checkoutEligible && !hasActiveProgram/,
+            `${file}: "below viable threshold" must never mean "already sold"`,
+        )
+        // The displayed scope must come from the purchased program, not from a
+        // fresh selection that has nothing left to select.
+        assert.match(source, /displayClusterIds/, `${file}: must show the purchased clusters`)
+        assert.match(source, /displayArticleCount/, `${file}: must show the purchased article count`)
+    }
+
+    // The ineligibility banner must be suppressed on all three signals.
+    assert.match(
+        scopeResults,
+        /!scope\.checkoutEligible && !scope\.hasActiveProgram && !progress &&/,
+        "the not-eligible banner must never render to someone who already bought",
+    )
+})
+
 test("no two articles in a cluster get the same intro shape", async () => {
     // Imported from lib/writer/composition.ts, not the trigger task: that file
     // uses "@/..." aliases which plain node cannot resolve.

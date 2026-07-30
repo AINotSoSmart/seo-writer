@@ -453,7 +453,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **39/39 test groups passed**.
+- `npm run test:pivot-contract`: **40/40 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -549,11 +549,67 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     (`needs_product_detail`). Never inject the whole brand blob into every
     section, and never leave a How-To section unflagged — the writer receives
     nothing otherwise.
-18. Relevance is not sufficiency. A query must also be *deliverable*: not
+18. "Unsold" is not "unqualified". Cluster selection filters out sold clusters
+    to answer "can they buy another program" — it returns zero for a healthy
+    audit that has simply been purchased. Never render that result as the
+    audit's own quality; check `hasActiveProgram` first.
+19. Relevance is not sufficiency. A query must also be *deliverable*: not
     centred on a third party's product, and not dependent on the publishing
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-01 - a paid audit reported itself ineligible
+
+**Reported from production, immediately after the first successful payment.**
+The audit page showed 58 planned articles across 6 clusters and, directly above
+them:
+
+```
+Not eligible for a program yet. This site currently has 0 unsold qualified
+clusters. The program requires six.
+
+The selected six contain 0 articles. They cover 0 confirmed business areas.
+Review every title and its supporting searches before choosing a delivery speed.
+```
+
+Nothing was broken in the purchase — `programs` held the correct active row:
+6 clusters, 58 articles, `scope_status = active`.
+
+**Cause.** `selectQualifiedProgramScope(clusters, soldClusterIds)` filters out
+clusters already sold. That is right for the question it answers — *can this
+customer buy ANOTHER program* — and after a purchase the answer is legitimately
+"no, zero remain". The bug was rendering that result as though it described the
+audit's quality, to the person who had just bought it. Three surfaces consumed
+it unguarded: the ineligibility banner, the "Program scope" stat, and the
+six-cluster heading copy, all of which read from `selection.selected` — which is
+empty by design post-purchase.
+
+The public report page (`app/audit/[token]/page.tsx`) duplicated the same
+computation, so a shared outreach link flipped to "not eligible" the moment the
+prospect converted.
+
+**Fixed.**
+
+- `getAuditScope` now loads the active/paused program for the audit and, when
+  one exists, displays the **purchased** scope (`clusters_included`,
+  `total_articles`) instead of a fresh selection with nothing left to select.
+- New `hasActiveProgram` flag on `AuditScope`, mirrored in the public page.
+- `belowViableThreshold` is now `!checkoutEligible && !hasActiveProgram` —
+  "too small to sell" must never be conflated with "already sold".
+- The ineligibility banner requires all three of `!checkoutEligible`,
+  `!hasActiveProgram` and `!progress`.
+- Post-purchase copy reads "Your program covers N articles across M confirmed
+  business areas. Clusters are delivered complete, in priority order."
+
+**Verified against the live purchased audit** on the public report route:
+banner gone, scope line reads *"Your program covers 58 articles across 4
+confirmed business areas"*, header still *"58 planned articles across 6 measured
+clusters"*, and no visible mention of eligibility anywhere. The old reason string
+survives only as inert data inside the serialized RSC payload, never rendered.
+
+Contract test pins all of it across both the authenticated action and the public
+page. 40/40 groups pass.
 
 ### 2026-08-01 - writer quality: intros, links, brand starvation
 

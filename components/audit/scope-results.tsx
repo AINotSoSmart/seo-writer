@@ -96,7 +96,14 @@ export function ScopeResults({
                 </p>
             </header>
 
-            {!scope.checkoutEligible && (
+            {/*
+              * Never shown to someone who has already bought. After purchase every
+              * cluster is "sold", so the eligibility check returns zero remaining —
+              * which is about buying ANOTHER program, not about this audit being
+              * deficient. Rendering it unguarded told a paying customer their scope
+              * was ineligible directly above the articles they had just paid for.
+              */}
+            {!scope.checkoutEligible && !scope.hasActiveProgram && !progress && (
                 <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
                     <div className="text-sm text-amber-950">
@@ -123,7 +130,7 @@ export function ScopeResults({
                 />
                 <Stat
                     icon={CalendarClock}
-                    label="Program scope"
+                    label={scope.hasActiveProgram ? "Your program" : "Program scope"}
                     value={scope.recommendedArticleCount}
                     detail={`${recommended.length} clusters across confirmed business areas`}
                 />
@@ -138,11 +145,22 @@ export function ScopeResults({
                             {showAllClusters ? "All measured clusters" : "Your six-cluster program"}
                         </h3>
                         <p className="mt-1 text-sm text-stone-500">
-                            The selected six contain {scope.recommendedArticleCount} articles.
-                            They cover {recommendedFamilyCount} confirmed business{" "}
-                            {recommendedFamilyCount === 1 ? "area" : "areas"}.{" "}
-                            Review every title and its supporting searches before choosing a
-                            delivery speed.
+                            {scope.hasActiveProgram ? (
+                                <>
+                                    Your program covers {scope.recommendedArticleCount} articles
+                                    across {recommendedFamilyCount} confirmed business{" "}
+                                    {recommendedFamilyCount === 1 ? "area" : "areas"}. Clusters are
+                                    delivered complete, in priority order.
+                                </>
+                            ) : (
+                                <>
+                                    The selected six contain {scope.recommendedArticleCount}{" "}
+                                    articles. They cover {recommendedFamilyCount} confirmed business{" "}
+                                    {recommendedFamilyCount === 1 ? "area" : "areas"}. Review every
+                                    title and its supporting searches before choosing a delivery
+                                    speed.
+                                </>
+                            )}
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">

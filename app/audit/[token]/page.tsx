@@ -119,6 +119,23 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
     const freshness = auditCheckoutFreshness(audit.completed_at)
     const checkoutEligible = selection.eligible && freshness.fresh
 
+    // Every cluster being sold means this audit was BOUGHT, not that it is too
+    // small to sell. Without this, a shared public report flipped to "not
+    // eligible for a program" the moment the customer paid — on the exact link
+    // used for outreach. See the matching guard in actions/harvest.ts.
+    const soldClusterIds: string[] = (soldRows || []).map(
+        (row: any) => row.audit_cluster_id,
+    )
+    const hasActiveProgram = soldClusterIds.length > 0
+    const displayClusterIds = hasActiveProgram
+        ? soldClusterIds
+        : selection.selected.map((cluster) => cluster.id)
+    const displayArticleCount = hasActiveProgram
+        ? clusters
+              .filter((cluster) => soldClusterIds.includes(cluster.id))
+              .reduce((sum, cluster) => sum + cluster.articleCount, 0)
+        : selection.selectedArticleCount
+
     return {
         scope: {
             auditId: audit.id,
@@ -127,10 +144,8 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
             clusterCount: clusters.length,
             authorityScore: audit.authority_score || 0,
             clusters,
-            recommendedClusterIds: selection.selected.map(
-                (cluster) => cluster.id,
-            ),
-            recommendedArticleCount: selection.selectedArticleCount,
+            recommendedClusterIds: displayClusterIds,
+            recommendedArticleCount: displayArticleCount,
             velocity: [
                 { tier: "close", clustersPerMonth: 1, months: 6 },
                 { tier: "accelerate", clustersPerMonth: 2, months: 3 },
@@ -138,7 +153,8 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
             ],
             checkoutEligible,
             eligibilityReason: selection.reason || freshness.reason,
-            belowViableThreshold: !checkoutEligible,
+            hasActiveProgram,
+            belowViableThreshold: !checkoutEligible && !hasActiveProgram,
             publicToken: token,
             completedAt: audit.completed_at,
         },

@@ -32,6 +32,8 @@ export interface AuditScope {
     velocity: { tier: string; clustersPerMonth: number; months: number }[]
     checkoutEligible: boolean
     eligibilityReason: string | null
+    /** A program has already been purchased from this audit. */
+    hasActiveProgram: boolean
     /** Compatibility alias for the existing audit component. */
     belowViableThreshold: boolean
     publicToken: string | null
@@ -79,6 +81,7 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
         { data: clusterRows, error },
         { data: soldRows },
         { data: scopeRows },
+        { data: activeProgram },
     ] =
         await Promise.all([
             (supabase as any)
@@ -97,6 +100,15 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
                 .from("audit_scope_families")
                 .select("id, name, priority")
                 .eq("audit_id", audit.id),
+            // The program the customer already bought from THIS audit, if any.
+            (supabase as any)
+                .from("programs")
+                .select("id, clusters_included, total_articles")
+                .eq("user_id", user.id)
+                .eq("audit_id", audit.id)
+                .in("status", ["active", "paused"])
+                .limit(1)
+                .maybeSingle(),
         ])
 
     if (error) {
@@ -137,6 +149,35 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
     const checkoutEligible = selection.eligible && freshness.fresh
     const eligibilityReason = selection.reason || freshness.reason
 
+    /**
+     * Once a program is bought, every cluster in it is "sold", so
+     * `selectQualifiedProgramScope` correctly returns zero remaining — it
+     * answers "can they buy ANOTHER program", not "is this audit any good".
+     *
+     * Reporting that raw result to a paying customer produced this on the audit
+     * page immediately after a successful purchase:
+     *
+     *   "Not eligible for a program yet. This site currently has 0 unsold
+     *    qualified clusters."
+     *   "The selected six contain 0 articles."
+     *
+     * ...directly above the 58 articles they had just paid for. The purchased
+     * scope is the right thing to show them, so it takes precedence here.
+     */
+    const purchasedClusterIds: string[] = Array.isArray(activeProgram?.clusters_included)
+        ? activeProgram.clusters_included
+        : []
+    const hasActiveProgram = purchasedClusterIds.length > 0
+    const displayClusterIds = hasActiveProgram
+        ? purchasedClusterIds
+        : selection.selected.map((cluster) => cluster.id)
+    const displayArticleCount = hasActiveProgram
+        ? Number(activeProgram.total_articles || 0) ||
+          clusters
+              .filter((cluster) => purchasedClusterIds.includes(cluster.id))
+              .reduce((sum, cluster) => sum + cluster.articleCount, 0)
+        : selection.selectedArticleCount
+
     const velocity = [
         { tier: "close", clustersPerMonth: 1 },
         { tier: "accelerate", clustersPerMonth: 2 },
@@ -156,12 +197,16 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
         clusterCount: clusters.length,
         authorityScore: audit.authority_score || 0,
         clusters,
-        recommendedClusterIds: selection.selected.map((cluster) => cluster.id),
-        recommendedArticleCount: selection.selectedArticleCount,
+        recommendedClusterIds: displayClusterIds,
+        recommendedArticleCount: displayArticleCount,
         velocity,
         checkoutEligible,
         eligibilityReason,
-        belowViableThreshold: !checkoutEligible,
+        /** True when this audit already has a bought program. */
+        hasActiveProgram,
+        // "Below viable threshold" must mean the audit is too small to sell —
+        // never "already sold", which is the opposite situation.
+        belowViableThreshold: !checkoutEligible && !hasActiveProgram,
         publicToken: audit.public_token,
         completedAt: audit.completed_at,
     }
