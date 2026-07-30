@@ -45,19 +45,20 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
         { data: clusterRows },
         { data: gapRows },
         { data: articleRows },
+        { data: scopeRows },
         { data: brand },
         { data: soldRows },
     ] =
         await Promise.all([
             supabase
                 .from("audit_clusters")
-                .select("id, name, description, priority, article_count, competitor_urls")
+                .select("id, scope_family_id, name, description, priority, article_count, competitor_urls")
                 .eq("audit_id", audit.id)
                 .order("priority", { ascending: true }),
             supabase
                 .from("query_pool")
                 .select(
-                    "id, query, observed_value, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
+                    "id, scope_family_id, query, observed_value, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
                 )
                 .eq("audit_id", audit.id)
                 .in("status", ["gap", "partial"])
@@ -66,10 +67,14 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
             supabase
                 .from("planned_articles")
                 .select(
-                    "id, title, main_keyword, supporting_keywords, source_query_ids, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id, target_url",
+                    "id, scope_family_id, title, main_keyword, supporting_keywords, source_query_ids, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id, target_url",
                 )
                 .eq("audit_id", audit.id)
                 .order("is_pillar", { ascending: false }),
+            supabase
+                .from("audit_scope_families")
+                .select("id, name, priority")
+                .eq("audit_id", audit.id),
             audit.brand_id
                 ? supabase
                       .from("brand_details")
@@ -83,10 +88,17 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
                 .eq("programs.audit_id", audit.id),
         ])
 
+    const scopeById = new Map(
+        (scopeRows || []).map((scope: any) => [scope.id, scope]),
+    )
     const clusters: ClusterSummary[] = (clusterRows || []).map((cluster: any) => {
         const articleCount = Number(cluster.article_count || 0)
+        const scope = scopeById.get(cluster.scope_family_id) as any
         return {
             id: cluster.id,
+            scopeFamilyId: cluster.scope_family_id,
+            scopeFamilyName: scope?.name || "Unverified legacy scope",
+            scopeFamilyPriority: Number(scope?.priority ?? 99),
             name: cluster.name,
             description: cluster.description,
             priority: cluster.priority,
@@ -132,6 +144,7 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
         },
         gaps: (gapRows || []).map((row: any) => ({
             id: row.id,
+            scopeFamilyId: row.scope_family_id,
             query: row.query,
             observedValue: row.observed_value || row.query,
             source: row.source,
@@ -145,6 +158,7 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
         })),
         articles: (articleRows || []).map((row: any) => ({
             id: row.id,
+            scopeFamilyId: row.scope_family_id,
             title: row.title,
             mainKeyword: row.main_keyword,
             supportingKeywords: Array.isArray(row.supporting_keywords)

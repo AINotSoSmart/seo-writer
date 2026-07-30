@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { jsonrepair } from "jsonrepair"
+import {
+  MAX_TOTAL_SCOPE_SEEDS,
+  normalizeSeed,
+  validateGroundedScope,
+} from "@/lib/brand-scope"
+import { BrandDetailsSchema } from "@/lib/schemas/brand"
 
 export const maxDuration = 300 // 5 minute timeout
 
 export async function POST(req: NextRequest) {
   try {
-    const { url } = await req.json()
+    const { url, targetSeeds: rawTargetSeeds = [] } = await req.json()
     if (!url) {
       return NextResponse.json({ error: "Missing URL" }, { status: 400 })
     }
@@ -23,19 +29,48 @@ export async function POST(req: NextRequest) {
 
     // Note: crawl returns a promise that resolves when the crawl is complete (sync mode implied by SDK types or it handles polling)
     // Based on docs, it returns TavilyCrawlResponse
+    const targetSeeds = Array.from(
+      new Set(
+        (Array.isArray(rawTargetSeeds) ? rawTargetSeeds : [])
+          .map((seed: unknown) => normalizeSeed(String(seed)))
+          .filter(Boolean),
+      ),
+    )
+    if (targetSeeds.length > MAX_TOTAL_SCOPE_SEEDS) {
+      return NextResponse.json(
+        {
+          error: `Add no more than ${MAX_TOTAL_SCOPE_SEEDS} main customer searches.`,
+        },
+        { status: 400 },
+      )
+    }
+
     const crawlResponse = await tvly.crawl(url, {
-      limit: 10,
+      limit: 20,
       extractDepth: "advanced",
       format: "markdown",
-      instructions: "Find the homepage, about page, features page, pricing page, and any blog posts to understand the brand data and its voice and writing style."
+      instructions: "Find the homepage and every product, service, tool, use-case, feature, pricing, comparison, about, and navigation-linked page. Product scope is more important than blog coverage. Include a small blog sample only for writing style."
     })
 
     // Aggregate content
     let combinedContent = ""
+    const crawledPages: Array<{ url: string; content: string }> = []
     // @ts-ignore - SDK types might be slightly off, checking results property
     const results = crawlResponse.results || crawlResponse.data
 
     if (results && Array.isArray(results)) {
+      for (const page of results) {
+        const rawPage = page as any
+        crawledPages.push({
+            url: String(page.url || ""),
+            content: String(
+                page.rawContent ||
+                    rawPage.markdown ||
+                    rawPage.content ||
+                    "",
+            ),
+        })
+      }
       combinedContent = results.map((page: any) => `
 ---
 URL: ${page.url}
@@ -63,6 +98,9 @@ ${page.rawContent || page.markdown || page.content || ''}
       
       Website Content Samples:
       ${combinedContent.slice(0, 50000)}
+
+      Founder-provided target searches (authoritative direction, if any):
+      ${targetSeeds.length ? targetSeeds.map((seed) => `- ${seed}`).join("\n") : "- None supplied"}
       
       ## CRITICAL: NOISE FILTERING RULES
       Before analyzing, you MUST filter out the following "noise" frequently found on websites:
@@ -80,7 +118,22 @@ ${page.rawContent || page.markdown || page.content || ''}
       7. **Core Features (The "Fixes"):** List permanent product capabilities, not transient UI features.
       8. **Pricing:** High-level model (Subscription, One-time, Free tier).
       9. **Brand Keywords:** Generate 4-5 SHORT search keywords (2-4 words each) that represent what a user would type into Google to find this type of product. NOT the brand name, NOT full sentences — just the search terms. Example: for a photo restoration app, keywords might be: "ai photo restoration", "restore old photos", "fix damaged photos", "old photo animation", "family photo repair".
-      10. **Style DNA (ROBUST LINGUISTIC GUIDE):** 
+      10. **Commercial Scope Families:** Identify every DISTINCT product, service,
+          tool, or use-case family the business actually sells or provides.
+          These are not keyword synonyms and not blog categories. A multi-product
+          website must return multiple families. Each family needs:
+          - A short customer-facing name.
+          - A concrete description of the capability/customer job.
+          - 1-8 direct search phrases for that family.
+          - No more than 12 search phrases across all families.
+          - 1-5 evidence objects containing an EXACT quote and the EXACT crawled URL.
+          Every founder-provided target search must appear verbatim in exactly one
+          family's seed_keywords. A category or implementation label is not
+          itself a commercial family. Create a family only when the site evidence
+          proves a distinct capability or customer job the business actually offers.
+          Do not infer a family from a blog post unless a product, feature, or
+          pricing page proves the business offers it.
+      11. **Style DNA (ROBUST LINGUISTIC GUIDE):**
          Create a SINGLE paragraph that defines the LINGUISTIC STYLE. 
          - **Perspective:** (e.g., Second-person addressing user, first-person plural for brand).
          - **Rhetorical Patterns:** (e.g., Do they lead with benefits? Use rhetorical questions? Use active/command verbs?).
@@ -98,6 +151,7 @@ ${page.rawContent || page.markdown || page.content || ''}
       model: "gemini-3.1-flash-lite",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
+        temperature: 0,
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
@@ -151,12 +205,41 @@ ${page.rawContent || page.markdown || page.content || ''}
               items: { type: "STRING" },
               description: "4-5 short search keywords (2-4 words each) users would type to find this product type"
             },
+            scope_families: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  name: { type: "STRING" },
+                  description: { type: "STRING" },
+                  seed_keywords: {
+                    type: "ARRAY",
+                    items: { type: "STRING" }
+                  },
+                  evidence: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        url: { type: "STRING" },
+                        quote: { type: "STRING" }
+                      },
+                      required: ["url", "quote"]
+                    }
+                  },
+                  source: { type: "STRING", enum: ["extracted"] },
+                  priority: { type: "INTEGER" },
+                  enabled: { type: "BOOLEAN" }
+                },
+                required: ["name", "description", "seed_keywords", "evidence", "source", "priority", "enabled"]
+              }
+            },
             style_dna: {
               type: "STRING",
               description: "Complete writing voice and style guide as a single paragraph covering perspective, tone, sentence style, formality, patterns, and words to avoid"
             }
           },
-          required: ["product_name", "product_identity", "mission", "audience", "enemy", "category", "uvp", "core_features", "pricing", "how_it_works", "brand_keywords", "style_dna"]
+          required: ["product_name", "product_identity", "mission", "audience", "enemy", "category", "uvp", "core_features", "pricing", "how_it_works", "brand_keywords", "scope_families", "style_dna"]
         }
       }
     })
@@ -176,7 +259,42 @@ ${page.rawContent || page.markdown || page.content || ''}
       }
     }
 
-    return NextResponse.json(brandData)
+    const grounded = validateGroundedScope(
+      brandData.scope_families,
+      crawledPages,
+      url,
+      targetSeeds,
+    )
+    if (grounded.families.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            grounded.issues[0]?.message ||
+            "We could not verify any product or service area against the pages we crawled. No audit was started.",
+          scopeIssues: grounded.issues,
+        },
+        { status: 422 },
+      )
+    }
+
+    const validated = BrandDetailsSchema.safeParse({
+      ...brandData,
+      scope_families: grounded.families,
+      target_seed_keywords: targetSeeds,
+    })
+    if (!validated.success) {
+      console.error("[Brand Analysis] Invalid response:", validated.error.flatten())
+      return NextResponse.json(
+        { error: "The website analysis returned an invalid business profile. Please retry." },
+        { status: 422 },
+      )
+    }
+
+    return NextResponse.json({
+      ...validated.data,
+      scope_analysis_issues: grounded.issues,
+      unassigned_target_seeds: grounded.unassignedTargetSeeds,
+    })
 
   } catch (e: unknown) {
     console.error("Brand analysis error:", e)

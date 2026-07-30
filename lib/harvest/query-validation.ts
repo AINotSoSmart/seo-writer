@@ -46,10 +46,8 @@ export const DEMAND_OVERLAP_THRESHOLD = 0.6
  * include pets in my family portrait?", "What photo quality do I need for
  * uploads?", "Can I customize backgrounds in the AI family portraits?").
  *
- * Longer strings bypass this gate and are left to the niche filter and the
- * coverage evidence stage. Short furniture — "What Our Users Say" — is still
- * caught here, and possessive marketing copy is rejected upstream by
- * `isPlausibleQuery`.
+ * Longer strings bypass this demand check and are left to the positive
+ * confirmed-family classifier and the coverage evidence stage.
  */
 export const MAX_WORDS_FOR_DEMAND_CHECK = 7
 
@@ -61,9 +59,7 @@ const STOPWORDS = new Set([
 ])
 
 function contentWords(text: string): string[] {
-    return normalizeQuery(text)
-        .split(/\s+/)
-        .map((w) => w.replace(/[^a-z0-9]/g, ""))
+    return (normalizeQuery(text).match(/[\p{L}\p{N}]+/gu) || [])
         .filter((w) => w.length > 2 && !STOPWORDS.has(w))
 }
 

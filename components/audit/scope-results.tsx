@@ -48,6 +48,9 @@ export function ScopeResults({
     const recommended = scope.clusters.filter((cluster) =>
         scope.recommendedClusterIds.includes(cluster.id),
     )
+    const recommendedFamilyCount = new Set(
+        recommended.map((cluster) => cluster.scopeFamilyId),
+    ).size
     const remainder = scope.clusters.filter(
         (cluster) => !scope.recommendedClusterIds.includes(cluster.id),
     )
@@ -122,7 +125,7 @@ export function ScopeResults({
                     icon={CalendarClock}
                     label="Program scope"
                     value={scope.recommendedArticleCount}
-                    detail={`${recommended.length} highest-priority qualified clusters`}
+                    detail={`${recommended.length} clusters across confirmed business areas`}
                 />
             </div>
 
@@ -136,6 +139,8 @@ export function ScopeResults({
                         </h3>
                         <p className="mt-1 text-sm text-stone-500">
                             The selected six contain {scope.recommendedArticleCount} articles.
+                            They cover {recommendedFamilyCount} confirmed business{" "}
+                            {recommendedFamilyCount === 1 ? "area" : "areas"}.{" "}
                             Review every title and its supporting searches before choosing a
                             delivery speed.
                         </p>
@@ -201,6 +206,9 @@ export function ScopeResults({
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center gap-2">
+                                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-600">
+                                            {cluster.scopeFamilyName}
+                                        </span>
                                         <span className="text-sm font-medium text-stone-900">
                                             {cluster.name}
                                         </span>
@@ -236,6 +244,9 @@ export function ScopeResults({
                                         ) : (
                                             <div className="space-y-2">
                                                 {clusterArticles.map((article, articleIndex) => {
+                                                    const scopeMismatch =
+                                                        article.scopeFamilyId !==
+                                                        cluster.scopeFamilyId
                                                     const articleEvidence = article.sourceQueryIds
                                                         .map((id) => gapById.get(id))
                                                         .filter(
@@ -263,6 +274,12 @@ export function ScopeResults({
                                                                     <h4 className="mt-1 text-sm font-medium text-stone-900">
                                                                         {article.title}
                                                                     </h4>
+                                                                    {scopeMismatch && (
+                                                                        <p className="mt-1 text-xs font-medium text-red-600">
+                                                                            This article crossed confirmed business
+                                                                            areas. Treat this as an audit data bug.
+                                                                        </p>
+                                                                    )}
                                                                     <p className="mt-1 text-xs text-stone-500">
                                                                         Primary search: {article.mainKeyword}
                                                                     </p>

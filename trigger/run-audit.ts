@@ -111,7 +111,11 @@ export const runAuditTask = task({
                         return false
                     }
                 })
-                .slice(0, HARVEST_POLICY.maxCompetitors)
+            if (competitors.length > HARVEST_POLICY.maxCompetitors) {
+                throw new Error(
+                    `The saved audit input has ${competitors.length} competitors; maximum is ${HARVEST_POLICY.maxCompetitors}. None were silently removed.`,
+                )
+            }
 
             if (!brandRecord?.discovered_competitors?.length && competitors.length > 0) {
                 await supabase

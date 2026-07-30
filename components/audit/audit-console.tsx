@@ -29,6 +29,7 @@ interface AuditConsoleProps {
 type AuditPhase =
     | "competitor_discovery"
     | "harvesting"
+    | "validating_business_scope"
     | "scanning_user_site"
     | "scanning_competitors"
     | "computing_gaps"
@@ -66,6 +67,7 @@ type AuditStatusResponse = {
 const PHASE_ORDER: AuditPhase[] = [
     "competitor_discovery",
     "harvesting",
+    "validating_business_scope",
     "scanning_user_site",
     "scanning_competitors",
     "computing_gaps",
@@ -87,6 +89,12 @@ const PHASE_COPY: Record<AuditPhase, {
         label: "Harvesting observed searches",
         description: "Collecting real queries and preserving where each one was found.",
         icon: Search,
+    },
+    validating_business_scope: {
+        label: "Enforcing confirmed business scope",
+        description:
+            "Assigning each observed search to a product area you approved and rejecting adjacent markets.",
+        icon: ShieldCheck,
     },
     scanning_user_site: {
         label: "Scanning your published coverage",

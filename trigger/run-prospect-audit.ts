@@ -2,13 +2,13 @@ import { task } from "@trigger.dev/sdk/v3"
 
 import { assembleHarvest } from "@/lib/harvest/assembly"
 import { persistHarvestOutput } from "@/lib/harvest/run-harvest"
+import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import { createAdminClient } from "@/utils/supabase/admin"
 
 interface ProspectAuditPayload {
     auditId: string
     founderUserId: string
     subjectUrl: string
-    seeds: string[]
     competitors: string[]
 }
 
@@ -63,14 +63,35 @@ export const runProspectAuditTask = task({
         }
 
         try {
+            const { data: scopeRows, error: scopeError } = await supabase
+                .from("audit_scope_families")
+                .select("id, name, description, seed_keywords, priority")
+                .eq("audit_id", payload.auditId)
+                .eq("user_id", payload.founderUserId)
+                .order("priority", { ascending: true })
+            if (scopeError || !scopeRows?.length) {
+                throw new Error(
+                    "Prospect audit has no confirmed business scope snapshot.",
+                )
+            }
+            const scopeFamilies: AuditScopeFamily[] = scopeRows.map(
+                (row: any) => ({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    seedKeywords: Array.isArray(row.seed_keywords)
+                        ? row.seed_keywords
+                        : [],
+                    priority: Number(row.priority || 0),
+                }),
+            )
             await update({ generation_phase: "harvesting" })
             const output = await assembleHarvest(
                 {
                     subjectUrl: payload.subjectUrl,
                     subjectName: new URL(payload.subjectUrl).hostname,
-                    seeds: payload.seeds,
+                    scopeFamilies,
                     competitors: payload.competitors,
-                    brandContext: payload.seeds.join(", "),
                 },
                 {
                     onProgress: async (progress) => {

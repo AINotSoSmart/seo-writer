@@ -3,8 +3,22 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "closed-pool-v2.4.0",
+    version: "confirmed-business-scope-v3.0.0",
     maxCompetitors: 4,
+    maxCompetitorDiscoveryQueries: 12,
+    maxScopeFamilies: 12,
+    // A family may carry several genuinely different founder-confirmed searches.
+    // The total audit cap below is the cost boundary; never silently truncate a
+    // confirmed family to an arbitrary first three.
+    maxSeedsPerFamily: 8,
+    maxTotalScopeSeeds: 12,
+    // At least one ranking-page search can represent every allowed family.
+    maxScopeSerpSeeds: 12,
+    /**
+     * Bounds positive-scope classification cost while preserving each
+     * confirmed family and evidence source through a fair round-robin cap.
+     */
+    maxPreScopeQueries: 600,
     maxQueries: 400,
     maxCompetitorCorpusPages: 120,
     maxCoveragePages: 150,

@@ -50,7 +50,7 @@ export async function createProgramPurchaseIntent(input: {
     const { data: audit, error: auditError } = await supabase
         .from("topical_audits")
         .select(
-            "id, user_id, brand_id, subject_url, site_page_snapshot, run_status, completed_at, requires_reaudit",
+            "id, user_id, brand_id, subject_url, site_page_snapshot, run_status, completed_at, requires_reaudit, scope_hash",
         )
         .eq("id", input.auditId)
         .eq("user_id", input.userId)
@@ -80,7 +80,7 @@ export async function createProgramPurchaseIntent(input: {
 
     const { data: brand } = await supabase
         .from("brand_details")
-        .select("current_audit_id, website_url")
+        .select("current_audit_id, website_url, scope_hash")
         .eq("id", audit.brand_id)
         .eq("user_id", input.userId)
         .single()
@@ -88,6 +88,12 @@ export async function createProgramPurchaseIntent(input: {
         throw new PurchaseIntentError(
             "Checkout requires the brand's current completed audit.",
             "audit_not_current",
+        )
+    }
+    if (!audit.scope_hash || brand.scope_hash !== audit.scope_hash) {
+        throw new PurchaseIntentError(
+            "The confirmed business scope changed after this audit. Run a fresh audit before checkout.",
+            "scope_changed",
         )
     }
 
@@ -125,18 +131,37 @@ export async function createProgramPurchaseIntent(input: {
         (soldRows || []).map((row: any) => String(row.audit_cluster_id)),
     )
 
-    const { data: clusterRows, error: clusterError } = await supabase
-        .from("audit_clusters")
-        .select("id, priority, article_count")
-        .eq("audit_id", audit.id)
-        .order("priority", { ascending: true })
+    const [
+        { data: clusterRows, error: clusterError },
+        { data: scopeRows, error: scopeError },
+    ] = await Promise.all([
+        supabase
+            .from("audit_clusters")
+            .select("id, scope_family_id, priority, article_count")
+            .eq("audit_id", audit.id)
+            .order("priority", { ascending: true }),
+        supabase
+            .from("audit_scope_families")
+            .select("id, priority")
+            .eq("audit_id", audit.id),
+    ])
     if (clusterError) throw new PurchaseIntentError(clusterError.message, "cluster_load_failed")
+    if (scopeError) throw new PurchaseIntentError(scopeError.message, "scope_load_failed")
+    const scopePriority = new Map(
+        (scopeRows || []).map((scope: any) => [
+            String(scope.id),
+            Number(scope.priority || 0),
+        ]),
+    )
 
     const selection = selectQualifiedProgramScope(
         (clusterRows || []).map((cluster: any) => ({
             id: cluster.id,
             priority: Number(cluster.priority || 0),
             articleCount: Number(cluster.article_count || 0),
+            scopeFamilyId: String(cluster.scope_family_id),
+            scopeFamilyPriority:
+                scopePriority.get(String(cluster.scope_family_id)) ?? 99,
         })),
         sold,
         false,

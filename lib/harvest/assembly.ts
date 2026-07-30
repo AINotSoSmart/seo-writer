@@ -16,14 +16,16 @@ import {
 } from "./clusterer"
 import { type PoolQuery, scanCoverage, type SiteCoverageResult } from "./coverage"
 import { computeGaps, type GapAnalysisResult, type GapItem } from "./gap-engine"
-import { filterByLanguage } from "./language-filter"
-import { buildNicheCentroid, filterByNicheRelevance } from "./niche-filter"
 import { HARVEST_POLICY } from "./policy"
 import { filterToSearchedQueries } from "./query-validation"
+import {
+    classifyQueriesToScope,
+    type AuditScopeFamily,
+} from "./scope-classifier"
+import { roundRobinCap, selectSerpSeeds } from "./scope-cap"
 import { harvestSerpQuestions } from "./serp-questions"
 import {
     brandTokensFromUrls,
-    capProportionally,
     dedupeQueries,
     mapWithConcurrency,
     type HarvestedQuery,
@@ -35,16 +37,15 @@ const EMBEDDING_CONCURRENCY = 5
 
 export interface HarvestInput {
     subjectUrl: string
-    seeds: string[]
+    scopeFamilies: AuditScopeFamily[]
     competitors: string[]
     countryCode?: string
-    brandContext?: string
-    excludeContext?: string
     subjectName?: string
 }
 
 export interface AssembledQuery {
     id: string
+    scopeFamilyId: string
     evidence: HarvestedQuery
     embedding: number[]
     userCoverage: SiteCoverageResult["coverage"][number]
@@ -54,10 +55,11 @@ export interface AssembledQuery {
 export interface HarvestStatistics {
     poolSize: number
     harvestedBeforeDemandFilter: number
-    droppedByLanguageFilter: number
+    droppedByPreScopeCap: number
+    droppedByFinalCap: number
     droppedByDemandFilter: number
     demandCheckFailures: number
-    droppedByNicheFilter: number
+    droppedByScopeFilter: number
     userPagesScanned: number
     competitorsScanned: number
     coveredCount: number
@@ -69,6 +71,7 @@ export interface HarvestStatistics {
     clusterSizes: number[]
     collapseRatio: number
     bySource: Record<string, number>
+    byScopeFamily: Record<string, number>
 }
 
 export interface HarvestOutput {
@@ -89,8 +92,12 @@ export interface HarvestOutput {
     policyVersion: string
     resultHash: string
     droppedByDemandFilter: Array<{ query: string; source: string }>
-    droppedByNicheFilter: Array<{ query: string; source: string; similarity: number }>
-    droppedByLanguageFilter: Array<{ query: string; source: string; detected: string }>
+    droppedByScopeFilter: Array<{
+        query: string
+        source: string
+        reason: string
+        suggestedFamilyId: string | null
+    }>
 }
 
 export class HarvestAssemblyError extends Error {
@@ -116,9 +123,13 @@ type AssemblyOptions = {
 }
 
 function validateInput(input: HarvestInput): HarvestInput {
-    if (!input.subjectUrl || !Array.isArray(input.seeds) || input.seeds.length === 0) {
+    if (
+        !input.subjectUrl ||
+        !Array.isArray(input.scopeFamilies) ||
+        input.scopeFamilies.length === 0
+    ) {
         throw new HarvestAssemblyError(
-            "A subject URL and at least one seed are required.",
+            "A subject URL and at least one confirmed business family are required.",
             "invalid_input",
         )
     }
@@ -133,21 +144,127 @@ function validateInput(input: HarvestInput): HarvestInput {
         throw new HarvestAssemblyError("The subject URL must use HTTP or HTTPS.", "invalid_input")
     }
 
-    const competitors = Array.from(new Set(input.competitors || [])).slice(
+    const competitors = Array.from(new Set(input.competitors || []))
+    if (competitors.length > HARVEST_POLICY.maxCompetitors) {
+        throw new HarvestAssemblyError(
+            `The audit has ${competitors.length} competitors; maximum is ${HARVEST_POLICY.maxCompetitors}. None were silently removed.`,
+            "invalid_input",
+        )
+    }
+
+    if (input.scopeFamilies.length > HARVEST_POLICY.maxScopeFamilies) {
+        throw new HarvestAssemblyError(
+            `Confirmed scope contains ${input.scopeFamilies.length} business areas; maximum is ${HARVEST_POLICY.maxScopeFamilies}.`,
+            "invalid_scope",
+        )
+    }
+    if (
+        input.scopeFamilies.some(
+            (family) =>
+                !family.id ||
+                !family.name.trim() ||
+                !family.description.trim() ||
+                family.seedKeywords.length === 0,
+        )
+    ) {
+        throw new HarvestAssemblyError(
+            "Every confirmed business area needs an ID, name, description, and search direction.",
+            "invalid_scope",
+        )
+    }
+
+    const scopeFamilies = input.scopeFamilies
+        .map((family, priority) => ({
+            ...family,
+            name: family.name.trim(),
+            description: family.description.trim(),
+            seedKeywords: Array.from(
+                new Set(
+                    family.seedKeywords
+                        .map((seed) => seed.trim().toLowerCase())
+                        .filter(Boolean),
+                ),
+            ),
+            priority,
+        }))
+    if (
+        new Set(scopeFamilies.map((family) => family.id)).size !==
+            scopeFamilies.length ||
+        new Set(
+            scopeFamilies.map((family) => family.name.toLowerCase()),
+        ).size !== scopeFamilies.length
+    ) {
+        throw new HarvestAssemblyError(
+            "Confirmed business area IDs and names must be unique.",
+            "invalid_scope",
+        )
+    }
+    if (scopeFamilies.length === 0) {
+        throw new HarvestAssemblyError(
+            "The confirmed business scope contains no usable search direction.",
+            "invalid_scope",
+        )
+    }
+    const totalSeeds = scopeFamilies.reduce(
+        (sum, family) => sum + family.seedKeywords.length,
         0,
-        HARVEST_POLICY.maxCompetitors,
     )
+    const oversizedFamily = scopeFamilies.find(
+        (family) =>
+            family.seedKeywords.length > HARVEST_POLICY.maxSeedsPerFamily,
+    )
+    if (oversizedFamily) {
+        throw new HarvestAssemblyError(
+            `"${oversizedFamily.name}" contains ${oversizedFamily.seedKeywords.length} search directions; maximum is ${HARVEST_POLICY.maxSeedsPerFamily}.`,
+            "invalid_scope",
+        )
+    }
+    if (totalSeeds > HARVEST_POLICY.maxTotalScopeSeeds) {
+        throw new HarvestAssemblyError(
+            `Confirmed scope contains ${totalSeeds} search directions; maximum is ${HARVEST_POLICY.maxTotalScopeSeeds}.`,
+            "invalid_scope",
+        )
+    }
 
     return {
         ...input,
         subjectUrl: subjectUrl.toString(),
-        seeds: Array.from(new Set(input.seeds.map((seed) => seed.trim()).filter(Boolean))).slice(0, 6),
+        scopeFamilies,
         competitors,
     }
 }
 
 function stableHash(value: unknown): string {
     return createHash("sha256").update(JSON.stringify(value)).digest("hex")
+}
+
+const SOURCE_ORDER: QuerySource[] = [
+    "paa",
+    "competitor_sitemap",
+    "autocomplete",
+]
+
+function sourceFamilyHint(
+    query: HarvestedQuery,
+    families: AuditScopeFamily[],
+): string {
+    const sourceSeed = (query.source_seed || "").toLowerCase()
+    const matches = families.flatMap((family) =>
+        family.seedKeywords
+            .filter((seed) => sourceSeed.includes(seed.toLowerCase()))
+            .map((seed) => ({ familyId: family.id, length: seed.length })),
+    )
+    matches.sort((left, right) => right.length - left.length)
+    return matches[0]?.familyId || "__unassigned__"
+}
+
+function preferredScopeSourceKeys(families: AuditScopeFamily[]): string[] {
+    return [
+        ...families.flatMap((family) =>
+            SOURCE_ORDER.map((source) => `${family.id}:${source}`),
+        ),
+        ...SOURCE_ORDER.map((source) => `__unassigned__:${source}`),
+    ]
 }
 
 /**
@@ -160,10 +277,20 @@ export async function assembleHarvest(
 ): Promise<HarvestOutput> {
     const input = validateInput(rawInput)
     const excludeBrands = brandTokensFromUrls([input.subjectUrl, ...input.competitors])
+    const seeds = input.scopeFamilies.flatMap((family) => family.seedKeywords)
+    const serpSeeds = selectSerpSeeds(
+        input.scopeFamilies,
+        HARVEST_POLICY.maxScopeSerpSeeds,
+    )
 
     const [autocomplete, serpQuestions, competitorTopics] = await Promise.all([
-        harvestAutocomplete(input.seeds, { countryCode: input.countryCode }),
-        harvestSerpQuestions(input.seeds, undefined, 6, excludeBrands),
+        harvestAutocomplete(seeds, { countryCode: input.countryCode }),
+        harvestSerpQuestions(
+            serpSeeds,
+            undefined,
+            serpSeeds.length,
+            excludeBrands,
+        ),
         harvestCompetitorCorpus(input.competitors, excludeBrands),
     ])
 
@@ -200,14 +327,20 @@ export async function assembleHarvest(
         ...competitorTopics.queries,
         ...autocomplete.queries,
     ])
-    // Language before demand: a competitor's localised sitemap contributes German
-    // and Polish titles that the niche filter cannot reject, because multilingual
-    // embeddings place translations close to the English centroid on purpose.
-    // Relevance and language are orthogonal, so language needs its own gate —
-    // and doing it first saves a demand request per foreign string.
-    const languageFiltered = filterByLanguage(deduped)
-
-    const demandFiltered = await filterToSearchedQueries(languageFiltered.kept, {
+    const untraceable = deduped.filter(
+        (query) => !query.source_url || !query.observed_value,
+    )
+    if (untraceable.length > 0) {
+        throw new HarvestAssemblyError(
+            `${untraceable.length} harvested queries are missing provenance.`,
+            "untraceable_query",
+            reports,
+        )
+    }
+    // Demand validation is structural evidence that the phrase is searched.
+    // Language and business relevance are decided together by the positive
+    // confirmed-family assignment below; there is no language word list.
+    const demandFiltered = await filterToSearchedQueries(deduped, {
         countryCode: input.countryCode,
     })
     liveLedger.push({
@@ -234,24 +367,53 @@ export async function assembleHarvest(
             reports,
         )
     }
-    const capped = capProportionally(demandFiltered.kept, HARVEST_POLICY.maxQueries)
+    const preferredKeys = preferredScopeSourceKeys(input.scopeFamilies)
+    const preScopeCapped = roundRobinCap(
+        demandFiltered.kept,
+        HARVEST_POLICY.maxPreScopeQueries,
+        (query) =>
+            `${sourceFamilyHint(query, input.scopeFamilies)}:${query.source}`,
+        preferredKeys,
+    )
 
-    if (capped.length === 0) {
+    if (preScopeCapped.length === 0) {
         throw new HarvestAssemblyError("Harvest produced zero queries.", "empty_harvest", reports)
     }
-    const untraceable = capped.filter(
-        (query) => !query.source_url || !query.observed_value,
+
+    const scopeClassified = await classifyQueriesToScope(
+        preScopeCapped,
+        input.scopeFamilies,
     )
-    if (untraceable.length > 0) {
+    liveLedger.push({
+        source: "scope_classification",
+        attempted: scopeClassified.callsAttempted,
+        succeeded: scopeClassified.callsSucceeded,
+        failed:
+            scopeClassified.callsAttempted - scopeClassified.callsSucceeded,
+        cached: 0,
+    })
+    await options.onProgress?.({
+        phase: "validating_business_scope",
+        sourceCallLedger: [...liveLedger],
+    })
+    if (scopeClassified.kept.length === 0) {
         throw new HarvestAssemblyError(
-            `${untraceable.length} harvested queries are missing provenance.`,
-            "untraceable_query",
+            "No observed searches directly belonged to the confirmed business scope.",
+            "scope_filter_empty",
             reports,
         )
     }
+    const scopedQueries = roundRobinCap(
+        scopeClassified.kept,
+        HARVEST_POLICY.maxQueries,
+        (query) => `${query.scope_family_id}:${query.source}`,
+        preferredKeys,
+    )
 
-    const embeddings = await mapWithConcurrency(capped, EMBEDDING_CONCURRENCY, (query) =>
-        generateEmbedding(query.query, "RETRIEVAL_QUERY"),
+    const embeddings = await mapWithConcurrency(
+        scopedQueries,
+        EMBEDDING_CONCURRENCY,
+        (query) => generateEmbedding(query.query, "RETRIEVAL_QUERY"),
     )
     if (embeddings.some((embedding) => embedding === null)) {
         throw new HarvestAssemblyError(
@@ -262,8 +424,8 @@ export async function assembleHarvest(
     }
     liveLedger.push({
         source: "query_embedding",
-        attempted: capped.length,
-        succeeded: capped.length,
+        attempted: scopedQueries.length,
+        succeeded: scopedQueries.length,
         failed: 0,
         cached: 0,
     })
@@ -272,36 +434,41 @@ export async function assembleHarvest(
         sourceCallLedger: [...liveLedger],
     })
 
-    const centroid = await buildNicheCentroid(
-        input.seeds,
-        input.brandContext,
-        input.excludeContext,
-    )
-    const nicheFiltered = filterByNicheRelevance(
-        capped,
-        embeddings as number[][],
-        centroid,
-    )
-    if (nicheFiltered.kept.length === 0) {
-        throw new HarvestAssemblyError(
-            "The niche relevance filter rejected every query.",
-            "niche_filter_empty",
-            reports,
-        )
-    }
-
     const poolQueries: PoolQuery[] = []
-    const poolMeta = new Map<string, { source: QuerySource; sourceUrl: string | null }>()
-    const evidenceById = new Map<string, { evidence: HarvestedQuery; embedding: number[] }>()
+    const poolMeta = new Map<
+        string,
+        {
+            source: QuerySource
+            sourceUrl: string | null
+            scopeFamilyId: string
+        }
+    >()
+    const evidenceById = new Map<
+        string,
+        {
+            evidence: (typeof scopedQueries)[number]
+            embedding: number[]
+        }
+    >()
 
-    for (const kept of nicheFiltered.kept) {
+    for (let index = 0; index < scopedQueries.length; index++) {
+        const query = scopedQueries[index]
+        const embedding = embeddings[index]
+        if (!embedding) {
+            throw new HarvestAssemblyError(
+                `Missing embedding for scoped query "${query.query}".`,
+                "embedding_failure",
+                reports,
+            )
+        }
         const id = randomUUID()
-        poolQueries.push({ id, query: kept.query.query, embedding: kept.embedding })
+        poolQueries.push({ id, query: query.query, embedding })
         poolMeta.set(id, {
-            source: kept.query.source,
-            sourceUrl: kept.query.source_url,
+            source: query.source,
+            sourceUrl: query.source_url,
+            scopeFamilyId: query.scope_family_id,
         })
-        evidenceById.set(id, { evidence: kept.query, embedding: kept.embedding })
+        evidenceById.set(id, { evidence: query, embedding })
     }
 
     const userCoverage = await scanCoverage(
@@ -377,10 +544,32 @@ export async function assembleHarvest(
         sourceCallLedger: [...liveLedger],
     })
     const embeddingMap = new Map(poolQueries.map((query) => [query.id, query.embedding]))
-    let articleUnits = collapseToArticles(gapResult.gaps, embeddingMap)
+    let articleUnits = input.scopeFamilies.flatMap((family) =>
+        collapseToArticles(
+            gapResult.gaps.filter(
+                (gap) => gap.scopeFamilyId === family.id,
+            ),
+            embeddingMap,
+        ),
+    )
     articleUnits = await titleArticles(articleUnits)
-    let clusters = groupIntoClusters(articleUnits)
+    let clusters = input.scopeFamilies.flatMap((family) =>
+        groupIntoClusters(
+            articleUnits.filter(
+                (article) => article.scopeFamilyId === family.id,
+            ),
+        ),
+    )
     clusters = await nameClusters(clusters)
+    const familyPriority = new Map(
+        input.scopeFamilies.map((family) => [family.id, family.priority]),
+    )
+    clusters.sort(
+        (left, right) =>
+            (familyPriority.get(left.scopeFamilyId) ?? 99) -
+                (familyPriority.get(right.scopeFamilyId) ?? 99) ||
+            right.priority - left.priority,
+    )
 
     const largestCluster = clusters.reduce(
         (largest, cluster) => Math.max(largest, cluster.articles.length),
@@ -398,12 +587,16 @@ export async function assembleHarvest(
         ? articleUnits.length / gapResult.gapCount
         : 0
 
-    // The real invariant: no two articles may be near-duplicates of each other.
-    // `collapseToArticles` folds anything within ARTICLE_MERGE into an existing
-    // unit, so a surviving pair above that threshold means the merge step
-    // genuinely failed — the only way a customer receives two articles about the
-    // same thing.
-    const duplicatePairs = findDuplicateArticlePairs(articleUnits)
+    // Inside one confirmed family, no two articles may be near-duplicates.
+    // Cross-family similarity is not a merge failure: two separately confirmed
+    // customer jobs can use adjacent language while remaining distinct products.
+    const duplicatePairs = input.scopeFamilies.flatMap((family) =>
+        findDuplicateArticlePairs(
+            articleUnits.filter(
+                (article) => article.scopeFamilyId === family.id,
+            ),
+        ),
+    )
     if (duplicatePairs.length > 0) {
         const sample = duplicatePairs
             .slice(0, 3)
@@ -470,6 +663,7 @@ export async function assembleHarvest(
         }
         return {
             id: query.id,
+            scopeFamilyId: source.evidence.scope_family_id,
             evidence: source.evidence,
             embedding: source.embedding,
             userCoverage: coverage,
@@ -481,13 +675,24 @@ export async function assembleHarvest(
         counts[query.evidence.source] = (counts[query.evidence.source] || 0) + 1
         return counts
     }, {})
+    const byScopeFamily = assembledQueries.reduce<Record<string, number>>(
+        (counts, query) => {
+            counts[query.scopeFamilyId] =
+                (counts[query.scopeFamilyId] || 0) + 1
+            return counts
+        },
+        {},
+    )
     const statistics: HarvestStatistics = {
         poolSize: assembledQueries.length,
         harvestedBeforeDemandFilter: deduped.length,
-        droppedByLanguageFilter: languageFiltered.dropped.length,
+        droppedByPreScopeCap:
+            demandFiltered.kept.length - preScopeCapped.length,
+        droppedByFinalCap:
+            scopeClassified.kept.length - scopedQueries.length,
         droppedByDemandFilter: demandFiltered.dropped.length,
         demandCheckFailures: demandFiltered.checkFailures,
-        droppedByNicheFilter: nicheFiltered.dropped.length,
+        droppedByScopeFilter: scopeClassified.dropped.length,
         userPagesScanned: userCoverage.pagesScanned,
         competitorsScanned: competitorCoverages.length,
         coveredCount: gapResult.coveredCount,
@@ -499,6 +704,7 @@ export async function assembleHarvest(
         clusterSizes: clusters.map((cluster) => cluster.articles.length),
         collapseRatio,
         bySource,
+        byScopeFamily,
     }
 
     const sourceCallLedger: HarvestOutput["sourceCallLedger"] = liveLedger
@@ -506,13 +712,17 @@ export async function assembleHarvest(
         policyVersion: HARVEST_POLICY.version,
         queries: assembledQueries.map((query) => ({
             query: query.evidence.query_norm,
+            scopeFamilyId: query.scopeFamilyId,
             source: query.evidence.source,
             sourceUrl: query.evidence.source_url,
             coverage: query.userCoverage.status,
             competitors: query.competitorMatches.map((match) => match.matchedUrl).sort(),
         })).sort((a, b) => a.query.localeCompare(b.query)),
         clusters: clusters.map((cluster) =>
-            cluster.articles.map((article) => article.mainKeyword).sort(),
+            [
+                cluster.scopeFamilyId,
+                ...cluster.articles.map((article) => article.mainKeyword).sort(),
+            ],
         ).sort((a, b) => a.join("|").localeCompare(b.join("|"))),
     })
 
@@ -528,7 +738,6 @@ export async function assembleHarvest(
         policyVersion: HARVEST_POLICY.version,
         resultHash,
         droppedByDemandFilter: demandFiltered.dropped,
-        droppedByNicheFilter: nicheFiltered.dropped,
-        droppedByLanguageFilter: languageFiltered.dropped,
+        droppedByScopeFilter: scopeClassified.dropped,
     }
 }

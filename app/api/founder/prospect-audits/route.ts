@@ -3,7 +3,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { tasks } from "@trigger.dev/sdk/v3"
 
 import { isFounderUser } from "@/lib/founder"
+import {
+    SCOPE_CONTRACT_VERSION,
+    MAX_SCOPE_FAMILIES,
+    MAX_TOTAL_SCOPE_SEEDS,
+    normalizeSeed,
+    scopeHash,
+} from "@/lib/brand-scope"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
+import { ScopeFamilySchema, type ScopeFamily } from "@/lib/schemas/brand"
 import type { runProspectAuditTask } from "@/trigger/run-prospect-audit"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
@@ -13,16 +21,6 @@ function normalizeUrl(value: string): string {
     if (!["http:", "https:"].includes(url.protocol)) throw new Error("Invalid website URL")
     url.hash = ""
     return url.toString()
-}
-
-function fallbackSeeds(subjectUrl: string): string[] {
-    const host = new URL(subjectUrl).hostname.replace(/^www\./, "")
-    const words = host
-        .split(".")[0]
-        .split(/[-_]+/)
-        .map((word) => word.trim())
-        .filter((word) => word.length > 2)
-    return [words.join(" ") || host]
 }
 
 async function founder() {
@@ -66,16 +64,66 @@ export async function POST(request: NextRequest) {
                 { status: 400 },
             )
         }
-        const rawSeeds: unknown[] = Array.isArray(body.seeds) ? body.seeds : []
-        const seeds: string[] = Array.from(
-            new Set<string>(
-                rawSeeds
-                    .map((seed: unknown) => String(seed))
-                    .map((seed) => seed.trim())
-                    .filter(Boolean),
-            ),
-        ).slice(0, 6)
-        const effectiveSeeds = seeds.length ? seeds : fallbackSeeds(subjectUrl)
+        const rawFamilies: unknown[] = Array.isArray(body.businessAreas)
+            ? body.businessAreas
+            : []
+        if (rawFamilies.length > MAX_SCOPE_FAMILIES) {
+            return NextResponse.json(
+                {
+                    error: `Use no more than ${MAX_SCOPE_FAMILIES} confirmed business areas. None were silently removed.`,
+                },
+                { status: 400 },
+            )
+        }
+        const scopeFamilies: ScopeFamily[] = rawFamilies
+            .map((candidate: any, priority: number) =>
+                ScopeFamilySchema.parse({
+                    name: String(candidate?.name || "").trim(),
+                    description:
+                        String(candidate?.description || "").trim() ||
+                        `Content directly serving ${String(candidate?.name || "").trim()}.`,
+                    seed_keywords: Array.from(
+                        new Set(
+                            (Array.isArray(candidate?.seedKeywords)
+                                ? candidate.seedKeywords
+                                : []
+                            )
+                                .map((seed: unknown) =>
+                                    normalizeSeed(String(seed)),
+                                )
+                                .filter(Boolean),
+                        ),
+                    ),
+                    evidence: [],
+                    source: "user",
+                    priority,
+                    enabled: true,
+                }),
+            )
+        if (scopeFamilies.length === 0) {
+            return NextResponse.json(
+                {
+                    error:
+                        "Confirm at least one business area and its direct customer searches.",
+                },
+                { status: 400 },
+            )
+        }
+        const totalSeeds = scopeFamilies.reduce(
+            (sum, family) => sum + family.seed_keywords.length,
+            0,
+        )
+        if (totalSeeds > MAX_TOTAL_SCOPE_SEEDS) {
+            return NextResponse.json(
+                {
+                    error: `Use no more than ${MAX_TOTAL_SCOPE_SEEDS} confirmed searches across all business areas.`,
+                },
+                { status: 400 },
+            )
+        }
+        const effectiveSeeds = scopeFamilies.flatMap(
+            (family) => family.seed_keywords,
+        )
         const rawCompetitors: unknown[] = Array.isArray(body.competitors)
             ? body.competitors
             : []
@@ -85,23 +133,57 @@ export async function POST(request: NextRequest) {
                     .map((competitor: unknown) => String(competitor))
                     .map(normalizeUrl),
             ),
-        ).slice(0, HARVEST_POLICY.maxCompetitors)
+        )
+        if (competitors.length > HARVEST_POLICY.maxCompetitors) {
+            return NextResponse.json(
+                {
+                    error: `Use no more than ${HARVEST_POLICY.maxCompetitors} direct competitors. None were silently removed.`,
+                },
+                { status: 400 },
+            )
+        }
         const publicToken = randomBytes(24).toString("base64url")
         const claimToken = randomBytes(32).toString("base64url")
         const claimHash = createHash("sha256").update(claimToken).digest("hex")
 
         const { data: auditId, error: auditError } = await (
             actor.supabase as any
-        ).rpc("create_prospect_audit", {
+        ).rpc("create_scoped_prospect_audit", {
             p_creator_user_id: actor.user.id,
             p_subject_url: subjectUrl,
             p_input_seeds: effectiveSeeds,
             p_input_competitors: competitors,
             p_brand_snapshot: {
                 product_name: new URL(subjectUrl).hostname.replace(/^www\./, ""),
-                category: effectiveSeeds[0],
+                product_identity: {
+                    literally: scopeFamilies.map((family) => family.name).join(", "),
+                    emotionally: "Not yet confirmed by the prospect",
+                    not: "Outside the confirmed business areas",
+                },
+                mission: "Not yet confirmed by the prospect",
+                audience: {
+                    primary: "Not yet confirmed by the prospect",
+                    psychology: "Not yet confirmed by the prospect",
+                },
+                enemy: [],
+                category: scopeFamilies[0].name,
+                uvp: [],
+                core_features: [],
+                pricing: [],
+                how_it_works: [],
+                brand_keywords: [],
+                scope_families: scopeFamilies,
+                target_seed_keywords: effectiveSeeds,
+                search_country: "",
+                search_topic: "general",
+                article_length: "long",
+                image_style: "stock",
+                style_dna: "",
             },
             p_policy_version: HARVEST_POLICY.version,
+            p_scope_contract_version: SCOPE_CONTRACT_VERSION,
+            p_scope_hash: scopeHash(scopeFamilies),
+            p_scope_families: scopeFamilies,
             p_public_token: publicToken,
             p_claim_token_hash: claimHash,
             p_claim_email_normalized: prospectEmail,
@@ -115,7 +197,6 @@ export async function POST(request: NextRequest) {
                 auditId,
                 founderUserId: actor.user.id,
                 subjectUrl,
-                seeds: effectiveSeeds,
                 competitors,
             })
         } catch (queueError) {

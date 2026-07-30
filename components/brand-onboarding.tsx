@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
 import { PillInput } from "@/components/ui/pill-input"
+import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
 
 interface BrandOnboardingProps {
     onComplete: (brandId: string) => void
@@ -22,17 +23,24 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
     const [analyzing, setAnalyzing] = useState(false)
     const [saving, setSaving] = useState(false)
     const [brandData, setBrandData] = useState<BrandDetails | null>(initialData || null)
+    const [targetSeeds, setTargetSeeds] = useState<string[]>(
+        initialData?.target_seed_keywords || [],
+    )
     const [error, setError] = useState("")
 
     const handleAnalyze = async () => {
         if (!url) return
+        if (targetSeeds.length > 12) {
+            setError("Add no more than 12 main customer searches.")
+            return
+        }
         setAnalyzing(true)
         setError("")
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify({ url, targetSeeds }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || "Failed to analyze brand")
@@ -73,6 +81,19 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             how_it_works: cleanArray(brandData.how_it_works),
             core_features: cleanArray(brandData.core_features),
             pricing: cleanArray(brandData.pricing),
+            target_seed_keywords: cleanArray(
+                brandData.target_seed_keywords || targetSeeds,
+            ),
+            scope_families: (brandData.scope_families || [])
+                .filter((family) => family.enabled)
+                .map((family, priority) => ({
+                    ...family,
+                    name: family.name.trim(),
+                    description: family.description.trim(),
+                    seed_keywords: cleanArray(family.seed_keywords),
+                    priority,
+                    enabled: true,
+                })),
         }
 
         // Validate required fields
@@ -136,16 +157,28 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                     <p className="text-sm text-stone-500">Enter your website URL to automatically extract your brand identity.</p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="space-y-4">
                     <Input
                         type="url"
                         placeholder="https://example.com"
                         className="flex-1 w-full"
                         value={url}
                         onChange={(e) => setUrl(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
                     />
-                    <Button onClick={handleAnalyze} disabled={analyzing || !url} className="w-full sm:w-auto bg-stone-900 text-white">
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-stone-600">
+                            Main customer searches
+                        </label>
+                        <PillInput
+                            value={targetSeeds}
+                            onChange={setTargetSeeds}
+                            placeholder="e.g. old photo restoration"
+                        />
+                        <p className="mt-1 text-[10px] text-stone-400">
+                            We will map each search to a product area for you to confirm.
+                        </p>
+                    </div>
+                    <Button onClick={handleAnalyze} disabled={analyzing || !url} className="w-full bg-stone-900 text-white">
                         {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analyze Brand"}
                     </Button>
                 </div>
@@ -166,6 +199,8 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                             image_style: "stock",
                             style_dna: "",
                             brand_keywords: [], // Added to fix type error
+                            scope_families: [],
+                            target_seed_keywords: targetSeeds,
                             search_country: "",
                             search_topic: "general",
                             article_length: "long",
@@ -194,6 +229,16 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             </div>
 
             <div className="grid gap-6 p-4 sm:p-6 bg-white rounded-xl border border-stone-200">
+                <ScopeFamilyReview
+                    families={brandData.scope_families || []}
+                    targetSeeds={brandData.target_seed_keywords || targetSeeds}
+                    onChange={(scope_families) =>
+                        setBrandData((current) =>
+                            current ? { ...current, scope_families } : current,
+                        )
+                    }
+                />
+
                 {/* 1. Product Identity */}
                 <div className="space-y-4">
                     <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">1. Product Identity</h3>

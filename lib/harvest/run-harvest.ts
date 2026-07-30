@@ -12,9 +12,9 @@ import { createAdminClient } from "@/utils/supabase/admin"
 import type { BrandDetails } from "@/lib/schemas/brand"
 import { extractSearchPrefs } from "@/lib/tavily-search"
 import { assembleHarvest, type HarvestOutput } from "./assembly"
-import { deriveSeeds } from "./pool"
 import { HARVEST_POLICY } from "./policy"
 import { selectQualifiedProgramScope } from "./program-contract"
+import type { AuditScopeFamily } from "./scope-classifier"
 
 const COUNTRY_ISO: Record<string, string> = {
     "united states": "us",
@@ -74,25 +74,20 @@ export interface RunHarvestOptions {
     ) => Promise<void> | void
 }
 
-function brandContext(brand: BrandDetails): string {
-    return [
-        brand.product_identity?.literally,
-        brand.category,
-        brand.audience?.primary ? `for ${brand.audience.primary}` : "",
-        Array.isArray(brand.core_features) ? brand.core_features.slice(0, 4).join(", ") : "",
-    ]
-        .filter(Boolean)
-        .join(". ")
-}
-
 export function isSubscriptionEligible(
-    clusters: Array<{ articles: unknown[] }>,
+    clusters: Array<{ scopeFamilyId: string; articles: unknown[] }>,
+    scopeFamilies: AuditScopeFamily[],
 ): boolean {
     return selectQualifiedProgramScope(
         clusters.map((cluster, index) => ({
             id: String(index),
             priority: index,
             articleCount: cluster.articles.length,
+            scopeFamilyId: cluster.scopeFamilyId,
+            scopeFamilyPriority:
+                scopeFamilies.find(
+                    (family) => family.id === cluster.scopeFamilyId,
+                )?.priority ?? 99,
         })),
         [],
         false,
@@ -107,6 +102,7 @@ export async function persistHarvestOutput(
     const clusterIds = output.clusters.map(() => randomUUID())
     const clusterRows = output.clusters.map((cluster, index) => ({
         id: clusterIds[index],
+        scope_family_id: cluster.scopeFamilyId,
         name: cluster.name,
         description: "",
         priority: index,
@@ -117,6 +113,7 @@ export async function persistHarvestOutput(
         cluster.articles.map((article, articleIndex) => ({
             id: randomUUID(),
             cluster_id: clusterIds[clusterIndex],
+            scope_family_id: article.scopeFamilyId,
             title: article.title,
             main_keyword: article.mainKeyword,
             supporting_keywords: article.supportingKeywords,
@@ -128,6 +125,7 @@ export async function persistHarvestOutput(
     )
     const queryRows = output.queries.map((query) => ({
         id: query.id,
+        scope_family_id: query.scopeFamilyId,
         query: query.evidence.query,
         query_norm: query.evidence.query_norm,
         source: query.evidence.source,
@@ -186,12 +184,28 @@ export async function runHarvestAudit(
         if (options.onPhase) await options.onPhase(phase, detail)
     }
 
-    const seeds = deriveSeeds(brandData)
-    if (seeds.length === 0) {
-        throw new Error("The brand needs a category or product description before an audit can run.")
+    const supabase = createAdminClient() as any
+    const { data: scopeRows, error: scopeError } = await supabase
+        .from("audit_scope_families")
+        .select("id, name, description, seed_keywords, priority")
+        .eq("audit_id", options.auditId)
+        .eq("user_id", userId)
+        .order("priority", { ascending: true })
+    if (scopeError || !scopeRows?.length) {
+        throw new Error(
+            "The audit has no immutable confirmed business scope snapshot.",
+        )
     }
+    const scopeFamilies: AuditScopeFamily[] = scopeRows.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        seedKeywords: Array.isArray(row.seed_keywords)
+            ? row.seed_keywords
+            : [],
+        priority: row.priority,
+    }))
     const competitors = options.competitors
-        .slice(0, HARVEST_POLICY.maxCompetitors)
         .map((competitor) => competitor.url)
     const prefs = extractSearchPrefs(brandData)
     const countryCode = COUNTRY_ISO[(prefs.country || "").toLowerCase()]
@@ -201,11 +215,9 @@ export async function runHarvestAudit(
         {
             subjectUrl: brandUrl,
             subjectName: brandData.product_name || "Customer site",
-            seeds,
+            scopeFamilies,
             competitors,
             countryCode,
-            brandContext: brandContext(brandData),
-            excludeContext: brandData.product_identity?.not,
         },
         {
             onProgress: async (progress) => {
@@ -238,7 +250,10 @@ export async function runHarvestAudit(
         competitorsScanned: output.statistics.competitorsScanned,
         userPagesScanned: output.statistics.userPagesScanned,
         publicToken: persisted.publicToken,
-        belowViableThreshold: !isSubscriptionEligible(output.clusters),
+        belowViableThreshold: !isSubscriptionEligible(
+            output.clusters,
+            scopeFamilies,
+        ),
         policyVersion: output.policyVersion,
         resultHash: output.resultHash,
         durationMs: Date.now() - startedAt,

@@ -7,13 +7,14 @@ what the code does, the code is right and this file is a bug.
 
 ## 1. The whole thing in one paragraph
 
-Someone gives us a website. We go and collect real search questions from Google
-and from competitor pages — never invented, always with a link back to where we
-saw them. We check which ones their site already answers. The leftovers are
-gaps. We group the gaps into themed batches of 3–15 articles ("clusters"). We
-show them the six best clusters and say "this is your scope, here's what it costs
-to close it." If they buy, we write and deliver one complete cluster at a time.
-When all six are done, the subscription cancels itself.
+Someone gives us a website, optional competitors, and their main customer
+searches. We show the distinct product/service areas we found with exact page
+evidence; they correct and confirm that business scope before research starts.
+We then collect real search questions from Google and competitor pages. A query
+enters only when it directly belongs to one confirmed area. We check which ones
+their site already answers, group the gaps inside each area, and show the
+six-cluster program before payment. If they buy, we deliver one complete cluster
+at a time. After cluster six, cancellation is scheduled for period end.
 
 That's it. Everything below is detail.
 
@@ -39,31 +40,27 @@ customer's back.
 
 ### What it does, in order
 
-1. **Work out the seeds.** 2–6 short phrases describing what the business does,
-   pulled from their brand info. Example: `old photo restoration`.
-2. **Ask Google Autocomplete** for real searches around those seeds.
-3. **Read the top-ranking pages** for those seeds and pull out the questions
+1. **Confirm the business scope.** Extract distinct product/service families
+   from the site with exact evidence, combine them with founder-provided target
+   searches, and let the customer rename, remove, add, or reprioritize them.
+2. **Ask Google Autocomplete** for real searches around the confirmed searches.
+3. **Read the top-ranking pages** for those searches and pull out the questions
    those pages answer.
 4. **Read competitor pages** and take their actual headlines.
-5. **Throw away junk** — page furniture, competitor support FAQs, off-topic drift, and anything not in the site's own language (competitors often publish translated versions).
+5. **Enforce confirmed ownership.** Each observed query must directly belong to
+   exactly one confirmed family and use a language represented by that family’s
+   confirmed searches. Adjacent and unrelated queries are rejected.
 6. **Read their site** and work out which questions it already answers.
 7. **Subtract.** Everything left over is a gap.
-8. **Group the gaps** into clusters and give each one a title.
+8. **Group inside each family.** Different confirmed customer jobs cannot merge
+   into the same article or cluster.
 
-### Real numbers from an actual run (bringback.pro, 3 seeds, 1 competitor)
+### BringBack must be re-measured
 
-| | |
-|---|---|
-| Questions collected | 744 |
-| Survived the junk filters | 395 |
-| Their site already answered | 170 |
-| **Gaps** | **225** |
-| Gaps merged into articles | 63 |
-| Clusters formed | 5 |
-| Time | 105 seconds |
-
-Note 225 gaps became 63 articles. That's on purpose — `restore old photos free`
-and `free old photo restoration` are the same article, so they merge.
+The previous BringBack numbers came from the retired flat-scope pipeline and are
+not product evidence. The next staging run must confirm restoration, animation,
+family portraits, add/remove person, nostalgic hug, and memory-book families
+before its counts are recorded here.
 
 ---
 
@@ -84,6 +81,7 @@ by each of the 26 letters, and 7 question forms (`how to`, `what is`, `why`,
 | 1 | 34 | 20 | ~50 | **~105** |
 | 3 | 102 | 20 | ~150 | **~270** |
 | 6 | 204 | 20 | ~200 | **~420** |
+| 12 (hard maximum) | 408 | 20 | varies | **bounded by policy** |
 
 **What increases it:** more seeds (linear), more competitors (more page phrases
 to demand-check).
@@ -93,8 +91,10 @@ an hour. At 20 customers you're at ~200 calls/day — Google won't notice.
 
 ### Tavily search — small count, real money
 
-One search per seed (max 6), plus a couple for finding competitors.
-**~5–8 searches per audit.** This is your main audit cost.
+One search per selected confirmed search, taking one from every family before a
+second from any family (maximum 12). Automatic competitor discovery may make
+one additional search per confirmed family (also capped at 12) before selecting
+at most four competitors. This is the main paid audit cost.
 
 ### Page fetches — free but slow
 
@@ -112,11 +112,13 @@ Typical real audit: ~80. The caps exist so one huge site can't run past the
 
 ~400 questions + ~80 pages = ~480. Fractions of a cent.
 
-### Gemini text generation — only 2 calls in the whole audit
+### Gemini — constrained classification plus labels
 
-One writes the article titles, one names the clusters. **The AI never decides
-what the topics are** — it only labels topics that were already found in the
-wild. That's the core rule.
+The positive scope classifier handles batches of 50 observed queries: at most
+12 successful batches for the 600-row pre-scope cap, with at most one bounded
+retry per batch. One later call writes article titles and one names clusters.
+The classifier cannot invent a family or query; it may only assign observed
+evidence to a customer-confirmed family or reject it.
 
 ---
 
@@ -133,16 +135,16 @@ Three separate reasons stack up:
    repeating itself. That's why everyone churned. Six clusters means the work
    genuinely finishes and you say so.
 
-If a site can't produce six qualified clusters (each needing 3–15 articles), **we
-refuse the sale.** That's deliberate. A niche too small to fill six clusters is a
-customer who'd churn in two months.
+If a site cannot produce six qualified clusters (each needing 3–15 articles),
+**we refuse the sale.** The evidence remains viewable, but no checkout is shown.
 
 ---
 
 ## 6. Stage 2 & 3 — Offer and purchase
 
-The customer sees: *"Your niche is 63 articles across 5 clusters. Here are the
-six best. Choose how fast you want them."*
+The customer sees the measured queries, all clusters and articles, their
+confirmed business-family labels, and source evidence. If at least six clusters
+and 25 selected articles qualify, the six-cluster offer becomes available.
 
 | Tier | Price/month | Speed | Payments | **Total** | Per cluster |
 |---|---|---|---|---|---|
@@ -285,12 +287,15 @@ If a future change breaks one of these, the product is back to being a $19
 competitor with nicer copy.
 
 1. **Every question must link back to where we saw it.** No source URL, no entry.
-2. **The AI never invents a topic.** It only labels and titles what was found.
+2. **The AI never invents a query or business area.** It may assign observed
+   evidence to one customer-confirmed family, reject it, or label/title it.
 3. **"Covered" means a specific page actually answers it** — not that the site is
    vaguely about the same subject.
 4. **Clusters ship whole or not at all.**
 5. **Programs end.** Six clusters, then cancel.
-6. **Small niches get refused**, not sold a plan that will run dry.
+6. **Small measured scopes get refused**, not sold a program that will run dry.
+7. **Every query, cluster, and article belongs to one immutable confirmed
+   business family.** No blended-centroid or word-blacklist fallback.
 
 ---
 

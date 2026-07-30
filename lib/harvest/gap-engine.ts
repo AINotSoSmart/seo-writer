@@ -30,6 +30,8 @@ export interface CompetitorMatch {
 export interface GapItem {
     queryId: string
     query: string
+    /** Confirmed commercial family that positively owns this search intent. */
+    scopeFamilyId: string
     /** Where we observed this query — the provenance claim */
     source: QuerySource
     sourceUrl: string | null
@@ -99,7 +101,14 @@ function scoreGap(
 export function computeGaps(
     userCoverage: SiteCoverageResult,
     competitorCoverages: SiteCoverageResult[],
-    poolMeta: Map<string, { source: QuerySource; sourceUrl: string | null }>
+    poolMeta: Map<
+        string,
+        {
+            source: QuerySource
+            sourceUrl: string | null
+            scopeFamilyId: string
+        }
+    >
 ): GapAnalysisResult {
     // Index competitor coverage by query for O(1) lookup
     const competitorIndex = new Map<string, CompetitorMatch[]>()
@@ -133,12 +142,18 @@ export function computeGaps(
         if (userQuery.status === "partial") partialCount++
 
         const meta = poolMeta.get(userQuery.queryId)
+        if (!meta?.scopeFamilyId) {
+            throw new Error(
+                `Query ${userQuery.queryId} has no confirmed business scope`,
+            )
+        }
         const source = meta?.source ?? "autocomplete"
         const competitors = competitorIndex.get(userQuery.queryId) || []
 
         gaps.push({
             queryId: userQuery.queryId,
             query: userQuery.query,
+            scopeFamilyId: meta.scopeFamilyId,
             source,
             sourceUrl: meta?.sourceUrl ?? null,
             userStatus: userQuery.status,
@@ -187,21 +202,41 @@ export function computeGaps(
  */
 export async function loadPoolMeta(
     brandId: string
-): Promise<Map<string, { source: QuerySource; sourceUrl: string | null }>> {
+): Promise<
+    Map<
+        string,
+        {
+            source: QuerySource
+            sourceUrl: string | null
+            scopeFamilyId: string
+        }
+    >
+> {
     const supabase = createAdminClient()
 
     const { data, error } = await (supabase as any)
         .from("query_pool")
-        .select("id, source, source_url")
+        .select("id, source, source_url, scope_family_id")
         .eq("brand_id", brandId)
 
     if (error) {
         throw new Error(`Failed to load pool metadata: ${error.message}`)
     }
 
-    const map = new Map<string, { source: QuerySource; sourceUrl: string | null }>()
+    const map = new Map<
+        string,
+        {
+            source: QuerySource
+            sourceUrl: string | null
+            scopeFamilyId: string
+        }
+    >()
     for (const row of data || []) {
-        map.set(row.id, { source: row.source, sourceUrl: row.source_url })
+        map.set(row.id, {
+            source: row.source,
+            sourceUrl: row.source_url,
+            scopeFamilyId: row.scope_family_id,
+        })
     }
 
     return map

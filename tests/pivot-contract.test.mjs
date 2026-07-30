@@ -14,6 +14,10 @@ import {
     auditCheckoutFreshness,
     selectQualifiedProgramScope,
 } from "../lib/harvest/program-contract.ts"
+import {
+    roundRobinCap,
+    selectSerpSeeds,
+} from "../lib/harvest/scope-cap.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const text = (relativePath) =>
@@ -127,7 +131,7 @@ test("frozen graph contains the complete deterministic pillar/leaf/sibling contr
     assert.throws(() => validateFrozenGraph(tampered), LinkGraphError)
 })
 
-test("program scope selects only the six highest-priority unsold qualified clusters", () => {
+test("legacy flat scope selects six priority unsold qualified clusters", () => {
     const clusters = Array.from({ length: 9 }, (_, index) => ({
         id: `cluster-${index + 1}`,
         priority: index + 1,
@@ -159,6 +163,85 @@ test("program scope selects only the six highest-priority unsold qualified clust
     const legacy = selectQualifiedProgramScope(clusters, [], true)
     assert.equal(legacy.eligible, false)
     assert.match(legacy.reason, /refreshed/i)
+})
+
+test("six-cluster selection represents confirmed business families before taking depth", () => {
+    const clusters = [
+        ...Array.from({ length: 7 }, (_, index) => ({
+            id: `restoration-${index + 1}`,
+            priority: index,
+            articleCount: 5,
+            scopeFamilyId: "restoration",
+            scopeFamilyPriority: 0,
+        })),
+        ...["animation", "portrait", "add-person", "hug", "memory-book"].map(
+            (family, index) => ({
+                id: `${family}-1`,
+                priority: 20 + index,
+                articleCount: 5,
+                scopeFamilyId: family,
+                scopeFamilyPriority: index + 1,
+            }),
+        ),
+    ]
+    const selection = selectQualifiedProgramScope(clusters, [], false)
+    assert.equal(selection.eligible, true)
+    assert.deepEqual(
+        selection.selected.map((cluster) => cluster.scopeFamilyId),
+        [
+            "restoration",
+            "animation",
+            "portrait",
+            "add-person",
+            "hug",
+            "memory-book",
+        ],
+    )
+})
+
+test("query and SERP caps preserve smaller confirmed families", () => {
+    const rows = [
+        ...Array.from({ length: 10 }, (_, index) => ({
+            id: `restoration-${index}`,
+            group: "restoration",
+        })),
+        { id: "animation-0", group: "animation" },
+        { id: "memory-0", group: "memory" },
+    ]
+    assert.deepEqual(
+        roundRobinCap(
+            rows,
+            6,
+            (row) => row.group,
+            ["restoration", "animation", "memory"],
+        ).map((row) => row.group),
+        [
+            "restoration",
+            "animation",
+            "memory",
+            "restoration",
+            "restoration",
+            "restoration",
+        ],
+    )
+
+    assert.deepEqual(
+        selectSerpSeeds(
+            [
+                { seedKeywords: ["restore photos", "repair photos", "fix photos"] },
+                { seedKeywords: ["animate photos", "photo motion"] },
+                { seedKeywords: ["memory book"] },
+            ],
+            5,
+        ),
+        [
+            "restore photos",
+            "animate photos",
+            "memory book",
+            "repair photos",
+            "photo motion",
+        ],
+    )
 })
 
 test("checkout eligibility expires 30 days after audit completion", () => {
@@ -193,16 +276,22 @@ test("verify and production use the same authoritative assembly function", async
         text("lib/harvest/policy.ts"),
     ])
     assert.match(verify, /assembleHarvest\(input\)/)
+    assert.match(verify, /scopeFamilies is required/)
+    assert.doesNotMatch(verify, /body\.seeds/)
     assert.match(production, /assembleHarvest\(\s*\{/)
     assert.match(production, /persistHarvestOutput\(options\.auditId, output\)/)
     assert.match(production, /initialSourceCallLedger/)
     assert.match(assembly, /filterToSearchedQueries/)
-    assert.match(assembly, /capProportionally\(.*HARVEST_POLICY\.maxQueries/s)
+    assert.match(assembly, /roundRobinCap/)
+    assert.match(assembly, /HARVEST_POLICY\.maxPreScopeQueries/)
+    assert.match(assembly, /HARVEST_POLICY\.maxQueries/)
+    assert.match(assembly, /sourceFamilyHint/)
     assert.match(assembly, /resultHash/)
     assert.match(assembly, /onProgress/)
     assert.match(assembly, /phase:\s*"scanning_user_site"/)
     assert.match(assembly, /phase:\s*"scanning_competitors"/)
     assert.match(policy, /maxCompetitors:\s*4/)
+    assert.match(policy, /maxPreScopeQueries:\s*600/)
     assert.match(policy, /maxQueries:\s*400/)
     assert.match(policy, /maxCompetitorCorpusPages:\s*120/)
     // Bounded so the worst-case audit fits the 900s task budget:
@@ -417,18 +506,28 @@ test("near-duplicate articles are rejected directly, not via the collapse ratio"
     assert.match(clusterer, /const absorbed: GapItem\[\] = \[\]/)
     assert.match(clusterer, /const members = \[gap, \.\.\.supporting, \.\.\.absorbed\]/)
 
-    // Language is orthogonal to relevance: multilingual embeddings place
-    // translations close to the niche centroid on purpose, so a German title
-    // from a competitor's localised sitemap passes the niche filter.
-    const [assemblySource, language] = await Promise.all([
+    // Business and language relevance are a positive assignment to a
+    // customer-confirmed family. A growing language/keyword blacklist would
+    // encode one incident at a time and fail on the next industry or locale.
+    const [assemblySource, classifier, queryTypes] = await Promise.all([
         text("lib/harvest/assembly.ts"),
-        text("lib/harvest/language-filter.ts"),
+        text("lib/harvest/scope-classifier.ts"),
+        text("lib/harvest/types.ts"),
     ])
-    assert.match(language, /export function filterByLanguage/)
-    assert.match(language, /FOREIGN_SUFFIXES/)
-    assert.match(assemblySource, /filterByLanguage\(deduped\)/)
-    assert.match(assemblySource, /filterToSearchedQueries\(languageFiltered\.kept/)
-    assert.match(assembly, /findDuplicateArticlePairs\(articleUnits\)/)
+    await assert.rejects(
+        access(path.join(root, "lib/harvest/language-filter.ts")),
+    )
+    assert.doesNotMatch(assemblySource, /filterByLanguage/)
+    assert.match(assemblySource, /filterToSearchedQueries\(deduped/)
+    assert.match(assemblySource, /classifyQueriesToScope/)
+    assert.match(classifier, /positive business-scope assignment/i)
+    assert.match(classifier, /same language as at least one confirmed search phrase/i)
+    assert.doesNotMatch(queryTypes, /NON_QUERY_PATTERNS|CONTENTLESS_WORDS/)
+    assert.match(assembly, /findDuplicateArticlePairs\(/)
+    assert.match(
+        assembly,
+        /articleUnits\.filter\([\s\S]{0,160}?article\.scopeFamilyId === family\.id/,
+    )
     assert.match(assembly, /"duplicate_articles"/)
 
     // Collapse ratio must NOT gate on the expected band. It measures a niche's
@@ -444,6 +543,98 @@ test("near-duplicate articles are rejected directly, not via the collapse ratio"
         assembly,
         /collapseExpectedMin[\s\S]{0,400}?console\.warn/,
     )
+})
+
+test("confirmed business scope is the only production relevance contract", async () => {
+    const [
+        analysis,
+        onboarding,
+        review,
+        auditRoute,
+        assembly,
+        production,
+        queryTypes,
+        migration,
+        prospectRoute,
+        brandActions,
+        demandFilter,
+    ] = await Promise.all([
+        text("app/api/analyze-brand/route.ts"),
+        text("app/(onboarding)/onboarding/page.tsx"),
+        text("components/onboarding/scope-family-review.tsx"),
+        text("app/api/topical-audit/route.ts"),
+        text("lib/harvest/assembly.ts"),
+        text("lib/harvest/run-harvest.ts"),
+        text("lib/harvest/types.ts"),
+        text("supabase/migrations/20260731_confirmed_business_scope.sql"),
+        text("app/api/founder/prospect-audits/route.ts"),
+        text("actions/brand.ts"),
+        text("lib/harvest/query-validation.ts"),
+    ])
+
+    assert.match(analysis, /Founder-provided target searches/)
+    assert.match(analysis, /Commercial Scope Families/)
+    assert.match(analysis, /EXACT quote and the EXACT crawled URL/)
+    assert.match(onboarding, /What should this audit help you become known for/)
+    assert.match(onboarding, /Find my business areas/)
+    assert.match(onboarding, /<ScopeFamilyReview/)
+    assert.match(onboarding, /onboarding_competitors/)
+    assert.match(review, /Rename, remove,[\s\S]*add, or reorder/)
+    assert.match(review, /Why we found this area/)
+
+    const snapshotWrite = auditRoute.indexOf(
+        '"create_customer_audit_with_scope"',
+    )
+    const queue = auditRoute.indexOf("tasks.trigger")
+    assert.ok(snapshotWrite >= 0 && snapshotWrite < queue)
+    assert.match(assembly, /scopeFamilies:\s*AuditScopeFamily\[\]/)
+    assert.match(assembly, /classifyQueriesToScope/)
+    assert.doesNotMatch(assembly, /\bbrandContext\b|\bexcludeContext\b/)
+    assert.doesNotMatch(
+        assembly,
+        /input\.competitors[\s\S]{0,80}?\.slice\(/,
+    )
+    assert.doesNotMatch(production, /deriveSeeds/)
+    assert.doesNotMatch(queryTypes, /NON_QUERY_PATTERNS|CONTENTLESS_WORDS/)
+    for (const retiredFilter of [
+        "lib/harvest/pool.ts",
+        "lib/harvest/niche-filter.ts",
+        "lib/harvest/language-filter.ts",
+    ]) {
+        await assert.rejects(access(path.join(root, retiredFilter)))
+    }
+
+    for (const table of ["query_pool", "audit_clusters", "planned_articles"]) {
+        assert.ok(
+            migration.includes(`ALTER TABLE public.${table}`),
+            `${table} has no scope migration`,
+        )
+    }
+    assert.match(migration, /ALTER COLUMN scope_family_id SET NOT NULL/)
+    assert.match(migration, /Query references scope outside its audit/)
+    assert.match(migration, /Article references a cluster outside its confirmed scope/)
+    assert.match(migration, /Business scope cannot change while an audit is running/)
+    assert.match(
+        migration,
+        /create_customer_audit_with_scope[\s\S]*?FOR UPDATE[\s\S]*?An audit is already running for this brand/,
+    )
+    assert.match(migration, /Completed audit scope contract is immutable/)
+    assert.match(migration, /guard_completed_row_scope_family/)
+    assert.match(migration, /scope_hash = v_audit\.scope_hash/)
+    assert.match(migration, /create_scoped_prospect_audit/)
+    assert.match(prospectRoute, /\.rpc\("create_scoped_prospect_audit"/)
+    assert.match(migration, /save_onboarding_brand_with_scope/)
+    assert.match(migration, /ta\.subject_url IS DISTINCT FROM p_website_url/)
+    assert.match(migration, /ta\.input_competitors/)
+    assert.match(
+        brandActions,
+        /\.rpc\(\s*"save_onboarding_brand_with_scope"/,
+    )
+    assert.doesNotMatch(
+        prospectRoute,
+        /rawFamilies[\s\S]{0,120}?\.slice\(/,
+    )
+    assert.match(demandFilter, /\\p\{L\}\\p\{N\}/)
 })
 
 test("database migration encodes immutable audit, graph, billing, claim, and delivery invariants", async () => {

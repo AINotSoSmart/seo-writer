@@ -66,13 +66,24 @@ export function ProspectAuditRunner() {
                 .map((value) => value.trim())
                 .filter(Boolean)
         try {
+            const businessAreas = lines("businessAreas").map((line) => {
+                const [name, seedText = ""] = line.split("|", 2)
+                return {
+                    name: name.trim(),
+                    description: `Content directly serving ${name.trim()}.`,
+                    seedKeywords: seedText
+                        .split(",")
+                        .map((seed) => seed.trim())
+                        .filter(Boolean),
+                }
+            })
             const response = await fetch("/api/founder/prospect-audits", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     website: form.get("website"),
                     email: form.get("email"),
-                    seeds: lines("seeds"),
+                    businessAreas,
                     competitors: lines("competitors"),
                 }),
             })
@@ -98,9 +109,9 @@ export function ProspectAuditRunner() {
                     <Field name="website" label="Prospect website" placeholder="https://example.com" required />
                     <Field name="email" label="Claim email" placeholder="owner@example.com" type="email" required />
                     <TextArea
-                        name="seeds"
-                        label="Seeds (optional, one per line)"
-                        placeholder={"product category\ncustomer problem"}
+                        name="businessAreas"
+                        label="Confirmed business areas (required)"
+                        placeholder={"Photo restoration | restore old photos, fix damaged photos\nPhoto animation | animate old photos"}
                     />
                     <TextArea
                         name="competitors"

@@ -3,6 +3,95 @@
 import { createClient } from "@/utils/supabase/server"
 import { getUserBrandLimit, getBrandCount } from "@/lib/brands"
 import { BrandDetails } from "@/lib/schemas/brand"
+import { HARVEST_POLICY } from "@/lib/harvest/policy"
+import {
+  SCOPE_CONTRACT_VERSION,
+  scopeHash,
+  validateConfirmedScope,
+} from "@/lib/brand-scope"
+
+async function persistConfirmedScope(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  brandId: string,
+  brandData: BrandDetails,
+) {
+  const scope = validateConfirmedScope(brandData)
+  if (scope.errors.length > 0) {
+    return { success: false as const, error: scope.errors.join(" ") }
+  }
+
+  const { error } = await (supabase as any).rpc("confirm_brand_scope", {
+    p_brand_id: brandId,
+    p_families: scope.families,
+    p_contract_version: SCOPE_CONTRACT_VERSION,
+    p_scope_hash: scopeHash(scope.families),
+    p_brand_data: {
+      ...brandData,
+      scope_families: scope.families,
+    },
+  })
+  if (error) {
+    return {
+      success: false as const,
+      error: `Could not confirm the business scope: ${error.message}`,
+    }
+  }
+
+  return { success: true as const, families: scope.families }
+}
+
+function normalizedCompetitors(competitors: string[] | undefined) {
+  const byHost = new Map<string, { name: string; url: string }>()
+  for (const raw of competitors || []) {
+    const value = raw.trim()
+    if (!value) continue
+    const parsed = new URL(
+      /^(https?:)?\/\//i.test(value) ? value : `https://${value}`,
+    )
+    if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname) {
+      throw new Error(`Invalid competitor URL: ${value}`)
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "")
+    byHost.set(host, { name: host, url: `https://${host}` })
+  }
+  return Array.from(byHost.values())
+}
+
+async function saveOnboardingBrandWithScope(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  brandId: string | null,
+  websiteUrl: string,
+  brandData: BrandDetails,
+  competitors: Array<{ name: string; url: string }>,
+) {
+  const scope = validateConfirmedScope(brandData)
+  if (scope.errors.length > 0) {
+    return { success: false as const, error: scope.errors.join(" ") }
+  }
+  const confirmedBrandData: BrandDetails = {
+    ...brandData,
+    scope_families: scope.families,
+  }
+  const { data, error } = await (supabase as any).rpc(
+    "save_onboarding_brand_with_scope",
+    {
+      p_brand_id: brandId,
+      p_website_url: websiteUrl,
+      p_discovered_competitors: competitors,
+      p_families: scope.families,
+      p_contract_version: SCOPE_CONTRACT_VERSION,
+      p_scope_hash: scopeHash(scope.families),
+      p_brand_data: confirmedBrandData,
+    },
+  )
+  if (error || !data) {
+    return {
+      success: false as const,
+      error: `Could not save the brand and confirmed business scope: ${error?.message || "unknown error"}`,
+    }
+  }
+  return { success: true as const, brandId: String(data) }
+}
 
 export async function saveBrandAction(
   url: string,
@@ -13,7 +102,52 @@ export async function saveBrandAction(
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    return { success: false, error: "Not authenticated" }
+    return { success: false as const, error: "Not authenticated" }
+  }
+  let websiteUrl: string
+  let websiteHost: string
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== "https:") {
+      throw new Error("Website URL must use HTTPS.")
+    }
+    parsed.hash = ""
+    parsed.search = ""
+    parsed.hostname = parsed.hostname.toLowerCase()
+    parsed.pathname =
+      parsed.pathname === "/" ? "/" : parsed.pathname.replace(/\/+$/, "")
+    websiteUrl = parsed.toString()
+    websiteHost = parsed.hostname.replace(/^www\./, "")
+  } catch (error) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Website URL is invalid.",
+    }
+  }
+  let competitorRecords: Array<{ name: string; url: string }>
+  try {
+    competitorRecords = normalizedCompetitors(competitors)
+  } catch (error) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "A competitor URL is invalid.",
+    }
+  }
+  if (competitorRecords.length > HARVEST_POLICY.maxCompetitors) {
+    return {
+      success: false as const,
+      error: `Add no more than ${HARVEST_POLICY.maxCompetitors} direct competitors. None were silently removed.`,
+    }
+  }
+  if (
+    competitorRecords.some(
+      (competitor) => new URL(competitor.url).hostname === websiteHost,
+    )
+  ) {
+    return {
+      success: false as const,
+      error: "Your own website cannot also be saved as a competitor.",
+    }
   }
 
   // Get user's brand limit
@@ -32,28 +166,13 @@ export async function saveBrandAction(
       .maybeSingle()
 
     if (existingBrand) {
-      // Update existing brand with new URL and data
-      const updatePayload: Record<string, any> = {
-        brand_data: brandData,
-        website_url: url
-      }
-      // Save competitors if provided
-      if (competitors && competitors.length > 0) {
-        updatePayload.discovered_competitors = competitors
-          .filter(c => c.trim())
-          .map(domain => {
-            const clean = domain.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0]
-            return { name: clean, url: `https://${clean}` }
-          })
-      }
-      const { error } = await supabase
-        .from("brand_details")
-        .update(updatePayload)
-        .eq("id", existingBrand.id)
-        .eq("user_id", user.id)
-
-      if (error) return { success: false, error: error.message }
-      return { success: true, brandId: existingBrand.id }
+      return saveOnboardingBrandWithScope(
+        supabase,
+        existingBrand.id,
+        websiteUrl,
+        brandData,
+        competitorRecords,
+      )
     }
     // No existing brand, will insert below
   } else {
@@ -62,50 +181,37 @@ export async function saveBrandAction(
       .from("brand_details")
       .select("id")
       .eq("user_id", user.id)
-      .eq("website_url", url)
+      .eq("website_url", websiteUrl)
       .is("deleted_at", null)
       .maybeSingle()
 
     if (existingBrand) {
-      return updateBrandAction(existingBrand.id, brandData)
+      return saveOnboardingBrandWithScope(
+        supabase,
+        existingBrand.id,
+        websiteUrl,
+        brandData,
+        competitorRecords,
+      )
     }
 
     // Check limit for multi-brand users
     const currentCount = await getBrandCount(user.id)
     if (currentCount >= limit) {
       return {
-        success: false,
+        success: false as const,
         error: `Plan limit reached. You have ${currentCount} brands, but your plan allows ${limit}. Please upgrade.`
       }
     }
   }
 
-  // Insert new brand
-  const insertPayload: Record<string, any> = {
-    user_id: user.id,
-    website_url: url,
-    brand_data: brandData,
-  }
-  // Save competitors if provided
-  if (competitors && competitors.length > 0) {
-    insertPayload.discovered_competitors = competitors
-      .filter(c => c.trim())
-      .map(domain => {
-        const clean = domain.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0]
-        return { name: clean, url: `https://${clean}` }
-      })
-  }
-  const { data, error } = await supabase
-    .from("brand_details")
-    .insert(insertPayload)
-    .select()
-    .single()
-
-  if (error) {
-    return { success: false, error: error.message }
-  }
-
-  return { success: true, brandId: data.id }
+  return saveOnboardingBrandWithScope(
+    supabase,
+    null,
+    websiteUrl,
+    brandData,
+    competitorRecords,
+  )
 }
 
 export async function updateBrandAction(brandId: string, brandData: BrandDetails) {
@@ -116,17 +222,21 @@ export async function updateBrandAction(brandId: string, brandData: BrandDetails
     return { success: false, error: "Not authenticated" }
   }
 
-  const { error } = await supabase
-    .from("brand_details")
-    .update({
-      brand_data: brandData,
-    })
-    .eq("id", brandId)
-    .eq("user_id", user.id) // Security check
-
-  if (error) {
-    return { success: false, error: error.message }
+  const confirmedScope = validateConfirmedScope(brandData)
+  if (confirmedScope.errors.length > 0) {
+    return { success: false, error: confirmedScope.errors.join(" ") }
   }
+  const confirmedBrandData: BrandDetails = {
+    ...brandData,
+    scope_families: confirmedScope.families,
+  }
+
+  const scopeResult = await persistConfirmedScope(
+    supabase,
+    brandId,
+    confirmedBrandData,
+  )
+  if (!scopeResult.success) return scopeResult
 
   return { success: true, brandId }
 }

@@ -104,43 +104,6 @@ export function normalizeQuery(raw: string): string {
 }
 
 /**
- * Marketing furniture that appears on pages but is not a search query.
- *
- * These reached the pool on the 2026-07-29 run as real "content gaps":
- * "Ready to hire your AI teammate?", "Earn $ 2,970 /mo with recurring
- * commissions", "Blog | Machined", "How did it do?". All were genuinely
- * observed on a page — provenance was fine — but nobody searches them.
- */
-const NON_QUERY_PATTERNS: RegExp[] = [
-    // Calls to action
-    /^(ready|want|need|looking|keen)\s+to\b/i,
-    /^(do|would|are)\s+you\s+(want|need|have|looking)\b/i,
-    /^(get|start|try|book|join|claim|grab|unlock|discover)\s+(your|our|the|a|free|started)\b/i,
-    /^(sign|log)\s?(up|in)\b/i,
-    // Offers and pricing furniture
-    /[$£€]\s?[\d,]+/,
-    /\b\d+%\s+(off|discount|commission)/i,
-    /\b(recurring commissions?|affiliate program|money back guarantee)\b/i,
-    // Section and listing labels rather than topics
-    /^(blog|news|home|index|resources|articles|case studies)\s*[|\-–—:]/i,
-    /^(table of contents|related (posts|articles)|share this|read more)\b/i,
-    // Fragments referring to a subject stated elsewhere on the page
-    /^(so,?\s+)?(how|what|why|when)\s+(did|does|is|was)\s+(it|this|that|they|he|she)\b/i,
-    // Support FAQs belonging to a specific company. These are lifted verbatim
-    // from competitor help pages — "Can I order prints directly through
-    // PixReunion?", "How do I scan my photo to upload to Forever Studios?" —
-    // and are not searchable topics for anyone else to write about.
-    /^can\s+i\s+(order|buy|purchase|cancel|return|track|refund|upgrade|downgrade)\b/i,
-    /^how\s+do\s+i\s+(upload|scan|send|submit|contact|cancel|access|log\s?in|sign\s?up|reset)\b/i,
-    /\b(do|does)\s+(you|they)\s+(offer|provide|accept|support|ship|deliver)\b/i,
-    /\b(our|your)\s+(service|platform|app|website|team|studio|software|pricing)\b/i,
-    // First-person-plural is the site talking about itself. Nobody searches
-    // "How You Can Use Our AI Family Picture Generator" or "What Our Users Say".
-    /\b(our|ours|we|us)\b/i,
-    /\b(upload|order|subscribe|sign\s?up)\s+(to|through|with|via)\s+[A-Z][A-Za-z]/,
-]
-
-/**
  * True when a query names a brand it should not — the user's own competitors,
  * or the brand being harvested for.
  *
@@ -174,17 +137,10 @@ export function brandTokensFromUrls(urls: string[]): string[] {
     return Array.from(tokens)
 }
 
-/** Words that carry no topical meaning on their own */
-const CONTENTLESS_WORDS = new Set([
-    "it", "this", "that", "they", "them", "he", "she", "we", "you", "i",
-    "do", "did", "does", "is", "are", "was", "were", "be", "been",
-    "the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "so",
-    "how", "what", "why", "when", "where", "who", "which", "your", "our",
-])
-
 /**
- * Rejects strings that are not plausible search queries.
- * Runs on everything before it reaches the pool.
+ * Mechanical sanitation only. This deliberately makes no semantic judgement
+ * about words, industries, calls to action, or features. Positive
+ * confirmed-family assignment owns business relevance later in the pipeline.
  */
 export function isPlausibleQuery(raw: string): boolean {
     const q = raw.trim()
@@ -200,15 +156,6 @@ export function isPlausibleQuery(raw: string): boolean {
     // Must be mostly letters — filters out IDs, hashes, and date slugs
     const letters = (q.match(/[a-z]/gi) || []).length
     if (letters / q.length < 0.6) return false
-
-    if (NON_QUERY_PATTERNS.some((pattern) => pattern.test(q))) return false
-
-    // Needs at least two words carrying subject matter, otherwise it is a
-    // fragment pointing at something named elsewhere on the page.
-    const contentWords = words.filter(
-        (w) => !CONTENTLESS_WORDS.has(w.toLowerCase().replace(/[^a-z]/g, ""))
-    )
-    if (contentWords.length < 2) return false
 
     return true
 }
@@ -229,52 +176,6 @@ export function dedupeQueries(queries: HarvestedQuery[]): HarvestedQuery[] {
     }
 
     return out
-}
-
-/**
- * Caps a merged pool while preserving each source's share.
- *
- * A plain `.slice(0, cap)` after merging silently starves whichever source is
- * ordered last: a run capped at 80 with sources ordered [paa, competitor,
- * autocomplete] produced 33 + 47 + **0**, discarding all 131 autocomplete rows
- * and truncating competitors mid-list. The cap is a cost control, not a source
- * preference.
- */
-export function capProportionally(
-    queries: HarvestedQuery[],
-    cap: number
-): HarvestedQuery[] {
-    if (queries.length <= cap) return queries
-
-    const bySource = new Map<QuerySource, HarvestedQuery[]>()
-    for (const q of queries) {
-        const list = bySource.get(q.source) || []
-        list.push(q)
-        bySource.set(q.source, list)
-    }
-
-    const out: HarvestedQuery[] = []
-
-    // Page-backed sources are taken whole before autocomplete gets a look in.
-    // Strict proportional allocation gave a competitor's 11 harvested topics
-    // only 3 slots out of 400 while autocomplete's raw volume took 89% of the
-    // pool — but a topic a competitor actually published is stronger evidence
-    // of demand than an autocomplete variant.
-    const PAGE_BACKED: QuerySource[] = ["paa", "competitor_sitemap"]
-
-    for (const source of PAGE_BACKED) {
-        const list = bySource.get(source) || []
-        const room = cap - out.length
-        if (room <= 0) break
-        out.push(...list.slice(0, room))
-        bySource.set(source, list.slice(Math.min(room, list.length)))
-    }
-
-    // Autocomplete fills whatever remains
-    const autocomplete = bySource.get("autocomplete") || []
-    out.push(...autocomplete.slice(0, Math.max(0, cap - out.length)))
-
-    return out.slice(0, cap)
 }
 
 /**

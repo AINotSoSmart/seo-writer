@@ -3,7 +3,6 @@ import { createClient } from "@/utils/supabase/server"
 import { tasks } from "@trigger.dev/sdk/v3"
 import type { runAuditTask } from "@/trigger/run-audit"
 import { randomBytes } from "crypto"
-import { deriveSeeds } from "@/lib/harvest/pool"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import { createAdminClient } from "@/utils/supabase/admin"
 
@@ -144,9 +143,27 @@ export async function POST(req: NextRequest) {
         // Authentication is checked with the request client; immutable run
         // creation/mutation is service-side only.
         const db = createAdminClient() as any
+
+        // Fail before reading scope-specific columns or spending on research.
+        const { error: readinessError } = await db.rpc(
+            "assert_harvest_schema_ready",
+        )
+        if (readinessError) {
+            console.error("[Audit API] Database contract is not ready:", readinessError)
+            return NextResponse.json(
+                {
+                    error:
+                        "The audit service is temporarily unavailable while its database is being updated. No audit was started.",
+                },
+                { status: 503 },
+            )
+        }
+
         const { data: brand, error: brandError } = await db
             .from("brand_details")
-            .select("id, website_url, brand_data")
+            .select(
+                "id, website_url, brand_data, discovered_competitors, scope_confirmed_at, scope_contract_version, scope_hash",
+            )
             .eq("id", brandId)
             .eq("user_id", user.id)
             .single()
@@ -156,14 +173,31 @@ export async function POST(req: NextRequest) {
 
         const brandData = brand.brand_data
         const brandUrl = brand.website_url
-        const seeds = deriveSeeds(brandData)
-        if (seeds.length === 0) {
+        const { data: scopeFamilies, error: scopeError } = await db
+            .from("brand_scope_families")
+            .select(
+                "id, name, description, seed_keywords, evidence, source, priority",
+            )
+            .eq("brand_id", brandId)
+            .eq("user_id", user.id)
+            .eq("enabled", true)
+            .order("priority", { ascending: true })
+
+        if (
+            scopeError ||
+            !brand.scope_confirmed_at ||
+            !brand.scope_hash ||
+            !Array.isArray(scopeFamilies) ||
+            scopeFamilies.length === 0
+        ) {
             return NextResponse.json(
-                { error: "Add a category or product description before running the audit." },
+                {
+                    error:
+                        "Confirm the product and service areas before running the audit. No research was started.",
+                },
                 { status: 422 },
             )
         }
-
         // One immutable run may execute per brand at a time.
         // Clear abandoned runs first, otherwise a dead row blocks every retry.
         await reclaimStaleRuns(db, user.id, brandId)
@@ -194,18 +228,45 @@ export async function POST(req: NextRequest) {
         const freshAfter = new Date(
             Date.now() - HARVEST_POLICY.checkoutFreshnessDays * 24 * 60 * 60 * 1000,
         ).toISOString()
-        const { data: recentCompleted } = await db
+        const { data: recentCompletedCandidates } = await db
             .from("topical_audits")
-            .select("id")
+            .select("id, input_competitors")
             .eq("user_id", user.id)
             .eq("brand_id", brandId)
             .eq("audit_kind", "customer")
             .eq("run_status", "completed")
             .eq("requires_reaudit", false)
+            .eq("scope_hash", brand.scope_hash)
+            .eq("subject_url", brandUrl)
             .gte("completed_at", freshAfter)
             .order("completed_at", { ascending: false })
-            .limit(1)
-            .maybeSingle()
+            .limit(20)
+
+        const normalizeCompetitorSet = (values: unknown): string[] =>
+            (Array.isArray(values) ? values : [])
+                .map((value: any) =>
+                    typeof value === "string" ? value : value?.url,
+                )
+                .filter((value: unknown): value is string => Boolean(value))
+                .map((value) => {
+                    try {
+                        return new URL(value).hostname
+                            .toLowerCase()
+                            .replace(/^www\./, "")
+                    } catch {
+                        return value.toLowerCase()
+                    }
+                })
+                .sort()
+        const configuredCompetitors = normalizeCompetitorSet(
+            brand.discovered_competitors,
+        )
+        const recentCompleted = (recentCompletedCandidates || []).find(
+            (candidate: any) =>
+                JSON.stringify(
+                    normalizeCompetitorSet(candidate.input_competitors),
+                ) === JSON.stringify(configuredCompetitors),
+        )
 
         if (recentCompleted?.id) {
             return NextResponse.json({
@@ -249,54 +310,18 @@ export async function POST(req: NextRequest) {
             )
         }
 
-        // Catch migration/schema drift before a new run incurs Tavily, crawl,
-        // and embedding cost. A missing preflight RPC is also a deployment
-        // readiness failure, so it safely blocks the run.
-        const { error: readinessError } = await db.rpc(
-            "assert_harvest_schema_ready",
-        )
-        if (readinessError) {
-            console.error("[Audit API] Database contract is not ready:", readinessError)
-            return NextResponse.json(
-                {
-                    error:
-                        "The audit service is temporarily unavailable while its database is being updated. No audit was started.",
-                },
-                { status: 503 },
-            )
-        }
-
         const publicToken = randomBytes(24).toString("hex")
-        const { data: audit, error: insertError } = await db
-            .from("topical_audits")
-            .insert({
-                user_id: user.id,
-                brand_id: brandId,
-                subject_url: brandUrl,
-                input_seeds: seeds,
-                brand_snapshot: brandData,
-                audit_kind: "customer",
-                created_by_user_id: user.id,
-                run_status: "running",
-                generation_status: "running",
-                generation_phase: "competitor_discovery",
-                harvest_policy_version: HARVEST_POLICY.version,
-                generation_error: null,
-                authority_score: 0,
-                pool_size: 0,
-                article_count: 0,
-                cluster_count: 0,
-                competitors_scanned: 0,
-                topics_analyzed: 0,
-                user_pages_scanned: 0,
-                public_token: publicToken,
-                started_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            })
-            .select("id")
-            .single()
+        const { data: auditId, error: insertError } = await db.rpc(
+            "create_customer_audit_with_scope",
+            {
+                p_user_id: user.id,
+                p_brand_id: brandId,
+                p_public_token: publicToken,
+                p_policy_version: HARVEST_POLICY.version,
+            },
+        )
 
-        if (insertError || !audit) {
+        if (insertError || !auditId) {
             console.error("[Audit API] Insert failed:", insertError)
             throw new Error(`Failed to create audit record: ${insertError?.message || "unknown error"}`)
         }
@@ -309,7 +334,7 @@ export async function POST(req: NextRequest) {
                 brandId,
                 brandData,
                 brandUrl,
-                auditId: audit.id,
+                auditId,
             })
         } catch (queueError) {
             await db
@@ -326,7 +351,7 @@ export async function POST(req: NextRequest) {
                     failed_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                 })
-                .eq("id", audit.id)
+                .eq("id", auditId)
                 .eq("user_id", user.id)
             throw queueError
         }
@@ -337,7 +362,7 @@ export async function POST(req: NextRequest) {
             message: "Audit started",
             status: "running",
             taskId: handle.id,
-            auditId: audit.id,
+            auditId,
         })
 
     } catch (error: any) {

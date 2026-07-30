@@ -37,6 +37,7 @@ const TARGET_CLUSTER_MAX = 15
 export type ArticleType = "informational" | "commercial" | "howto"
 
 export interface ArticleUnit {
+    scopeFamilyId: string
     /** The query this article primarily targets */
     mainKeyword: string
     /** Same-intent variants folded into this article */
@@ -53,6 +54,7 @@ export interface ArticleUnit {
 }
 
 export interface ArticleCluster {
+    scopeFamilyId: string
     name: string
     articles: ArticleUnit[]
     priority: number
@@ -137,6 +139,7 @@ export function collapseToArticles(
         )
 
         units.push({
+            scopeFamilyId: gap.scopeFamilyId,
             mainKeyword: gap.query,
             supportingKeywords: supporting.map((s) => s.query),
             sourceQueryIds: members.map((m) => m.queryId),
@@ -280,7 +283,15 @@ function splitOversized(articles: ArticleUnit[]): ArticleUnit[][] {
 
 function buildCluster(articles: ArticleUnit[]): ArticleCluster {
     const sorted = [...articles].sort((a, b) => b.priority - a.priority)
+    const scopeFamilyId = sorted[0]?.scopeFamilyId
+    if (
+        !scopeFamilyId ||
+        sorted.some((article) => article.scopeFamilyId !== scopeFamilyId)
+    ) {
+        throw new Error("A content cluster crossed confirmed business families")
+    }
     return {
+        scopeFamilyId,
         // Placeholder until nameClusters() runs; falls back to the lead keyword
         name: sorted[0].mainKeyword,
         articles: sorted,

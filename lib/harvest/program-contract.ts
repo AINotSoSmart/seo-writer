@@ -4,6 +4,8 @@ export interface ScopeCluster {
     id: string
     priority: number
     articleCount: number
+    scopeFamilyId?: string
+    scopeFamilyPriority?: number
 }
 
 export interface ProgramScopeSelection {
@@ -40,7 +42,7 @@ export function selectQualifiedProgramScope(
     requiresReaudit: boolean,
 ): ProgramScopeSelection {
     const sold = new Set(soldClusterIds)
-    const selected = [...clusters]
+    const qualified = [...clusters]
         .filter(
             (cluster) =>
                 !sold.has(cluster.id) &&
@@ -52,7 +54,36 @@ export function selectQualifiedProgramScope(
             (a, b) =>
                 a.priority - b.priority || a.id.localeCompare(b.id),
         )
-        .slice(0, HARVEST_POLICY.recommendedClusterCount)
+
+    // Portfolio selection: take one cluster from each confirmed commercial
+    // family before taking a second from any family. A flat global sort let one
+    // verbose feature consume the entire six-cluster program.
+    const byFamily = new Map<string, ScopeCluster[]>()
+    for (const cluster of qualified) {
+        const familyId = cluster.scopeFamilyId || "__legacy_flat_scope__"
+        const rows = byFamily.get(familyId) || []
+        rows.push(cluster)
+        byFamily.set(familyId, rows)
+    }
+    const familyOrder = Array.from(byFamily.entries()).sort(
+        ([leftId, left], [rightId, right]) =>
+            (left[0]?.scopeFamilyPriority ?? 99) -
+                (right[0]?.scopeFamilyPriority ?? 99) ||
+            leftId.localeCompare(rightId),
+    )
+    const selected: ScopeCluster[] = []
+    let round = 0
+    while (
+        selected.length < HARVEST_POLICY.recommendedClusterCount &&
+        familyOrder.some(([, rows]) => rows.length > round)
+    ) {
+        for (const [, rows] of familyOrder) {
+            const cluster = rows[round]
+            if (cluster) selected.push(cluster)
+            if (selected.length >= HARVEST_POLICY.recommendedClusterCount) break
+        }
+        round++
+    }
 
     const selectedArticleCount = selected.reduce(
         (sum, cluster) => sum + cluster.articleCount,

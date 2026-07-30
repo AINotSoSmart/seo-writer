@@ -13,11 +13,16 @@ type CheckState = "PASS" | "FAIL" | "INCONCLUSIVE"
 
 interface VerifyRequest {
     url: string
-    seeds: string[]
+    scopeFamilies: Array<{
+        id?: string
+        name: string
+        description: string
+        seedKeywords?: string[]
+        seed_keywords?: string[]
+        priority?: number
+    }>
     competitors?: string[]
     countryCode?: string
-    brandContext?: string
-    excludeContext?: string
 }
 export async function POST(req: NextRequest) {
     if (process.env.NODE_ENV === "production") {
@@ -27,13 +32,28 @@ export async function POST(req: NextRequest) {
     const startedAt = Date.now()
     try {
         const body = (await req.json()) as VerifyRequest
+        if (!Array.isArray(body.scopeFamilies) || body.scopeFamilies.length === 0) {
+            return NextResponse.json(
+                {
+                    error:
+                        "scopeFamilies is required so verification uses the same confirmed-scope contract as production.",
+                },
+                { status: 400 },
+            )
+        }
+        const scopeFamilies = body.scopeFamilies.map((family, index) => ({
+            id: family.id || `verify-scope-${index}`,
+            name: family.name,
+            description: family.description,
+            seedKeywords:
+                family.seedKeywords || family.seed_keywords || [],
+            priority: family.priority ?? index,
+        }))
         const input: HarvestInput = {
             subjectUrl: body.url,
-            seeds: body.seeds,
+            scopeFamilies,
             competitors: body.competitors || [],
             countryCode: body.countryCode,
-            brandContext: body.brandContext,
-            excludeContext: body.excludeContext,
         }
         const output = await assembleHarvest(input)
         const { statistics } = output
@@ -121,13 +141,9 @@ export async function POST(req: NextRequest) {
                 dropped: output.droppedByDemandFilter.length,
                 droppedSample: output.droppedByDemandFilter.slice(0, 25),
             },
-            languageFilter: {
-                dropped: output.droppedByLanguageFilter.length,
-                droppedSample: output.droppedByLanguageFilter.slice(0, 25),
-            },
-            nicheFilter: {
-                dropped: output.droppedByNicheFilter.length,
-                droppedSample: output.droppedByNicheFilter.slice(0, 25),
+            scopeFilter: {
+                dropped: output.droppedByScopeFilter.length,
+                droppedSample: output.droppedByScopeFilter.slice(0, 25),
             },
             provenance: traceableGaps
                 .slice(0, HARVEST_POLICY.provenanceSampleSize)
@@ -142,6 +158,7 @@ export async function POST(req: NextRequest) {
                     ),
                 })),
             clusters: output.clusters.map((cluster) => ({
+                scopeFamilyId: cluster.scopeFamilyId,
                 name: cluster.name,
                 articleCount: cluster.articles.length,
                 sampleArticles: cluster.articles.slice(0, 5).map((article) => ({

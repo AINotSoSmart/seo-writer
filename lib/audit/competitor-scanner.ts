@@ -1,6 +1,7 @@
 import { tavily } from "@tavily/core"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { buildTavilySearchOptions, TavilySearchPrefs } from "@/lib/tavily-search"
+import { HARVEST_POLICY } from "@/lib/harvest/policy"
 
 // ============================================================
 // Competitor Scanner — Discovers competitor domains
@@ -49,11 +50,24 @@ export async function discoverCompetitors(
         const tvly = tavily({ apiKey })
         const brandNameLower = brandData.product_name.toLowerCase()
 
-        // Build search queries from brand keywords (set during brand DNA analysis)
+        // Build discovery from confirmed commercial areas. A flat keyword list
+        // previously collapsed multi-offer businesses into one feature family.
         const queries: string[] = []
+        const scopeFamilies = (brandData.scope_families || [])
+            .filter((family) => family.enabled)
+            .sort((a, b) => a.priority - b.priority)
 
-        if (brandData.brand_keywords && brandData.brand_keywords.length > 0) {
-            // Use brand keywords — each one becomes a targeted search query
+        if (scopeFamilies.length > 0) {
+            for (
+                const family of scopeFamilies.slice(
+                    0,
+                    HARVEST_POLICY.maxCompetitorDiscoveryQueries,
+                )
+            ) {
+                const primarySeed = family.seed_keywords[0]
+                if (primarySeed) queries.push(primarySeed)
+            }
+        } else if (brandData.brand_keywords && brandData.brand_keywords.length > 0) {
             for (const keyword of brandData.brand_keywords.slice(0, 3)) {
                 queries.push(`${keyword}`)
             }
@@ -139,6 +153,16 @@ export async function discoverCompetitors(
 - **Name:** ${brandData.product_name}
 - **What it does:** ${brandData.product_identity?.literally || brandData.category || 'Software'}
 - **Category:** ${brandData.category || "N/A"}
+- **Confirmed product/service areas:** ${
+            scopeFamilies.length
+                ? scopeFamilies
+                      .map(
+                          (family) =>
+                              `${family.name}: ${family.description}`,
+                      )
+                      .join(" | ")
+                : "Not available"
+        }
 
 ## WEBSITES FOUND IN SEARCH RESULTS
 ${allResults.map((r, i) => `${i + 1}. [${r.domain}] "${r.title}" — ${r.url}\n   Description: ${r.snippet || 'No description available'}`).join('\n')}

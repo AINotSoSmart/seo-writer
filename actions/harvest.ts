@@ -9,6 +9,9 @@ import {
 
 export interface ClusterSummary {
     id: string
+    scopeFamilyId: string
+    scopeFamilyName: string
+    scopeFamilyPriority: number
     name: string
     description: string | null
     priority: number
@@ -72,11 +75,17 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
     const audit = await currentOwnedAudit(supabase as any, user.id, brandId)
     if (!audit || audit.run_status !== "completed") return null
 
-    const [{ data: clusterRows, error }, { data: soldRows }] =
+    const [
+        { data: clusterRows, error },
+        { data: soldRows },
+        { data: scopeRows },
+    ] =
         await Promise.all([
             (supabase as any)
                 .from("audit_clusters")
-                .select("id, name, description, priority, article_count, competitor_urls")
+                .select(
+                    "id, scope_family_id, name, description, priority, article_count, competitor_urls",
+                )
                 .eq("audit_id", audit.id)
                 .order("priority", { ascending: true }),
             (supabase as any)
@@ -84,6 +93,10 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
                 .select("audit_cluster_id, programs!inner(user_id, audit_id)")
                 .eq("programs.user_id", user.id)
                 .eq("programs.audit_id", audit.id),
+            (supabase as any)
+                .from("audit_scope_families")
+                .select("id, name, priority")
+                .eq("audit_id", audit.id),
         ])
 
     if (error) {
@@ -91,10 +104,17 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
         return null
     }
 
+    const scopeById = new Map(
+        (scopeRows || []).map((scope: any) => [scope.id, scope]),
+    )
     const clusters: ClusterSummary[] = (clusterRows || []).map((cluster: any) => {
         const articleCount = Number(cluster.article_count || 0)
+        const scope = scopeById.get(cluster.scope_family_id) as any
         return {
             id: cluster.id,
+            scopeFamilyId: cluster.scope_family_id,
+            scopeFamilyName: scope?.name || "Unverified legacy scope",
+            scopeFamilyPriority: Number(scope?.priority ?? 99),
             name: cluster.name,
             description: cluster.description,
             priority: cluster.priority,
@@ -249,6 +269,7 @@ export async function getProgramProgress(brandId: string): Promise<ProgramProgre
 
 export interface GapEvidence {
     id: string
+    scopeFamilyId: string
     query: string
     observedValue: string
     source: string
@@ -274,7 +295,7 @@ export async function getGapEvidence(
     const { data, error } = await (supabase as any)
         .from("query_pool")
         .select(
-            "id, query, observed_value, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
+            "id, scope_family_id, query, observed_value, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
         )
         .eq("audit_id", audit.id)
         .in("status", ["gap", "partial"])
@@ -288,6 +309,7 @@ export async function getGapEvidence(
 
     return (data || []).map((row: any) => ({
         id: row.id,
+        scopeFamilyId: row.scope_family_id,
         query: row.query,
         observedValue: row.observed_value || row.query,
         source: row.source,
@@ -307,6 +329,7 @@ export async function getGapEvidence(
 
 export interface PlannedArticleRow {
     id: string
+    scopeFamilyId: string
     title: string
     mainKeyword: string
     supportingKeywords: string[]
@@ -336,7 +359,7 @@ export async function getPlannedArticles(
     let query = (supabase as any)
         .from("planned_articles")
         .select(
-            "id, title, main_keyword, supporting_keywords, source_query_ids, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id, target_url",
+            "id, scope_family_id, title, main_keyword, supporting_keywords, source_query_ids, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id, target_url",
         )
         .eq("audit_id", audit.id)
         .order("is_pillar", { ascending: false })
@@ -350,6 +373,7 @@ export async function getPlannedArticles(
 
     return (data || []).map((row: any) => ({
         id: row.id,
+        scopeFamilyId: row.scope_family_id,
         title: row.title,
         mainKeyword: row.main_keyword,
         supportingKeywords: row.supporting_keywords || [],

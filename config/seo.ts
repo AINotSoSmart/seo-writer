@@ -16,7 +16,7 @@ export interface SEOConfig {
 export const defaultSEO: SEOConfig = {
   title: "FlipAEO — Evidence-Backed Content Clusters for Founder-Led B2B SaaS",
   description:
-    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers highest-priority qualified clusters as one finite, interlinked program.",
+    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers six qualified clusters across their confirmed business areas as one finite, interlinked program.",
   keywords: [
     "topical authority",
     "how to build topical authority",

@@ -57,7 +57,7 @@ export default function Hero() {
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
         Built for SaaS teams with a real product and website, but no dedicated content strategy team.
-        <strong className="text-black font-normal">{" "}See the source-linked gaps first, then get the six highest-priority clusters delivered as one finite program.</strong>
+        <strong className="text-black font-normal">{" "}See the source-linked gaps first, then get six clusters across your confirmed business areas delivered as one finite program.</strong>
       </p>
 
       {/* CTA Button Container */}

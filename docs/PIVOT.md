@@ -12,7 +12,8 @@ for what to do next.
 
 Last implementation update: 2026-07-30
 
-Status: **application contract implemented and locally validated; checkout remains
+Status: **confirmed-scope application contract implemented and locally
+validated; the 20260731 migration is not yet applied and checkout remains
 disabled pending the staging/external release gate**
 
 ## 1. Locked product contract
@@ -26,7 +27,15 @@ FlipAEO now has one finite contract:
 Locked decisions:
 
 - Every audit is a new immutable run.
-- A program contains the six highest-priority unsold qualified clusters.
+- Before research, the customer confirms distinct business/product families,
+  their direct search directions, priorities, and the exact site evidence used
+  to extract them.
+- Every query, cluster, and planned article belongs to exactly one confirmed
+  family frozen into that audit. Relevance is positive ownership, not a growing
+  blacklist of words learned from previous failures.
+- A program contains six portfolio-balanced unsold qualified clusters: take
+  one priority cluster from each represented confirmed business family before
+  taking additional depth from any family.
 - A qualified cluster has 3-15 unique articles.
 - The selected six clusters must contain at least 25 articles in total.
 - Small niches are rejected. There is no one-off fallback product.
@@ -151,6 +160,53 @@ Why the logic is not only in TypeScript:
 | Focused onboarding shell | The dashboard sidebar, delivery controls, account menu, and support widget compete with the only decision a new user should make: completing setup. | `/onboarding` lives in its own authenticated route-group layout with lightweight floating brand/back/logout controls rather than a second header shell; dashboard navigation is absent and the optional chat/settings launchers are hidden during the flow. |
 | Provider cost events | Revenue can look healthy while article COGS is unknown or retries are double-counted. | Each Gemini/Tavily/FAL call records provider/model/units/request cost and whether usage measurement was complete; unknown cost remains null, never fake zero. |
 | Checkout feature flag | Local tests cannot prove Dodo, WordPress, Trigger.dev, or production database behavior. | Checkout defaults off and can be enabled only after the documented staging/manual evidence gate passes. |
+
+### 2.0.2 Why the confirmed-business-scope SQL is substantial
+
+`supabase/migrations/20260731_confirmed_business_scope.sql` is the database half
+of the fix for the BringBack audit that produced technically valid but
+commercially absurd clusters. The bug was not one bad keyword. The old model
+flattened a multi-product business into one blended topic, then asked whether
+each query was merely near that blend. A generic phrase could therefore
+authorize an unrelated content universe while provenance, demand, cluster
+size, and collapse checks all passed.
+
+The migration enforces the replacement contract at every relational boundary:
+
+| Area | What it changes | Why |
+|---|---|---|
+| Mutable brand scope | Adds `brand_scope_families`, an atomic confirmation RPC, an atomic onboarding create/update wrapper, and a semantic scope hash | Website, competitors, brand profile, and confirmed scope either save together or all roll back; there is no half-configured brand after a constraint or network-facing action fails. |
+| Immutable audit scope | Adds `audit_scope_families` and atomically copies confirmed scope when a customer/prospect audit is created | A later settings edit must never rewrite a completed audit or active program. |
+| Row ownership | Makes `scope_family_id` mandatory on `query_pool`, `audit_clusters`, and `planned_articles`, with same-audit composite foreign keys | The database rejects cross-family/cross-audit relationships even during retries, future callers, or manual operations. |
+| Legacy preservation | Backfills old audits under `Legacy unverified scope` and marks unpurchased pre-scope audits for re-audit | History remains visible without pretending the old flat plan was scope-verified. |
+| Atomic finalization | Replaces `finalize_audit_run` and validates query → cluster → article family ownership plus source-query ownership | Any mismatch rolls the entire run back instead of exposing a partial plan. |
+| Prospect creation/claim | Creates audit, claim, and scope snapshot together; claim transfers scope as well as evidence/articles | A claimed report becomes the claimant’s actual current brand contract instead of an orphan. |
+| Deployment preflight | Extends `assert_harvest_schema_ready` for scope columns, tables, atomic creation, and pgvector resolution | Schema drift fails before external research calls spend money. |
+
+The corresponding application behavior is:
+
+- Onboarding collects website, optional competitors, and up to 12
+  founder-provided direct searches.
+- Brand analysis extracts distinct commercial families and must cite an exact
+  quote from an exact crawled page. Unverifiable extracted families are removed.
+- The customer can confirm, rename, remove, add, and reprioritize family cards.
+  No research starts until every founder search belongs to a family.
+- Production and `/api/harvest/verify` call the same positive classifier. A
+  query enters only when it directly belongs to exactly one confirmed family.
+  There is no generic-word, industry-word, or language-word blacklist.
+- Pre-classification is bounded at 600 rows and final coverage at 400; both caps
+  round-robin across family and evidence source. Search-page seeds also take one
+  from each family before taking a second from any family.
+- Customer-confirmed families, searches, and competitors are rejected with a
+  visible validation error when they exceed policy; they are never truncated
+  with `slice()`. Machine-harvested rows alone are fairly capped.
+- Collapse, clustering, and duplicate validation happen inside each family.
+- Program selection takes one qualified cluster per represented family before
+  taking additional depth from any family.
+
+The old `lib/harvest/pool.ts`, blended-centroid `niche-filter.ts`, heuristic
+`language-filter.ts`, and semantic query word lists were deleted. Do not restore
+them as a fallback.
 
 ### 2.1 Immutable audit lifecycle - implemented
 
@@ -358,17 +414,23 @@ migration history with `supabase migration repair` is a separate task, listed in
 4. Apply `supabase/migrations/20260730_reconcile_harvest_columns.sql`.
    Required on any database created before 2026-07-30 — see the changelog entry
    below. It is idempotent, so applying it to a fresh database is a no-op.
-5. Deploy application and Trigger.dev source with
+5. Apply `supabase/migrations/20260730_fix_finalize_vector_search_path.sql`.
+6. Apply `supabase/migrations/20260730_retire_free_signup_credits.sql`.
+7. Apply `supabase/migrations/20260731_confirmed_business_scope.sql` **last**.
+   It owns the final scope-aware `finalize_audit_run` and
+   `assert_harvest_schema_ready` definitions. Do not deploy the application
+   changes before this succeeds.
+8. Deploy application and Trigger.dev source with
    `CLOSED_POOL_CHECKOUT_ENABLED=false`.
-6. Confirm `program-lifecycle` is healthy.
-7. Only then archive these Trigger.dev schedules:
+9. Confirm `program-lifecycle` is healthy.
+10. Only then archive these Trigger.dev schedules:
    - `daily-content-watchman`
    - `seo-health-auto-refresh`
    - `sitemap-sync-scheduler`
    - `gsc-daily-auto-refresh`
    - `ship-cluster`
-8. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
-9. Enable checkout only on the exact commit that passed all gates.
+11. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
+12. Enable checkout only on the exact commit that passed all gates.
 
 Required server environment:
 
@@ -383,9 +445,9 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **20/20 test groups passed**.
+- `npm run test:pivot-contract`: **25/25 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
-- `npm run build`: **passed** before the instruction to skip further builds.
+- `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
 
 The contract suite is `tests/pivot-contract.test.mjs`. It covers:
@@ -394,6 +456,8 @@ The contract suite is `tests/pivot-contract.test.mjs`. It covers:
 - Six-cluster selection and stale-audit rejection.
 - Prospect retry semantics.
 - Shared verify/production assembly and bounded policy.
+- Evidence-backed confirmed families, family/source-fair caps, family-contained
+  clustering, and portfolio-balanced six-cluster selection.
 - Immutable SQL, RLS, billing, claim, state, and brand-subject guards.
 - Webhook/scheduler finite-scope behavior.
 - Retired routes/jobs and stale active copy.
@@ -458,10 +522,73 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     `20260728_harvest_pool.sql` uses `CREATE TABLE IF NOT EXISTS`, so an edit to
     it is a silent no-op against any database that already has those tables —
     the change lands in the repo, passes review, and never reaches Postgres. Add
-    a new migration with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` instead, and
-    extend `20260730_reconcile_harvest_columns.sql` so the contract test passes.
+     a new migration with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` instead, and
+     extend `20260730_reconcile_harvest_columns.sql` so the contract test passes.
+14. Do not repair relevance incidents with domain-word, generic-word, or
+    language-word blacklists. A query must positively belong to one confirmed
+    business family; malformed strings may still receive structural sanitation.
 
 ## 7. Changelog
+
+### 2026-07-30 - confirmed business scope replaces the blended niche gate
+
+**Production evidence.** BringBack explicitly offers old-photo restoration,
+photo animation, AI family portraits, adding/removing people, nostalgic hug
+videos, and memory books. The old brand analyzer reduced that multi-product
+business to flat/generic seeds. The harvest then produced 65 selected articles,
+39 from wholly irrelevant clusters and 56 with no competitor match. Every row
+could still pass provenance, demand, cluster-size, and collapse checks.
+
+**Root cause.** The pipeline asked whether a query was semantically near one
+blended brand centroid. That is an open-world permission model: a vague seed
+widens the whole universe. Adding rejected words would only encode BringBack’s
+incident and fail again on another category or language.
+
+**Implemented replacement.**
+
+- Onboarding now asks for founder target searches alongside website and
+  competitors, then shows evidence-backed business-family cards.
+- Users can confirm, rename, remove, add, and reprioritize those cards before any
+  audit cost is incurred. Extraction notes remain visible when a proposed family
+  was removed because its exact page evidence could not be verified.
+- One bounded positive classifier assigns every observed query to exactly one
+  immutable audit family or rejects it as adjacent/unrelated.
+- Harvest caps are fair across family and source; search-page seed selection is
+  round-robin across families.
+- Auto-discovery can search one confirmed direction from every family (bounded
+  at 12 discovery searches) before selecting at most four competitors; it no
+  longer ignores every family after the first four.
+- Collapse, cluster construction, and duplicate checks cannot cross a family.
+- The six-cluster program represents distinct available families before taking
+  additional depth from a verbose family.
+- Query, cluster, article, purchase, public report, and prospect-claim paths now
+  carry the same mandatory family ID.
+- Customer and prospect audit creation are transactional with their scope
+  snapshots. Finalization rejects any cross-audit or cross-family relationship.
+- The initial website, competitor set, brand profile, and confirmed scope now
+  save in one database transaction; a failed scope constraint cannot leave an
+  inserted or partially updated brand behind.
+- Legacy audits remain visible under an unverified family but unpurchased ones
+  require a new confirmed audit.
+- Scope confirmation and customer-audit creation lock the same brand row. A
+  concurrent edit/start cannot create two running audits or spend on a run whose
+  scope changed while it was queued.
+- A completed audit is reusable only for the same scope hash, exact subject URL,
+  and normalized competitor set. Changing the site or competitors clears the
+  current pointer and makes unmatched unpurchased evidence stale.
+- Demand-token overlap is Unicode-aware; non-English searches are not erased by
+  an ASCII-only tokenizer.
+- Removed the unused flat `pool.ts`, blended `niche-filter.ts`, heuristic
+  `language-filter.ts`, and semantic query blocklists.
+
+**Deployment dependency.**
+`supabase/migrations/20260731_confirmed_business_scope.sql` must be applied
+before these application changes. Until then the preflight intentionally refuses
+to start an audit. Existing completed, unpurchased audits must be rerun after
+scope confirmation.
+
+**Local verification.** `tsc --noEmit` passes and all 25 pivot-contract groups
+pass. No production build was run, following the founder’s explicit instruction.
 
 ### 2026-07-30 - persistent inspect-before-pay audit
 
@@ -655,9 +782,14 @@ filter cannot catch these — multilingual embeddings place translations *close
 to* the English centroid by design, which is also exactly why they scored 0.9
 against each other and tripped the duplicate detector.
 
-Relevance and language are orthogonal, so `lib/harvest/language-filter.ts` adds
-a separate gate running before the demand filter (saving a request per foreign
-string). Detection is non-Latin script, foreign function words, and systematic
+That first repair added a separate language word/suffix gate before demand.
+It was later removed as the same incident-by-incident architecture the
+confirmed-scope rewrite rejects. The positive classifier now requires a query
+to use a language represented in the confirmed searches of its assigned
+family. A multilingual customer can confirm multiple languages; an unconfirmed
+translation is rejected without maintaining a global vocabulary list.
+
+The retired detector used non-Latin script, foreign function words, and
 morphological suffixes (`-ieren`, `-ção`, `-ość`, `-ement`). Suffixes matter:
 "Alte Fotos animieren" contains no German function word at all, but `-ieren` is
 unambiguous — morphology generalises where a word list only catches the case in
@@ -665,10 +797,11 @@ front of you.
 
 Verified 16/16 against the exact production strings plus English controls,
 including "café website design" which must survive its single loan diacritic.
-Drops are reported as `languageFilter` in `/api/harvest/verify`.
+Drops were reported as `languageFilter` in `/api/harvest/verify`; that retired
+field no longer exists.
 
-Contract suite pins both: the merge loop must not `break` on the cap, and
-assembly must run `filterByLanguage` before `filterToSearchedQueries`.
+Contract suite now pins both durable rules: the merge loop must not `break` on
+the display cap, and the retired heuristic language filter cannot return.
 
 
 ### 2026-07-30 - abandoned audit runs self-heal
@@ -799,11 +932,12 @@ contains, not whether clustering worked:
 
 Page-derived strings are distinct page titles and questions, so they do not
 merge. Autocomplete strings are phrasing variants that merge roughly 4:1.
-`capProportionally` takes page-backed sources whole before autocomplete, so a
-subject whose competitors publish rich FAQ/blog content gets a pool dominated by
+The source-only cap then took page-backed rows before autocomplete, so a subject
+whose competitors published rich FAQ/blog content got a pool dominated by
 unmergeable strings — and the ratio rises mechanically. **The gate was rejecting
 audits based on a property of someone else's website.** It would recur on any
-such niche, unpredictably from the URL alone.
+such niche, unpredictably from the URL alone. The current confirmed-scope
+pipeline replaces that cap with family/source round-robin selection.
 
 **Fix — test the actual risk instead of a proxy for it.** The reason to care
 about collapse is "don't ship two articles about the same thing", so that is now
@@ -818,9 +952,9 @@ Collapse ratio is now:
   composition logged, because that band tracks source mix
 - reported by `/api/harvest/verify` with an explicit "check source mix" note
 
-Policy version -> `closed-pool-v2.4.0`. `collapseMin`/`collapseMax` removed;
-the contract suite now pins their absence plus the new invariant, so the gate
-cannot be reintroduced.
+Current policy version: `confirmed-business-scope-v3.0.0`.
+`collapseMin`/`collapseMax` remain removed; the contract suite pins their absence
+plus the direct duplicate invariant so the proxy gate cannot be reintroduced.
 
 
 ### 2026-07-30 - buyer lock, CTA cleanup, and free-credit retirement
@@ -978,9 +1112,10 @@ A three-panel strip above states what you buy (6 clusters), how many articles
 
 - Replaced the fabricated LLM topical blueprint with observed autocomplete,
   search-page question, and competitor-page evidence.
-- Added mandatory provenance, hard source failures, demand/niche filters,
-  bounded site coverage, evidence verification, gap computation, and constrained
-  clustering.
+- Added mandatory provenance, hard source failures, demand validation, bounded
+  site coverage, evidence verification, gap computation, and constrained
+  clustering. The blended niche filter from this first version was superseded
+  by confirmed business-family ownership on 2026-07-30.
 - Removed quota-refill duplicate generation and the old LLM planning chain.
 - Calibrated two-stage retrieval/evidence coverage against BringBack and
   PixReunion test sets.

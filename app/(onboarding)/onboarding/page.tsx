@@ -24,12 +24,16 @@ import { CustomSpinner } from "@/components/CustomSpinner"
 import { PillInput } from "@/components/ui/pill-input"
 import { AuditConsole } from "@/components/audit/audit-console"
 import { ScopeResults } from "@/components/audit/scope-results"
+import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
 
 const STORAGE_KEYS = {
     STEP: 'onboarding_step',
     BRAND_URL: 'onboarding_brand_url',
     BRAND_DATA: 'onboarding_brand_data',
     BRAND_ID: 'onboarding_brand_id',
+    COMPETITORS: 'onboarding_competitors',
+    SCOPE_ANALYSIS_ISSUES: 'onboarding_scope_analysis_issues',
+    TARGET_SEEDS: 'onboarding_target_seeds',
 } as const
 
 type Step = "brand" | "audit" | "audit-results"
@@ -57,8 +61,12 @@ export default function OnboardingPage() {
 
     const [url, setUrl] = useState("")
     const [competitors, setCompetitors] = useState<string[]>([])
+    const [targetSeeds, setTargetSeeds] = useState<string[]>([])
     const [analyzing, setAnalyzing] = useState(false)
     const [brandData, setBrandData] = useState<BrandDetails | null>(null)
+    const [scopeAnalysisIssues, setScopeAnalysisIssues] = useState<
+        Array<{ family?: string; message: string }>
+    >([])
     const [savingBrand, setSavingBrand] = useState(false)
     const [brandId, setBrandId] = useState<string | null>(null)
     const [auditScope, setAuditScope] = useState<AuditScope | null>(null)
@@ -86,6 +94,11 @@ export default function OnboardingPage() {
         const savedUrl = localStorage.getItem(STORAGE_KEYS.BRAND_URL)
         const savedBrandData = localStorage.getItem(STORAGE_KEYS.BRAND_DATA)
         const savedBrandId = urlBrandId || localStorage.getItem(STORAGE_KEYS.BRAND_ID)
+        const savedCompetitors = localStorage.getItem(STORAGE_KEYS.COMPETITORS)
+        const savedScopeIssues = localStorage.getItem(
+            STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES,
+        )
+        const savedTargetSeeds = localStorage.getItem(STORAGE_KEYS.TARGET_SEEDS)
 
         // Only clear storage if: user completed onboarding (has brandId) AND has no unsaved brandData
         // This allows fresh start for returning users while preserving progress for those mid-onboarding
@@ -94,6 +107,9 @@ export default function OnboardingPage() {
             setBrandId(null)
             setUrl("")
             setBrandData(null)
+            setScopeAnalysisIssues([])
+            setCompetitors([])
+            setTargetSeeds([])
             setIsHydrated(true)
             return
         }
@@ -106,6 +122,27 @@ export default function OnboardingPage() {
             try {
                 setBrandData(JSON.parse(savedBrandData))
             } catch { }
+        }
+        if (savedTargetSeeds) {
+            try {
+                setTargetSeeds(JSON.parse(savedTargetSeeds))
+            } catch {
+                setTargetSeeds([])
+            }
+        }
+        if (savedCompetitors) {
+            try {
+                setCompetitors(JSON.parse(savedCompetitors))
+            } catch {
+                setCompetitors([])
+            }
+        }
+        if (savedScopeIssues) {
+            try {
+                setScopeAnalysisIssues(JSON.parse(savedScopeIssues))
+            } catch {
+                setScopeAnalysisIssues([])
+            }
         }
 
         // Restore brandId if exists
@@ -143,6 +180,24 @@ export default function OnboardingPage() {
 
     useEffect(() => {
         if (!isHydrated) return
+        localStorage.setItem(
+            STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES,
+            JSON.stringify(scopeAnalysisIssues),
+        )
+    }, [scopeAnalysisIssues, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.COMPETITORS, JSON.stringify(competitors))
+    }, [competitors, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
+        localStorage.setItem(STORAGE_KEYS.TARGET_SEEDS, JSON.stringify(targetSeeds))
+    }, [targetSeeds, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
         if (brandData) {
             localStorage.setItem(STORAGE_KEYS.BRAND_DATA, JSON.stringify(brandData))
         } else {
@@ -160,16 +215,28 @@ export default function OnboardingPage() {
     // Brand DNA handlers
     const handleAnalyzeBrand = async () => {
         if (!url) return
+        if (targetSeeds.length > 12) {
+            setError("Add no more than 12 main customer searches.")
+            return
+        }
         setAnalyzing(true)
         setError("")
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: `https://${url}` }),
+                body: JSON.stringify({
+                    url: `https://${url}`,
+                    targetSeeds,
+                }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || "Failed to analyze brand")
+            setScopeAnalysisIssues(
+                Array.isArray(data.scope_analysis_issues)
+                    ? data.scope_analysis_issues
+                    : [],
+            )
             setBrandData(data)
         } catch (e: any) {
             setError(e.message || "An error occurred")
@@ -200,6 +267,17 @@ export default function OnboardingPage() {
             core_features: cleanArray(brandData.core_features),
             pricing: cleanArray(brandData.pricing),
             brand_keywords: cleanArray(brandData.brand_keywords),
+            target_seed_keywords: cleanArray(brandData.target_seed_keywords),
+            scope_families: brandData.scope_families
+                .filter((family) => family.enabled)
+                .map((family, priority) => ({
+                    ...family,
+                    name: family.name.trim(),
+                    description: family.description.trim(),
+                    seed_keywords: cleanArray(family.seed_keywords),
+                    priority,
+                    enabled: true,
+                })),
         }
 
         setSavingBrand(true)
@@ -326,7 +404,7 @@ export default function OnboardingPage() {
           shadow-[0_0_0_1px_rgba(0,0,0,0.08),0px_1px_2px_rgba(0,0,0,0.04)]
           rounded-[20px]
           bg-stone-100
-          ${step === "audit-results" ? "max-w-[1400px] w-full px-4 sm:px-6" : "max-w-xl"}
+          ${step === "audit-results" ? "max-w-[1400px] w-full px-4 sm:px-6" : brandData ? "max-w-4xl" : "max-w-xl"}
         `}
                     >
                         {/* Top Notch */}
@@ -367,7 +445,7 @@ export default function OnboardingPage() {
                                                     </p>
                                                 </div>
 
-                                                <div className="flex flex-col sm:flex-row gap-2">
+                                                <div className="flex">
                                                     <div className="flex-1 flex">
                                                         <span className="inline-flex items-center px-3 text-sm text-stone-500 bg-stone-100 border border-r-0 border-stone-200 rounded-l-md font-medium select-none">
                                                             https://
@@ -378,34 +456,8 @@ export default function OnboardingPage() {
                                                             className="flex-1 bg-stone-50 border-stone-200 py-2 px-3 text-sm rounded-l-none focus:ring-0 focus:outline-none focus-visible:ring-0"
                                                             value={url}
                                                             onChange={(e) => setUrl(e.target.value.replace(/^https?:\/\//i, ''))}
-                                                            onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeBrand()}
                                                         />
                                                     </div>
-                                                    <Button
-                                                        onClick={handleAnalyzeBrand}
-                                                        disabled={analyzing || !url}
-                                                        className={`
-                          px-6 font-semibold gap-2
-                          bg-gradient-to-b from-stone-800 to-stone-950
-                          hover:from-stone-700 hover:to-stone-900
-                          shadow-sm
-                        `}
-                                                    >
-                                                        <motion.div
-                                                            animate={analyzing ? {
-                                                                scale: [1, 1.2, 1],
-                                                                rotate: [0, 180, 360],
-                                                            } : {}}
-                                                            transition={{
-                                                                duration: 2,
-                                                                repeat: Infinity,
-                                                                ease: "easeInOut"
-                                                            }}
-                                                        >
-                                                            <Globe className="w-4 h-4 text-white" />
-                                                        </motion.div>
-                                                        {analyzing ? "Analyzing..." : "Analyze"}
-                                                    </Button>
                                                 </div>
 
                                                 {/* Optional Competitor Input */}
@@ -427,17 +479,90 @@ export default function OnboardingPage() {
                                                         </p>
                                                     )}
                                                 </div>
+
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-medium text-stone-600">
+                                                        What should this audit help you become known for?
+                                                        <span className="ml-1 text-stone-400">
+                                                            (recommended)
+                                                        </span>
+                                                    </label>
+                                                    <PillInput
+                                                        value={targetSeeds}
+                                                        onChange={setTargetSeeds}
+                                                        placeholder="e.g. old photo restoration (press Enter to add)"
+                                                    />
+                                                    <p className="text-[10px] leading-relaxed text-stone-400">
+                                                        Add your main customer searches, not dozens of variations.
+                                                        We will map every one to a product area for you to confirm
+                                                        before research starts.
+                                                    </p>
+                                                </div>
+
+                                                <Button
+                                                    onClick={handleAnalyzeBrand}
+                                                    disabled={analyzing || !url}
+                                                    className={`
+                          w-full font-semibold gap-2
+                          bg-gradient-to-b from-stone-800 to-stone-950
+                          hover:from-stone-700 hover:to-stone-900
+                          shadow-sm
+                        `}
+                                                >
+                                                    <motion.div
+                                                        animate={analyzing ? {
+                                                            scale: [1, 1.2, 1],
+                                                            rotate: [0, 180, 360],
+                                                        } : {}}
+                                                        transition={{
+                                                            duration: 2,
+                                                            repeat: Infinity,
+                                                            ease: "easeInOut"
+                                                        }}
+                                                    >
+                                                        <Globe className="w-4 h-4 text-white" />
+                                                    </motion.div>
+                                                    {analyzing ? "Analyzing..." : "Find my business areas"}
+                                                </Button>
                                             </div>
                                         ) : (
                                             // Brand Review Form - Complete with all 10 sections
                                             <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
                                                 <div className="flex items-center justify-between">
                                                     <div>
-                                                        <h2 className={`text-lg font-bold text-stone-900`}>Review Brand Details</h2>
-                                                        <p className={`text-xs text-stone-500`}>We recommend adding more detailed brand data to get better and accurate articles later</p>
+                                                        <h2 className={`text-lg font-bold text-stone-900`}>Confirm Your Business Scope</h2>
+                                                        <p className={`text-xs text-stone-500`}>Nothing is researched until the product areas and search direction below are correct.</p>
                                                     </div>
 
                                                 </div>
+
+                                                <ScopeFamilyReview
+                                                    families={brandData.scope_families || []}
+                                                    targetSeeds={brandData.target_seed_keywords || targetSeeds}
+                                                    onChange={(scope_families) =>
+                                                        setBrandData((current) =>
+                                                            current
+                                                                ? { ...current, scope_families }
+                                                                : current,
+                                                        )
+                                                    }
+                                                />
+
+                                                {scopeAnalysisIssues.length > 0 && (
+                                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                                                        <p className="font-semibold">
+                                                            Review these extraction notes
+                                                        </p>
+                                                        <ul className="mt-1.5 list-disc space-y-1 pl-4">
+                                                            {scopeAnalysisIssues.map((issue, index) => (
+                                                                <li key={`${issue.family || "scope"}-${index}`}>
+                                                                    {issue.family ? `${issue.family}: ` : ""}
+                                                                    {issue.message}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
 
                                                 {/* 1. Product Identity */}
                                                 <div className="space-y-3">
@@ -496,16 +621,6 @@ export default function OnboardingPage() {
                                                             placeholder="e.g., Privacy-First Web Analytics, AI Photo Restoration"
                                                         />
                                                         <p className={`text-[10px] text-stone-400 mt-1`}>How would you describe your product category?</p>
-                                                    </div>
-                                                    <div className="mt-3">
-                                                        <label className={`block text-xs font-medium mb-1 text-stone-600`}>Brand Keywords</label>
-                                                        <PillInput
-                                                            value={brandData.brand_keywords || []}
-                                                            onChange={arr => setBrandData(prev => prev ? ({ ...prev, brand_keywords: arr }) : null)}
-                                                            className="min-h-[60px]"
-                                                            placeholder="Type keyword and press Enter"
-                                                        />
-                                                        <p className={`text-[10px] text-stone-400 mt-1`}>Search terms users would type to find your product (e.g. "ai photo restoration", "restore old photos")</p>
                                                     </div>
                                                 </div>
 
