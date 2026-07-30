@@ -2,7 +2,12 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
-import type { AuditScope, ClusterSummary, GapEvidence } from "@/actions/harvest"
+import type {
+    AuditScope,
+    ClusterSummary,
+    GapEvidence,
+    PlannedArticleRow,
+} from "@/actions/harvest"
 import { ScopeResults } from "@/components/audit/scope-results"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import {
@@ -14,6 +19,7 @@ import { createAdminClient } from "@/utils/supabase/admin"
 type PublicAuditData = {
     scope: AuditScope
     gaps: GapEvidence[]
+    articles: PlannedArticleRow[]
     brandName: string
 }
 
@@ -38,24 +44,32 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
     const [
         { data: clusterRows },
         { data: gapRows },
+        { data: articleRows },
         { data: brand },
         { data: soldRows },
     ] =
         await Promise.all([
             supabase
                 .from("audit_clusters")
-                .select("id, name, priority, article_count, competitor_urls")
+                .select("id, name, description, priority, article_count, competitor_urls")
                 .eq("audit_id", audit.id)
                 .order("priority", { ascending: true }),
             supabase
                 .from("query_pool")
                 .select(
-                    "query, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
+                    "id, query, observed_value, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
                 )
                 .eq("audit_id", audit.id)
                 .in("status", ["gap", "partial"])
                 .order("coverage_similarity", { ascending: true })
-                .limit(100),
+                .limit(HARVEST_POLICY.maxQueries),
+            supabase
+                .from("planned_articles")
+                .select(
+                    "id, title, main_keyword, supporting_keywords, source_query_ids, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id, target_url",
+                )
+                .eq("audit_id", audit.id)
+                .order("is_pillar", { ascending: false }),
             audit.brand_id
                 ? supabase
                       .from("brand_details")
@@ -74,6 +88,7 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
         return {
             id: cluster.id,
             name: cluster.name,
+            description: cluster.description,
             priority: cluster.priority,
             articleCount,
             competitorUrls: Array.isArray(cluster.competitor_urls)
@@ -116,7 +131,9 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
             completedAt: audit.completed_at,
         },
         gaps: (gapRows || []).map((row: any) => ({
+            id: row.id,
             query: row.query,
+            observedValue: row.observed_value || row.query,
             source: row.source,
             sourceUrl: row.source_url,
             status: row.status,
@@ -125,6 +142,25 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
             competitors: Array.isArray(row.competitor_matches)
                 ? row.competitor_matches
                 : [],
+        })),
+        articles: (articleRows || []).map((row: any) => ({
+            id: row.id,
+            title: row.title,
+            mainKeyword: row.main_keyword,
+            supportingKeywords: Array.isArray(row.supporting_keywords)
+                ? row.supporting_keywords
+                : [],
+            sourceQueryIds: Array.isArray(row.source_query_ids)
+                ? row.source_query_ids
+                : [],
+            articleType: row.article_type,
+            isPillar: Boolean(row.is_pillar),
+            generationStatus: row.generation_status,
+            deliveryStatus: row.delivery_status,
+            publicationStatus: row.publication_status,
+            status: row.generation_status,
+            clusterId: row.cluster_id,
+            targetUrl: row.target_url,
         })),
         brandName:
             brand?.brand_data?.product_name ||
@@ -174,6 +210,7 @@ export default async function PublicAuditPage({
                 <ScopeResults
                     scope={data.scope}
                     gaps={data.gaps}
+                    articles={data.articles}
                     brandName={data.brandName}
                     showShareLink={false}
                 />

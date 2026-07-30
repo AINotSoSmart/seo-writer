@@ -9,9 +9,11 @@ import { canAccessOnboarding } from "@/actions/onboarding"
 import {
     getAuditScope,
     getGapEvidence,
+    getPlannedArticles,
     getProgramProgress,
     type AuditScope,
     type GapEvidence,
+    type PlannedArticleRow,
     type ProgramProgress,
 } from "@/actions/harvest"
 import { BrandDetails } from "@/lib/schemas/brand"
@@ -61,6 +63,7 @@ export default function OnboardingPage() {
     const [brandId, setBrandId] = useState<string | null>(null)
     const [auditScope, setAuditScope] = useState<AuditScope | null>(null)
     const [gapEvidence, setGapEvidence] = useState<GapEvidence[]>([])
+    const [plannedArticles, setPlannedArticles] = useState<PlannedArticleRow[]>([])
     const [programProgress, setProgramProgress] = useState<ProgramProgress | null>(null)
     const [isLoadingScope, setIsLoadingScope] = useState(false)
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
@@ -232,9 +235,9 @@ export default function OnboardingPage() {
 
     // The immutable harvest is already the plan. Never mirror it into the
     // legacy content_plans table or run a second paid harvest.
-    const handleGeneratePlan = () => {
+    const handleOpenSavedAudit = () => {
         clearOnboardingStorage()
-        router.push(auditScope?.checkoutEligible ? "/subscribe" : "/content-plan")
+        router.push("/audit")
     }
 
     // Load the closed-pool read model after completion and on refresh.
@@ -253,9 +256,10 @@ export default function OnboardingPage() {
                     return
                 }
 
-                const [scope, gaps, progress] = await Promise.all([
+                const [scope, gaps, articles, progress] = await Promise.all([
                     getAuditScope(brandId),
                     getGapEvidence(brandId),
+                    getPlannedArticles(brandId),
                     getProgramProgress(brandId),
                 ])
 
@@ -265,6 +269,7 @@ export default function OnboardingPage() {
 
                 setAuditScope(scope)
                 setGapEvidence(gaps)
+                setPlannedArticles(articles)
                 setProgramProgress(progress)
             } catch (e) {
                 console.error("Failed to load audit scope:", e)
@@ -706,27 +711,27 @@ export default function OnboardingPage() {
                                         exit={{ opacity: 0, x: 20 }}
                                         className="p-6"
                                     >
-                                        {auditScope ? (
+                                                {auditScope ? (
                                             <div className="space-y-8">
                                                 <ScopeResults
-                                                scope={auditScope}
-                                                gaps={gapEvidence}
-                                                brandName={brandData?.product_name || "Your Site"}
-                                                progress={programProgress}
+                                                    scope={auditScope}
+                                                    gaps={gapEvidence}
+                                                    articles={plannedArticles}
+                                                    brandName={brandData?.product_name || "Your Site"}
+                                                    progress={programProgress}
                                                 />
                                                 <div className="flex flex-col items-center gap-3 border-t border-stone-200 pt-7 text-center">
                                                     <p className="max-w-xl text-sm text-stone-500">
-                                                        Your evidence-backed clusters are ready. Continue to review the
-                                                        articles before choosing a delivery velocity.
+                                                        This audit is saved permanently in your dashboard. You can
+                                                        return to every cluster, article, and source before purchasing.
                                                     </p>
                                                     <Button
-                                                        onClick={handleGeneratePlan}
+                                                        onClick={handleOpenSavedAudit}
                                                         disabled={isGeneratingPlan}
-                                                        className="bg-stone-900 text-white hover:bg-stone-800"
+                                                        variant="outline"
                                                     >
-                                                        {auditScope.checkoutEligible
-                                                            ? <>Confirm URLs and Pricing <ArrowRight className="w-4 h-4 ml-2" /></>
-                                                            : <>Review Measured Scope <ArrowRight className="w-4 h-4 ml-2" /></>}
+                                                        Open Saved Audit
+                                                        <ArrowRight className="ml-2 h-4 w-4" />
                                                     </Button>
                                                 </div>
                                             </div>

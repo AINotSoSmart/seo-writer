@@ -463,6 +463,44 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-30 - persistent inspect-before-pay audit
+
+The first successful production-shaped audit exposed a product-contract hole:
+the completed result appeared briefly inside onboarding, then
+`canAccessOnboarding()` noticed `brand_details.current_audit_id` and redirected
+the customer to `/content-plan`. That page rendered only the aggregate
+“articles across six clusters” count. The immutable evidence existed in the
+database, but the customer could not inspect the proposed articles or trace
+them back to their observed sources before paying.
+
+Fixed:
+
+- Onboarding access now allows the active `audit` and `audit-results` steps to
+  finish after finalization. Later attempts to reopen setup go to `/audit`,
+  never directly to a checkout-shaped summary.
+- `/audit` is now a permanent authenticated evidence view linked from the
+  dashboard sidebar. It reloads the brand's `current_audit_id`, its complete
+  gap evidence, planned articles, and optional program progress.
+- The six selected program clusters are expanded by default. Each cluster shows
+  every proposed article, its pillar role, primary/supporting searches, and
+  source-query links. Additional measured clusters remain inspectable but are
+  clearly outside the current six-cluster program.
+- The evidence table can expand from the first 40 rows to the complete
+  post-filter pool. Missing article rows or unresolved source evidence are
+  displayed as data bugs instead of being hidden.
+- `/content-plan` now renders the same complete inspector before purchase. Once
+  purchased, it continues to render the frozen delivery program.
+- Public read-only audit links now load planned articles and the complete
+  capped evidence set, so a shared report supports the same claims as the
+  authenticated view.
+- Subscription empty states and the sidebar now link back to the saved audit.
+  The customer therefore always has a route from evidence to URL confirmation
+  and pricing, and back again.
+
+This closes the UX side of “inspect and weigh before you pay.” It does not alter
+the immutable audit, qualification, purchase-intent, graph, or billing
+contracts.
+
 ### 2026-07-30 - pgvector finalization repair and preflight
 
 An audit completed harvesting and clustering but failed inside

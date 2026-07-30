@@ -15,6 +15,8 @@ const routeDisplayNames: Record<string, string> = {
   dashboard: "Dashboard",
   "demo-tool": "Demo Tool",
   reports: "Reports",
+  audit: "Evidence Audit",
+  "content-plan": "Content Plan",
   settings: "Settings",
 }
 

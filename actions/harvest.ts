@@ -10,6 +10,7 @@ import {
 export interface ClusterSummary {
     id: string
     name: string
+    description: string | null
     priority: number
     articleCount: number
     competitorUrls: string[]
@@ -75,7 +76,7 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
         await Promise.all([
             (supabase as any)
                 .from("audit_clusters")
-                .select("id, name, priority, article_count, competitor_urls")
+                .select("id, name, description, priority, article_count, competitor_urls")
                 .eq("audit_id", audit.id)
                 .order("priority", { ascending: true }),
             (supabase as any)
@@ -95,6 +96,7 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
         return {
             id: cluster.id,
             name: cluster.name,
+            description: cluster.description,
             priority: cluster.priority,
             articleCount,
             competitorUrls: Array.isArray(cluster.competitor_urls)
@@ -246,7 +248,9 @@ export async function getProgramProgress(brandId: string): Promise<ProgramProgre
 }
 
 export interface GapEvidence {
+    id: string
     query: string
+    observedValue: string
     source: string
     sourceUrl: string | null
     status: string
@@ -257,7 +261,7 @@ export interface GapEvidence {
 
 export async function getGapEvidence(
     brandId: string,
-    limit: number = 100,
+    limit: number = HARVEST_POLICY.maxQueries,
 ): Promise<GapEvidence[]> {
     const supabase = await createClient()
     const {
@@ -270,12 +274,12 @@ export async function getGapEvidence(
     const { data, error } = await (supabase as any)
         .from("query_pool")
         .select(
-            "query, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
+            "id, query, observed_value, source, source_url, status, covered_by_url, coverage_similarity, competitor_matches",
         )
         .eq("audit_id", audit.id)
         .in("status", ["gap", "partial"])
         .order("coverage_similarity", { ascending: true })
-        .limit(Math.min(250, Math.max(1, limit)))
+        .limit(Math.min(HARVEST_POLICY.maxQueries, Math.max(1, limit)))
 
     if (error) {
         console.error("[getGapEvidence]", error)
@@ -283,7 +287,9 @@ export async function getGapEvidence(
     }
 
     return (data || []).map((row: any) => ({
+        id: row.id,
         query: row.query,
+        observedValue: row.observed_value || row.query,
         source: row.source,
         sourceUrl: row.source_url,
         status: row.status,
@@ -304,6 +310,7 @@ export interface PlannedArticleRow {
     title: string
     mainKeyword: string
     supportingKeywords: string[]
+    sourceQueryIds: string[]
     articleType: string
     isPillar: boolean
     generationStatus: string
@@ -311,6 +318,7 @@ export interface PlannedArticleRow {
     publicationStatus: string
     status: string
     clusterId: string | null
+    targetUrl: string | null
 }
 
 export async function getPlannedArticles(
@@ -328,7 +336,7 @@ export async function getPlannedArticles(
     let query = (supabase as any)
         .from("planned_articles")
         .select(
-            "id, title, main_keyword, supporting_keywords, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id",
+            "id, title, main_keyword, supporting_keywords, source_query_ids, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id, target_url",
         )
         .eq("audit_id", audit.id)
         .order("is_pillar", { ascending: false })
@@ -345,6 +353,7 @@ export async function getPlannedArticles(
         title: row.title,
         mainKeyword: row.main_keyword,
         supportingKeywords: row.supporting_keywords || [],
+        sourceQueryIds: row.source_query_ids || [],
         articleType: row.article_type,
         isPillar: row.is_pillar,
         generationStatus: row.generation_status,
@@ -352,5 +361,6 @@ export async function getPlannedArticles(
         publicationStatus: row.publication_status,
         status: row.generation_status,
         clusterId: row.cluster_id,
+        targetUrl: row.target_url,
     }))
 }

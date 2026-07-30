@@ -9,12 +9,18 @@ import {
     ChevronUp,
     Copy,
     ExternalLink,
+    FileText,
     Gauge,
     Layers,
     Link2,
 } from "lucide-react"
 
-import type { AuditScope, GapEvidence, ProgramProgress } from "@/actions/harvest"
+import type {
+    AuditScope,
+    GapEvidence,
+    PlannedArticleRow,
+    ProgramProgress,
+} from "@/actions/harvest"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -23,17 +29,22 @@ export function ScopeResults({
     gaps,
     brandName,
     progress,
+    articles = [],
     showShareLink = true,
 }: {
     scope: AuditScope
     gaps: GapEvidence[]
     brandName: string
     progress?: ProgramProgress | null
+    articles?: PlannedArticleRow[]
     showShareLink?: boolean
 }) {
     const [showAllClusters, setShowAllClusters] = useState(false)
     const [showEvidence, setShowEvidence] = useState(true)
     const [copied, setCopied] = useState(false)
+    const [expandedClusterIds, setExpandedClusterIds] = useState<Set<string>>(
+        () => new Set(scope.recommendedClusterIds),
+    )
     const recommended = scope.clusters.filter((cluster) =>
         scope.recommendedClusterIds.includes(cluster.id),
     )
@@ -41,6 +52,16 @@ export function ScopeResults({
         (cluster) => !scope.recommendedClusterIds.includes(cluster.id),
     )
     const visibleClusters = showAllClusters ? scope.clusters : recommended
+    const gapById = new Map(gaps.map((gap) => [gap.id, gap]))
+
+    const toggleCluster = (clusterId: string) => {
+        setExpandedClusterIds((current) => {
+            const next = new Set(current)
+            if (next.has(clusterId)) next.delete(clusterId)
+            else next.add(clusterId)
+            return next
+        })
+    }
 
     return (
         <div className="w-full space-y-8">
@@ -107,11 +128,209 @@ export function ScopeResults({
 
             {progress && <ProgramBurnDown progress={progress} />}
 
+            <section>
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h3 className="font-serif text-xl text-stone-900">
+                            {showAllClusters ? "All measured clusters" : "Your six-cluster program"}
+                        </h3>
+                        <p className="mt-1 text-sm text-stone-500">
+                            The selected six contain {scope.recommendedArticleCount} articles.
+                            Review every title and its supporting searches before choosing a
+                            delivery speed.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setExpandedClusterIds(
+                                    new Set(visibleClusters.map((cluster) => cluster.id)),
+                                )
+                            }
+                            className="text-xs font-medium text-stone-600 hover:text-stone-950"
+                        >
+                            Expand all articles
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setExpandedClusterIds(new Set())}
+                            className="text-xs font-medium text-stone-600 hover:text-stone-950"
+                        >
+                            Collapse all
+                        </button>
+                        {remainder.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setShowAllClusters((value) => !value)}
+                                className="flex items-center gap-1 text-xs font-medium text-brand-600"
+                            >
+                                {showAllClusters
+                                    ? "Show six-cluster program"
+                                    : `Show ${remainder.length} additional clusters`}
+                                {showAllClusters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            </button>
+                        )}
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    {visibleClusters.map((cluster, index) => {
+                        const selected = scope.recommendedClusterIds.includes(cluster.id)
+                        const expanded = expandedClusterIds.has(cluster.id)
+                        const clusterArticles = articles.filter(
+                            (article) => article.clusterId === cluster.id,
+                        )
+                        return (
+                            <article
+                                key={cluster.id}
+                                className={cn(
+                                    "overflow-hidden rounded-lg border",
+                                    selected
+                                        ? "border-stone-200 bg-white"
+                                        : "border-stone-200 bg-stone-50 opacity-65",
+                                )}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => toggleCluster(cluster.id)}
+                                    className="flex w-full items-start gap-4 p-4 text-left"
+                                    aria-expanded={expanded}
+                                >
+                                <div className="w-6 font-serif text-lg text-stone-400">
+                                    {index + 1}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-medium text-stone-900">
+                                            {cluster.name}
+                                        </span>
+                                        {selected && (
+                                            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                                                Program cluster
+                                            </span>
+                                        )}
+                                    </div>
+                                    {cluster.description && (
+                                        <p className="mt-1 text-xs leading-relaxed text-stone-500">
+                                            {cluster.description}
+                                        </p>
+                                    )}
+                                    <div className="mt-1 text-xs text-stone-500">
+                                        {cluster.articleCount} articles ·{" "}
+                                        {cluster.qualified ? "qualified" : "outside program limits"}
+                                    </div>
+                                </div>
+                                {expanded ? (
+                                    <ChevronUp className="mt-1 h-4 w-4 text-stone-400" />
+                                ) : (
+                                    <ChevronDown className="mt-1 h-4 w-4 text-stone-400" />
+                                )}
+                                </button>
+                                {expanded && (
+                                    <div className="border-t border-stone-100 bg-stone-50/40 px-4 py-3 sm:px-6">
+                                        {clusterArticles.length === 0 ? (
+                                            <p className="py-3 text-sm text-amber-700">
+                                                The cluster says it contains {cluster.articleCount} articles,
+                                                but no article rows were returned. Treat this as an audit data bug.
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {clusterArticles.map((article, articleIndex) => {
+                                                    const articleEvidence = article.sourceQueryIds
+                                                        .map((id) => gapById.get(id))
+                                                        .filter(
+                                                            (gap): gap is GapEvidence =>
+                                                                Boolean(gap),
+                                                        )
+                                                    return (
+                                                        <div
+                                                            key={article.id}
+                                                            className="rounded-md border border-stone-200 bg-white p-3"
+                                                        >
+                                                            <div className="flex items-start gap-3">
+                                                                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-stone-400" />
+                                                                <div className="min-w-0 flex-1">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span className="text-xs text-stone-400">
+                                                                            {String(articleIndex + 1).padStart(2, "0")}
+                                                                        </span>
+                                                                        {article.isPillar && (
+                                                                            <span className="rounded bg-stone-900 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                                                                                Pillar
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <h4 className="mt-1 text-sm font-medium text-stone-900">
+                                                                        {article.title}
+                                                                    </h4>
+                                                                    <p className="mt-1 text-xs text-stone-500">
+                                                                        Primary search: {article.mainKeyword}
+                                                                    </p>
+                                                                    {article.supportingKeywords.length > 0 && (
+                                                                        <p className="mt-1 text-xs text-stone-500">
+                                                                            Supports:{" "}
+                                                                            {article.supportingKeywords.join(", ")}
+                                                                        </p>
+                                                                    )}
+                                                                    <details className="mt-2">
+                                                                        <summary className="cursor-pointer text-xs font-medium text-brand-600">
+                                                                            Inspect {articleEvidence.length} source-linked
+                                                                            search{articleEvidence.length === 1 ? "" : "es"}
+                                                                        </summary>
+                                                                        <div className="mt-2 grid gap-1.5">
+                                                                            {articleEvidence.length > 0 ? (
+                                                                                articleEvidence.map((gap) => (
+                                                                                    <EvidenceLink
+                                                                                        key={gap.id}
+                                                                                        gap={gap}
+                                                                                    />
+                                                                                ))
+                                                                            ) : (
+                                                                                <span className="text-xs text-red-600">
+                                                                                    No supporting evidence rows were returned.
+                                                                                    Treat this as an audit data bug.
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </details>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </article>
+                        )
+                    })}
+                </div>
+            </section>
+
+            <section>
+                <button
+                    type="button"
+                    onClick={() => setShowEvidence((value) => !value)}
+                    className="mb-3 flex items-center gap-2"
+                >
+                    <h3 className="font-serif text-xl text-stone-900">Source-linked evidence</h3>
+                    {showEvidence ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                <p className="mb-4 text-sm text-stone-500">
+                    If a source does not support its observed query, that is a data bug.
+                </p>
+                {showEvidence && <EvidenceTable gaps={gaps} />}
+            </section>
+
             {!progress && scope.checkoutEligible && (
-                <section>
-                    <h3 className="font-serif text-xl text-stone-900">Choose delivery speed</h3>
+                <section className="rounded-xl border border-stone-200 bg-stone-50 p-5">
+                    <h3 className="font-serif text-xl text-stone-900">
+                        Finished inspecting the scope?
+                    </h3>
                     <p className="mb-4 mt-1 text-sm text-stone-500">
-                        Every tier delivers the same six clusters. Only the cadence changes.
+                        Every tier freezes and delivers these same six clusters. Only the
+                        delivery cadence changes.
                     </p>
                     <div className="grid gap-3 sm:grid-cols-3">
                         {scope.velocity.map((velocity) => (
@@ -135,86 +354,19 @@ export function ScopeResults({
                                     Approximately {velocity.months} month
                                     {velocity.months === 1 ? "" : "s"} to deliver
                                 </p>
-                                <Button
-                                    className="mt-4 w-full"
-                                    variant={
-                                        velocity.tier === "accelerate" ? "default" : "outline"
-                                    }
-                                    onClick={() => {
-                                        window.location.href = "/subscribe"
-                                    }}
-                                >
-                                    Confirm URLs and pricing
-                                </Button>
                             </div>
                         ))}
                     </div>
+                    <Button
+                        className="mt-4"
+                        onClick={() => {
+                            window.location.href = "/subscribe"
+                        }}
+                    >
+                        Confirm URLs and view pricing
+                    </Button>
                 </section>
             )}
-
-            <section>
-                <div className="mb-3 flex items-baseline justify-between">
-                    <h3 className="font-serif text-xl text-stone-900">
-                        {showAllClusters ? "All measured clusters" : "Priority program scope"}
-                    </h3>
-                    {remainder.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={() => setShowAllClusters((value) => !value)}
-                            className="flex items-center gap-1 text-xs text-stone-500"
-                        >
-                            {showAllClusters
-                                ? "Show program scope"
-                                : `Show ${remainder.length} additional clusters`}
-                            {showAllClusters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                        </button>
-                    )}
-                </div>
-                <div className="space-y-2">
-                    {visibleClusters.map((cluster, index) => {
-                        const selected = scope.recommendedClusterIds.includes(cluster.id)
-                        return (
-                            <div
-                                key={cluster.id}
-                                className={cn(
-                                    "flex items-start gap-4 rounded-lg border p-4",
-                                    selected
-                                        ? "border-stone-200 bg-white"
-                                        : "border-stone-200 bg-stone-50 opacity-65",
-                                )}
-                            >
-                                <div className="w-6 font-serif text-lg text-stone-400">
-                                    {index + 1}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="text-sm font-medium text-stone-900">
-                                        {cluster.name}
-                                    </div>
-                                    <div className="mt-1 text-xs text-stone-500">
-                                        {cluster.articleCount} articles ·{" "}
-                                        {cluster.qualified ? "qualified" : "outside program limits"}
-                                    </div>
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
-            </section>
-
-            <section>
-                <button
-                    type="button"
-                    onClick={() => setShowEvidence((value) => !value)}
-                    className="mb-3 flex items-center gap-2"
-                >
-                    <h3 className="font-serif text-xl text-stone-900">Source-linked evidence</h3>
-                    {showEvidence ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-                <p className="mb-4 text-sm text-stone-500">
-                    If a source does not support its observed query, that is a data bug.
-                </p>
-                {showEvidence && <EvidenceTable gaps={gaps} />}
-            </section>
         </div>
     )
 }
@@ -281,64 +433,103 @@ function ProgramBurnDown({ progress }: { progress: ProgramProgress }) {
     )
 }
 
-function EvidenceTable({ gaps }: { gaps: GapEvidence[] }) {
+function EvidenceLink({ gap }: { gap: GapEvidence }) {
     return (
-        <div className="overflow-x-auto rounded-lg border border-stone-200">
-            <table className="w-full min-w-[640px] text-sm">
-                <thead className="bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
-                    <tr>
-                        <th className="px-4 py-2.5 text-left font-medium">Query</th>
-                        <th className="px-4 py-2.5 text-left font-medium">Observed source</th>
-                        <th className="px-4 py-2.5 text-left font-medium">Competitors</th>
-                        <th className="px-4 py-2.5 text-left font-medium">Current coverage</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {gaps.slice(0, 40).map((gap) => (
-                        <tr key={`${gap.query}:${gap.sourceUrl}`} className="border-t align-top">
-                            <td className="px-4 py-3 text-stone-900">{gap.query}</td>
-                            <td className="px-4 py-3">
-                                {gap.sourceUrl ? (
-                                    <a
-                                        href={gap.sourceUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
-                                    >
-                                        {safeHostname(gap.sourceUrl)}
-                                        <ExternalLink size={11} />
-                                    </a>
-                                ) : (
-                                    <span className="text-xs text-red-600">Missing source</span>
-                                )}
-                            </td>
-                            <td className="px-4 py-3">
-                                {gap.competitors.slice(0, 2).map((competitor) => (
-                                    <a
-                                        key={competitor.matchedUrl}
-                                        href={competitor.matchedUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="flex items-center gap-1 text-xs text-brand-600"
-                                    >
-                                        <Link2 size={11} />
-                                        {competitor.name}
-                                    </a>
-                                ))}
-                            </td>
-                            <td className="px-4 py-3 text-xs text-stone-500">
-                                {gap.status === "partial" ? (
-                                    <span className="inline-flex items-center gap-1 text-amber-700">
-                                        <CheckCircle2 size={11} /> Partial
-                                    </span>
-                                ) : (
-                                    "Not covered"
-                                )}
-                            </td>
+        <div className="flex flex-col gap-1 rounded border border-stone-100 bg-stone-50 px-2.5 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-xs text-stone-700">{gap.observedValue}</span>
+            {gap.sourceUrl ? (
+                <a
+                    href={gap.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-brand-600 hover:underline"
+                >
+                    Open observed source
+                    <ExternalLink size={10} />
+                </a>
+            ) : (
+                <span className="text-[11px] text-red-600">Missing source</span>
+            )}
+        </div>
+    )
+}
+
+function EvidenceTable({ gaps }: { gaps: GapEvidence[] }) {
+    const [showAll, setShowAll] = useState(false)
+    const visibleGaps = showAll ? gaps : gaps.slice(0, 40)
+
+    return (
+        <div>
+            <div className="overflow-x-auto rounded-lg border border-stone-200">
+                <table className="w-full min-w-[640px] text-sm">
+                    <thead className="bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
+                        <tr>
+                            <th className="px-4 py-2.5 text-left font-medium">Observed search</th>
+                            <th className="px-4 py-2.5 text-left font-medium">Observed source</th>
+                            <th className="px-4 py-2.5 text-left font-medium">Competitors</th>
+                            <th className="px-4 py-2.5 text-left font-medium">Current coverage</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {visibleGaps.map((gap) => (
+                            <tr key={gap.id} className="border-t align-top">
+                                <td className="px-4 py-3 text-stone-900">
+                                    {gap.observedValue}
+                                </td>
+                                <td className="px-4 py-3">
+                                    {gap.sourceUrl ? (
+                                        <a
+                                            href={gap.sourceUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
+                                        >
+                                            {safeHostname(gap.sourceUrl)}
+                                            <ExternalLink size={11} />
+                                        </a>
+                                    ) : (
+                                        <span className="text-xs text-red-600">Missing source</span>
+                                    )}
+                                </td>
+                                <td className="px-4 py-3">
+                                    {gap.competitors.slice(0, 2).map((competitor) => (
+                                        <a
+                                            key={competitor.matchedUrl}
+                                            href={competitor.matchedUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="flex items-center gap-1 text-xs text-brand-600"
+                                        >
+                                            <Link2 size={11} />
+                                            {competitor.name}
+                                        </a>
+                                    ))}
+                                </td>
+                                <td className="px-4 py-3 text-xs text-stone-500">
+                                    {gap.status === "partial" ? (
+                                        <span className="inline-flex items-center gap-1 text-amber-700">
+                                            <CheckCircle2 size={11} /> Partial
+                                        </span>
+                                    ) : (
+                                        "Not covered"
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {gaps.length > 40 && (
+                <button
+                    type="button"
+                    onClick={() => setShowAll((value) => !value)}
+                    className="mt-3 text-xs font-medium text-brand-600"
+                >
+                    {showAll
+                        ? "Show first 40 evidence rows"
+                        : `Show all ${gaps.length} evidence rows`}
+                </button>
+            )}
         </div>
     )
 }

@@ -677,6 +677,49 @@ test("onboarding uses a focused authenticated shell outside the dashboard sideba
     assert.match(consent, /\["do", "chat:hide"\]/)
 })
 
+test("the completed audit remains inspectable before purchase", async () => {
+    const [
+        accessAction,
+        auditPage,
+        contentPlan,
+        scopeResults,
+        publicAudit,
+        sidebar,
+        subscribe,
+    ] = await Promise.all([
+        text("actions/onboarding.ts"),
+        text("app/(protected)/audit/page.tsx"),
+        text("app/(protected)/content-plan/page.tsx"),
+        text("components/audit/scope-results.tsx"),
+        text("app/audit/[token]/page.tsx"),
+        text("components/dashboard/app-sidebar.tsx"),
+        text("app/(protected)/subscribe/page.tsx"),
+    ])
+
+    assert.match(accessAction, /currentStep === "audit"/)
+    assert.match(accessAction, /currentStep === "audit-results"/)
+    assert.match(accessAction, /redirectTo: "\/audit"/)
+    assert.doesNotMatch(accessAction, /redirectTo: "\/content-plan"/)
+
+    for (const source of [auditPage, contentPlan]) {
+        assert.match(source, /getAuditScope/)
+        assert.match(source, /getGapEvidence/)
+        assert.match(source, /getPlannedArticles/)
+        assert.match(source, /articles=\{articles\}/)
+    }
+
+    assert.match(scopeResults, /Your six-cluster program/)
+    assert.match(scopeResults, /Expand all articles/)
+    assert.match(scopeResults, /sourceQueryIds/)
+    assert.match(scopeResults, /source-linked/)
+    assert.match(scopeResults, /Show all \$\{gaps\.length\} evidence rows/)
+    assert.match(publicAudit, /from\("planned_articles"\)/)
+    assert.match(publicAudit, /articles=\{data\.articles\}/)
+    assert.match(sidebar, /title: "Evidence Audit"/)
+    assert.match(sidebar, /url: "\/audit"/)
+    assert.match(subscribe, /href="\/audit"/)
+})
+
 test("checkout remains disabled by default and consent gates optional analytics", async () => {
     const [checkout, consent, layout] = await Promise.all([
         text("app/api/dodopayments/checkout/route.ts"),

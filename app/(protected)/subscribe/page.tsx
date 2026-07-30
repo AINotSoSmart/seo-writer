@@ -224,7 +224,7 @@ function EmptyState({
             <p className="mx-auto mt-2 max-w-xl text-sm text-stone-600">{body}</p>
             {children}
             <Link
-                href="/onboarding"
+                href="/audit"
                 className="mt-6 inline-flex items-center gap-2 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
             >
                 <Layers3 className="h-4 w-4" />

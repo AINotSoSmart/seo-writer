@@ -6,10 +6,14 @@ import {
     ExternalLink,
     FileCheck2,
     FileText,
-    Layers3,
 } from "lucide-react"
 
-import { getAuditScope } from "@/actions/harvest"
+import {
+    getAuditScope,
+    getGapEvidence,
+    getPlannedArticles,
+} from "@/actions/harvest"
+import { ScopeResults } from "@/components/audit/scope-results"
 import { ProgramDeliveryControls } from "@/components/program/ProgramDeliveryControls"
 import { createClient } from "@/utils/supabase/server"
 
@@ -22,7 +26,7 @@ export default async function ContentPlanPage() {
 
     const { data: brand } = await supabase
         .from("brand_details")
-        .select("id, current_audit_id")
+        .select("id, current_audit_id, brand_data")
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle()
@@ -40,32 +44,38 @@ export default async function ContentPlanPage() {
         .maybeSingle()
 
     if (!program) {
-        const scope = await getAuditScope(brand.id)
+        const [scope, gaps, articles] = await Promise.all([
+            getAuditScope(brand.id),
+            getGapEvidence(brand.id),
+            getPlannedArticles(brand.id),
+        ])
+        if (!scope) return <NoProgram />
+
         return (
-            <main className="mx-auto w-full max-w-5xl py-6">
-                <header className="mb-7">
-                    <h1 className="font-serif text-3xl text-stone-900">Program scope</h1>
+            <main className="mx-auto w-full max-w-6xl py-6">
+                <header className="mb-7 flex flex-col gap-4 border-b border-stone-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                    <h1 className="font-serif text-3xl text-stone-900">
+                        Proposed content program
+                    </h1>
                     <p className="mt-2 text-sm text-stone-600">
-                        Your audit is the plan. A paid program freezes six qualified clusters,
-                        their URLs, and their link graph.
+                        Nothing has been purchased or frozen. Inspect every cluster, article,
+                        and supporting source below before deciding.
                     </p>
-                </header>
-                <div className="rounded-xl border border-stone-200 bg-white p-8 text-center">
-                    <Layers3 className="mx-auto h-8 w-8 text-stone-400" />
-                    <h2 className="mt-3 font-serif text-xl">No purchased program yet</h2>
-                    <p className="mx-auto mt-2 max-w-lg text-sm text-stone-600">
-                        {scope?.checkoutEligible
-                            ? `${scope.recommendedArticleCount} articles across six qualified clusters are ready to freeze.`
-                            : scope?.eligibilityReason ||
-                              "Complete a current evidence-backed audit first."}
-                    </p>
+                    </div>
                     <Link
-                        href={scope?.checkoutEligible ? "/subscribe" : "/onboarding"}
-                        className="mt-5 inline-flex rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
+                        href="/audit"
+                        className="inline-flex shrink-0 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800"
                     >
-                        {scope?.checkoutEligible ? "Confirm URLs and pricing" : "View audit"}
+                        Open permanent audit
                     </Link>
-                </div>
+                </header>
+                <ScopeResults
+                    scope={scope}
+                    gaps={gaps}
+                    articles={articles}
+                    brandName={(brand.brand_data as any)?.product_name || "Your Site"}
+                />
             </main>
         )
     }

@@ -7,7 +7,7 @@ import { createClient } from "@/utils/supabase/server"
  * one may resume onboarding; everyone else uses the normalized program view.
  */
 export async function canAccessOnboarding(
-    _currentStep?: string,
+    currentStep?: string,
 ): Promise<{ allowed: boolean; redirectTo?: string }> {
     const supabase = await createClient()
     const {
@@ -24,7 +24,15 @@ export async function canAccessOnboarding(
         .limit(1)
         .maybeSingle()
 
-    return brand?.current_audit_id
-        ? { allowed: false, redirectTo: "/content-plan" }
-        : { allowed: true }
+    if (!brand?.current_audit_id) return { allowed: true }
+
+    // Do not eject the customer at the exact moment finalization sets the
+    // brand's current audit. The audit and audit-results steps are the focused
+    // completion experience; all other attempts to reopen onboarding land on
+    // the permanent evidence view.
+    if (currentStep === "audit" || currentStep === "audit-results") {
+        return { allowed: true }
+    }
+
+    return { allowed: false, redirectTo: "/audit" }
 }

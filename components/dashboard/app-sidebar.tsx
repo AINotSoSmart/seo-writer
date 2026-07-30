@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   Send,
   Layers3,
+  Search,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -45,7 +46,7 @@ function ProgramCard({ isSubscribed, planName }: { isSubscribed?: boolean; planN
         <div className="text-sm font-medium mb-1">Delivery program</div>
         <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
           <Layers3 className="h-3 w-3" />
-          {isSubscribed ? `${planName || "Active"} velocity` : "Audit required"}
+          {isSubscribed ? `${planName || "Active"} velocity` : "Program not purchased"}
         </div>
         {isSubscribed ? (
           <Button size="sm" variant="outline" className="w-full" asChild>
@@ -55,8 +56,8 @@ function ProgramCard({ isSubscribed, planName }: { isSubscribed?: boolean; planN
           </Button>
         ) : (
           <Button size="sm" className="w-full bg-black hover:bg-black/90 text-white border-0" asChild>
-            <Link href="/subscribe" prefetch={false}>
-              Review eligibility
+            <Link href="/audit" prefetch={false}>
+              Review audit
             </Link>
           </Button>
         )}
@@ -87,6 +88,11 @@ export function AppSidebar({
   }
 
   const navItems = React.useMemo(() => [
+    {
+      title: "Evidence Audit",
+      url: "/audit",
+      icon: Search,
+    },
     {
       title: "Content Plan",
       url: "/content-plan",
