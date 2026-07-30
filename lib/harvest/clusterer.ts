@@ -427,6 +427,47 @@ ${clusters
     }
 }
 
+export interface DuplicateArticlePair {
+    a: string
+    b: string
+    similarity: number
+}
+
+/**
+ * Finds article units that should have been merged and were not.
+ *
+ * This is the invariant that actually protects the customer. `collapseToArticles`
+ * folds any query within `ARTICLE_MERGE` of an existing unit into it, so after
+ * clustering **no two units should be that close to each other**. A pair above
+ * the threshold means the merge step genuinely failed — which is the only way a
+ * customer receives two articles about the same thing.
+ *
+ * It replaces gating on the collapse ratio, which measured how much phrasing
+ * redundancy a niche happened to contain and rejected a perfectly healthy audit
+ * because its competitors published a lot of FAQ pages.
+ */
+export function findDuplicateArticlePairs(
+    units: ArticleUnit[],
+    threshold: number = CLUSTER_THRESHOLDS.ARTICLE_MERGE
+): DuplicateArticlePair[] {
+    const pairs: DuplicateArticlePair[] = []
+
+    for (let i = 0; i < units.length; i++) {
+        for (let j = i + 1; j < units.length; j++) {
+            const similarity = cosineSimilarity(units[i].embedding, units[j].embedding)
+            if (similarity >= threshold) {
+                pairs.push({
+                    a: units[i].mainKeyword,
+                    b: units[j].mainKeyword,
+                    similarity: Math.round(similarity * 1000) / 1000,
+                })
+            }
+        }
+    }
+
+    return pairs.sort((x, y) => y.similarity - x.similarity)
+}
+
 /**
  * QA guard on the collapse ratio.
  *

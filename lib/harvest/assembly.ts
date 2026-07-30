@@ -6,6 +6,7 @@ import { generateEmbedding } from "@/lib/gemini-embedding"
 import { harvestAutocomplete } from "./autocomplete"
 import { harvestCompetitorCorpus } from "./competitor-corpus"
 import {
+    findDuplicateArticlePairs,
     collapseToArticles,
     groupIntoClusters,
     titleArticles,
@@ -386,17 +387,53 @@ export async function assembleHarvest(
     const collapseRatio = gapResult.gapCount
         ? articleUnits.length / gapResult.gapCount
         : 0
+
+    // The real invariant: no two articles may be near-duplicates of each other.
+    // `collapseToArticles` folds anything within ARTICLE_MERGE into an existing
+    // unit, so a surviving pair above that threshold means the merge step
+    // genuinely failed — the only way a customer receives two articles about the
+    // same thing.
+    const duplicatePairs = findDuplicateArticlePairs(articleUnits)
+    if (duplicatePairs.length > 0) {
+        const sample = duplicatePairs
+            .slice(0, 3)
+            .map((pair) => `"${pair.a}" ~ "${pair.b}" (${pair.similarity})`)
+            .join("; ")
+        throw new HarvestAssemblyError(
+            `${duplicatePairs.length} article pairs were not merged: ${sample}`,
+            "duplicate_articles",
+            reports,
+        )
+    }
+
+    // Catastrophic-breakage ceiling only. The collapse ratio measures how much
+    // phrasing redundancy a niche happens to contain, not whether clustering
+    // worked — a healthy 13-cluster audit was previously rejected at 48.4%
+    // purely because its competitors published a lot of FAQ pages. See the
+    // comment on `collapseExpectedMax` in policy.ts.
     if (
         gapResult.gapCount >= HARVEST_POLICY.minGapsForCollapseCheck &&
-        (collapseRatio < HARVEST_POLICY.collapseMin ||
-            collapseRatio > HARVEST_POLICY.collapseMax)
+        collapseRatio > HARVEST_POLICY.collapseCeiling
     ) {
         throw new HarvestAssemblyError(
-            `Collapse ratio ${(collapseRatio * 100).toFixed(1)}% is outside ${
-                HARVEST_POLICY.collapseMin * 100
-            }-${HARVEST_POLICY.collapseMax * 100}%.`,
+            `Collapse ratio ${(collapseRatio * 100).toFixed(1)}% exceeds the ${
+                HARVEST_POLICY.collapseCeiling * 100
+            }% ceiling — same-intent queries are not merging at all.`,
             "collapse_ratio",
             reports,
+        )
+    }
+
+    if (
+        gapResult.gapCount >= HARVEST_POLICY.minGapsForCollapseCheck &&
+        (collapseRatio < HARVEST_POLICY.collapseExpectedMin ||
+            collapseRatio > HARVEST_POLICY.collapseExpectedMax)
+    ) {
+        // Telemetry, not a gate. Usually means an unusual source mix.
+        console.warn(
+            `[Assembly] Collapse ratio ${(collapseRatio * 100).toFixed(1)}% is outside the ` +
+            `expected ${HARVEST_POLICY.collapseExpectedMin * 100}-${HARVEST_POLICY.collapseExpectedMax * 100}% band. ` +
+            `Pool composition: ${reports.map((r) => `${r.source}=${r.queriesFound}`).join(", ")}`
         )
     }
 

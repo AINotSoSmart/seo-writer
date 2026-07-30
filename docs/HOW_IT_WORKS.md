@@ -245,6 +245,8 @@ anything, and 78% of people left at that wall.
 | One article fails to generate | Its cluster stays hidden. We retry that article only. |
 | Payment webhook arrives twice | Second one is ignored. One program, one charge. |
 | Customer re-runs their audit mid-program | New audit is stored separately. **Their running program does not change.** |
+| Two planned articles turn out near-identical | **The audit stops.** That means clustering failed to merge them, and shipping both would be selling the same article twice. |
+| An audit fails and the customer refreshes the page | Nothing re-runs. The failure is shown, and a retry is refused for 15 minutes. After 3 failures in that window retries stop entirely. |
 | Cancellation call to Dodo fails | Retries, then emails you. |
 
 The pattern: **when we're unsure, we stop rather than guess.** A wrong audit is

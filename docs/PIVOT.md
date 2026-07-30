@@ -438,6 +438,116 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-30 - refreshing a failed audit no longer re-runs it
+
+**Reported from production.** An audit failed, the page was left open, and a
+single refresh from another device started a brand new `run-topical-audit`. Every
+refresh would have done the same, without limit.
+
+Chain:
+
+1. `finalize_audit_run` sets `brand_details.current_audit_id` **only on success**.
+2. After a failure there is no `running` row and no `current_audit_id`, so
+   `GET /api/topical-audit` returned `status: "not_found"`.
+3. `recoverOrStart` in `components/audit/audit-console.tsx` reads `not_found` as
+   "never ran" and POSTs.
+4. `POST` guarded only `running` and `completed` runs — a `failed` run matched
+   neither, so it inserted a new audit row and triggered the full pipeline.
+
+One refresh = a complete crawl, search, embedding and clustering run.
+
+Fixed in three layers, because any one alone still leaks:
+
+- **GET** now falls back to the most recent `failed` run, so the status is
+  reported instead of looking like a fresh brand.
+- **POST** enforces `AUDIT_RETRY_COOLDOWN_MINUTES` (15) and
+  `MAX_FAILURES_PER_COOLDOWN` (3), returning 429 with `Retry-After`. After three
+  failures in the window, automatic retries stop and the response says so.
+- **The console** auto-starts only for `status === "not_found"`. A failed run,
+  a non-OK response, and a thrown fetch all surface an error now; previously all
+  three called `startAudit()`, so a transient network blip also paid for a run.
+
+**Retry UX.** The failure state now owns the whole console surface:
+
+- Leads with what did *not* happen — nothing charged, nothing saved, brand
+  details intact — because the old handler bounced the customer back to the
+  brand step, implying they had mistyped something.
+- Shows the actual error, a live `mm:ss` countdown, and attempts remaining.
+- The retry button is disabled until the server would genuinely accept it. GET
+  and POST both derive from one `retryState()` helper so the countdown shown is
+  the rule enforced — a button that offers a retry the API refuses is worse than
+  no button.
+- After `MAX_FAILURES_PER_COOLDOWN` it switches to a support mailto instead.
+- States plainly: "Refreshing this page will not start a new audit."
+
+Copy is truthful about the alert: `trigger/run-audit.ts` really does email on
+failure, so the panel says "our team has been alerted automatically". What it no
+longer claims is that the *customer* will be emailed back — that address is the
+founder's, and nothing automated replies to the customer. That alert now reads
+`FOUNDER_ALERT_EMAIL` (falling back to the previous hardcoded address) so it
+matches the release-gate variable already used by `billing-lifecycle.ts`.
+
+Contract suite pins all of it: `recoverOrStart` must contain exactly one
+`await startAudit()` call reachable only from the `not_found` branch, both
+handlers must call the shared `retryState()`, the retry button must stay
+disabled behind `canRetry`, and the dead error callback must not return.
+
+**Correction to the previous entry.** It said the fixed collapse-ratio audit
+could simply be "re-run". There is no deliberate re-run path — the only reason a
+re-run happened at all was this bug. A proper retry affordance on the failure
+state is still outstanding.
+
+
+### 2026-07-30 - collapse ratio demoted; duplicate articles gated directly
+
+A production audit failed on a healthy result:
+
+```
+[GapEngine] Pool 354: 50 covered, 2 partial, 304 gaps. Authority 14%
+[Clusterer] 147 articles grouped into 13 clusters (sizes: 15,15,12,12,11,8,8,12,10,10,9,13,12)
+HarvestAssemblyError: Collapse ratio 48.4% is outside 25-40%.
+```
+
+Everything about that run was correct — 13 clusters all sized 8-15, oversized
+clusters split properly, zero source failures, 304 gaps, easily enough to
+qualify six clusters. It was rejected by a number invented in a planning
+document and then hard-wired as an invariant.
+
+**Root cause.** Collapse ratio measures how much *phrasing redundancy* a niche
+contains, not whether clustering worked:
+
+| Run | paa | competitor | autocomplete | page-derived | queries/article | ratio |
+|---|---|---|---|---|---|---|
+| bringback | 44 | 9 | 340 | 13% | 3.57 | 28.3% PASS |
+| pixreunion | 25 | 3 | 267 | 9% | 3.62 | 27.7% PASS |
+| **failing run** | **141** | **79** | **180** | **55%** | **2.07** | **48.4% FAIL** |
+
+Page-derived strings are distinct page titles and questions, so they do not
+merge. Autocomplete strings are phrasing variants that merge roughly 4:1.
+`capProportionally` takes page-backed sources whole before autocomplete, so a
+subject whose competitors publish rich FAQ/blog content gets a pool dominated by
+unmergeable strings — and the ratio rises mechanically. **The gate was rejecting
+audits based on a property of someone else's website.** It would recur on any
+such niche, unpredictably from the URL alone.
+
+**Fix — test the actual risk instead of a proxy for it.** The reason to care
+about collapse is "don't ship two articles about the same thing", so that is now
+tested directly. `findDuplicateArticlePairs` (lib/harvest/clusterer.ts) compares
+every article-unit pair; since `collapseToArticles` folds anything within
+`ARTICLE_MERGE` into an existing unit, a surviving pair above that threshold is a
+genuine merge failure. `assembly.ts` throws `duplicate_articles` on any such pair.
+
+Collapse ratio is now:
+- **hard failure only above `collapseCeiling` (0.80)** — catastrophic non-merging
+- **a `console.warn` outside `collapseExpectedMin/Max` (0.25-0.55)**, with pool
+  composition logged, because that band tracks source mix
+- reported by `/api/harvest/verify` with an explicit "check source mix" note
+
+Policy version -> `closed-pool-v2.4.0`. `collapseMin`/`collapseMax` removed;
+the contract suite now pins their absence plus the new invariant, so the gate
+cannot be reintroduced.
+
+
 ### 2026-07-30 - buyer lock, CTA cleanup, and free-credit retirement
 
 - Locked the public buyer to founder-led B2B SaaS teams with an existing

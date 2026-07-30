@@ -3,7 +3,7 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "closed-pool-v2.3.0",
+    version: "closed-pool-v2.4.0",
     maxCompetitors: 4,
     maxQueries: 400,
     maxCompetitorCorpusPages: 120,
@@ -22,8 +22,29 @@ export const HARVEST_POLICY = {
     minProgramArticles: 25,
     recommendedClusterCount: 6,
     minGapsForCollapseCheck: 60,
-    collapseMin: 0.25,
-    collapseMax: 0.40,
+    /**
+     * Expected collapse band, reported as telemetry — NOT a release gate.
+     *
+     * Collapse ratio measures how much phrasing redundancy a niche happens to
+     * contain, not whether clustering worked. Observed across four real audits:
+     * 27.7%, 28.3%, 28.4% and 48.4%. The 48.4% run was entirely healthy — 13
+     * clusters, all sized 8-15, every source clean — but its pool was 55%
+     * page-derived (141 PAA + 79 competitor titles) versus ~10% on the others.
+     * Page titles are distinct and do not merge; autocomplete variants merge
+     * roughly 4:1. So the ratio tracks source mix, and source mix depends on how
+     * much FAQ/blog content a customer's competitors happen to publish.
+     *
+     * Gating on it rejected a good audit for a property of someone else's
+     * website. The real risk — near-duplicate articles — is now tested directly
+     * by `findDuplicateArticlePairs`.
+     */
+    collapseExpectedMin: 0.25,
+    collapseExpectedMax: 0.55,
+    /**
+     * Hard ceiling. Above this, clustering is genuinely not merging anything and
+     * the customer would receive near-duplicate articles.
+     */
+    collapseCeiling: 0.80,
     provenanceSampleSize: 20,
     checkoutFreshnessDays: 30,
 } as const

@@ -226,6 +226,79 @@ test("verify and production use the same authoritative assembly function", async
     )
 })
 
+test("a failed audit cannot be restarted by refreshing the page", async () => {
+    const [route, console_] = await Promise.all([
+        text("app/api/topical-audit/route.ts"),
+        text("components/audit/audit-console.tsx"),
+    ])
+
+    // GET must report a failed run. finalize_audit_run only sets
+    // current_audit_id on success, so without this lookup GET answered
+    // "not_found" and the console auto-started a brand new expensive audit on
+    // every single page refresh.
+    assert.match(route, /run_status", "failed"/)
+    assert.match(route, /const auditId = running\?\.id \|\| brand\?\.current_audit_id \|\| failed\?\.id/)
+
+    // POST must refuse to re-run inside the cooldown, and stop entirely after
+    // repeated failures.
+    assert.match(route, /AUDIT_RETRY_COOLDOWN_MINUTES\s*=\s*\d+/)
+    assert.match(route, /MAX_FAILURES_PER_COOLDOWN\s*=\s*\d+/)
+    assert.match(route, /retryAfterSeconds/)
+    assert.match(route, /status:\s*429/)
+
+    // The console may only auto-start when an audit has genuinely never run.
+    // Network errors and failed runs must surface, never launch work.
+    const recover = console_.slice(console_.indexOf("const recoverOrStart"))
+    const autoStarts = recover.match(/await startAudit\(\)/g) || []
+    assert.equal(
+        autoStarts.length,
+        1,
+        "recoverOrStart must call startAudit exactly once, only for status not_found",
+    )
+    assert.match(recover, /if \(data\.status === "not_found"\) \{\s*await startAudit\(\)/)
+
+    // GET and POST must derive the cooldown from one helper, so the countdown
+    // the customer sees is the same rule the endpoint enforces.
+    assert.match(route, /async function retryState/)
+    assert.equal((route.match(/retryState\(db, user\.id, brandId\)/g) || []).length, 2)
+
+    // The failure state must offer a deliberate retry, never an automatic one.
+    assert.match(console_, /Run the audit again/)
+    assert.match(console_, /Refreshing this page will not start a new audit/)
+    assert.match(console_, /disabled=\{!canRetry \|\| isRetrying\}/)
+    // And it must not bounce the customer back to re-enter their brand.
+    assert.doesNotMatch(console_, /onError/)
+})
+
+test("near-duplicate articles are rejected directly, not via the collapse ratio", async () => {
+    const [assembly, clusterer, policy] = await Promise.all([
+        text("lib/harvest/assembly.ts"),
+        text("lib/harvest/clusterer.ts"),
+        text("lib/harvest/policy.ts"),
+    ])
+
+    // The real invariant: two article units may never survive above the merge
+    // threshold, because that is the only way a customer receives two articles
+    // about the same thing.
+    assert.match(clusterer, /export function findDuplicateArticlePairs/)
+    assert.match(assembly, /findDuplicateArticlePairs\(articleUnits\)/)
+    assert.match(assembly, /"duplicate_articles"/)
+
+    // Collapse ratio must NOT gate on the expected band. It measures a niche's
+    // phrasing redundancy, not clustering quality — a healthy 13-cluster audit
+    // was rejected at 48.4% because its competitors published many FAQ pages.
+    assert.match(policy, /collapseCeiling:\s*0\.80/)
+    assert.match(policy, /collapseExpectedMin:\s*0\.25/)
+    assert.match(policy, /collapseExpectedMax:\s*0\.55/)
+    assert.doesNotMatch(policy, /collapseMin:|collapseMax:/)
+    assert.match(assembly, /collapseRatio > HARVEST_POLICY\.collapseCeiling/)
+    // The expected band may only warn.
+    assert.match(
+        assembly,
+        /collapseExpectedMin[\s\S]{0,400}?console\.warn/,
+    )
+})
+
 test("database migration encodes immutable audit, graph, billing, claim, and delivery invariants", async () => {
     const migration = await text(
         "supabase/migrations/20260730_closed_pool_v2.sql",

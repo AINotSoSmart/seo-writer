@@ -229,13 +229,6 @@ export default function OnboardingPage() {
         setStep("audit-results")
     }
 
-    const handleAuditError = (message: string) => {
-        setError(`Audit failed: The issue has been reported to the developer. we will fix it ASAP and email you once we are back.`)
-        // On audit failure, go back to brand step to allow retry
-        setStep("brand")
-        // Scroll to top to see error
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
 
     // The immutable harvest is already the plan. Never mirror it into the
     // legacy content_plans table or run a second paid harvest.
@@ -701,7 +694,6 @@ export default function OnboardingPage() {
                                             brandId={brandId}
                                             brandUrl={`https://${url.trim()}`}
                                             onComplete={handleAuditComplete}
-                                            onError={handleAuditError}
                                         />
                                     </motion.div>
                                 )}

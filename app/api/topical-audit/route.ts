@@ -13,6 +13,63 @@ import { createAdminClient } from "@/utils/supabase/admin"
 // ============================================================
 
 /**
+ * A failed audit may be retried, but not on every page refresh. The crawl and
+ * search work behind one run is the expensive part of the product, and a failed
+ * run is neither `running` nor `completed` — so without a cooldown each refresh
+ * silently started a new one.
+ */
+const AUDIT_RETRY_COOLDOWN_MINUTES = 15
+const MAX_FAILURES_PER_COOLDOWN = 3
+
+type RetryState = {
+    retryAfterSeconds: number
+    attemptsRemaining: number
+    retryBlocked: boolean
+}
+
+/**
+ * Retry budget for a brand's recent failed audits.
+ *
+ * GET and POST both derive from this so the countdown a customer sees is the
+ * same rule the endpoint enforces — a UI that offers a retry the server will
+ * reject is worse than no button at all.
+ */
+async function retryState(db: any, userId: string, brandId: string): Promise<RetryState> {
+    const cooldownAfter = new Date(
+        Date.now() - AUDIT_RETRY_COOLDOWN_MINUTES * 60 * 1000,
+    ).toISOString()
+
+    const { data: failures } = await db
+        .from("topical_audits")
+        .select("created_at")
+        .eq("user_id", userId)
+        .eq("brand_id", brandId)
+        .eq("audit_kind", "customer")
+        .eq("run_status", "failed")
+        .gte("created_at", cooldownAfter)
+        .order("created_at", { ascending: false })
+
+    const count = failures?.length || 0
+    if (count === 0) {
+        return {
+            retryAfterSeconds: 0,
+            attemptsRemaining: MAX_FAILURES_PER_COOLDOWN,
+            retryBlocked: false,
+        }
+    }
+
+    const readyAt =
+        new Date(failures[0].created_at).getTime() +
+        AUDIT_RETRY_COOLDOWN_MINUTES * 60 * 1000
+
+    return {
+        retryAfterSeconds: Math.max(0, Math.ceil((readyAt - Date.now()) / 1000)),
+        attemptsRemaining: Math.max(0, MAX_FAILURES_PER_COOLDOWN - count),
+        retryBlocked: count >= MAX_FAILURES_PER_COOLDOWN,
+    }
+}
+
+/**
  * POST — Trigger a new audit
  * Creates/upserts the audit row, then triggers the background task
  */
@@ -101,6 +158,39 @@ export async function POST(req: NextRequest) {
                 auditId: recentCompleted.id,
                 reused: true,
             })
+        }
+
+        // Repeated failures must not become a repeated bill. A failed audit is
+        // neither `running` nor `completed`, so without this guard every retry —
+        // including an automatic one from a page refresh — created a new row and
+        // ran the full crawl/search pipeline again, unbounded.
+        const retry = await retryState(db, user.id, brandId)
+
+        if (retry.retryBlocked) {
+            return NextResponse.json(
+                {
+                    error:
+                        "This audit has failed several times. We have stopped retrying so it cannot " +
+                        "keep consuming resources. Email support@flipaeo.com and we will look at the run.",
+                    status: "failed",
+                    ...retry,
+                },
+                { status: 429 },
+            )
+        }
+
+        if (retry.retryAfterSeconds > 0) {
+            return NextResponse.json(
+                {
+                    error: `A previous audit failed. You can try again in ${Math.ceil(retry.retryAfterSeconds / 60)} minute(s).`,
+                    status: "failed",
+                    ...retry,
+                },
+                {
+                    status: 429,
+                    headers: { "Retry-After": String(retry.retryAfterSeconds) },
+                },
+            )
         }
 
         const publicToken = randomBytes(24).toString("hex")
@@ -219,7 +309,27 @@ export async function GET(req: NextRequest) {
             .eq("user_id", user.id)
             .maybeSingle()
 
-        const auditId = running?.id || brand?.current_audit_id
+        // A failed run leaves no `running` row and never sets
+        // `current_audit_id` (finalize_audit_run switches that pointer only on
+        // success). Without this lookup GET answered "not_found", the console
+        // treated that as "never ran", and every page refresh started a brand
+        // new expensive audit. Report the failure instead.
+        let failed: { id: string } | null = null
+        if (!running?.id && !brand?.current_audit_id) {
+            const { data } = await db
+                .from("topical_audits")
+                .select("id")
+                .eq("user_id", user.id)
+                .eq("brand_id", brandId)
+                .eq("audit_kind", "customer")
+                .eq("run_status", "failed")
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle()
+            failed = data || null
+        }
+
+        const auditId = running?.id || brand?.current_audit_id || failed?.id
         if (!auditId) {
             return NextResponse.json({ status: "not_found", audit: null })
         }
@@ -252,9 +362,17 @@ export async function GET(req: NextRequest) {
             })
         }
 
+        // A failed run must tell the client exactly when a retry is allowed and
+        // how many remain, so the UI never offers a button the server refuses.
+        const retry =
+            audit.run_status === "failed"
+                ? await retryState(db, user.id, brandId)
+                : null
+
         // Build a response tailored to the current status
         return NextResponse.json({
             status: audit.run_status,
+            ...(retry || {}),
             phase: audit.generation_phase,
             error: audit.generation_error,
             audit: audit.generation_status === "completed" ? {

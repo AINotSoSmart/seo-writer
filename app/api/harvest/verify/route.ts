@@ -49,17 +49,28 @@ export async function POST(req: NextRequest) {
                 detail: `${traceableGaps.length}/${statistics.gapCount} gaps traceable; require 100%`,
             },
             {
+                // Only the ceiling gates. The expected band is reported because
+                // the ratio tracks a niche's phrasing redundancy, not clustering
+                // quality — a healthy 13-cluster audit was once rejected at
+                // 48.4% purely because its competitors publish a lot of FAQs.
+                // Duplicate articles are caught directly by `duplicate_articles`.
                 name: "collapse_ratio",
                 state: !collapseMeasurable
                     ? "INCONCLUSIVE"
-                    : statistics.collapseRatio >= HARVEST_POLICY.collapseMin &&
-                        statistics.collapseRatio <= HARVEST_POLICY.collapseMax
-                      ? "PASS"
-                      : "FAIL",
+                    : statistics.collapseRatio > HARVEST_POLICY.collapseCeiling
+                      ? "FAIL"
+                      : "PASS",
                 detail: collapseMeasurable
-                    ? `${(statistics.collapseRatio * 100).toFixed(1)}%; require ${
-                          HARVEST_POLICY.collapseMin * 100
-                      }-${HARVEST_POLICY.collapseMax * 100}%`
+                    ? `${(statistics.collapseRatio * 100).toFixed(1)}%; ceiling ${
+                          HARVEST_POLICY.collapseCeiling * 100
+                      }%, expected ${HARVEST_POLICY.collapseExpectedMin * 100}-${
+                          HARVEST_POLICY.collapseExpectedMax * 100
+                      }%${
+                          statistics.collapseRatio < HARVEST_POLICY.collapseExpectedMin ||
+                          statistics.collapseRatio > HARVEST_POLICY.collapseExpectedMax
+                              ? " (outside expected band — check source mix)"
+                              : ""
+                      }`
                     : `only ${statistics.gapCount} gaps; need ${HARVEST_POLICY.minGapsForCollapseCheck}`,
             },
             {

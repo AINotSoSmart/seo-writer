@@ -199,7 +199,9 @@ export const runAuditTask = task({
             try {
                 await resend.emails.send({
                     from: EMAIL_FROM,
-                    to: "harvanshjatt@gmail.com",
+                    // Same channel as billing alerts. Hardcoding a personal
+                    // address meant the release-gate env var was ignored here.
+                    to: process.env.FOUNDER_ALERT_EMAIL || "harvanshjatt@gmail.com",
                     subject: `Audit failed: ${brandData.product_name || brandId}`,
                     react: AuditFailedEmail({
                         userId,
