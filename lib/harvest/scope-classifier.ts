@@ -47,7 +47,12 @@ export type ScopeClassificationResult = {
     callsSucceeded: number
 }
 
-const BATCH_SIZE = 50
+/**
+ * Keep batches small. Gemini structured output for 50 rows with five decision
+ * classes routinely returned the wrong assignment count or mangled UUID
+ * family_ids, which fail-closed the whole audit after harvest spend.
+ */
+const BATCH_SIZE = 25
 
 /**
  * Classification runs *after* the whole harvest — autocomplete, Tavily, and
@@ -65,9 +70,116 @@ type RawAssignment = {
     reason: string
 }
 
+const VALID_DECISIONS = new Set<ScopeDecision>([
+    "direct",
+    "adjacent",
+    "unrelated",
+    "third_party_branded",
+    "publisher_specific",
+])
+
 // findThirdPartyBrand lives in ./types.ts beside brandTokensFromUrls and
 // containsExcludedBrand — this module is server-only and cannot be imported by
 // the contract suite, which runs under plain node.
+
+/**
+ * Models copy short aliases (`f1`) reliably and invent/mangle UUIDs often.
+ * Prompt and schema use aliases; persistence still stores the real family UUID.
+ */
+function buildFamilyAliasMaps(families: AuditScopeFamily[]): {
+    aliasToId: Map<string, string>
+    idToAlias: Map<string, string>
+    nameToId: Map<string, string>
+} {
+    const aliasToId = new Map<string, string>()
+    const idToAlias = new Map<string, string>()
+    const nameToId = new Map<string, string>()
+    families.forEach((family, index) => {
+        const alias = `f${index + 1}`
+        aliasToId.set(alias, family.id)
+        idToAlias.set(family.id, alias)
+        const nameKey = family.name.trim().toLowerCase()
+        if (nameKey && !nameToId.has(nameKey)) {
+            nameToId.set(nameKey, family.id)
+        }
+    })
+    return { aliasToId, idToAlias, nameToId }
+}
+
+function resolveFamilyRef(
+    raw: unknown,
+    aliasToId: Map<string, string>,
+    nameToId: Map<string, string>,
+    familyIds: Set<string>,
+): string | null {
+    if (typeof raw !== "string") return null
+    const trimmed = raw.trim()
+    if (!trimmed) return null
+    const aliasHit = aliasToId.get(trimmed.toLowerCase())
+    if (aliasHit) return aliasHit
+    if (familyIds.has(trimmed)) return trimmed
+    const nameHit = nameToId.get(trimmed.toLowerCase())
+    if (nameHit) return nameHit
+    return null
+}
+
+function diagnoseContractFailure(
+    assignments: RawAssignment[],
+    batchLength: number,
+    aliasToId: Map<string, string>,
+    nameToId: Map<string, string>,
+    familyIds: Set<string>,
+): Record<string, unknown> {
+    let invalidDecision = 0
+    let badReason = 0
+    let directMissingFamily = 0
+    let unknownFamilyId = 0
+    const sampleUnknown: string[] = []
+    const seen = new Set<number>()
+    let duplicate = 0
+    let outOfRange = 0
+
+    for (const assignment of assignments) {
+        if (!VALID_DECISIONS.has(assignment.decision)) invalidDecision++
+        if (typeof assignment.reason !== "string") badReason++
+        const resolved = resolveFamilyRef(
+            assignment.family_id,
+            aliasToId,
+            nameToId,
+            familyIds,
+        )
+        const supplied =
+            typeof assignment.family_id === "string" &&
+            assignment.family_id.trim().length > 0
+        if (supplied && !resolved) {
+            unknownFamilyId++
+            if (sampleUnknown.length < 5) {
+                sampleUnknown.push(String(assignment.family_id))
+            }
+        }
+        if (assignment.decision === "direct" && !resolved) {
+            directMissingFamily++
+        }
+        if (!Number.isInteger(assignment.index)) outOfRange++
+        else if (assignment.index < 0 || assignment.index >= batchLength) {
+            outOfRange++
+        } else if (seen.has(assignment.index)) duplicate++
+        else seen.add(assignment.index)
+    }
+
+    return {
+        batchLength,
+        assignmentCount: assignments.length,
+        coveredIndexes: seen.size,
+        invalidDecision,
+        badReason,
+        directMissingFamily,
+        unknownFamilyId,
+        sampleUnknown,
+        duplicate,
+        outOfRange,
+    }
+}
 
 /**
  * Positive business-scope assignment.
@@ -88,6 +200,7 @@ export async function classifyQueriesToScope(
 
     const client = getGeminiClient()
     const familyIds = new Set(families.map((family) => family.id))
+    const { aliasToId, idToAlias, nameToId } = buildFamilyAliasMaps(families)
     const kept: ScopedHarvestedQuery[] = []
     const dropped: ScopeRejectedQuery[] = []
     let callsAttempted = 0
@@ -135,48 +248,53 @@ both relevant AND deliverable: something we could write for THIS business
 without naming somebody else or inventing their internal facts.
 
 Rules:
-1. Assign a direct search to exactly one family_id.
-2. Never infer a new product area.
-3. A generic technology phrase is not direct merely because every family uses
+1. Assign a direct search to exactly one family_id. family_id MUST be one of
+   the short aliases listed below (f1, f2, …) — never invent an id and never
+   use the family display name as family_id.
+2. For non-direct decisions, set family_id to null.
+3. Never infer a new product area.
+4. A generic technology phrase is not direct merely because every family uses
    that technology.
-4. A competitor page title is evidence that text exists, not permission to
+5. A competitor page title is evidence that text exists, not permission to
    expand beyond the confirmed scope.
-5. A search must use the same language as at least one confirmed search phrase
+6. A search must use the same language as at least one confirmed search phrase
    in its assigned family. A translated phrase in an unconfirmed language is
    adjacent, even when its meaning is otherwise direct.
-6. Deliverability outranks relevance. If a search is on-subject but names a
+7. Deliverability outranks relevance. If a search is on-subject but names a
    third party, it is "third_party_branded", not "direct". If it is on-subject
    but only its publisher could answer it, it is "publisher_specific".
-7. The publisher-specific test is: "could a competent outside writer answer
+8. The publisher-specific test is: "could a competent outside writer answer
    this correctly from public information?" First-person framing ("our", "we
    accept", "items we") is a strong signal, but the test is the dependency on
    private facts, not the wording — "photo restoration turnaround times" is
    still publisher-specific with the pronoun removed.
-8. Return exactly one assignment for every numbered query, preserving indexes.
+9. Return exactly one assignment for every numbered query, preserving indexes.
+   The assignments array length must equal the number of observed searches.
 
-WORKED EXAMPLES for a business that restores and animates old family photos:
-- "how to restore a faded photograph"            -> direct
-- "ai photo restoration"                          -> direct
-- "Using Adobe Firefly to Colorize Any Old Image" -> third_party_branded
-- "How to Animate Memories Using Fotor's AI"      -> third_party_branded
-- "Easy Steps to Upload Photos to Forever Studios"-> third_party_branded
-- "Understanding Our Turnaround Times"            -> publisher_specific
-- "Items We Accept: Slides, Negatives, Prints"    -> publisher_specific
-- "Our Easy Cancellation Policy and Terms"        -> publisher_specific
-- "Real Reviews: What Our Clients Say"            -> publisher_specific
-- "How We Protect Your Privacy and Your Images"   -> publisher_specific
-- "best dslr camera for landscapes"               -> adjacent
-- "how to file a tax return"                       -> unrelated
+WORKED EXAMPLES for a business with f1=Photo Restoration, f2=Photo Animation:
+- "how to restore a faded photograph"            -> direct, family_id=f1
+- "ai photo restoration"                          -> direct, family_id=f1
+- "how to animate an old photo"                   -> direct, family_id=f2
+- "Using Adobe Firefly to Colorize Any Old Image" -> third_party_branded, family_id=null
+- "How to Animate Memories Using Fotor's AI"      -> third_party_branded, family_id=null
+- "Easy Steps to Upload Photos to Forever Studios"-> third_party_branded, family_id=null
+- "Understanding Our Turnaround Times"            -> publisher_specific, family_id=null
+- "Items We Accept: Slides, Negatives, Prints"    -> publisher_specific, family_id=null
+- "Our Easy Cancellation Policy and Terms"        -> publisher_specific, family_id=null
+- "Real Reviews: What Our Clients Say"            -> publisher_specific, family_id=null
+- "How We Protect Your Privacy and Your Images"   -> publisher_specific, family_id=null
+- "best dslr camera for landscapes"               -> adjacent, family_id=null
+- "how to file a tax return"                       -> unrelated, family_id=null
 
 CONFIRMED FAMILIES:
 ${families
-    .map(
-        (family) =>
-            `- id=${family.id}\n  name=${family.name}\n  customer job=${family.description}\n  confirmed searches=${family.seedKeywords.join(" | ")}`,
-    )
+    .map((family) => {
+        const alias = idToAlias.get(family.id)!
+        return `- family_id=${alias}\n  name=${family.name}\n  customer job=${family.description}\n  confirmed searches=${family.seedKeywords.join(" | ")}`
+    })
     .join("\n")}
 
-OBSERVED SEARCHES:
+OBSERVED SEARCHES (${batch.length} items — return exactly ${batch.length} assignments):
 ${batch
     .map(
         (query, index) =>
@@ -249,272 +367,95 @@ ${batch
                 )
                     ? parsed.assignments
                     : []
-                const validDecisions = new Set<ScopeDecision>([
-                    "direct",
-                    "adjacent",
-                    "unrelated",
-                    "third_party_branded",
-                    "publisher_specific",
-                ])
-                // #region agent log
-                const diag = {
-                    invalidDecision: 0,
-                    badReason: 0,
-                    unknownFamilyId: 0,
-                    directMissingFamily: 0,
-                    sampleUnknownFamilies: [] as string[],
-                    sampleInvalidDecisions: [] as string[],
-                    sampleDirectMissing: [] as number[],
-                    decisionCounts: {} as Record<string, number>,
-                    indexIssues: {
-                        nonInteger: 0,
-                        outOfRange: 0,
-                        duplicate: 0,
-                    },
-                }
-                const seenIndexes = new Set<number>()
-                for (const assignment of assignments) {
-                    const d = String(assignment?.decision ?? "undefined")
-                    diag.decisionCounts[d] = (diag.decisionCounts[d] || 0) + 1
-                    if (!validDecisions.has(assignment.decision)) {
-                        diag.invalidDecision++
-                        if (diag.sampleInvalidDecisions.length < 5) {
-                            diag.sampleInvalidDecisions.push(d)
-                        }
-                    }
-                    if (typeof assignment.reason !== "string") diag.badReason++
-                    const suppliedFamily =
-                        typeof assignment.family_id === "string" &&
-                        assignment.family_id.length > 0
-                    if (
-                        suppliedFamily &&
-                        !familyIds.has(assignment.family_id as string)
-                    ) {
-                        diag.unknownFamilyId++
-                        if (diag.sampleUnknownFamilies.length < 5) {
-                            diag.sampleUnknownFamilies.push(
-                                String(assignment.family_id),
-                            )
-                        }
-                    }
-                    if (assignment.decision === "direct" && !suppliedFamily) {
-                        diag.directMissingFamily++
-                        if (diag.sampleDirectMissing.length < 5) {
-                            diag.sampleDirectMissing.push(assignment.index)
-                        }
-                    }
-                    if (!Number.isInteger(assignment.index)) {
-                        diag.indexIssues.nonInteger++
-                    } else if (
-                        assignment.index < 0 ||
-                        assignment.index >= batch.length
-                    ) {
-                        diag.indexIssues.outOfRange++
-                    } else if (seenIndexes.has(assignment.index)) {
-                        diag.indexIssues.duplicate++
-                    } else {
-                        seenIndexes.add(assignment.index)
-                    }
-                }
-                // #endregion
-                const malformed = assignments.some((assignment) => {
-                    const suppliedFamily =
-                        typeof assignment.family_id === "string" &&
-                        assignment.family_id.length > 0
-                    return (
-                        !validDecisions.has(assignment.decision) ||
-                        typeof assignment.reason !== "string" ||
-                        (suppliedFamily &&
-                            !familyIds.has(assignment.family_id as string)) ||
-                        (assignment.decision === "direct" &&
-                            !suppliedFamily)
-                    )
-                })
-                if (malformed || assignments.length !== batch.length) {
-                    lastError = "assignments violated the scope response contract"
-                    // #region agent log
-                    const payload = {
-                        sessionId: "56d2b8",
-                        runId: "pre-fix",
-                        hypothesisId: "A-E",
-                        location: "scope-classifier.ts:contract",
-                        message: "scope response contract violated",
-                        data: {
-                            attempt,
-                            offset,
-                            batchLength: batch.length,
-                            assignmentCount: assignments.length,
-                            lengthMismatch:
-                                assignments.length !== batch.length,
-                            malformed,
-                            familyCount: families.length,
-                            knownFamilyIds: families.map((f) => f.id),
-                            knownFamilyNames: families.map((f) => f.name),
-                            textLen: (response.text || "").length,
-                            ...diag,
-                        },
-                        timestamp: Date.now(),
-                    }
-                    console.error(
-                        "[debug-56d2b8] scope contract violation",
-                        JSON.stringify(payload.data),
-                    )
-                    fetch(
-                        "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "X-Debug-Session-Id": "56d2b8",
-                            },
-                            body: JSON.stringify(payload),
-                        },
-                    ).catch(() => {})
-                    // #endregion
-                    continue
-                }
+
                 const candidate = new Map<number, RawAssignment>()
+                let malformed = false
                 for (const assignment of assignments) {
                     if (
-                        Number.isInteger(assignment.index) &&
-                        assignment.index >= 0 &&
-                        assignment.index < batch.length &&
-                        !candidate.has(assignment.index)
+                        !Number.isInteger(assignment.index) ||
+                        assignment.index < 0 ||
+                        assignment.index >= batch.length ||
+                        candidate.has(assignment.index)
                     ) {
-                        candidate.set(assignment.index, assignment)
+                        continue
+                    }
+                    if (
+                        !VALID_DECISIONS.has(assignment.decision) ||
+                        typeof assignment.reason !== "string"
+                    ) {
+                        malformed = true
+                        break
+                    }
+
+                    const resolved = resolveFamilyRef(
+                        assignment.family_id,
+                        aliasToId,
+                        nameToId,
+                        familyIds,
+                    )
+
+                    if (assignment.decision === "direct") {
+                        if (!resolved) {
+                            malformed = true
+                            break
+                        }
+                        candidate.set(assignment.index, {
+                            ...assignment,
+                            family_id: resolved,
+                        })
+                    } else {
+                        // Non-direct: an unknown/mangled family_id must not
+                        // fail the whole batch — clear it and keep the decision.
+                        candidate.set(assignment.index, {
+                            ...assignment,
+                            family_id: resolved,
+                        })
                     }
                 }
-                if (candidate.size !== batch.length) {
-                    lastError = `${candidate.size}/${batch.length} decisions`
-                    // #region agent log
-                    const payload = {
-                        sessionId: "56d2b8",
-                        runId: "pre-fix",
-                        hypothesisId: "A",
-                        location: "scope-classifier.ts:index-coverage",
-                        message: "assignment index coverage incomplete",
-                        data: {
+
+                if (malformed || candidate.size !== batch.length) {
+                    const diag = diagnoseContractFailure(
+                        assignments,
+                        batch.length,
+                        aliasToId,
+                        nameToId,
+                        familyIds,
+                    )
+                    lastError =
+                        candidate.size !== batch.length
+                            ? `${candidate.size}/${batch.length} decisions`
+                            : "assignments violated the scope response contract"
+                    console.error(
+                        "[scope-classifier] contract violation",
+                        JSON.stringify({
                             attempt,
                             offset,
-                            batchLength: batch.length,
-                            assignmentCount: assignments.length,
-                            candidateSize: candidate.size,
+                            lastError,
                             ...diag,
-                        },
-                        timestamp: Date.now(),
-                    }
-                    console.error(
-                        "[debug-56d2b8] index coverage fail",
-                        JSON.stringify(payload.data),
+                        }),
                     )
-                    fetch(
-                        "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "X-Debug-Session-Id": "56d2b8",
-                            },
-                            body: JSON.stringify(payload),
-                        },
-                    ).catch(() => {})
-                    // #endregion
                     continue
                 }
+
                 byIndex = candidate
                 callsSucceeded++
-                // #region agent log
-                fetch(
-                    "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "X-Debug-Session-Id": "56d2b8",
-                        },
-                        body: JSON.stringify({
-                            sessionId: "56d2b8",
-                            runId: "pre-fix",
-                            hypothesisId: "ok",
-                            location: "scope-classifier.ts:batch-ok",
-                            message: "scope batch accepted",
-                            data: {
-                                attempt,
-                                offset,
-                                batchLength: batch.length,
-                                decisionCounts: diag.decisionCounts,
-                            },
-                            timestamp: Date.now(),
-                        }),
-                    },
-                ).catch(() => {})
-                // #endregion
                 break
             } catch (error) {
                 lastError =
                     error instanceof Error ? error.message : "unknown error"
-                // #region agent log
-                const payload = {
-                    sessionId: "56d2b8",
-                    runId: "pre-fix",
-                    hypothesisId: "E",
-                    location: "scope-classifier.ts:catch",
-                    message: "scope classification attempt threw",
-                    data: {
+                console.error(
+                    "[scope-classifier] attempt threw",
+                    JSON.stringify({
                         attempt,
                         offset,
                         batchLength: batch.length,
                         error: lastError,
-                    },
-                    timestamp: Date.now(),
-                }
-                console.error(
-                    "[debug-56d2b8] classification throw",
-                    JSON.stringify(payload.data),
+                    }),
                 )
-                fetch(
-                    "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "X-Debug-Session-Id": "56d2b8",
-                        },
-                        body: JSON.stringify(payload),
-                    },
-                ).catch(() => {})
-                // #endregion
             }
         }
 
         if (!byIndex) {
-            // #region agent log
-            fetch(
-                "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-Debug-Session-Id": "56d2b8",
-                    },
-                    body: JSON.stringify({
-                        sessionId: "56d2b8",
-                        runId: "pre-fix",
-                        hypothesisId: "fatal",
-                        location: "scope-classifier.ts:fatal",
-                        message: "scope classification exhausted attempts",
-                        data: {
-                            offset,
-                            batchLength: batch.length,
-                            lastError,
-                            classifiableTotal: classifiable.length,
-                            familyCount: families.length,
-                        },
-                        timestamp: Date.now(),
-                    }),
-                },
-            ).catch(() => {})
-            // #endregion
             throw new Error(
                 `Business-scope classification failed after ${MAX_ATTEMPTS_PER_BATCH} bounded attempts: ${lastError}`,
             )

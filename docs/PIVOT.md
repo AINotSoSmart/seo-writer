@@ -10,7 +10,7 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-07-30
+Last implementation update: 2026-07-31
 
 Status: **confirmed-scope application contract implemented and locally
 validated; the 20260731 migration is not yet applied and checkout remains
@@ -560,6 +560,40 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-07-31 - scope classifier fail-closed on UUID family_ids
+
+**Production evidence.** A Trigger.dev `run-topical-audit` died after harvest
+spend with:
+
+```
+Business-scope classification failed after 4 bounded attempts:
+assignments violated the scope response contract
+```
+
+A second run of the same site then succeeded with no code change — the gate is
+nondeterministic. The first failure did not include per-check diagnostics; the
+exact lastError string is only set when Gemini's batch response fails the
+malformed / coverage contract (not when the call throws).
+
+**Root cause class.** The classifier asked the model to echo Postgres UUIDs as
+`family_id`, and treated any unknown `family_id` on a non-direct row as a batch
+failure. Structured output for 50-row batches also routinely missed indexes.
+Worked examples said `-> direct` with no `family_id`, teaching the wrong shape.
+
+**Fixed in `lib/harvest/scope-classifier.ts`:**
+
+- Prompt and schema use short aliases (`f1`…`fN`); aliases map back to real
+  family UUIDs before persistence.
+- Worked examples show `direct, family_id=f1` and `…, family_id=null`.
+- `BATCH_SIZE` reduced from 50 → 25.
+- Non-direct rows with a mangled/unknown `family_id` clear the id and keep the
+  decision instead of aborting the batch.
+- Alias, raw UUID, and case-insensitive family name are accepted as refs.
+- Durable `console.error("[scope-classifier] …")` diagnostics on contract
+  violations so the next Trigger failure names the counters.
+
+Contract suite pins aliases, batch size, and the non-direct clear path.
 
 ### 2026-08-02 - a deleted brand stranded onboarding
 

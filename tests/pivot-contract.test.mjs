@@ -1089,6 +1089,24 @@ test("scope classification rejects undeliverable topics, not just irrelevant one
     // A deliverability rejection must not suggest a family to reinstate into.
     assert.match(classifier, /assignment\.decision === "adjacent" \? familyId : null/)
 
+    // Production audits failed closed when Gemini mangled UUID family_ids or
+    // returned a non-direct row with an invented id. Short aliases (f1, f2)
+    // are what the model sees; UUIDs are resolved after. Non-direct unknown
+    // family refs must clear, not abort the batch.
+    assert.match(classifier, /buildFamilyAliasMaps|aliasToId/)
+    assert.match(classifier, /resolveFamilyRef/)
+    assert.match(classifier, /BATCH_SIZE = 25/)
+    assert.match(classifier, /family_id=\$\{alias\}/)
+    assert.match(
+        classifier,
+        /direct, family_id=f1/,
+        "worked examples must show family_id aliases, not bare 'direct'",
+    )
+    assert.match(
+        classifier,
+        /Non-direct: an unknown\/mangled family_id must not/,
+    )
+
     assert.ok(thirdPartyBranded.length === 4 && publisherSpecific.length === 6)
 })
 
