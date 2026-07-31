@@ -731,7 +731,7 @@ export default function OnboardingPage() {
                                                             <span>
                                                                 Brand voice &amp; details
                                                                 <span className="ml-1.5 text-xs text-stone-400">
-                                                                    optional review
+                                                                    optional review (we need it for brand aligned articles writing)
                                                                 </span>
                                                             </span>
                                                             <span className="text-xs text-stone-400 group-open:hidden">
