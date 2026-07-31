@@ -1300,10 +1300,14 @@ test("the demand check never blocks the brand-analysis response", async () => {
             `${file}: must call the decoupled demand-check endpoint`,
         )
         // setBrandData must not be waiting on the demand-check fetch — the
-        // fetch call must appear strictly after setBrandData(data) is invoked,
-        // not be awaited before it.
-        const setBrandDataIdx = client.indexOf("setBrandData(data)")
+        // fetch call must appear strictly after setBrandData is invoked for
+        // the analyze result, not be awaited before it.
         const demandFetchIdx = client.indexOf("/api/analyze-brand/demand-check")
+        const beforeDemand = client.slice(0, demandFetchIdx)
+        const setBrandDataIdx = Math.max(
+            beforeDemand.lastIndexOf("setBrandData({"),
+            beforeDemand.lastIndexOf("setBrandData(data)"),
+        )
         assert.ok(setBrandDataIdx !== -1 && demandFetchIdx !== -1)
         assert.ok(
             setBrandDataIdx < demandFetchIdx,
@@ -1580,8 +1584,18 @@ test("confirmed business scope is the only production relevance contract", async
     assert.match(onboarding, /Find my business areas/)
     assert.match(onboarding, /<ScopeFamilyReview/)
     assert.match(onboarding, /onboarding_competitors/)
-    assert.match(review, /Rename, remove,[\s\S]*add, or reorder/)
-    assert.match(review, /Why we found this area/)
+    assert.match(review, /disableAdd=\{atCap\}/)
+    assert.match(review, /\{totalDirections\}\/\{MAX_SEARCH_DIRECTIONS\}/)
+    assert.match(review, /Evidence \(\{family\.evidence\.length\}\)/)
+    assert.match(analysis, /trimFamiliesToSearchCap/)
+    assert.match(
+        await text("lib/scope-search-cap.ts"),
+        /export function trimFamiliesToSearchCap/,
+    )
+    assert.match(
+        await text("lib/scope-search-cap.ts"),
+        /MAX_SEARCH_DIRECTIONS = 12/,
+    )
 
     const snapshotWrite = auditRoute.indexOf(
         '"create_customer_audit_with_scope"',

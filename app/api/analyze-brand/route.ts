@@ -5,6 +5,7 @@ import { jsonrepair } from "jsonrepair"
 import {
   MAX_TOTAL_SCOPE_SEEDS,
   normalizeSeed,
+  trimFamiliesToSearchCap,
   validateGroundedScope,
 } from "@/lib/brand-scope"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
@@ -302,9 +303,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const scopedFamilies = trimFamiliesToSearchCap(grounded.families)
+
     const validated = BrandDetailsSchema.safeParse({
       ...brandData,
-      scope_families: grounded.families,
+      scope_families: scopedFamilies,
       target_seed_keywords: targetSeeds,
     })
     if (!validated.success) {

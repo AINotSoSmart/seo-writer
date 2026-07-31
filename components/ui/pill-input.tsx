@@ -10,9 +10,18 @@ export interface PillInputProps {
     placeholder?: string
     className?: string
     variant?: "default" | "url" | "keyword"
+    /** When true, existing pills can be removed but nothing new can be added. */
+    disableAdd?: boolean
 }
 
-export function PillInput({ value = [], onChange, placeholder, className, variant = "default" }: PillInputProps) {
+export function PillInput({
+    value = [],
+    onChange,
+    placeholder,
+    className,
+    variant = "default",
+    disableAdd = false,
+}: PillInputProps) {
     const [inputValue, setInputValue] = React.useState("")
     const inputRef = React.useRef<HTMLInputElement>(null)
 
@@ -21,7 +30,6 @@ export function PillInput({ value = [], onChange, placeholder, className, varian
             e.preventDefault()
             addPill()
         } else if (e.key === "Backspace" && inputValue === "" && value.length > 0) {
-            // Delete the last item if input is empty
             const newValue = [...value]
             newValue.pop()
             onChange(newValue)
@@ -29,9 +37,9 @@ export function PillInput({ value = [], onChange, placeholder, className, varian
     }
 
     const addPill = () => {
+        if (disableAdd) return
         const trimmed = inputValue.trim()
         if (trimmed) {
-            // Check for duplicates
             if (!value.includes(trimmed)) {
                 onChange([...value, trimmed])
             }
@@ -45,9 +53,8 @@ export function PillInput({ value = [], onChange, placeholder, className, varian
         onChange(newValue)
     }
 
-    // Focus input when clicking on the container
     const handleContainerClick = () => {
-        inputRef.current?.focus()
+        if (!disableAdd) inputRef.current?.focus()
     }
 
     const renderIcon = () => {
@@ -62,6 +69,7 @@ export function PillInput({ value = [], onChange, placeholder, className, varian
                 "flex flex-wrap items-center gap-1.5 w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm transition-all",
                 "focus-within:ring-1 focus-within:ring-stone-200 focus-within:border-stone-200",
                 "min-h-[42px]",
+                disableAdd && "cursor-default",
                 className
             )}
             onClick={handleContainerClick}
@@ -87,16 +95,18 @@ export function PillInput({ value = [], onChange, placeholder, className, varian
                 </div>
             ))}
 
-            <input
-                ref={inputRef}
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onBlur={addPill} // Add on blur as well
-                className="flex-1 bg-transparent border-none outline-none min-w-[120px] placeholder:text-stone-400 text-stone-900 text-sm h-6 py-0 focus:ring-0"
-                placeholder={value.length === 0 ? placeholder : ""}
-            />
+            {!disableAdd && (
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={addPill}
+                    className="flex-1 bg-transparent border-none outline-none min-w-[120px] placeholder:text-stone-400 text-stone-900 text-sm h-6 py-0 focus:ring-0"
+                    placeholder={value.length === 0 ? placeholder : ""}
+                />
+            )}
         </div>
     )
 }

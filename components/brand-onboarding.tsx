@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 
 import { PillInput } from "@/components/ui/pill-input"
 import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
+import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
 
 const ANALYZE_PHASES = [
     { afterMs: 0, label: "Reading your site…" },
@@ -70,7 +71,10 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || "Failed to analyze brand")
-            setBrandData(data)
+            setBrandData({
+                ...data,
+                scope_families: trimFamiliesToSearchCap(data.scope_families || []),
+            })
 
             // Advisory-only and intentionally NOT awaited before this screen
             // renders — see the incident note on findSeedsWithoutDemand in

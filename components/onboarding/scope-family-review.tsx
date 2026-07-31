@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 
 import type { ScopeFamily } from "@/lib/schemas/brand"
+import { MAX_SEARCH_DIRECTIONS } from "@/lib/scope-search-cap"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PillInput } from "@/components/ui/pill-input"
@@ -18,7 +19,7 @@ function normalizeSeed(value: string): string {
     return value.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()
 }
 
-export const MAX_SEARCH_DIRECTIONS = 12
+export { MAX_SEARCH_DIRECTIONS }
 
 export function countScopeSearches(families: ScopeFamily[]): number {
     return families
@@ -51,8 +52,7 @@ export function ScopeFamilyReview({
         .map(normalizeSeed)
         .filter((seed) => seed && !assignedSeeds.has(seed))
     const totalDirections = countScopeSearches(ordered)
-    const overBy = totalDirections - MAX_SEARCH_DIRECTIONS
-    const overCap = overBy > 0
+    const atCap = totalDirections >= MAX_SEARCH_DIRECTIONS
 
     const replace = (index: number, family: ScopeFamily) => {
         onChange(
@@ -60,6 +60,17 @@ export function ScopeFamilyReview({
                 currentIndex === index ? family : current,
             ),
         )
+    }
+    const replaceSeeds = (index: number, seed_keywords: string[]) => {
+        const family = ordered[index]
+        const others =
+            totalDirections - family.seed_keywords.length
+        const room = Math.max(0, MAX_SEARCH_DIRECTIONS - others)
+        replace(index, {
+            ...family,
+            seed_keywords: seed_keywords.slice(0, room),
+            priority: index,
+        })
     }
     const move = (index: number, direction: -1 | 1) => {
         const target = index + direction
@@ -76,6 +87,7 @@ export function ScopeFamilyReview({
         )
     }
     const add = () => {
+        if (atCap) return
         onChange([
             ...ordered,
             {
@@ -97,25 +109,18 @@ export function ScopeFamilyReview({
         <section className="space-y-2">
             <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-stone-500">
-                    Priority order · research uses the search chips only
+                    Priority order · research uses the search chips
                 </p>
                 <p
                     className={cn(
-                        "font-mono text-[11px] tabular-nums",
-                        overCap ? "font-semibold text-red-600" : "text-stone-400",
+                        "font-mono text-[11px] tabular-nums text-stone-400",
+                        atCap && "text-stone-600",
                     )}
                 >
                     {totalDirections}/{MAX_SEARCH_DIRECTIONS}
                 </p>
             </div>
 
-            {overCap && (
-                <p className="rounded-md bg-red-50 px-2.5 py-1.5 text-xs text-red-800">
-                    Remove {overBy} search chip{overBy === 1 ? "" : "s"} (click ×)
-                    or delete an area — we cap at {MAX_SEARCH_DIRECTIONS} so the
-                    audit stays fast and focused.
-                </p>
-            )}
             {unassigned.length > 0 && (
                 <p className="text-xs text-amber-800">
                     Put these into an area: {unassigned.join(", ")}
@@ -195,12 +200,9 @@ export function ScopeFamilyReview({
                                 <PillInput
                                     value={family.seed_keywords}
                                     onChange={(seed_keywords) =>
-                                        replace(index, {
-                                            ...family,
-                                            seed_keywords,
-                                            priority: index,
-                                        })
+                                        replaceSeeds(index, seed_keywords)
                                     }
+                                    disableAdd={atCap}
                                     placeholder="Add a Google search, Enter"
                                     className="min-h-0 border-0 bg-stone-50/80 px-1.5 py-1"
                                 />
@@ -255,7 +257,7 @@ export function ScopeFamilyReview({
             <button
                 type="button"
                 onClick={add}
-                disabled={ordered.length >= 12}
+                disabled={atCap || ordered.length >= 12}
                 className="inline-flex h-8 items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 disabled:opacity-40"
             >
                 <Plus className="h-3.5 w-3.5" />

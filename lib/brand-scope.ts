@@ -8,10 +8,15 @@ import {
 // Relative, not "@/lib/...": this module is imported directly by the contract
 // suite, which runs under plain node and cannot resolve the tsconfig alias.
 } from "./schemas/brand.ts"
+import {
+    MAX_SEARCH_DIRECTIONS,
+    trimFamiliesToSearchCap,
+} from "./scope-search-cap.ts"
 
 export const SCOPE_CONTRACT_VERSION = "confirmed-business-scope-v1"
 export const MAX_SCOPE_FAMILIES = 12
-export const MAX_TOTAL_SCOPE_SEEDS = 12
+export const MAX_TOTAL_SCOPE_SEEDS = MAX_SEARCH_DIRECTIONS
+export { trimFamiliesToSearchCap }
 
 type CrawledPage = {
     url: string

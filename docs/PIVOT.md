@@ -12,11 +12,11 @@ for what to do next.
 
 Last implementation update: 2026-07-31
 
-Status: **audit progress UI refined to opacity-driven text steps; audit/prospect
-Trigger maxDuration raised to 1800s (30m); SERP harvest parallelized; brandless
-users gated to onboarding; qualified cluster floor locked at 8–15; the 20260731
-migration is not yet applied and checkout remains disabled pending the
-staging/external release gate**
+Status: **confirm-scope auto-trims to 12 searches (add disabled at cap); audit
+progress UI refined; audit/prospect Trigger maxDuration 1800s; SERP harvest
+parallelized; brandless users gated to onboarding; qualified cluster floor
+locked at 8–15; the 20260731 migration is not yet applied and checkout remains
+disabled pending the staging/external release gate**
 
 ## 1. Locked product contract
 
@@ -563,14 +563,21 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-31 - confirm-scope auto-trims to 12; no trim essay
+
+Analyze returns at most 12 search directions (`trimFamiliesToSearchCap` in
+`lib/scope-search-cap.ts`, applied in `/api/analyze-brand`). The review UI
+shows a quiet `N/12` counter; at 12, chip add and “Add area” are disabled.
+Under 12, the user can add. Continue is never a “remove N searches” nag —
+over-cap state is prevented, not explained.
+
 ### 2026-07-31 - confirm-scope onboarding is compact and action-led
 
 Second pass after the widen-the-island change still felt exhausting: stacked
 explanations, tall family cards, and brand DNA always expanded. Now:
 
 - Title is one line; product areas are dense rows (name + search chips + one-line job).
-- Cap copy tells the exact action: “Remove N search chips (click ×)…”.
-- Continue becomes that same action while over 12.
+- Quiet `N/12` counter; add disabled at cap (see auto-trim entry above).
 - Brand voice/details sit in a closed disclosure so scope is the default focus.
 
 ### 2026-07-31 - confirm-scope step uses page space instead of a cramped nest

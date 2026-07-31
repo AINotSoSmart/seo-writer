@@ -24,7 +24,8 @@ import { CustomSpinner } from "@/components/CustomSpinner"
 import { PillInput } from "@/components/ui/pill-input"
 import { AuditConsole } from "@/components/audit/audit-console"
 import { ScopeResults } from "@/components/audit/scope-results"
-import { ScopeFamilyReview, countScopeSearches, MAX_SEARCH_DIRECTIONS } from "@/components/onboarding/scope-family-review"
+import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
+import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
 
 const STORAGE_KEYS = {
     STEP: 'onboarding_step',
@@ -164,7 +165,13 @@ export default function OnboardingPage() {
         // Restore brand data if exists (saves API costs on refresh!)
         if (savedBrandData) {
             try {
-                setBrandData(JSON.parse(savedBrandData))
+                const parsed = JSON.parse(savedBrandData)
+                setBrandData({
+                    ...parsed,
+                    scope_families: trimFamiliesToSearchCap(
+                        parsed.scope_families || [],
+                    ),
+                })
             } catch { }
         }
         if (savedTargetSeeds) {
@@ -340,7 +347,10 @@ export default function OnboardingPage() {
                     ? data.scope_analysis_issues
                     : [],
             )
-            setBrandData(data)
+            setBrandData({
+                ...data,
+                scope_families: trimFamiliesToSearchCap(data.scope_families || []),
+            })
 
             // Advisory-only and intentionally NOT awaited before this screen
             // renders — see the incident note on findSeedsWithoutDemand in
@@ -526,14 +536,6 @@ export default function OnboardingPage() {
         const arr = value.split('\n')
         setBrandData(prev => prev ? ({ ...prev, [field]: arr }) : null)
     }
-
-    const scopeSearchCount = brandData
-        ? countScopeSearches(brandData.scope_families || [])
-        : 0
-    const scopeSearchesOver =
-        scopeSearchCount > MAX_SEARCH_DIRECTIONS
-            ? scopeSearchCount - MAX_SEARCH_DIRECTIONS
-            : 0
 
     return (
         <div className={`flex min-h-[calc(100vh-5rem)] flex-col px-4 py-10 font-sans sm:px-6 ${brandData && step === "brand" ? "items-stretch sm:items-center" : "items-center justify-center"}`}>
@@ -957,7 +959,7 @@ export default function OnboardingPage() {
 
                                                     <Button
                                                         onClick={handleSaveBrand}
-                                                        disabled={savingBrand || scopeSearchesOver > 0}
+                                                        disabled={savingBrand}
                                                         className={`
                           w-full h-10 font-semibold
                           bg-gradient-to-b from-stone-800 to-stone-950
@@ -970,8 +972,6 @@ export default function OnboardingPage() {
                                                                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
                                                                 Saving...
                                                             </>
-                                                        ) : scopeSearchesOver > 0 ? (
-                                                            `Remove ${scopeSearchesOver} search${scopeSearchesOver === 1 ? "" : "es"} to continue`
                                                         ) : (
                                                             <>
                                                                 Continue
