@@ -24,7 +24,7 @@ import { CustomSpinner } from "@/components/CustomSpinner"
 import { PillInput } from "@/components/ui/pill-input"
 import { AuditConsole } from "@/components/audit/audit-console"
 import { ScopeResults } from "@/components/audit/scope-results"
-import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
+import { ScopeFamilyReview, countScopeSearches, MAX_SEARCH_DIRECTIONS } from "@/components/onboarding/scope-family-review"
 
 const STORAGE_KEYS = {
     STEP: 'onboarding_step',
@@ -527,6 +527,13 @@ export default function OnboardingPage() {
         setBrandData(prev => prev ? ({ ...prev, [field]: arr }) : null)
     }
 
+    const scopeSearchCount = brandData
+        ? countScopeSearches(brandData.scope_families || [])
+        : 0
+    const scopeSearchesOver =
+        scopeSearchCount > MAX_SEARCH_DIRECTIONS
+            ? scopeSearchCount - MAX_SEARCH_DIRECTIONS
+            : 0
 
     return (
         <div className={`flex min-h-[calc(100vh-5rem)] flex-col px-4 py-10 font-sans sm:px-6 ${brandData && step === "brand" ? "items-stretch sm:items-center" : "items-center justify-center"}`}>
@@ -680,17 +687,11 @@ export default function OnboardingPage() {
                                             </div>
                                         ) : (
                                             // Brand review — page scrolls; no nested 60vh trap
-                                            <div className="space-y-8 pb-2">
-                                                <div className="max-w-2xl">
-                                                    <h2 className="font-serif text-2xl tracking-tight text-stone-900 sm:text-[1.75rem]">
-                                                        Confirm your business scope
+                                            <div className="space-y-4 pb-1">
+                                                <div className="flex items-baseline justify-between gap-3">
+                                                    <h2 className="font-serif text-xl tracking-tight text-stone-900">
+                                                        Confirm what you sell
                                                     </h2>
-                                                    <p className="mt-2 text-sm leading-relaxed text-stone-500">
-                                                        Each block is one product area: a name, the
-                                                        customer job, and the Google searches we may
-                                                        research. Nothing starts until this list is
-                                                        right.
-                                                    </p>
                                                 </div>
 
                                                 <ScopeFamilyReview
@@ -707,11 +708,11 @@ export default function OnboardingPage() {
                                                 />
 
                                                 {scopeAnalysisIssues.length > 0 && (
-                                                    <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
-                                                        <p className="font-medium">
-                                                            Extraction notes
-                                                        </p>
-                                                        <ul className="mt-1.5 list-disc space-y-1 pl-4 text-amber-900/90">
+                                                    <details className="text-xs text-stone-500">
+                                                        <summary className="cursor-pointer hover:text-stone-700">
+                                                            Extraction notes ({scopeAnalysisIssues.length})
+                                                        </summary>
+                                                        <ul className="mt-1.5 list-disc space-y-1 pl-4">
                                                             {scopeAnalysisIssues.map((issue, index) => (
                                                                 <li key={`${issue.family || "scope"}-${index}`}>
                                                                     {issue.family ? `${issue.family}: ` : ""}
@@ -719,18 +720,27 @@ export default function OnboardingPage() {
                                                                 </li>
                                                             ))}
                                                         </ul>
-                                                    </div>
+                                                    </details>
                                                 )}
 
-                                                <div className="border-t border-stone-100 pt-6">
-                                                    <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-400">
-                                                        Brand details
-                                                    </p>
-                                                    <p className="mt-1 text-sm text-stone-500">
-                                                        Used later for writing voice — skim and fix
-                                                        anything wrong.
-                                                    </p>
-                                                </div>
+                                                <details className="group rounded-lg border border-stone-200">
+                                                    <summary className="cursor-pointer list-none px-3 py-2.5 text-sm text-stone-600 marker:content-none [&::-webkit-details-marker]:hidden">
+                                                        <span className="flex items-center justify-between gap-2">
+                                                            <span>
+                                                                Brand voice &amp; details
+                                                                <span className="ml-1.5 text-xs text-stone-400">
+                                                                    optional review
+                                                                </span>
+                                                            </span>
+                                                            <span className="text-xs text-stone-400 group-open:hidden">
+                                                                Show
+                                                            </span>
+                                                            <span className="hidden text-xs text-stone-400 group-open:inline">
+                                                                Hide
+                                                            </span>
+                                                        </span>
+                                                    </summary>
+                                                    <div className="space-y-5 border-t border-stone-100 px-3 py-4">
 
                                                 {/* 1. Product Identity */}
                                                 <div className="space-y-3">
@@ -883,19 +893,21 @@ export default function OnboardingPage() {
                                                     </select>
                                                     <p className={`text-[10px] text-right text-stone-400`}>Select the style for AI-generated featured images.</p>
                                                 </div>
+                                                    </div>
+                                                </details>
 
-                                                <div className="sticky bottom-0 space-y-4 border-t border-stone-100 bg-white/95 py-4 backdrop-blur-sm">
-                                                    <div className="grid grid-cols-2 gap-3">
+                                                <div className="sticky bottom-0 space-y-3 border-t border-stone-100 bg-white/95 py-3 backdrop-blur-sm">
+                                                    <div className="grid grid-cols-2 gap-2">
                                                         <div>
-                                                            <label className="mb-1 block text-[11px] font-medium text-stone-500">
-                                                                Search country
+                                                            <label className="mb-1 block text-[10px] font-medium text-stone-400">
+                                                                Country
                                                             </label>
                                                             <select
-                                                                className="h-9 w-full rounded-md border border-stone-200 bg-white px-2 text-sm text-stone-900"
+                                                                className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs text-stone-900"
                                                                 value={brandData.search_country || ""}
                                                                 onChange={e => updateField('search_country', e.target.value)}
                                                             >
-                                                                <option value="">Global (No filter)</option>
+                                                                <option value="">Global</option>
                                                                 <option value="australia">Australia</option>
                                                                 <option value="united states">United States</option>
                                                                 <option value="united kingdom">United Kingdom</option>
@@ -927,32 +939,30 @@ export default function OnboardingPage() {
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="mb-1 block text-[11px] font-medium text-stone-500">
-                                                                Topic source
+                                                            <label className="mb-1 block text-[10px] font-medium text-stone-400">
+                                                                Topic
                                                             </label>
                                                             <select
-                                                                className="h-9 w-full rounded-md border border-stone-200 bg-white px-2 text-sm text-stone-900"
+                                                                className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs text-stone-900"
                                                                 value={brandData.search_topic || "general"}
                                                                 onChange={e => updateField('search_topic', e.target.value)}
                                                             >
-                                                                <option value="general">General (Web)</option>
+                                                                <option value="general">General</option>
                                                                 <option value="news">News</option>
                                                                 <option value="finance">Finance</option>
-                                                                <option value="journal">Journal (Research)</option>
+                                                                <option value="journal">Journal</option>
                                                             </select>
                                                         </div>
                                                     </div>
-                                                    <p className="text-[10px] text-stone-400">
-                                                        Filters research sources for audits and articles.
-                                                    </p>
 
                                                     <Button
                                                         onClick={handleSaveBrand}
-                                                        disabled={savingBrand}
+                                                        disabled={savingBrand || scopeSearchesOver > 0}
                                                         className={`
                           w-full h-10 font-semibold
                           bg-gradient-to-b from-stone-800 to-stone-950
                           hover:from-stone-700 hover:to-stone-900
+                          disabled:opacity-50
                         `}
                                                     >
                                                         {savingBrand ? (
@@ -960,6 +970,8 @@ export default function OnboardingPage() {
                                                                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
                                                                 Saving...
                                                             </>
+                                                        ) : scopeSearchesOver > 0 ? (
+                                                            `Remove ${scopeSearchesOver} search${scopeSearchesOver === 1 ? "" : "es"} to continue`
                                                         ) : (
                                                             <>
                                                                 Continue

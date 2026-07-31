@@ -563,6 +563,16 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-31 - confirm-scope onboarding is compact and action-led
+
+Second pass after the widen-the-island change still felt exhausting: stacked
+explanations, tall family cards, and brand DNA always expanded. Now:
+
+- Title is one line; product areas are dense rows (name + search chips + one-line job).
+- Cap copy tells the exact action: “Remove N search chips (click ×)…”.
+- Continue becomes that same action while over 12.
+- Brand voice/details sit in a closed disclosure so scope is the default focus.
+
 ### 2026-07-31 - confirm-scope step uses page space instead of a cramped nest
 
 Brand confirm no longer traps families inside `max-h-[60vh]` with stacked
