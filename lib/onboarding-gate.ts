@@ -7,31 +7,13 @@
  * site; API routes are never gated here (analyze-brand runs before save).
  */
 
-export type BrandGateClient = {
-    from: (table: string) => {
-        select: (columns: string) => {
-            eq: (
-                column: string,
-                value: string,
-            ) => {
-                is: (
-                    column: string,
-                    value: null,
-                ) => {
-                    limit: (count: number) => {
-                        maybeSingle: () => Promise<{
-                            data: { id: string } | null
-                            error: unknown
-                        }>
-                    }
-                }
-            }
-        }
-    }
-}
-
+/**
+ * Real Postgrest builders are thenables, not Promise<T>, so a hand-rolled
+ * structural client type rejects createClient() under tsc. Accept any
+ * Supabase-shaped `.from()` surface instead.
+ */
 export async function userHasActiveBrand(
-    supabase: BrandGateClient,
+    supabase: { from: (table: string) => any },
     userId: string,
 ): Promise<boolean> {
     const { data } = await supabase

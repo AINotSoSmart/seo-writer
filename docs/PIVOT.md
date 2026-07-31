@@ -563,6 +563,13 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-31 - brand gate accepts real Supabase clients under tsc
+
+`userHasActiveBrand` no longer takes a hand-rolled `BrandGateClient` that
+typed `maybeSingle()` as `Promise<T>`. Real Postgrest builders are thenables,
+so Vercel `tsc` rejected `createClient()` at `actions/onboarding.ts`. The helper
+now accepts `{ from: (table: string) => any }`.
+
 ### 2026-07-31 - audit progress UI is opacity-driven text, not card stacks
 
 `AuditConsole` running state no longer renders bordered icon cards per phase.
