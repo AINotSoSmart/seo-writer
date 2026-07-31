@@ -242,7 +242,7 @@ export function buildFrozenGraph(
         const members = articles.filter((article) => article.clusterId === clusterId)
         if (members.length < 3 || members.length > 15) {
             throw new LinkGraphError(
-                `Cluster ${clusterId} has ${members.length} articles; qualified clusters require 3-15.`,
+                `Cluster ${clusterId} has ${members.length} articles; qualified clusters require 8-15.`,
                 "unqualified_cluster",
             )
         }
@@ -423,7 +423,7 @@ export function validateFrozenGraph(graph: FrozenGraph): void {
         )
         if (members.length < 3 || members.length > 15) {
             throw new LinkGraphError(
-                "A frozen cluster must contain 3-15 articles.",
+                "A frozen cluster must contain 8-15 articles.",
                 "unqualified_cluster",
             )
         }

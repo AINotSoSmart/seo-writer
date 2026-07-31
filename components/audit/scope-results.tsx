@@ -126,7 +126,7 @@ export function ScopeResults({
                     icon={Layers}
                     label="Measured clusters"
                     value={scope.clusterCount}
-                    detail="qualified clusters contain 3–15 articles"
+                    detail="qualified clusters contain 8–15 articles"
                 />
                 <Stat
                     icon={CalendarClock}
@@ -142,7 +142,11 @@ export function ScopeResults({
                 <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <h3 className="font-serif text-xl text-stone-900">
-                            {showAllClusters ? "All measured clusters" : "Your six-cluster program"}
+                            {showAllClusters
+                                ? "All measured clusters"
+                                : scope.hasActiveProgram || scope.checkoutEligible
+                                  ? "Your six-cluster program"
+                                  : "Measured clusters (not yet a program)"}
                         </h3>
                         <p className="mt-1 text-sm text-stone-500">
                             {scope.hasActiveProgram ? (
@@ -152,13 +156,23 @@ export function ScopeResults({
                                     {recommendedFamilyCount === 1 ? "area" : "areas"}. Clusters are
                                     delivered complete, in priority order.
                                 </>
-                            ) : (
+                            ) : scope.checkoutEligible ? (
                                 <>
                                     The selected six contain {scope.recommendedArticleCount}{" "}
                                     articles. They cover {recommendedFamilyCount} confirmed business{" "}
                                     {recommendedFamilyCount === 1 ? "area" : "areas"}. Review every
                                     title and its supporting searches before choosing a delivery
                                     speed.
+                                </>
+                            ) : (
+                                <>
+                                    This audit measured {recommended.length} qualified cluster
+                                    {recommended.length === 1 ? "" : "s"} (
+                                    {scope.recommendedArticleCount} articles) across{" "}
+                                    {recommendedFamilyCount} confirmed business{" "}
+                                    {recommendedFamilyCount === 1 ? "area" : "areas"}. A program
+                                    requires six clusters of 8–15 articles each — no checkout until
+                                    that depth exists. Evidence below is still shareable.
                                 </>
                             )}
                         </p>
@@ -189,7 +203,9 @@ export function ScopeResults({
                                 className="flex items-center gap-1 text-xs font-medium text-brand-600"
                             >
                                 {showAllClusters
-                                    ? "Show six-cluster program"
+                                    ? scope.checkoutEligible || scope.hasActiveProgram
+                                      ? "Show six-cluster program"
+                                      : "Show measured program candidates"
                                     : `Show ${remainder.length} additional clusters`}
                                 {showAllClusters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                             </button>

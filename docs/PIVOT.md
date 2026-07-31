@@ -12,9 +12,10 @@ for what to do next.
 
 Last implementation update: 2026-07-31
 
-Status: **brand analyze crawl/scope/pricing UX tightened; confirmed-scope
-application contract implemented; the 20260731 migration is not yet applied and
-checkout remains disabled pending the staging/external release gate**
+Status: **qualified cluster floor locked at 8–15 (matching marketing); thin
+clusters no longer count as program rows; brand analyze crawl/scope/pricing UX
+tightened; the 20260731 migration is not yet applied and checkout remains
+disabled pending the staging/external release gate**
 
 ## 1. Locked product contract
 
@@ -36,7 +37,7 @@ Locked decisions:
 - A program contains six portfolio-balanced unsold qualified clusters: take
   one priority cluster from each represented confirmed business family before
   taking additional depth from any family.
-- A qualified cluster has 3-15 unique articles.
+- A qualified cluster has 8-15 unique articles.
 - The selected six clusters must contain at least 25 articles in total.
 - Small niches are rejected. There is no one-off fallback product.
 - The customer confirms an absolute, HTTPS, same-host URL pattern containing
@@ -366,7 +367,7 @@ Approved completion wording is:
 Both UI and server reject checkout unless the audit has:
 
 - Six qualified unsold clusters.
-- 3-15 articles in every selected cluster.
+- 8-15 articles in every selected cluster.
 - At least 25 articles across the six.
 - Complete provenance.
 - A valid frozen graph.
@@ -560,6 +561,49 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-07-31 - lock 8–15 cluster depth; never invent SEO junk
+
+**Founder evidence.** A BringBack audit showed 21 planned articles across 3
+“program” clusters (sizes 6, 5, 10) while marketing promises 8–15 per cluster.
+UI still said “Your six-cluster program” / “The selected six contain 21…”. Logs:
+
+```
+Collapsed 33 → 6, 60 → 5, 0 → 0, 58 → 10
+```
+
+An earlier run with six real scopes produced ~58 articles / 6 clusters — not
+randomness: more confirmed families with demand-backed gap depth.
+
+**Causes.**
+
+1. Backend `minQualifiedClusterArticles` was **3** while marketing and the
+   clusterer’s `TARGET_CLUSTER_MIN` were **8**.
+2. `groupIntoClusters` forced everything into one undersized cluster when no
+   thematic group reached 8 — shipping 5–6 article “PROGRAM CLUSTER” rows.
+3. Ineligible copy still used the happy-path “selected six” strings.
+4. Empty / thin families were silent except a collapse log line.
+
+**Product stance (locked).** Six demand-backed clusters of 8–15 **unique**
+articles. Do not pad vanity scopes, do not un-merge same-intent queries into
+near-duplicates to inflate counts, do not invent subtopics without search
+demand. Fewer than six real qualified clusters ⇒ evidence-only audit, no
+checkout (small-niche rejection).
+
+**Fixed.**
+
+- `PRODUCT_TRUTH.minClusterArticles` and `HARVEST_POLICY.minQualifiedClusterArticles`
+  → 8; policy version `confirmed-business-scope-v3.1.0`.
+- `groupIntoClusters` emits **zero** clusters when nothing reaches the minimum;
+  residual undersized articles are logged, not sold.
+- Assembly hard-fails `cluster_too_small`; warns per family on 0 gaps or
+  insufficient distinct depth; `findDuplicateArticlePairs` remains fail-closed.
+- Scope-results titles ineligible audits “Measured clusters (not yet a program)”
+  and states real counts.
+- Docs / terms / HOW_IT_WORKS / link-graph strings synced to 8–15.
+
+Follow-up (not this change): calibrate `ARTICLE_MERGE` on labeled BringBack
+pairs if true multi-intent families are over-merged — never hand-tune mid-audit.
 
 ### 2026-07-31 - brand analyze: cut crawl cost, discover omitted scopes, real pricing
 
@@ -1793,7 +1837,7 @@ plus the direct duplicate invariant so the proxy gate cannot be reintroduced.
 - Replaced the active delivery illustration’s stale Shopify/Webflow destinations
   with the supported WordPress, manual-review, and export paths.
 - Corrected public scope from 48-90 articles to 25-90: each selected cluster has
-  3-15 articles and the six-cluster program has a minimum of 25.
+  8-15 articles and the six-cluster program has a minimum of 25.
 - Added `20260730_retire_free_signup_credits.sql`. It sets both legacy signup
   defaults to zero, removes only unbacked historical two-credit grants, and
   guards the compatibility balance against future free grants while continuing

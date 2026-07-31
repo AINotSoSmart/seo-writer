@@ -15,7 +15,7 @@
  */
 export const PRODUCT_TRUTH = {
     programClusters: 6,
-    minClusterArticles: 3,
+    minClusterArticles: 8,
     maxClusterArticles: 15,
     minProgramArticles: 25,
     tiers: {

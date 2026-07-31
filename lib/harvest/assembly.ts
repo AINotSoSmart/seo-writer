@@ -552,14 +552,33 @@ export async function assembleHarvest(
         sourceCallLedger: [...liveLedger],
     })
     const embeddingMap = new Map(poolQueries.map((query) => [query.id, query.embedding]))
-    let articleUnits = input.scopeFamilies.flatMap((family) =>
-        collapseToArticles(
-            gapResult.gaps.filter(
-                (gap) => gap.scopeFamilyId === family.id,
-            ),
-            embeddingMap,
-        ),
-    )
+    let articleUnits: ArticleUnit[] = []
+    for (const family of input.scopeFamilies) {
+        const familyGaps = gapResult.gaps.filter(
+            (gap) => gap.scopeFamilyId === family.id,
+        )
+        const familyUnits = collapseToArticles(familyGaps, embeddingMap)
+        articleUnits = articleUnits.concat(familyUnits)
+
+        if (familyGaps.length === 0) {
+            console.warn(
+                `[Assembly] Family "${family.name}" (${family.id}): 0 gaps — ` +
+                    `no unmet demand-backed queries after coverage (no cluster).`,
+            )
+            continue
+        }
+
+        if (familyUnits.length < HARVEST_POLICY.minQualifiedClusterArticles) {
+            // Distinct intents after merge are fewer than a qualified cluster.
+            // Do not invent articles or un-merge variants into near-duplicates.
+            console.warn(
+                `[Assembly] Family "${family.name}" (${family.id}): ` +
+                    `${familyGaps.length} gaps → ${familyUnits.length} unique articles ` +
+                    `(below ${HARVEST_POLICY.minQualifiedClusterArticles}) — ` +
+                    `insufficient distinct demand-backed depth for a qualified cluster.`,
+            )
+        }
+    }
     articleUnits = await titleArticles(articleUnits)
     let clusters = input.scopeFamilies.flatMap((family) =>
         groupIntoClusters(
@@ -587,6 +606,17 @@ export async function assembleHarvest(
         throw new HarvestAssemblyError(
             `A cluster contains ${largestCluster} articles; maximum is ${HARVEST_POLICY.maxClusterArticles}.`,
             "cluster_too_large",
+            reports,
+        )
+    }
+    const tooSmall = clusters.filter(
+        (cluster) =>
+            cluster.articles.length < HARVEST_POLICY.minQualifiedClusterArticles,
+    )
+    if (tooSmall.length > 0) {
+        throw new HarvestAssemblyError(
+            `A cluster contains ${tooSmall[0].articles.length} articles; minimum is ${HARVEST_POLICY.minQualifiedClusterArticles}.`,
+            "cluster_too_small",
             reports,
         )
     }

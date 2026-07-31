@@ -135,7 +135,8 @@ test("legacy flat scope selects six priority unsold qualified clusters", () => {
     const clusters = Array.from({ length: 9 }, (_, index) => ({
         id: `cluster-${index + 1}`,
         priority: index + 1,
-        articleCount: index === 0 ? 2 : 5,
+        // Floor is 8 — cluster-1 stays unqualified; sold cluster-2 is skipped.
+        articleCount: index === 0 ? 2 : 8,
     }))
     const selection = selectQualifiedProgramScope(
         clusters,
@@ -154,7 +155,7 @@ test("legacy flat scope selects six priority unsold qualified clusters", () => {
             "cluster-8",
         ],
     )
-    assert.equal(selection.selectedArticleCount, 30)
+    assert.equal(selection.selectedArticleCount, 48)
 
     const small = selectQualifiedProgramScope(clusters.slice(0, 6), [], false)
     assert.equal(small.eligible, false)
@@ -170,7 +171,7 @@ test("six-cluster selection represents confirmed business families before taking
         ...Array.from({ length: 7 }, (_, index) => ({
             id: `restoration-${index + 1}`,
             priority: index,
-            articleCount: 5,
+            articleCount: 8,
             scopeFamilyId: "restoration",
             scopeFamilyPriority: 0,
         })),
@@ -178,7 +179,7 @@ test("six-cluster selection represents confirmed business families before taking
             (family, index) => ({
                 id: `${family}-1`,
                 priority: 20 + index,
-                articleCount: 5,
+                articleCount: 8,
                 scopeFamilyId: family,
                 scopeFamilyPriority: index + 1,
             }),
@@ -799,6 +800,63 @@ test("a purchased audit is never shown as ineligible", async () => {
         /!scope\.checkoutEligible && !scope\.hasActiveProgram && !progress &&/,
         "the not-eligible banner must never render to someone who already bought",
     )
+
+    // Ineligible audits must not keep the happy-path "selected six" copy.
+    assert.match(
+        scopeResults,
+        /Measured clusters \(not yet a program\)/,
+        "ineligible audits must title measured clusters honestly",
+    )
+    assert.match(
+        scopeResults,
+        /scope\.checkoutEligible \? \([\s\S]*?The selected six contain/,
+        "selected-six copy may only render when checkoutEligible",
+    )
+})
+
+test("qualified clusters are 8-15 unique articles; thin clusters are never program rows", async () => {
+    const [
+        productTruth,
+        policy,
+        clusterer,
+        assembly,
+        pricing,
+        linkGraph,
+    ] = await Promise.all([
+        text("config/product-truth.ts"),
+        text("lib/harvest/policy.ts"),
+        text("lib/harvest/clusterer.ts"),
+        text("lib/harvest/assembly.ts"),
+        text("components/landing/PricingSection.tsx"),
+        text("lib/harvest/link-graph.ts"),
+    ])
+
+    assert.match(productTruth, /minClusterArticles:\s*8/)
+    assert.match(productTruth, /maxClusterArticles:\s*15/)
+    assert.match(policy, /minQualifiedClusterArticles:\s*8/)
+    assert.match(policy, /version:\s*"confirmed-business-scope-v3\.1\.0"/)
+    assert.match(pricing, /Between 8 and 15 per cluster/)
+
+    // The undersized escape that forced one 1–7 article cluster is gone.
+    assert.doesNotMatch(
+        clusterer,
+        /No group reached the minimum size, so everything merges into one/,
+    )
+    assert.match(clusterer, /emitting 0 clusters/)
+    assert.match(
+        clusterer,
+        /TARGET_CLUSTER_MIN = HARVEST_POLICY\.minQualifiedClusterArticles/,
+    )
+
+    // Persist path must reject any cluster below the floor.
+    assert.match(assembly, /"cluster_too_small"/)
+    assert.match(
+        assembly,
+        /insufficient distinct demand-backed depth for a qualified cluster/,
+    )
+    assert.match(assembly, /0 gaps —/)
+    assert.match(assembly, /findDuplicateArticlePairs/)
+    assert.match(linkGraph, /qualified clusters require 8-15/)
 })
 
 test("no two articles in a cluster get the same intro shape", async () => {

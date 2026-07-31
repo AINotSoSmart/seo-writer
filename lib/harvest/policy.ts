@@ -3,7 +3,7 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "confirmed-business-scope-v3.0.0",
+    version: "confirmed-business-scope-v3.1.0",
     maxCompetitors: 4,
     maxCompetitorDiscoveryQueries: 12,
     maxScopeFamilies: 12,
@@ -31,7 +31,7 @@ export const HARVEST_POLICY = {
     maxSitemapFiles: 20,
     maxSitemapUrls: 5000,
     maxClusterArticles: 15,
-    minQualifiedClusterArticles: 3,
+    minQualifiedClusterArticles: 8,
     minQualifiedClusters: 6,
     minProgramArticles: 25,
     recommendedClusterCount: 6,

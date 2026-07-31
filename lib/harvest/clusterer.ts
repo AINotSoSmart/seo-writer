@@ -15,6 +15,7 @@
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { cosineSimilarity } from "@/lib/audit/site-scanner"
 import { GapItem } from "./gap-engine"
+import { HARVEST_POLICY } from "./policy"
 
 /**
  * Merge thresholds.
@@ -31,8 +32,8 @@ export const CLUSTER_THRESHOLDS = {
 }
 
 const MAX_SUPPORTING_KEYWORDS = 5
-const TARGET_CLUSTER_MIN = 8
-const TARGET_CLUSTER_MAX = 15
+const TARGET_CLUSTER_MIN = HARVEST_POLICY.minQualifiedClusterArticles
+const TARGET_CLUSTER_MAX = HARVEST_POLICY.maxClusterArticles
 
 export type ArticleType = "informational" | "commercial" | "howto"
 
@@ -160,7 +161,9 @@ export function collapseToArticles(
 
 /**
  * Second-level grouping: article units into thematic clusters.
- * Small clusters are merged into their nearest neighbour; oversized ones split.
+ * Undersized thematic groups fold into a neighbour that already reached the
+ * minimum. If nothing reaches TARGET_CLUSTER_MIN, this family emits zero
+ * clusters — never a padded 1–7 article "program cluster".
  */
 export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
     const assigned = new Set<number>()
@@ -195,11 +198,15 @@ export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
     const small = raw.filter((g) => g.length < TARGET_CLUSTER_MIN)
 
     if (large.length === 0) {
-        // No group reached the minimum size, so everything merges into one.
-        // It must still respect the maximum — skipping the split here is what
-        // produced a single cluster of 16 against a configured max of 15.
-        const all = raw.flat()
-        return all.length > 0 ? splitOversized(all).map(buildCluster) : []
+        // Not enough distinct thematic depth for a qualified cluster. Emitting
+        // one undersized cluster used to make 5–6 article rows look like a
+        // program — and marketing promises 8–15. Keep the article units in
+        // logs; do not invent a cluster.
+        console.log(
+            `[Clusterer] ${units.length} articles below minimum ${TARGET_CLUSTER_MIN} — ` +
+                `emitting 0 clusters (residual undersized groups: ${raw.length})`,
+        )
+        return []
     }
 
     for (const group of small) {
@@ -221,11 +228,22 @@ export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
     // after merging, not before.
     const sized = large.flatMap(splitOversized)
 
-    const clusters = sized.map(buildCluster).sort((a, b) => b.priority - a.priority)
+    // Defense in depth: never return a cluster below the target minimum after
+    // split (a pathological split should not invent thin program rows).
+    const clusters = sized
+        .filter((group) => group.length >= TARGET_CLUSTER_MIN)
+        .map(buildCluster)
+        .sort((a, b) => b.priority - a.priority)
+
+    const residual = sized
+        .filter((group) => group.length < TARGET_CLUSTER_MIN)
+        .reduce((sum, group) => sum + group.length, 0)
 
     console.log(
         `[Clusterer] ${units.length} articles grouped into ${clusters.length} clusters ` +
-        `(sizes: ${clusters.map((c) => c.articles.length).join(", ")})`
+            `(sizes: ${clusters.map((c) => c.articles.length).join(", ") || "none"}` +
+            (residual > 0 ? `; residual undersized articles=${residual}` : "") +
+            `)`,
     )
 
     const oversized = clusters.filter((c) => c.articles.length > TARGET_CLUSTER_MAX)

@@ -16,7 +16,7 @@ export default function TermsPage() {
             <LegalSection title="The service">
                 <p>
                     A completed audit is an immutable snapshot of observed public evidence.
-                    An eligible paid program contains six selected clusters, each with 3–15
+                    An eligible paid program contains six selected clusters, each with 8–15
                     planned articles and at least 25 articles across the selected scope.
                 </p>
             </LegalSection>

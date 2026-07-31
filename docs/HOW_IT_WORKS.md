@@ -139,14 +139,14 @@ Three separate reasons stack up:
 
 1. **A cluster is only useful whole.** Articles in a cluster link to each other.
    Half a cluster is a broken web of links.
-2. **Six is a real program, not a taster.** Six clusters × 3–15 articles = 25+
+2. **Six is a real program, not a taster.** Six clusters × 8–15 articles = 25+
    articles minimum. Enough to actually move a site.
 3. **It ends.** Six is a finite promise. Your old product promised 30 articles a
    month forever, ran out of real topics around month three, and started
    repeating itself. That's why everyone churned. Six clusters means the work
    genuinely finishes and you say so.
 
-If a site cannot produce six qualified clusters (each needing 3–15 articles),
+If a site cannot produce six qualified clusters (each needing 8–15 articles),
 **we refuse the sale.** The evidence remains viewable, but no checkout is shown.
 
 ---
