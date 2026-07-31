@@ -14,7 +14,7 @@ interface ProspectAuditPayload {
 
 export const runProspectAuditTask = task({
     id: "run-prospect-audit",
-    maxDuration: 900,
+    maxDuration: 1800,
     retry: {
         maxAttempts: 2,
         minTimeoutInMs: 10_000,

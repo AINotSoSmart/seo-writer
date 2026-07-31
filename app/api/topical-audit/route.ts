@@ -22,9 +22,9 @@ const MAX_FAILURES_PER_COOLDOWN = 3
 
 /**
  * A run older than this cannot still be alive: `runAuditTask` has
- * `maxDuration: 900` (15 minutes), so 20 gives generous headroom.
+ * `maxDuration: 1800` (30 minutes), so 40 gives generous headroom.
  */
-const AUDIT_STALE_AFTER_MINUTES = 20
+const AUDIT_STALE_AFTER_MINUTES = 30
 
 /**
  * Marks abandoned `running` rows as failed.

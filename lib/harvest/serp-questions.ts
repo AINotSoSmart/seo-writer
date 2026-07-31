@@ -24,6 +24,7 @@ import {
     buildSourceReport,
     containsExcludedBrand,
     brandTokensFromUrls,
+    mapWithConcurrency,
 } from "./types"
 
 /** Interrogatives that make a heading a question even without a "?" */
@@ -37,8 +38,19 @@ const MAX_RESULTS_PER_SEED = 10
 const MAX_QUESTIONS_PER_PAGE = 15
 
 /**
- * True if a heading reads as a user question.
+ * Bounded parallelism across seeds. The previous sequential loop let each stuck
+ * Tavily advanced+markdown call burn 60s, and twelve seeds × timeouts alone
+ * could exhaust the audit's 900s Trigger budget before coverage even started.
  */
+const SERP_CONCURRENCY = 3
+
+/**
+ * Per-seed wall-clock cap. Tavily's client default (~60s) is too long when a
+ * seed is hung — fail that seed and keep the rest of the harvest moving.
+ */
+const SERP_SEED_TIMEOUT_MS = 25_000
+
+/** True if a heading reads as a user question. */
 function isQuestionShaped(text: string): boolean {
     const t = text.trim().toLowerCase()
     if (t.endsWith("?")) return true
@@ -95,6 +107,30 @@ function extractQuestions(markdown: string): string[] {
     return found
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`Request timed out after ${Math.round(ms / 1000)} seconds (${label})`))
+        }, ms)
+        promise.then(
+            (value) => {
+                clearTimeout(timer)
+                resolve(value)
+            },
+            (error) => {
+                clearTimeout(timer)
+                reject(error)
+            },
+        )
+    })
+}
+
+type SeedHarvestResult = {
+    seed: string
+    queries: HarvestedQuery[]
+    error: string | null
+}
+
 /**
  * Harvests real questions from the pages currently ranking for each seed.
  *
@@ -118,58 +154,83 @@ export async function harvestSerpQuestions(
     }
 
     const tvly = tavily({ apiKey })
+    const seedsToProcess = seeds.slice(0, maxSeeds)
+
+    const seedResults = await mapWithConcurrency(
+        seedsToProcess,
+        SERP_CONCURRENCY,
+        async (seed): Promise<SeedHarvestResult> => {
+            try {
+                const { modifiedQuery, options } = buildTavilySearchOptions(seed, searchPrefs, {
+                    searchDepth: "advanced",
+                    includeRawContent: "markdown",
+                    maxResults: MAX_RESULTS_PER_SEED,
+                })
+
+                const response = await withTimeout(
+                    tvly.search(modifiedQuery, options),
+                    SERP_SEED_TIMEOUT_MS,
+                    seed,
+                )
+                const results = response.results || []
+                const collected: HarvestedQuery[] = []
+
+                for (const result of results) {
+                    const markdown: string = result.rawContent || result.content || ""
+                    const questions = extractQuestions(markdown)
+
+                    // A page's own brand name, so "Can I use Media.io's AI family
+                    // portraits...?" is rejected without needing Media.io on any
+                    // list. Every harvested page supplies its own exclusion.
+                    const sourceBrand = brandTokensFromUrls([result.url])
+
+                    for (const question of questions) {
+                        // A rival's own support FAQ is observed but useless as a topic
+                        if (containsExcludedBrand(question, excludeBrands)) continue
+                        if (containsExcludedBrand(question, sourceBrand)) continue
+
+                        collected.push({
+                            query: question,
+                            query_norm: normalizeQuery(question),
+                            source: "paa",
+                            // The page we actually read this question from
+                            source_url: result.url,
+                            source_seed: seed,
+                            observed_value: question,
+                            observed_at: new Date().toISOString(),
+                        })
+                    }
+                }
+
+                console.log(
+                    `[Harvest:SERP] "${seed}": ${results.length} pages -> ${collected.length} questions`,
+                )
+                return { seed, queries: collected, error: null }
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error)
+                console.error(`[Harvest:SERP] Failed for seed "${seed}":`, message)
+                return { seed, queries: [], error: `${seed}: ${message}` }
+            }
+        },
+    )
+
     const collected: HarvestedQuery[] = []
     const errors: string[] = []
-    const seedsToProcess = seeds.slice(0, maxSeeds)
     let failed = 0
 
-    for (const seed of seedsToProcess) {
-        try {
-            const { modifiedQuery, options } = buildTavilySearchOptions(seed, searchPrefs, {
-                searchDepth: "advanced",
-                includeRawContent: "markdown",
-                maxResults: MAX_RESULTS_PER_SEED,
-            })
-
-            const response = await tvly.search(modifiedQuery, options)
-            const results = response.results || []
-
-            for (const result of results) {
-                const markdown: string = result.rawContent || result.content || ""
-                const questions = extractQuestions(markdown)
-
-                // A page's own brand name, so "Can I use Media.io's AI family
-                // portraits...?" is rejected without needing Media.io on any
-                // list. Every harvested page supplies its own exclusion.
-                const sourceBrand = brandTokensFromUrls([result.url])
-
-                for (const question of questions) {
-                    // A rival's own support FAQ is observed but useless as a topic
-                    if (containsExcludedBrand(question, excludeBrands)) continue
-                    if (containsExcludedBrand(question, sourceBrand)) continue
-
-                    collected.push({
-                        query: question,
-                        query_norm: normalizeQuery(question),
-                        source: "paa",
-                        // The page we actually read this question from
-                        source_url: result.url,
-                        source_seed: seed,
-                        observed_value: question,
-                        observed_at: new Date().toISOString(),
-                    })
-                }
-            }
-
-            console.log(
-                `[Harvest:SERP] "${seed}": ${results.length} pages -> ${collected.length} questions so far`
-            )
-        } catch (error: any) {
+    for (const result of seedResults) {
+        if (!result) {
+            // mapWithConcurrency only nulls on unexpected throw; treat as failed.
             failed++
-            const message = error?.message || String(error)
-            errors.push(`${seed}: ${message}`)
-            console.error(`[Harvest:SERP] Failed for seed "${seed}":`, message)
+            errors.push("unknown: seed worker returned null")
+            continue
         }
+        if (result.error) {
+            failed++
+            errors.push(result.error)
+            continue
+        }
+        collected.push(...result.queries)
     }
 
     const unique = dedupeQueries(collected)

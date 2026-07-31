@@ -1,5 +1,9 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import {
+  pathRequiresBrand,
+  userHasActiveBrand,
+} from '@/lib/onboarding-gate'
 
 export async function proxy(request: NextRequest) {
   const legacyFeatureRedirects: Record<string, string> = {
@@ -46,9 +50,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/content-plan', request.url))
   }
 
+  let requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', request.nextUrl.pathname)
+
   let response = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: requestHeaders,
     },
   })
 
@@ -66,9 +73,11 @@ export async function proxy(request: NextRequest) {
             value,
             ...options,
           })
+          requestHeaders = new Headers(request.headers)
+          requestHeaders.set('x-pathname', request.nextUrl.pathname)
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: requestHeaders,
             },
           })
           response.cookies.set({
@@ -83,9 +92,11 @@ export async function proxy(request: NextRequest) {
             value: '',
             ...options,
           })
+          requestHeaders = new Headers(request.headers)
+          requestHeaders.set('x-pathname', request.nextUrl.pathname)
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: requestHeaders,
             },
           })
           response.cookies.set({
@@ -155,9 +166,24 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // If authenticated and trying to access login, redirect to dashboard
-  if (request.nextUrl.pathname === '/login' && user) {
-    return NextResponse.redirect(new URL('/content-plan', request.url))
+  const pathname = request.nextUrl.pathname
+
+  // Brandless customers must finish /onboarding before any dashboard shell.
+  // /onboarding and /founder are exempt; /api stays open so analyze-brand can
+  // run before the brand row is saved.
+  if (user && pathRequiresBrand(pathname)) {
+    const hasBrand = await userHasActiveBrand(supabase, user.id)
+    if (!hasBrand) {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
+    }
+  }
+
+  // If authenticated and trying to access login, send them to the right home.
+  if (pathname === '/login' && user) {
+    const hasBrand = await userHasActiveBrand(supabase, user.id)
+    return NextResponse.redirect(
+      new URL(hasBrand ? '/content-plan' : '/onboarding', request.url),
+    )
   }
 
   return response

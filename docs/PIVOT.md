@@ -12,8 +12,9 @@ for what to do next.
 
 Last implementation update: 2026-07-31
 
-Status: **qualified cluster floor locked at 8–15 (matching marketing); thin
-clusters no longer count as program rows; brand analyze crawl/scope/pricing UX
+Status: **audit/prospect Trigger maxDuration raised to 1800s (30m); SERP harvest
+parallelized (concurrency 3, 25s/seed); brandless users gated to onboarding;
+qualified cluster floor locked at 8–15; brand analyze crawl/scope/pricing UX
 tightened; the 20260731 migration is not yet applied and checkout remains
 disabled pending the staging/external release gate**
 
@@ -561,6 +562,65 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-07-31 - audit Trigger budget raised from 15m to 30m
+
+`run-topical-audit` and `run-prospect-audit` override `maxDuration` to **1800**
+(project `trigger.config.ts` already defaulted to 1800; the tasks had been
+capped at 900). Large sites with dense sitemaps, multi-family SERP, and
+classification need the extra wall clock even after SERP parallelism.
+
+`AUDIT_STALE_AFTER_MINUTES` on `/api/topical-audit` moves **20 → 40** so a
+live 30-minute run is not reclaimed as `worker_never_ran`. Contract suite pins
+both values.
+
+### 2026-07-31 - SERP harvest no longer burns the 900s audit budget sequentially
+
+**Production evidence.** Audit on animatememories.com hit Trigger
+`MAX_DURATION_EXCEEDED` (900s) after logs like:
+
+```
+[Harvest:SERP] Failed for seed "ai hug video": Request timed out after 60 seconds
+… (five seeds, same 60s timeout)
+[Harvest:Autocomplete] Level 1: 2590 unique queries (408 requests)
+```
+
+This was **not** caused by the 8–15 cluster-floor commit (`eab53fb`) — that
+change only touches post-gap clustering/eligibility. The death was in harvest:
+`harvestSerpQuestions` walked seeds in a **serial** `for` loop. Each hung
+Tavily `advanced`+markdown call waited ~60s. Five timeouts alone are ~5 minutes
+wall clock before coverage/embeddings/classification even start, which is enough
+to push a 12-seed audit over the task ceiling.
+
+**Fixed in `lib/harvest/serp-questions.ts`.**
+
+- Seeds run with `mapWithConcurrency` at **3** (bounded Tavily parallelism).
+- Per-seed wall-clock cap **25s** via `Promise.race` — a stuck seed fails and
+  the others continue; partial SERP success still soft-fails closed only when
+  *all* seeds fail (`hardFailure`).
+- Worst-case SERP wall time drops from ~12×60s serial to ~⌈12/3⌉×25s.
+
+Contract suite pins concurrency + timeout constants.
+
+### 2026-07-31 - brandless users cannot leave onboarding into the dashboard
+
+Authenticated customers with no non-deleted `brand_details` row were able to
+open `/content-plan`, settings, and other dashboard shells — empty, confusing,
+and a soft escape from setup. Login also bounced every authed user to
+`/content-plan`.
+
+**Fixed.**
+
+- [`lib/onboarding-gate.ts`](lib/onboarding-gate.ts) — shared `userHasActiveBrand`
+  + `pathRequiresBrand` list (content-plan, audit, articles, settings, account,
+  integrations, subscribe, reports, seo-health).
+- [`proxy.ts`](proxy.ts) redirects brandless users on those paths to
+  `/onboarding`; login → `/onboarding` when brandless, `/content-plan` when not.
+  `/onboarding`, `/founder`, and `/api` stay ungated so analyze-brand can run
+  before the brand is saved.
+- Protected layout re-checks the gate (defence in depth) using `x-pathname`,
+  exempting `/founder`.
+- Escape from onboarding remains sign-out only until a brand exists.
 
 ### 2026-07-31 - lock 8–15 cluster depth; never invent SEO junk
 
@@ -1695,8 +1755,8 @@ There was no timeout anywhere. The state was permanent and needed manual
 database editing to clear.
 
 `reclaimStaleRuns()` now runs at the start of both handlers. Any `running` row
-whose `started_at` is older than `AUDIT_STALE_AFTER_MINUTES` (20, against the
-task's `maxDuration` of 900s) is marked failed with
+whose `started_at` is older than `AUDIT_STALE_AFTER_MINUTES` (30, against the
+task's `maxDuration` of 1800s) is marked failed with
 `failure_code: "worker_never_ran"` and a message stating no work was completed
 and nothing was charged. The stuck state becomes an ordinary retryable failure,
 so the retry panel handles it with no intervention.
@@ -1929,7 +1989,7 @@ A three-panel strip above states what you buy (6 clusters), how many articles
 - **Bounded worst-case IO.** `maxCoveragePages` 250 -> 150, new
   `maxCompetitorCoveragePages: 80`, and `scanCoverage` now takes a `role`
   argument. Worst case per audit drops from 1,370 page fetches to 590 (~74s of
-  fetching against a 900s task budget). Competitors need only enough depth to
+  fetching against a 1800s task budget). Competitors need only enough depth to
   establish who owns a gap. Policy version -> `closed-pool-v2.3.0`.
 - **`tests/pivot-contract.test.mjs`** updated. The policy-value pin caught this
   change, which is the pin doing its job. It now also asserts the competitor

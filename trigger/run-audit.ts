@@ -19,7 +19,9 @@ interface RunAuditPayload {
 
 export const runAuditTask = task({
     id: "run-topical-audit",
-    maxDuration: 900,
+    // 30 minutes — matches trigger.config.ts default. Big sites with dense
+    // coverage + SERP + classification need headroom beyond the old 15m cap.
+    maxDuration: 1800,
     retry: { maxAttempts: 1 },
     run: async (payload: RunAuditPayload) => {
         const { userId, brandId, auditId, brandData, brandUrl } = payload

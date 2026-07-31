@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/utils/supabase/server"
+import { userHasActiveBrand } from "@/lib/onboarding-gate"
 
 /**
  * A completed current audit is already the customer's plan. Customers without
@@ -35,4 +36,26 @@ export async function canAccessOnboarding(
     }
 
     return { allowed: false, redirectTo: "/audit" }
+}
+
+/**
+ * Dashboard pages require a saved brand. Without one, send the customer back
+ * to onboarding — the only place a brand can be created.
+ */
+export async function requireBrandForDashboard(): Promise<{
+    allowed: boolean
+    redirectTo?: string
+}> {
+    const supabase = await createClient()
+    const {
+        data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return { allowed: false, redirectTo: "/login" }
+
+    if (await userHasActiveBrand(supabase, user.id)) {
+        return { allowed: true }
+    }
+
+    return { allowed: false, redirectTo: "/onboarding" }
 }

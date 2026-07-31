@@ -10,7 +10,9 @@ import {
 import { LoadingProvider } from "@/components/loading-provider"
 import { SubscriptionProvider } from "@/contexts/subscription-context"
 import { NavigationProgress } from "@/components/navigation-progress"
+import { requireBrandForDashboard } from "@/actions/onboarding"
 import { createClient } from "@/utils/supabase/server"
+import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import Script from "next/script"
 
@@ -29,6 +31,18 @@ export default async function DashboardLayout({
   // If not authenticated, redirect to login
   if (!user) {
     redirect('/login')
+  }
+
+  // Defence in depth for the brand gate in proxy.ts. Founder tool routes stay
+  // reachable without a personal brand; every other dashboard page does not.
+  // If the pathname header is missing, rely on proxy alone rather than
+  // accidentally ejecting /founder.
+  const pathname = (await headers()).get("x-pathname") || ""
+  if (pathname && !pathname.startsWith("/founder")) {
+    const brandGate = await requireBrandForDashboard()
+    if (!brandGate.allowed) {
+      redirect(brandGate.redirectTo || "/onboarding")
+    }
   }
 
   // Fetch subscription status (single query)

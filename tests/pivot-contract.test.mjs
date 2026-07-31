@@ -295,7 +295,7 @@ test("verify and production use the same authoritative assembly function", async
     assert.match(policy, /maxPreScopeQueries:\s*600/)
     assert.match(policy, /maxQueries:\s*400/)
     assert.match(policy, /maxCompetitorCorpusPages:\s*120/)
-    // Bounded so the worst-case audit fits the 900s task budget:
+    // Bounded so the worst-case audit fits the 1800s task budget:
     // 150 subject + 4x80 competitor coverage + 120 corpus = 590 page fetches.
     assert.match(policy, /maxCoveragePages:\s*150/)
     assert.match(policy, /maxCompetitorCoveragePages:\s*80/)
@@ -314,6 +314,33 @@ test("verify and production use the same authoritative assembly function", async
         await text("lib/harvest/competitor-corpus.ts"),
         /remainingPageBudget\s*=\s*HARVEST_POLICY\.maxCompetitorCorpusPages/,
     )
+})
+
+test("SERP harvest uses bounded concurrency and a per-seed timeout under the Tavily default", async () => {
+    // Sequential SERP with ~60s hung seeds burned the Trigger ceiling
+    // (animatememories.com: five "Request timed out after 60 seconds" lines
+    // then MAX_DURATION_EXCEEDED). Parallelism + a tighter race keep wall
+    // clock proportional to ⌈seeds/concurrency⌉ × timeout, not seeds × 60s.
+    const serp = await text("lib/harvest/serp-questions.ts")
+    assert.match(serp, /SERP_CONCURRENCY\s*=\s*3/)
+    assert.match(serp, /SERP_SEED_TIMEOUT_MS\s*=\s*25_000/)
+    assert.match(serp, /mapWithConcurrency\([\s\S]{0,80}SERP_CONCURRENCY/)
+    assert.match(serp, /withTimeout\([\s\S]{0,120}SERP_SEED_TIMEOUT_MS/)
+    // hardFailure comes from buildSourceReport when every seed fails —
+    // partial SERP success must still soft-fail closed, not abort the audit.
+    assert.match(serp, /buildSourceReport\("paa",\s*seedsToProcess\.length,\s*failed/)
+    assert.match(serp, /if\s*\(report\.hardFailure\)/)
+})
+
+test("audit Trigger maxDuration is 30 minutes with matching stale reclaim", async () => {
+    const [audit, prospect, route] = await Promise.all([
+        text("trigger/run-audit.ts"),
+        text("trigger/run-prospect-audit.ts"),
+        text("app/api/topical-audit/route.ts"),
+    ])
+    assert.match(audit, /maxDuration:\s*1800/)
+    assert.match(prospect, /maxDuration:\s*1800/)
+    assert.match(route, /AUDIT_STALE_AFTER_MINUTES\s*=\s*40/)
 })
 
 test("a failed audit cannot be restarted by refreshing the page", async () => {
@@ -1818,6 +1845,38 @@ test("audit schema drift fails before an expensive task is queued", async () => 
         migration,
         /GRANT EXECUTE ON FUNCTION public\.assert_harvest_schema_ready\(\)/,
     )
+})
+
+test("brandless authenticated users cannot open the dashboard shell", async () => {
+    const [gate, proxy, layout, onboardingActions] = await Promise.all([
+        text("lib/onboarding-gate.ts"),
+        text("proxy.ts"),
+        text("app/(protected)/layout.tsx"),
+        text("actions/onboarding.ts"),
+    ])
+
+    assert.match(gate, /export async function userHasActiveBrand/)
+    assert.match(gate, /pathRequiresBrand/)
+    for (const prefix of [
+        "/content-plan",
+        "/audit",
+        "/articles",
+        "/settings",
+        "/account",
+        "/subscribe",
+    ]) {
+        assert.ok(
+            gate.includes(`"${prefix}"`),
+            `brand gate must include ${prefix}`,
+        )
+    }
+
+    assert.match(proxy, /pathRequiresBrand\(pathname\)/)
+    assert.match(proxy, /userHasActiveBrand\(supabase, user\.id\)/)
+    assert.match(proxy, /hasBrand \? '\/content-plan' : '\/onboarding'/)
+    assert.match(onboardingActions, /requireBrandForDashboard/)
+    assert.match(layout, /requireBrandForDashboard/)
+    assert.match(layout, /pathname\.startsWith\("\/founder"\)/)
 })
 
 test("onboarding uses a focused authenticated shell outside the dashboard sidebar", async () => {
