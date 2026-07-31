@@ -589,6 +589,45 @@ test("purging a brand cannot silently orphan a live subscription", async () => {
     assert.match(purge, /REVOKE ALL ON FUNCTION public\.purge_brand\(UUID, BOOLEAN\) FROM PUBLIC, anon, authenticated/)
 })
 
+test("a deleted brand cannot strand onboarding", async () => {
+    const page = await text("app/(onboarding)/onboarding/page.tsx")
+
+    // Onboarding persists step and brandId in localStorage and the URL, so a
+    // brand deleted server-side left the browser pointing at something gone.
+    // getAuditScope returns null for BOTH "no completed audit" and "brand does
+    // not exist", so audit-results threw "scope could not be loaded" and kept
+    // the stale state — every refresh reproduced it with no way out.
+    assert.match(page, /const resetToBrandStep = useCallback/)
+    assert.match(page, /clearOnboardingStorage\(\)/)
+    assert.match(page, /setStep\("brand"\)/)
+    assert.match(page, /router\.replace\("\/onboarding"\)/)
+
+    // Validated once at hydration so every step is covered, not just the one
+    // that happened to be reported.
+    assert.match(page, /verifyBrandStillExists/)
+    assert.match(page, /getUserBrands\(\)/)
+    assert.match(page, /import \{ getUserBrands, saveBrandAction \}/)
+
+    // A transient lookup failure must not itself strand the user.
+    assert.match(
+        page,
+        /catch \{[\s\S]{0,200}per-step checks still catch/,
+        "brand verification must fail open on a network error",
+    )
+
+    // The reset must clear every piece of brand-derived state, or a stale
+    // fragment re-renders the dead brand's data on the fresh step.
+    for (const setter of [
+        "setBrandId(null)",
+        "setBrandData(null)",
+        "setAuditScope(null)",
+        "setPlannedArticles([])",
+        "setProgramProgress(null)",
+    ]) {
+        assert.ok(page.includes(setter), `resetToBrandStep must call ${setter}`)
+    }
+})
+
 test("founder-only surfaces are gated in two independent layers", async () => {
     const [proxy, testPage, prospectPage, testApi] = await Promise.all([
         text("proxy.ts"),

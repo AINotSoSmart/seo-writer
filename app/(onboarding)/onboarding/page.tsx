@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
 import { Loader2, ChevronUp, ArrowRight, Sparkles, Eye, Globe, Globe2, Plus } from "lucide-react"
-import { saveBrandAction } from "@/actions/brand"
+import { getUserBrands, saveBrandAction } from "@/actions/brand"
 import { canAccessOnboarding } from "@/actions/onboarding"
 import {
     getAuditScope,
@@ -85,6 +85,37 @@ export default function OnboardingPage() {
         })
     }, [])
 
+    /**
+     * Wipes every trace of a brand that no longer exists and restarts onboarding.
+     *
+     * Onboarding persists `step` and `brandId` in localStorage (and the URL), so
+     * deleting a brand server-side left the browser pointing at something gone.
+     * `getAuditScope` returns null for BOTH "no completed audit yet" and "this
+     * brand does not exist", so the audit-results step threw
+     * "the audit finished, but its scope could not be loaded" and kept `step`
+     * and `brandId` set — every refresh reproduced it, with no way out.
+     */
+    const resetToBrandStep = useCallback(
+        (message: string) => {
+            clearOnboardingStorage()
+            setBrandId(null)
+            setUrl("")
+            setBrandData(null)
+            setScopeAnalysisIssues([])
+            setSeedsWithoutDemand([])
+            setCompetitors([])
+            setTargetSeeds([])
+            setAuditScope(null)
+            setGapEvidence([])
+            setPlannedArticles([])
+            setProgramProgress(null)
+            setError(message)
+            setStep("brand")
+            router.replace("/onboarding")
+        },
+        [clearOnboardingStorage, router],
+    )
+
     useEffect(() => {
         if (typeof window === 'undefined') return
 
@@ -161,6 +192,46 @@ export default function OnboardingPage() {
 
         setIsHydrated(true)
     }, [searchParams])
+
+    /**
+     * A restored brandId must still exist before any step trusts it.
+     *
+     * Onboarding restores `step` and `brandId` from localStorage and the URL, so
+     * a brand deleted server-side leaves the browser pointing at something gone.
+     * Every downstream step then failed in its own confusing way — audit-results
+     * threw "scope could not be loaded" and kept the stale state so refreshing
+     * reproduced it forever, and the audit step auto-started a run that 404'd
+     * with "Brand not found". One check here covers all of them.
+     */
+    useEffect(() => {
+        if (!isHydrated || !brandId || step === "brand") return
+        let cancelled = false
+
+        const verifyBrandStillExists = async () => {
+            try {
+                const owned = await getUserBrands()
+                if (cancelled) return
+                const stillExists = (owned || []).some(
+                    (brand: { id: string }) => brand.id === brandId,
+                )
+                if (!stillExists) {
+                    resetToBrandStep(
+                        "That brand was deleted, so its audit is gone too. Start again by adding a website.",
+                    )
+                }
+            } catch {
+                // Never strand the user on a transient lookup failure — the
+                // per-step checks still catch a genuinely missing brand.
+            }
+        }
+
+        void verifyBrandStillExists()
+        return () => {
+            cancelled = true
+        }
+        // Deliberately only on hydration/brand change, not on every step change.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isHydrated, brandId])
 
     useEffect(() => {
         if (!isHydrated) return
@@ -359,14 +430,28 @@ export default function OnboardingPage() {
                     return
                 }
 
-                const [scope, gaps, articles, progress] = await Promise.all([
+                const [scope, gaps, articles, progress, ownedBrands] = await Promise.all([
                     getAuditScope(brandId),
                     getGapEvidence(brandId),
                     getPlannedArticles(brandId),
                     getProgramProgress(brandId),
+                    getUserBrands(),
                 ])
 
                 if (!scope) {
+                    // Distinguish "no scope yet" from "this brand is gone".
+                    // Without this the deleted-brand case is unrecoverable: the
+                    // error leaves step and brandId set, so every refresh
+                    // repeats it forever.
+                    const brandStillExists = (ownedBrands || []).some(
+                        (owned: { id: string }) => owned.id === brandId,
+                    )
+                    if (!brandStillExists) {
+                        resetToBrandStep(
+                            "That brand was deleted, so its audit is gone too. Start again by adding a website.",
+                        )
+                        return
+                    }
                     throw new Error("The audit finished, but its scope could not be loaded. Please run it again.")
                 }
 
@@ -382,7 +467,7 @@ export default function OnboardingPage() {
             }
         }
         void fetchScope()
-    }, [auditScope, brandId, isHydrated, isLoadingScope, step])
+    }, [auditScope, brandId, isHydrated, isLoadingScope, step, resetToBrandStep])
 
     // NOTE: Plan generation is now fully handled in Trigger.dev
 

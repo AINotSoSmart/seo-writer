@@ -455,7 +455,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **43/43 test groups passed**.
+- `npm run test:pivot-contract`: **44/44 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -560,6 +560,41 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-02 - a deleted brand stranded onboarding
+
+**Reported immediately after the first `purge_brand` run.** Onboarding sat on
+`?step=audit-results&brandId=<purged>` showing a permanent spinner plus:
+
+```
+The audit finished, but its scope could not be loaded. Please run it again.
+```
+
+Refreshing reproduced it exactly. There was no way out.
+
+**Cause.** Onboarding persists `step` and `brandId` in localStorage and the URL,
+so deleting a brand server-side left the browser pointing at something that no
+longer existed. `getAuditScope` returns `null` for **both** "no completed audit
+yet" and "this brand does not exist", so the audit-results step could not tell
+the two apart: it threw, set an error, and left `step` and `brandId` intact —
+which is what made every refresh repeat it.
+
+The `audit` step failed differently but just as badly: `GET /api/topical-audit`
+answered `not_found` for a missing brand, the console read that as "never ran"
+and auto-started, and the `POST` then 404'd with "Brand not found".
+
+**Fixed.** A restored `brandId` is now verified once at hydration against
+`getUserBrands()` — reusing the existing action rather than adding one — so a
+single check covers every step instead of patching each failure separately. If
+the brand is gone, `resetToBrandStep()` clears all onboarding storage and
+brand-derived state, returns to the brand step with a plain explanation, and
+rewrites the URL so the dead `brandId` cannot come back on refresh. The
+audit-results path keeps its own check as defence in depth, and both fail open
+on a transient lookup error so a network blip cannot itself strand a user.
+
+Contract test pins the reset helper, the hydration check, the fail-open
+behaviour, and every piece of state the reset must clear. 44/44 groups pass.
+
 
 ### 2026-08-02 - brand purge and single-article QA generation
 
