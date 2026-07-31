@@ -540,6 +540,134 @@ test("every brand field the writer reads exists on BrandDetailsSchema", async ()
     }
 })
 
+test("purging a brand cannot silently orphan a live subscription", async () => {
+    const purge = await text("supabase/migrations/20260802_purge_brand.sql")
+
+    // Deleting a program does not stop Dodo billing. Purging a paid brand while
+    // its subscription stays live would keep charging a customer whose data no
+    // longer exists, so this must be refused unless explicitly acknowledged.
+    assert.match(purge, /p_acknowledge_active_subscription/)
+    assert.match(purge, /has a live Dodo subscription/)
+    assert.match(purge, /orphaned_dodo_subscription/)
+    // The payment record itself is evidence — never deleted.
+    assert.doesNotMatch(
+        purge,
+        /DELETE FROM public\.dodo_subscriptions/,
+        "dodo_subscriptions is the payment record and must survive a purge",
+    )
+
+    // The immutability hatch matches ONE audit id against a transaction-local
+    // setting, so a single set_config would exempt only the first audit and the
+    // trigger would reject the rest. A brand can hold several audits.
+    assert.match(purge, /FOREACH v_audit_id IN ARRAY v_audit_ids/)
+    const setConfigCalls = purge.match(/set_config\('flipaeo\.discarding_audit_id'/g) || []
+    assert.ok(
+        setConfigCalls.length >= 4,
+        `expected the hatch to be re-set per audit for each evidence table, saw ${setConfigCalls.length}`,
+    )
+
+    // Ordering matters: every FK into programs/audits is RESTRICT.
+    const order = [
+        "subscription_credit_consumptions",
+        "subscription_period_grants",
+        "program_cost_events",
+        "planned_article_links",
+        "program_clusters",
+        "DELETE FROM public.programs",
+        "program_purchase_intents",
+        "DELETE FROM public.topical_audits",
+        "DELETE FROM public.brand_details",
+    ]
+    let cursor = -1
+    for (const step of order) {
+        const at = purge.indexOf(step)
+        assert.ok(at > cursor, `purge order violated: "${step}" must come after the previous step`)
+        cursor = at
+    }
+
+    assert.match(purge, /GRANT EXECUTE ON FUNCTION public\.purge_brand\(UUID, BOOLEAN\) TO service_role/)
+    assert.match(purge, /REVOKE ALL ON FUNCTION public\.purge_brand\(UUID, BOOLEAN\) FROM PUBLIC, anon, authenticated/)
+})
+
+test("founder-only surfaces are gated in two independent layers", async () => {
+    const [proxy, testPage, prospectPage, testApi] = await Promise.all([
+        text("proxy.ts"),
+        text("app/(protected)/founder/test-article/page.tsx"),
+        text("app/(protected)/founder/prospect-audits/page.tsx"),
+        text("app/api/founder/test-article/route.ts"),
+    ])
+
+    // Layer 1 — the edge. An anonymous request must be turned away before it
+    // reaches a server component that queries the database on its way to
+    // rejecting the caller.
+    assert.match(
+        proxy,
+        /protectedRoutes = \[[^\]]*'\/founder'/,
+        "'/founder' must be a protected route so anonymous requests redirect to login",
+    )
+
+    // Layer 2 — the page itself. Being logged in is not sufficient; the user id
+    // must be in FOUNDER_USER_IDS, and a non-founder gets 404 rather than 403
+    // so the surface is not discoverable.
+    for (const [name, page] of [
+        ["test-article", testPage],
+        ["prospect-audits", prospectPage],
+    ]) {
+        assert.match(
+            page,
+            /isFounderUser\(user\.id\)/,
+            `${name} page must check FOUNDER_USER_IDS`,
+        )
+        assert.match(page, /notFound\(\)/, `${name} page must 404 for non-founders`)
+    }
+
+    // The API behind the page repeats the check — a page gate is not an API gate.
+    assert.match(testApi, /isFounderUser\(user\.id\)/)
+    assert.match(testApi, /status: 404/)
+})
+
+test("single-article test generation stays outside the program pipeline", async () => {
+    const route = await text("app/api/founder/test-article/route.ts")
+    // Strip comments: the file documents what it deliberately does NOT do, and
+    // prose naming a symbol is not a use of it.
+    const routeCode = route
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "")
+
+    // Founder-only, and 404 so the route is not discoverable.
+    assert.match(route, /isFounderUser\(user\.id\)/)
+    assert.match(route, /status: 404/)
+    // Must not let a founder generate against someone else's brand data.
+    assert.match(route, /brand\.user_id !== user\.id/)
+
+    // The three omissions that keep this out of the paid pipeline. Passing
+    // either of these would let a QA run mutate real cluster state or expect a
+    // link graph that only exists after purchase.
+    assert.doesNotMatch(
+        routeCode,
+        /plannedArticleId:/,
+        "passing plannedArticleId would let a test run mark a real cluster generating/blocked",
+    )
+    assert.doesNotMatch(
+        routeCode,
+        /frozenLinks:/,
+        "the frozen graph is created at purchase-intent time and must not be faked for a test",
+    )
+    assert.doesNotMatch(
+        routeCode,
+        /consume_program_credit|program_clusters|purchase_intent/,
+        "a QA article must not touch billing or program state",
+    )
+
+    // It must still exercise the REAL writer, or it proves nothing.
+    assert.match(route, /generateBlogPost\.trigger\(/)
+    // And be able to target a specific intro pattern, since that is the main
+    // thing being quality-checked.
+    assert.match(route, /clusterPosition/)
+    // A failed trigger must not leave an orphan article row behind.
+    assert.match(route, /\.delete\(\)\.eq\("id", article\.id\)/)
+})
+
 test("a purchased audit is never shown as ineligible", async () => {
     const [scopeAction, scopeResults, publicPage] = await Promise.all([
         text("actions/harvest.ts"),

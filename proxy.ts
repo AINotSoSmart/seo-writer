@@ -127,7 +127,12 @@ export async function proxy(request: NextRequest) {
   )
 
   // Protected routes - ONLY these require authentication
-  const protectedRoutes = ['/content-plan', '/seo-health', '/reports', '/settings', '/articles', '/integrations', '/subscribe', '/onboarding', '/account', '/api']
+  // '/founder' pages already call isFounderUser() and notFound(), so nothing
+  // leaks without it — verified by fetching one unauthenticated. It is listed
+  // here as defence in depth: an anonymous request should be turned away at the
+  // edge rather than reaching a server component that queries the database on
+  // its way to rejecting the caller.
+  const protectedRoutes = ['/content-plan', '/seo-health', '/reports', '/settings', '/articles', '/integrations', '/subscribe', '/onboarding', '/account', '/api', '/founder']
   const isProtectedRoute = protectedRoutes.some(route =>
     request.nextUrl.pathname.startsWith(route)
   ) && !isPublicApiRoute // Exclude public API routes from protection

@@ -428,17 +428,19 @@ migration history with `supabase migration repair` is a separate task, listed in
 8. Apply `supabase/migrations/20260801_discard_unpurchased_audit.sql`. Adds the
    `discard_unpurchased_audit(uuid)` operation; safe to skip only if no audit
    ever needs discarding, which is not a bet worth making.
-9. Deploy application and Trigger.dev source with
+9. Apply `supabase/migrations/20260802_purge_brand.sql` (founder escape
+   hatch; safe to apply any time).
+10. Deploy application and Trigger.dev source with
    `CLOSED_POOL_CHECKOUT_ENABLED=false`.
-10. Confirm `program-lifecycle` is healthy.
-11. Only then archive these Trigger.dev schedules:
+11. Confirm `program-lifecycle` is healthy.
+12. Only then archive these Trigger.dev schedules:
    - `daily-content-watchman`
    - `seo-health-auto-refresh`
    - `sitemap-sync-scheduler`
    - `gsc-daily-auto-refresh`
    - `ship-cluster`
-12. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
-13. Enable checkout only on the exact commit that passed all gates.
+13. Run and record every gate in `docs/CLOSED_POOL_RELEASE_GATE.md`.
+14. Enable checkout only on the exact commit that passed all gates.
 
 Required server environment:
 
@@ -453,7 +455,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **40/40 test groups passed**.
+- `npm run test:pivot-contract`: **43/43 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -558,6 +560,90 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-02 - brand purge and single-article QA generation
+
+Two founder tools. Neither changes the production pipeline.
+
+**1. `purge_brand(uuid, acknowledge_active_subscription boolean)`**
+(`supabase/migrations/20260802_purge_brand.sql`)
+
+`discard_unpurchased_audit` refuses once money is involved, which left no way
+out when a paid setup is wrong end to end. This deletes everything for one
+brand: audits, evidence, clusters, planned and generated articles, the frozen
+link graph, programs, purchase intents, billing ledgers, scope families, claims,
+internal links, and the brand row.
+
+Two deliberate refusals:
+
+- **It will not silently orphan a live subscription.** Deleting a program does
+  not stop Dodo billing, so the function raises while an active/pending
+  subscription exists unless the caller explicitly acknowledges it, and always
+  returns `orphaned_dodo_subscription` so it can be cancelled in Dodo. It never
+  deletes `dodo_subscriptions` itself — that row is the payment record.
+- **It does not touch the auth user.** The account survives so they can start
+  over.
+
+Deletion is ordered by FK direction because every constraint into `programs`
+and `topical_audits` is `RESTRICT`, not `CASCADE` — deliberately, so a stray
+`DELETE` can never take purchased work with it.
+
+**On the vector column:** nothing rewrites embeddings; `query_pool` rows are
+deleted whole. The immutability trigger is opened only through the existing
+transaction-scoped `audit_discard_in_progress` hatch. That hatch matches **one**
+audit id, so evidence deletion loops per audit and re-sets the setting each time
+— a single `set_config` would exempt only the first audit and the trigger would
+reject the rest. It depends on `guard_audit_snapshot_row` being able to resolve
+pgvector (repaired in `20260801`); that migration must stay applied.
+
+Rehearsed read-only against the live schema before shipping: the nested block
+parses, every table and column resolves, and the run rolled back.
+
+**2. `/founder/test-article` (page) + `POST /api/founder/test-article`**
+
+Generating one article previously meant shipping a whole cluster. This runs the
+real writer against real brand data with an overridable title, keyword, article
+type, supporting keywords, source queries and `clusterPosition` (which selects
+the intro pattern under test).
+
+It stays outside the paid pipeline by *omission*, not by reimplementation:
+
+- **no `plannedArticleId`** — every generation/delivery status write inside the
+  task is already guarded on it, so no real cluster can be marked generating,
+  blocked, or delivered;
+- **no `frozenLinks`** — the graph is frozen at purchase-intent time and does
+  not exist for a test article, so the writer falls back to
+  `getRelevantInternalLinks`, the pre-program path it already supports. This is
+  the "internal linking freezing point" concern, and the writer handles it;
+- **no credit consumption** — `consume_program_credit` lives in ship-cluster,
+  never in the writer.
+
+The only row created is one `articles` record, and it is deleted again if the
+trigger call fails. Founder-gated via `isFounderUser`, returns 404 rather than
+403, and refuses a brand the caller does not own. Provider costs are real.
+
+An admin page at `/founder/test-article` lists the founder's own planned
+articles (when an audit exists), loads one into an editable form in a click, and
+generates it. Title, keyword, article type, supporting keywords, observed
+searches, cluster name, pillar flag and **intro pattern** are all editable — the
+pattern selector is the point, since it is what lets one title be compared
+across all five opening shapes without generating a cluster. With no brand on
+the account it says so and points at onboarding, because the route needs real
+brand data but deliberately does not need an audit.
+
+**Founder surfaces are gated in two independent layers.** Verified empirically:
+fetching `/founder/test-article` unauthenticated leaked no founder UI, so the
+page-level `isFounderUser` + `notFound()` check was already holding. `'/founder'`
+is now also in `protectedRoutes`, so an anonymous request is redirected to
+`/login` at the edge (confirmed 307) instead of reaching a server component that
+queries the database on its way to rejecting the caller. A logged-in non-founder
+still gets 404 — not 403 — so the surface stays undiscoverable, and the API
+repeats the check because a page gate is not an API gate. This also closed the
+same edge gap on the pre-existing `/founder/prospect-audits`.
+
+Contract tests pin the purge ordering, the subscription refusal, the per-audit
+hatch loop, both gating layers, and all three QA-route omissions — the last verified in both
+directions against a simulated regression. 42/42 groups pass.
 
 ### 2026-08-01 - a paid audit reported itself ineligible
 
