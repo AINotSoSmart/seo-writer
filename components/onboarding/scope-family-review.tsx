@@ -196,7 +196,7 @@ export function ScopeFamilyReview({
                                 </div>
                             </div>
 
-                            <div className="mt-1.5 pl-6">
+                            <div className="mt-1.5">
                                 <PillInput
                                     value={family.seed_keywords}
                                     onChange={(seed_keywords) =>

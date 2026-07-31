@@ -563,6 +563,12 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-31 - confirm-scope chips align with priority numbers
+
+Search chips and the customer-job line no longer sit under a `pl-6` indent that
+tracked the index column. They start at the same left edge as the priority
+number so mobile width is not wasted under empty gutter.
+
 ### 2026-07-31 - confirm-scope auto-trims to 12; no trim essay
 
 Analyze returns at most 12 search directions (`trimFamiliesToSearchCap` in
