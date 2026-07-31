@@ -12,11 +12,12 @@ for what to do next.
 
 Last implementation update: 2026-07-31
 
-Status: **confirm-scope auto-trims to 12 searches (add disabled at cap); audit
-progress UI refined; audit/prospect Trigger maxDuration 1800s; SERP harvest
-parallelized; brandless users gated to onboarding; qualified cluster floor
-locked at 8–15; the 20260731 migration is not yet applied and checkout remains
-disabled pending the staging/external release gate**
+Status: **confirm-scope uses client-ready Category/Keywords labels; auto-trims
+to 12 searches (add disabled at cap); audit progress UI refined; audit/prospect
+Trigger maxDuration 1800s; SERP harvest parallelized; brandless users gated to
+onboarding; qualified cluster floor locked at 8–15; the 20260731 migration is
+not yet applied and checkout remains disabled pending the staging/external
+release gate**
 
 ## 1. Locked product contract
 
@@ -563,6 +564,13 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-31 - confirm-scope blocks use client-ready field labels
+
+Each family row now labels **Category**, **Keywords**, and **What this helps
+with** — founder language, not harvest jargon. Section hint:
+`Most important category first · keywords belong to that category`. Placeholders
+match. No Google / research / chips / seeds copy on the block.
+
 ### 2026-07-31 - confirm-scope chips align with priority numbers
 
 Search chips and the customer-job line no longer sit under a `pl-6` indent that
@@ -582,7 +590,7 @@ over-cap state is prevented, not explained.
 Second pass after the widen-the-island change still felt exhausting: stacked
 explanations, tall family cards, and brand DNA always expanded. Now:
 
-- Title is one line; product areas are dense rows (name + search chips + one-line job).
+- Title is one line; product areas are dense rows (Category + Keywords + what it helps with).
 - Quiet `N/12` counter; add disabled at cap (see auto-trim entry above).
 - Brand voice/details sit in a closed disclosure so scope is the default focus.
 

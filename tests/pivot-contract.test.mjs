@@ -1587,6 +1587,12 @@ test("confirmed business scope is the only production relevance contract", async
     assert.match(review, /disableAdd=\{atCap\}/)
     assert.match(review, /\{totalDirections\}\/\{MAX_SEARCH_DIRECTIONS\}/)
     assert.match(review, /Evidence \(\{family\.evidence\.length\}\)/)
+    assert.match(review, /Most important category first/)
+    assert.match(review, />Category</)
+    assert.match(review, />Keywords</)
+    assert.match(review, /What this helps with/)
+    assert.match(review, /Add a keyword, Enter/)
+    assert.doesNotMatch(review, /Google searches|search chips|Customer job/)
     assert.match(analysis, /trimFamiliesToSearchCap/)
     assert.match(
         await text("lib/scope-search-cap.ts"),
