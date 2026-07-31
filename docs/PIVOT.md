@@ -12,11 +12,11 @@ for what to do next.
 
 Last implementation update: 2026-07-31
 
-Status: **audit/prospect Trigger maxDuration raised to 1800s (30m); SERP harvest
-parallelized (concurrency 3, 25s/seed); brandless users gated to onboarding;
-qualified cluster floor locked at 8–15; brand analyze crawl/scope/pricing UX
-tightened; the 20260731 migration is not yet applied and checkout remains
-disabled pending the staging/external release gate**
+Status: **audit progress UI refined to opacity-driven text steps; audit/prospect
+Trigger maxDuration raised to 1800s (30m); SERP harvest parallelized; brandless
+users gated to onboarding; qualified cluster floor locked at 8–15; the 20260731
+migration is not yet applied and checkout remains disabled pending the
+staging/external release gate**
 
 ## 1. Locked product contract
 
@@ -562,6 +562,13 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-07-31 - audit progress UI is opacity-driven text, not card stacks
+
+`AuditConsole` running state no longer renders bordered icon cards per phase.
+Phases are a tight numbered text list: active step breathes at full opacity,
+completed/pending steps sit at lower opacity. Phase descriptions crossfade
+under the title. Polling, failure, and retry logic are unchanged.
 
 ### 2026-07-31 - audit Trigger budget raised from 15m to 30m
 

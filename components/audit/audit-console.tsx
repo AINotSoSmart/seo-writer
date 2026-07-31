@@ -1,20 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { motion } from "motion/react"
+import { AnimatePresence, motion } from "motion/react"
 import {
     AlertTriangle,
-    BarChart3,
-    CheckCircle2,
-    Database,
-    GitMerge,
-    Globe2,
-    Layers3,
-    Loader2,
     RefreshCw,
-    Search,
     ShieldCheck,
-    Users,
 } from "lucide-react"
 import type { BrandDetails } from "@/lib/schemas/brand"
 import { cn } from "@/lib/utils"
@@ -78,48 +69,39 @@ const PHASE_ORDER: AuditPhase[] = [
 const PHASE_COPY: Record<AuditPhase, {
     label: string
     description: string
-    icon: React.ElementType
 }> = {
     competitor_discovery: {
         label: "Finding the competitive set",
         description: "Resolving the sites that compete for the same search demand.",
-        icon: Users,
     },
     harvesting: {
         label: "Harvesting observed searches",
         description: "Collecting real queries and preserving where each one was found.",
-        icon: Search,
     },
     validating_business_scope: {
         label: "Enforcing confirmed business scope",
         description:
             "Assigning each observed search to a product area you approved and rejecting adjacent markets.",
-        icon: ShieldCheck,
     },
     scanning_user_site: {
         label: "Scanning your published coverage",
         description: "Checking which harvested searches your current pages already cover.",
-        icon: Globe2,
     },
     scanning_competitors: {
         label: "Scanning competitor coverage",
         description: "Verifying which gaps are already supported by competitor pages.",
-        icon: BarChart3,
     },
     computing_gaps: {
         label: "Computing verified gaps",
         description: "Comparing observed searches with the coverage found on your pages.",
-        icon: Database,
     },
     clustering: {
         label: "Collapsing gaps into article clusters",
         description: "Removing overlap and grouping articles that should ship together.",
-        icon: GitMerge,
     },
     persisting: {
         label: "Saving your finite scope",
         description: "Writing the evidence, clusters, and planned articles to your account.",
-        icon: Layers3,
     },
 }
 
@@ -428,87 +410,130 @@ export function AuditConsole({
     }
 
     return (
-        <div className="w-full max-w-2xl mx-auto py-8">
-            <div className="text-center mb-10">
-                <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border border-stone-200 shadow-xs mb-6">
-                    <ShieldCheck className="w-10 h-10 text-stone-900" strokeWidth={1.5} />
+        <div className="w-full max-w-md mx-auto py-10 sm:py-14">
+            <div className="mb-12 text-center">
+                <div className="relative mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200/80 bg-white">
+                    <ShieldCheck className="h-5 w-5 text-stone-800" strokeWidth={1.5} />
                     {isRunning && (
-                        <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white" />
+                        <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
+                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                         </span>
                     )}
                 </div>
-                <h3 className="font-serif text-3xl text-stone-900 mb-2">
-                    {isComplete ? "Scope verified" : isRunning ? "Mapping real search demand" : "Preparing your audit"}
+                <h3 className="font-serif text-2xl tracking-tight text-stone-900 sm:text-[1.75rem]">
+                    {isComplete
+                        ? "Scope verified"
+                        : isRunning
+                            ? "Mapping real search demand"
+                            : "Preparing your audit"}
                 </h3>
-                <p className="text-stone-500 text-base max-w-lg mx-auto leading-relaxed">
-                    {currentPhase
-                        ? PHASE_COPY[currentPhase].description
-                        : isComplete
-                            ? "Your finite content scope and its source evidence are ready."
-                            : "Preparing the closed-pool audit."}
-                </p>
+                <div className="relative mx-auto mt-3 h-10 max-w-sm">
+                    <AnimatePresence mode="wait">
+                        <motion.p
+                            key={currentPhase ?? (isComplete ? "done" : "prep")}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                            className="absolute inset-x-0 text-sm leading-relaxed text-stone-500"
+                        >
+                            {currentPhase
+                                ? PHASE_COPY[currentPhase].description
+                                : isComplete
+                                    ? "Your finite content scope and its source evidence are ready."
+                                    : "Preparing the closed-pool audit."}
+                        </motion.p>
+                    </AnimatePresence>
+                </div>
             </div>
 
-            <div className="space-y-3 px-2 sm:px-0">
+            <ol className="mx-auto max-w-xs space-y-0">
                 {PHASE_ORDER.map((phase, index) => {
                     const { status } = phases[phase]
                     const copy = PHASE_COPY[phase]
-                    const Icon = copy.icon
+                    const step = String(index + 1).padStart(2, "0")
+
                     return (
-                        <motion.div
+                        <motion.li
                             key={phase}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.04 }}
-                            className={cn(
-                                "flex items-center gap-4 rounded-xl border p-4 transition-colors",
-                                status === "active" && "border-stone-300 bg-white",
-                                status === "complete" && "border-stone-200 bg-stone-50/60",
-                                status === "pending" && "border-transparent opacity-45"
-                            )}
+                            initial={false}
+                            animate={{
+                                opacity:
+                                    status === "active" ? 1
+                                        : status === "complete" ? 0.38
+                                            : 0.22,
+                            }}
+                            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                            className="flex items-baseline gap-3 py-[0.45rem]"
                         >
-                            <div className={cn(
-                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg",
-                                status === "active" && "bg-stone-900 text-white",
-                                status === "complete" && "bg-emerald-100 text-emerald-700",
-                                status === "pending" && "bg-stone-100 text-stone-400"
-                            )}>
-                                {status === "active"
-                                    ? <Loader2 className="h-5 w-5 animate-spin" />
-                                    : status === "complete"
-                                        ? <CheckCircle2 className="h-5 w-5" />
-                                        : <Icon className="h-5 w-5" />}
-                            </div>
-                            <div className="min-w-0">
-                                <div className="text-sm font-medium text-stone-900">{copy.label}</div>
-                                {status === "active" && (
-                                    <div className="mt-1 text-xs text-stone-500">{copy.description}</div>
+                            <span
+                                className={cn(
+                                    "w-5 shrink-0 font-mono text-[10px] tabular-nums tracking-wide",
+                                    status === "active" ? "text-stone-400" : "text-stone-300",
                                 )}
-                            </div>
-                        </motion.div>
+                            >
+                                {status === "complete" ? "✓" : step}
+                            </span>
+                            <span
+                                className={cn(
+                                    "text-[13px] leading-snug tracking-[-0.01em] transition-[font-weight] duration-300",
+                                    status === "active"
+                                        ? "font-medium text-stone-900"
+                                        : "font-normal text-stone-600",
+                                )}
+                            >
+                                {status === "active" ? (
+                                    <motion.span
+                                        className="inline-block"
+                                        animate={{ opacity: [1, 0.55, 1] }}
+                                        transition={{
+                                            duration: 2.4,
+                                            repeat: Infinity,
+                                            ease: "easeInOut",
+                                        }}
+                                    >
+                                        {copy.label}
+                                    </motion.span>
+                                ) : (
+                                    copy.label
+                                )}
+                            </span>
+                        </motion.li>
                     )
                 })}
-            </div>
+            </ol>
 
             {isComplete && summary && (
                 <motion.div
-                    initial={{ opacity: 0, y: 8 }}
+                    initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mt-8 grid grid-cols-3 gap-3 border-t border-stone-100 pt-7 text-center"
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="mt-12 grid grid-cols-3 gap-2 border-t border-stone-100 pt-8 text-center"
                 >
                     <div>
-                        <div className="text-xs uppercase tracking-wide text-stone-400">Queries</div>
-                        <div className="mt-1 font-serif text-2xl text-stone-900">{summary.pool_size}</div>
+                        <div className="text-[10px] uppercase tracking-[0.14em] text-stone-400">
+                            Queries
+                        </div>
+                        <div className="mt-1.5 font-serif text-xl text-stone-900">
+                            {summary.pool_size}
+                        </div>
                     </div>
                     <div className="border-x border-stone-100">
-                        <div className="text-xs uppercase tracking-wide text-stone-400">Articles</div>
-                        <div className="mt-1 font-serif text-2xl text-stone-900">{summary.article_count}</div>
+                        <div className="text-[10px] uppercase tracking-[0.14em] text-stone-400">
+                            Articles
+                        </div>
+                        <div className="mt-1.5 font-serif text-xl text-stone-900">
+                            {summary.article_count}
+                        </div>
                     </div>
                     <div>
-                        <div className="text-xs uppercase tracking-wide text-stone-400">Clusters</div>
-                        <div className="mt-1 font-serif text-2xl text-stone-900">{summary.cluster_count}</div>
+                        <div className="text-[10px] uppercase tracking-[0.14em] text-stone-400">
+                            Clusters
+                        </div>
+                        <div className="mt-1.5 font-serif text-xl text-stone-900">
+                            {summary.cluster_count}
+                        </div>
                     </div>
                 </motion.div>
             )}
