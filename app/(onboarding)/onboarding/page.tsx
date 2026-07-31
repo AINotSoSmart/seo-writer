@@ -34,7 +34,14 @@ const STORAGE_KEYS = {
     COMPETITORS: 'onboarding_competitors',
     SCOPE_ANALYSIS_ISSUES: 'onboarding_scope_analysis_issues',
     TARGET_SEEDS: 'onboarding_target_seeds',
+    ANALYZING_STARTED_AT: 'onboarding_analyzing_started_at',
 } as const
+
+const ANALYZE_PHASES = [
+    { afterMs: 0, label: "Reading your site…" },
+    { afterMs: 8_000, label: "Finding product areas…" },
+    { afterMs: 18_000, label: "Building brand profile…" },
+] as const
 
 type Step = "brand" | "audit" | "audit-results"
 
@@ -63,6 +70,8 @@ export default function OnboardingPage() {
     const [competitors, setCompetitors] = useState<string[]>([])
     const [targetSeeds, setTargetSeeds] = useState<string[]>([])
     const [analyzing, setAnalyzing] = useState(false)
+    const [analyzePhase, setAnalyzePhase] = useState<string>(ANALYZE_PHASES[0].label)
+    const [analysisInterrupted, setAnalysisInterrupted] = useState(false)
     const [brandData, setBrandData] = useState<BrandDetails | null>(null)
     const [scopeAnalysisIssues, setScopeAnalysisIssues] = useState<
         Array<{ family?: string; message: string }>
@@ -131,6 +140,9 @@ export default function OnboardingPage() {
             STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES,
         )
         const savedTargetSeeds = localStorage.getItem(STORAGE_KEYS.TARGET_SEEDS)
+        const analyzingStartedAt = localStorage.getItem(
+            STORAGE_KEYS.ANALYZING_STARTED_AT,
+        )
 
         // Only clear storage if: user completed onboarding (has brandId) AND has no unsaved brandData
         // This allows fresh start for returning users while preserving progress for those mid-onboarding
@@ -180,6 +192,16 @@ export default function OnboardingPage() {
         // Restore brandId if exists
         if (savedBrandId) {
             setBrandId(savedBrandId)
+        }
+
+        // A refresh mid-analyze cannot resume the in-flight request, but URL /
+        // seeds / competitors are still here — tell the founder to re-run.
+        if (analyzingStartedAt && !savedBrandData) {
+            localStorage.removeItem(STORAGE_KEYS.ANALYZING_STARTED_AT)
+            setAnalysisInterrupted(true)
+            setError(
+                "Last analysis was interrupted — your website and searches are still here. Run Analyze again.",
+            )
         }
 
         // Restore step from URL or fallback to saved step, or default to brand
@@ -292,7 +314,16 @@ export default function OnboardingPage() {
             return
         }
         setAnalyzing(true)
+        setAnalyzePhase(ANALYZE_PHASES[0].label)
+        setAnalysisInterrupted(false)
         setError("")
+        localStorage.setItem(
+            STORAGE_KEYS.ANALYZING_STARTED_AT,
+            String(Date.now()),
+        )
+        const phaseTimers = ANALYZE_PHASES.slice(1).map((phase) =>
+            window.setTimeout(() => setAnalyzePhase(phase.label), phase.afterMs),
+        )
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
@@ -337,7 +368,10 @@ export default function OnboardingPage() {
         } catch (e: any) {
             setError(e.message || "An error occurred")
         } finally {
+            phaseTimers.forEach((id) => window.clearTimeout(id))
+            localStorage.removeItem(STORAGE_KEYS.ANALYZING_STARTED_AT)
             setAnalyzing(false)
+            setAnalyzePhase(ANALYZE_PHASES[0].label)
         }
     }
 
@@ -631,8 +665,18 @@ export default function OnboardingPage() {
                                                     >
                                                         <Globe className="w-4 h-4 text-white" />
                                                     </motion.div>
-                                                    {analyzing ? "Analyzing..." : "Find my business areas"}
+                                                    {analyzing
+                                                        ? analyzePhase
+                                                        : analysisInterrupted
+                                                          ? "Run Analyze again"
+                                                          : "Find my business areas"}
                                                 </Button>
+                                                {analyzing && (
+                                                    <p className="text-center text-[11px] text-stone-400">
+                                                        This usually takes under half a minute. Keep this tab open —
+                                                        refreshing cannot resume the in-flight read.
+                                                    </p>
+                                                )}
                                             </div>
                                         ) : (
                                             // Brand Review Form - Complete with all 10 sections

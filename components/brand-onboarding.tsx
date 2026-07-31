@@ -10,6 +10,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { PillInput } from "@/components/ui/pill-input"
 import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
 
+const ANALYZE_PHASES = [
+    { afterMs: 0, label: "Reading your site…" },
+    { afterMs: 8_000, label: "Finding product areas…" },
+    { afterMs: 18_000, label: "Building brand profile…" },
+] as const
+
+const ANALYZING_STARTED_KEY = "brand_onboarding_analyzing_started_at"
+
 interface BrandOnboardingProps {
     onComplete: (brandId: string) => void
     onCancel: () => void
@@ -21,6 +29,7 @@ interface BrandOnboardingProps {
 export default function BrandOnboarding({ onComplete, onCancel, initialData, initialUrl, brandId }: BrandOnboardingProps) {
     const [url, setUrl] = useState(initialUrl || "")
     const [analyzing, setAnalyzing] = useState(false)
+    const [analyzePhase, setAnalyzePhase] = useState<string>(ANALYZE_PHASES[0].label)
     const [saving, setSaving] = useState(false)
     const [brandData, setBrandData] = useState<BrandDetails | null>(initialData || null)
     const [targetSeeds, setTargetSeeds] = useState<string[]>(
@@ -29,6 +38,17 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
     const [seedsWithoutDemand, setSeedsWithoutDemand] = useState<string[]>([])
     const [error, setError] = useState("")
 
+    useEffect(() => {
+        if (typeof window === "undefined") return
+        const started = localStorage.getItem(ANALYZING_STARTED_KEY)
+        if (started && !initialData) {
+            localStorage.removeItem(ANALYZING_STARTED_KEY)
+            setError(
+                "Last analysis was interrupted — your website and searches are still here. Run Analyze again.",
+            )
+        }
+    }, [initialData])
+
     const handleAnalyze = async () => {
         if (!url) return
         if (targetSeeds.length > 12) {
@@ -36,7 +56,12 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             return
         }
         setAnalyzing(true)
+        setAnalyzePhase(ANALYZE_PHASES[0].label)
         setError("")
+        localStorage.setItem(ANALYZING_STARTED_KEY, String(Date.now()))
+        const phaseTimers = ANALYZE_PHASES.slice(1).map((phase) =>
+            window.setTimeout(() => setAnalyzePhase(phase.label), phase.afterMs),
+        )
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
@@ -73,7 +98,10 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
         } catch (e: any) {
             setError(e.message || "An error occurred")
         } finally {
+            phaseTimers.forEach((id) => window.clearTimeout(id))
+            localStorage.removeItem(ANALYZING_STARTED_KEY)
             setAnalyzing(false)
+            setAnalyzePhase(ANALYZE_PHASES[0].label)
         }
     }
 
@@ -206,8 +234,21 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                         </p>
                     </div>
                     <Button onClick={handleAnalyze} disabled={analyzing || !url} className="w-full bg-stone-900 text-white">
-                        {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analyze Brand"}
+                        {analyzing ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                {analyzePhase}
+                            </>
+                        ) : (
+                            "Analyze Brand"
+                        )}
                     </Button>
+                    {analyzing && (
+                        <p className="text-center text-[11px] text-stone-400">
+                            This usually takes under half a minute. Keep this tab open —
+                            refreshing cannot resume the in-flight read.
+                        </p>
+                    )}
                 </div>
                 <div className="text-center">
                     <button

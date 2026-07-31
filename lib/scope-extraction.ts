@@ -71,6 +71,42 @@ export function selectScopePages(pages: CrawledPage[]): CrawledPage[] {
         .slice(0, MAX_PAGES)
 }
 
+/**
+ * Ranked markdown corpus for brand-persona extraction.
+ * Homepage / pricing / product pages first so a 50k slice cannot drop plans
+ * while keeping blog noise from an unordered crawl.
+ */
+export function buildRankedBrandCorpus(
+    pages: CrawledPage[],
+    maxChars = 50_000,
+): string {
+    const ranked = selectScopePages(pages)
+    if (ranked.length === 0) return ""
+    let corpus = ""
+    for (const page of ranked) {
+        const block = `
+---
+URL: ${page.url}
+Content:
+${page.content}
+---`
+        if (corpus.length + block.length > maxChars) {
+            const remaining = maxChars - corpus.length
+            if (remaining > 200) {
+                corpus += `
+---
+URL: ${page.url}
+Content:
+${page.content.slice(0, remaining - 80)}
+---`
+            }
+            break
+        }
+        corpus += block
+    }
+    return corpus
+}
+
 function buildCorpus(pages: CrawledPage[]): string {
     let corpus = ""
     for (const page of selectScopePages(pages)) {
@@ -95,12 +131,18 @@ Website: ${subjectUrl}
 
 ${
     targetSeeds.length
-        ? `The founder says their customers search for these. Treat this as ground
-truth about what the business sells — it outranks your reading of the pages.
-Every one of these MUST appear verbatim in exactly one family's seed_keywords,
-and if none of your families fits a search, create the family it implies:
-${targetSeeds.map((seed) => `- ${seed}`).join("\n")}`
-        : "The founder supplied no target searches."
+        ? `The founder says their customers search for these. Treat each as ground
+truth that MUST appear verbatim in exactly one family's seed_keywords. If none
+of your families fits a search, create the family it implies:
+${targetSeeds.map((seed) => `- ${seed}`).join("\n")}
+
+Also return every distinct sellable capability visible on the PAGES even when
+the founder did not name it. Founder searches protect coverage of what they
+typed; they must not collapse or hide other customer jobs the site clearly
+offers. Do not merge multiple customer jobs into one family just because the
+founder listed fewer searches.`
+        : `The founder supplied no target searches. Discover every distinct
+sellable capability from the PAGES alone.`
 }
 
 PAGES:
@@ -117,6 +159,9 @@ not the way an engineer would describe the mechanism.
   families.
 - A single-product business returns exactly one family. Do not pad.
 - A business with genuinely separate capabilities returns one per capability.
+- Discover omitted site capabilities: if the pages show photo animation and
+  the founder only typed restoration searches, animation must still be its
+  own family.
 
 For each family provide:
 - name: 2-100 characters, customer-facing.

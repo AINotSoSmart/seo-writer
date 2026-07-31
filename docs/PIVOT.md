@@ -12,9 +12,9 @@ for what to do next.
 
 Last implementation update: 2026-07-31
 
-Status: **confirmed-scope application contract implemented and locally
-validated; the 20260731 migration is not yet applied and checkout remains
-disabled pending the staging/external release gate**
+Status: **brand analyze crawl/scope/pricing UX tightened; confirmed-scope
+application contract implemented; the 20260731 migration is not yet applied and
+checkout remains disabled pending the staging/external release gate**
 
 ## 1. Locked product contract
 
@@ -560,6 +560,43 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-07-31 - brand analyze: cut crawl cost, discover omitted scopes, real pricing
+
+**Founder evidence.** Onboarding brand step took ~84s with a button spinner,
+spent ~10 Tavily credits while competitors stayed user-supplied, echoed the
+founder's typed searches as "Business Scope" (missing site features they
+intentionally omitted), and extracted vague pricing while the landing page
+showed clear plans and perks. Refresh mid-run looked like progress was gone.
+
+**Causes.**
+
+1. `tvly.crawl({ limit: 20, extractDepth: "advanced" })` dominated wall time
+   and credits. Competitors are not part of this call.
+2. Scope prompt said founder seeds "outrank" the pages — correct for protecting
+   typed searches, wrong for discovering omitted site capabilities.
+3. Persona prompt literally asked for `Pricing: High-level model (Subscription,
+   One-time, Free tier)` and fed an unordered 50k crawl blob, so plan grids
+   were truncated out.
+4. UX was a single "Analyzing..." label with no interrupt recovery.
+
+**Fixed.**
+
+- Crawl bound to 8 pages; `basic` first, escalate to `advanced` only when the
+  corpus is thinner than 1500 characters. Instructions prioritize homepage and
+  pricing/product paths.
+- Persona corpus uses `buildRankedBrandCorpus` / `selectScopePages` so pricing
+  and product pages survive the character cap.
+- Scope extraction still requires every founder seed, and also requires every
+  distinct sellable capability visible on the pages even when the founder did
+  not name it.
+- Pricing extraction requires plan name / price / period / perks; forbids vague
+  model-only summaries.
+- Onboarding + brand-onboarding show phased progress copy and restore
+  URL/seeds/competitors after a mid-analyze refresh with a re-run prompt.
+
+Contract suite pins crawl bound, ranked corpus, omitted-capability discovery,
+pricing rules, and analyze UX phases.
 
 ### 2026-07-31 - scope classifier fail-closed on UUID family_ids
 

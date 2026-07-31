@@ -8,9 +8,44 @@ import {
   validateGroundedScope,
 } from "@/lib/brand-scope"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
-import { extractScopeFamilies } from "@/lib/scope-extraction"
+import {
+  buildRankedBrandCorpus,
+  extractScopeFamilies,
+} from "@/lib/scope-extraction"
 
 export const maxDuration = 300 // 5 minute timeout
+
+/** Enough for homepage + pricing + a few product surfaces; 20 burned ~80s. */
+const BRAND_CRAWL_LIMIT = 8
+/** Escalate to advanced extract only when basic crawl is too thin. */
+const THIN_CORPUS_CHARS = 1_500
+
+const CRAWL_INSTRUCTIONS =
+  "Prioritize the homepage (/), /pricing or /price, and product/feature/use-case/service pages. Deprioritize blog, news, careers, legal, login, and signup. Product scope and pricing matter more than writing-style samples."
+
+type CrawledPage = { url: string; content: string }
+
+function pagesFromCrawl(crawlResponse: unknown): CrawledPage[] {
+  const raw = crawlResponse as { results?: unknown[]; data?: unknown[] }
+  const results = raw.results || raw.data
+  if (!results || !Array.isArray(results)) return []
+  return results.map((page) => {
+    const rawPage = page as Record<string, unknown>
+    return {
+      url: String(rawPage.url || ""),
+      content: String(
+        rawPage.rawContent ||
+          rawPage.markdown ||
+          rawPage.content ||
+          "",
+      ),
+    }
+  })
+}
+
+function totalContentChars(pages: CrawledPage[]): number {
+  return pages.reduce((sum, page) => sum + (page.content?.trim().length || 0), 0)
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,17 +54,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing URL" }, { status: 400 })
     }
 
-    // 1. Crawl with Tavily SDK
     const apiKey = process.env.TAVILY_API_KEY
     if (!apiKey) {
       return NextResponse.json({ error: "Tavily API key not configured" }, { status: 500 })
     }
 
-
     const tvly = tavily({ apiKey })
 
-    // Note: crawl returns a promise that resolves when the crawl is complete (sync mode implied by SDK types or it handles polling)
-    // Based on docs, it returns TavilyCrawlResponse
     const targetSeeds = Array.from(
       new Set(
         (Array.isArray(rawTargetSeeds) ? rawTargetSeeds : [])
@@ -46,50 +77,33 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const crawlResponse = await tvly.crawl(url, {
-      limit: 20,
-      extractDepth: "advanced",
+    // Prefer basic extract first — advanced was the main wall-clock and credit
+    // cost. Escalate once only when the first pass is too thin to ground scope.
+    let crawlResponse = await tvly.crawl(url, {
+      limit: BRAND_CRAWL_LIMIT,
+      extractDepth: "basic",
       format: "markdown",
-      instructions: "Find the homepage and every product, service, tool, use-case, feature, pricing, comparison, about, and navigation-linked page. Product scope is more important than blog coverage. Include a small blog sample only for writing style."
+      instructions: CRAWL_INSTRUCTIONS,
     })
-
-    // Aggregate content
-    let combinedContent = ""
-    const crawledPages: Array<{ url: string; content: string }> = []
-    // @ts-ignore - SDK types might be slightly off, checking results property
-    const results = crawlResponse.results || crawlResponse.data
-
-    if (results && Array.isArray(results)) {
-      for (const page of results) {
-        const rawPage = page as any
-        crawledPages.push({
-            url: String(page.url || ""),
-            content: String(
-                page.rawContent ||
-                    rawPage.markdown ||
-                    rawPage.content ||
-                    "",
-            ),
-        })
-      }
-      combinedContent = results.map((page: any) => `
----
-URL: ${page.url}
-Title: ${page.title || 'No Title'}
-Content:
-${page.rawContent || page.markdown || page.content || ''}
----
-`).join("\n")
-    } else {
-      // Fallback dump
-      combinedContent = JSON.stringify(crawlResponse).slice(0, 20000)
+    let crawledPages = pagesFromCrawl(crawlResponse)
+    if (totalContentChars(crawledPages) < THIN_CORPUS_CHARS) {
+      crawlResponse = await tvly.crawl(url, {
+        limit: BRAND_CRAWL_LIMIT,
+        extractDepth: "advanced",
+        format: "markdown",
+        instructions: CRAWL_INSTRUCTIONS,
+      })
+      crawledPages = pagesFromCrawl(crawlResponse)
     }
+
+    const combinedContent =
+      buildRankedBrandCorpus(crawledPages) ||
+      JSON.stringify(crawlResponse).slice(0, 20000)
 
     if (!combinedContent || combinedContent.length < 50) {
       return NextResponse.json({ error: "No content extracted from website" }, { status: 400 })
     }
 
-    // 2. Analyze with Gemini
     const client = getGeminiClient()
 
     const prompt = `
@@ -97,8 +111,8 @@ ${page.rawContent || page.markdown || page.content || ''}
       
       Target Website: ${url}
       
-      Website Content Samples:
-      ${combinedContent.slice(0, 50000)}
+      Website Content Samples (homepage, pricing, and product pages ranked first):
+      ${combinedContent}
 
       Founder-provided target searches (authoritative direction, if any):
       ${targetSeeds.length ? targetSeeds.map((seed) => `- ${seed}`).join("\n") : "- None supplied"}
@@ -117,7 +131,15 @@ ${page.rawContent || page.markdown || page.content || ''}
       5. **Enemy:** What philosophical or practical problem is this product fighting (e.g., "Complexity", "Slow data", "High costs").
       6. **Unique Value Proposition:** 3-5 distinct, permanent selling points.
       7. **Core Features (The "Fixes"):** List permanent product capabilities, not transient UI features.
-      8. **Pricing:** High-level model (Subscription, One-time, Free tier).
+      8. **Pricing:** Extract the real plans visible on the pages. Do NOT summarize as only "Subscription", "One-time", or "Free tier".
+         - When plan cards or pricing tables are visible, each pricing array item is ONE plan line:
+           "Plan name — $price / period — key perk 1; key perk 2; key perk 3"
+         - Copy dollar amounts and plan names from the page; never invent prices.
+         - If the site only states a model with no dollar amounts, use one item like
+           "Subscription — price not listed on crawled pages".
+         - Worked examples:
+           "Close — $249 / month — one cluster per period; finite six-cluster scope"
+           "Accelerate — $449 / month — two clusters per period; same six-cluster scope"
       9. **Brand Keywords:** Generate 4-5 SHORT search keywords (2-4 words each) that represent what a user would type into Google to find this type of product. NOT the brand name, NOT full sentences — just the search terms. Example: for a photo restoration app, keywords might be: "ai photo restoration", "restore old photos", "fix damaged photos", "old photo animation", "family photo repair".
       10. **Style DNA (ROBUST LINGUISTIC GUIDE):**
          Create a SINGLE paragraph that defines the LINGUISTIC STYLE. 
@@ -185,7 +207,9 @@ ${page.rawContent || page.markdown || page.content || ''}
             },
             pricing: {
               type: "ARRAY",
-              items: { type: "STRING" }
+              items: { type: "STRING" },
+              description:
+                "One string per plan: name — $price / period — key perks. Not a vague model label.",
             },
             how_it_works: {
               type: "ARRAY",
@@ -235,7 +259,6 @@ ${page.rawContent || page.markdown || page.content || ''}
       }
     })
 
-    // Fix: response.text is a getter in newer SDKs, not a method
     const text = response.text || ""
     let brandData: any = {}
     try {

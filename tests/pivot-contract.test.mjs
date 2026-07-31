@@ -447,6 +447,63 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
         route.indexOf("const scopePromise") < route.indexOf("const response = await client"),
         "scope extraction must start before the persona call is awaited",
     )
+
+    // Brand crawl burned ~80s / ~10 Tavily credits at limit 20 + advanced.
+    // Bound to 8 pages, prefer basic, escalate only when the corpus is thin,
+    // and feed the persona a ranked corpus so pricing pages survive the 50k cut.
+    assert.match(route, /BRAND_CRAWL_LIMIT\s*=\s*8/)
+    assert.match(route, /extractDepth:\s*"basic"/)
+    assert.match(route, /THIN_CORPUS_CHARS/)
+    assert.match(route, /buildRankedBrandCorpus/)
+    assert.match(extraction, /export function buildRankedBrandCorpus/)
+    assert.match(extraction, /Discover omitted site capabilities/)
+    assert.match(
+        extraction,
+        /even when\s+the founder did not name it/,
+    )
+
+    // Pricing must extract real plan lines, not a vague billing model label.
+    assert.doesNotMatch(
+        route,
+        /High-level model \(Subscription, One-time, Free tier\)/,
+    )
+    assert.match(route, /Do NOT summarize as only "Subscription"/)
+    assert.match(route, /Plan name — \$price \/ period/)
+})
+
+test("brand analyze UX shows phases and survives a refresh mid-run", async () => {
+    const [onboarding, brandOnboarding] = await Promise.all([
+        text("app/(onboarding)/onboarding/page.tsx"),
+        text("components/brand-onboarding.tsx"),
+    ])
+
+    for (const [file, source] of [
+        ["onboarding/page.tsx", onboarding],
+        ["brand-onboarding.tsx", brandOnboarding],
+    ]) {
+        assert.match(
+            source,
+            /Reading your site/,
+            `${file}: phased copy while analyzing`,
+        )
+        assert.match(
+            source,
+            /Finding product areas/,
+            `${file}: phased copy while analyzing`,
+        )
+        assert.match(
+            source,
+            /Building brand profile/,
+            `${file}: phased copy while analyzing`,
+        )
+        assert.match(
+            source,
+            /Last analysis was interrupted/,
+            `${file}: refresh mid-analyze must restore inputs and prompt re-run`,
+        )
+    }
+    assert.match(onboarding, /ANALYZING_STARTED_AT/)
+    assert.match(brandOnboarding, /ANALYZING_STARTED_KEY/)
 })
 
 test("multi-table trigger functions dispatch on TG_TABLE_NAME before touching fields", async () => {
