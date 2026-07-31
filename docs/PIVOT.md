@@ -563,6 +563,13 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-07-31 - confirm-scope step uses page space instead of a cramped nest
+
+Brand confirm no longer traps families inside `max-h-[60vh]` with stacked
+info cards. The island widens to `max-w-5xl`, the page scrolls, each family is
+a two-column row (area name + customer job | searches), and alerts collapse to
+plain text under a `N/12 searches` counter. Caps and validation unchanged.
+
 ### 2026-07-31 - brand gate accepts real Supabase clients under tsc
 
 `userHasActiveBrand` no longer takes a hand-rolled `BrandGateClient` that

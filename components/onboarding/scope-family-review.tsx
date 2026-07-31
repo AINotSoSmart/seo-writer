@@ -5,7 +5,6 @@ import {
     ArrowUp,
     ExternalLink,
     Plus,
-    ShieldCheck,
     Trash2,
 } from "lucide-react"
 
@@ -14,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PillInput } from "@/components/ui/pill-input"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 
 function normalizeSeed(value: string): string {
     return value.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()
@@ -48,6 +48,11 @@ export function ScopeFamilyReview({
     const totalDirections = ordered.reduce(
         (total, family) => total + family.seed_keywords.length,
         0,
+    )
+    const overCap = totalDirections > MAX_SEARCH_DIRECTIONS
+    const hasUnverified = ordered.some((family) => family.verified === false)
+    const hasRare = ordered.some((family) =>
+        family.seed_keywords.some((seed) => noDemand.has(normalizeSeed(seed))),
     )
 
     const replace = (index: number, family: ScopeFamily) => {
@@ -92,70 +97,81 @@ export function ScopeFamilyReview({
     }
 
     return (
-        <section className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-            <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-lg bg-white p-2 text-stone-700 shadow-sm">
-                    <ShieldCheck className="h-4 w-4" />
-                </div>
+        <section className="space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-100 pb-3">
                 <div>
-                    <h3 className="text-sm font-semibold text-stone-950">
-                        Confirm what your business actually sells
-                    </h3>
-                    <p className="mt-1 text-xs leading-relaxed text-stone-600">
-                        The audit may only research these confirmed areas. Rename, remove,
-                        add, or reorder them now. The first area has the highest priority.
+                    <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-400">
+                        Product areas
+                    </p>
+                    <p className="mt-1 text-sm text-stone-500">
+                        First area is highest priority. Research uses only the
+                        searches listed under each area.
                     </p>
                 </div>
+                <p
+                    className={cn(
+                        "font-mono text-xs tabular-nums",
+                        overCap ? "font-medium text-red-600" : "text-stone-400",
+                    )}
+                >
+                    {totalDirections}/{MAX_SEARCH_DIRECTIONS} searches
+                </p>
             </div>
 
-            {unassigned.length > 0 && (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-                    Assign these searches to a product area before continuing:{" "}
-                    <strong>{unassigned.join(", ")}</strong>
-                </div>
-            )}
-            {ordered.some((family) => family.verified === false) && (
-                <div className="rounded-lg border border-stone-300 bg-white p-3 text-xs text-stone-700">
-                    Some areas below are marked{" "}
-                    <strong>not found on your site</strong>. We kept them rather
-                    than guessing — keep the ones that are real, remove the rest.
-                </div>
-            )}
-            {ordered.some((family) =>
-                family.seed_keywords.some((seed) => noDemand.has(normalizeSeed(seed))),
-            ) && (
-                <div className="rounded-lg border border-stone-300 bg-white p-3 text-xs text-stone-700">
-                    Searches marked <strong>rarely searched</strong> got no
-                    suggestions from Google. That usually means the wording
-                    describes how the product works rather than what customers
-                    call it. Reword them for better results.
-                </div>
-            )}
-            {totalDirections > MAX_SEARCH_DIRECTIONS && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-                    Keep the confirmed scope to {MAX_SEARCH_DIRECTIONS} main
-                    searches. You currently have {totalDirections}; combine
-                    close variations before continuing.
+            {(overCap || unassigned.length > 0 || hasUnverified || hasRare) && (
+                <div className="space-y-1.5 text-xs leading-relaxed">
+                    {overCap && (
+                        <p className="text-red-700">
+                            Combine close variations — you have {totalDirections}{" "}
+                            searches; the limit is {MAX_SEARCH_DIRECTIONS}.
+                        </p>
+                    )}
+                    {unassigned.length > 0 && (
+                        <p className="text-amber-800">
+                            Assign to an area before continuing:{" "}
+                            <span className="font-medium">
+                                {unassigned.join(", ")}
+                            </span>
+                        </p>
+                    )}
+                    {hasUnverified && (
+                        <p className="text-stone-500">
+                            <span className="font-medium text-stone-700">
+                                Not on site
+                            </span>{" "}
+                            means we could not quote your pages — keep only if
+                            real.
+                        </p>
+                    )}
+                    {hasRare && (
+                        <p className="text-stone-500">
+                            <span className="font-medium text-stone-700">
+                                Rarely searched
+                            </span>{" "}
+                            means Google Suggest had no expansions — reword if
+                            customers would phrase it differently.
+                        </p>
+                    )}
                 </div>
             )}
 
-            <div className="space-y-3">
+            <div className="divide-y divide-stone-100">
                 {ordered.map((family, index) => (
                     <article
                         key={family.id || `scope-family-${index}`}
-                        className="rounded-lg border border-stone-200 bg-white p-4"
+                        className="py-5 first:pt-1"
                     >
-                        <div className="mb-3 flex items-center justify-between">
-                            <span className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-                                Priority {index + 1}
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                            <span className="flex flex-wrap items-center gap-2 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+                                {index + 1}
                                 {family.source === "founder" && (
                                     <span className="rounded bg-stone-900 px-1.5 py-0.5 text-white">
-                                        From your search
+                                        Your search
                                     </span>
                                 )}
                                 {family.verified === false && (
                                     <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">
-                                        Not found on your site
+                                        Not on site
                                     </span>
                                 )}
                                 {family.seed_keywords.some((seed) =>
@@ -166,12 +182,12 @@ export function ScopeFamilyReview({
                                     </span>
                                 )}
                             </span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex shrink-0 items-center gap-0.5">
                                 <Button
                                     type="button"
                                     size="icon"
                                     variant="ghost"
-                                    className="h-7 w-7"
+                                    className="h-7 w-7 text-stone-400"
                                     onClick={() => move(index, -1)}
                                     disabled={index === 0}
                                     aria-label={`Move ${family.name} up`}
@@ -182,7 +198,7 @@ export function ScopeFamilyReview({
                                     type="button"
                                     size="icon"
                                     variant="ghost"
-                                    className="h-7 w-7"
+                                    className="h-7 w-7 text-stone-400"
                                     onClick={() => move(index, 1)}
                                     disabled={index === ordered.length - 1}
                                     aria-label={`Move ${family.name} down`}
@@ -193,7 +209,7 @@ export function ScopeFamilyReview({
                                     type="button"
                                     size="icon"
                                     variant="ghost"
-                                    className="h-7 w-7 text-red-600 hover:text-red-700"
+                                    className="h-7 w-7 text-stone-400 hover:text-red-600"
                                     onClick={() => remove(index)}
                                     aria-label={`Remove ${family.name}`}
                                 >
@@ -202,34 +218,47 @@ export function ScopeFamilyReview({
                             </div>
                         </div>
 
-                        <div className="space-y-3">
-                            <Input
-                                value={family.name}
-                                onChange={(event) =>
-                                    replace(index, {
-                                        ...family,
-                                        name: event.target.value,
-                                        priority: index,
-                                    })
-                                }
-                                placeholder="Product or service area"
-                                className="font-medium"
-                            />
-                            <Textarea
-                                value={family.description}
-                                onChange={(event) =>
-                                    replace(index, {
-                                        ...family,
-                                        description: event.target.value,
-                                        priority: index,
-                                    })
-                                }
-                                placeholder="What customer job does this area serve?"
-                                rows={2}
-                            />
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="mb-1 block text-[11px] font-medium text-stone-500">
+                                        Area name
+                                    </label>
+                                    <Input
+                                        value={family.name}
+                                        onChange={(event) =>
+                                            replace(index, {
+                                                ...family,
+                                                name: event.target.value,
+                                                priority: index,
+                                            })
+                                        }
+                                        placeholder="e.g. Photo restoration"
+                                        className="font-medium"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-[11px] font-medium text-stone-500">
+                                        Customer job
+                                    </label>
+                                    <Textarea
+                                        value={family.description}
+                                        onChange={(event) =>
+                                            replace(index, {
+                                                ...family,
+                                                description: event.target.value,
+                                                priority: index,
+                                            })
+                                        }
+                                        placeholder="What do customers hire this area to do?"
+                                        rows={2}
+                                        className="resize-none text-sm"
+                                    />
+                                </div>
+                            </div>
                             <div>
-                                <label className="mb-1 block text-xs font-medium text-stone-600">
-                                    Main searches for this area
+                                <label className="mb-1 block text-[11px] font-medium text-stone-500">
+                                    Searches we research
                                 </label>
                                 <PillInput
                                     value={family.seed_keywords}
@@ -240,59 +269,57 @@ export function ScopeFamilyReview({
                                             priority: index,
                                         })
                                     }
-                                    placeholder="Type a direct customer search and press Enter"
+                                    placeholder="Customer search phrase, then Enter"
+                                    className="min-h-[5.5rem]"
                                 />
+                                <p className="mt-1.5 text-[10px] leading-relaxed text-stone-400">
+                                    These are the Google phrases for this area —
+                                    not the area title above.
+                                </p>
                             </div>
                         </div>
 
-                        <div className="mt-3 border-t border-stone-100 pt-3">
-                            {family.evidence.length > 0 ? (
-                                <details>
-                                    <summary className="cursor-pointer text-xs font-medium text-stone-600">
-                                        Why we found this area ({family.evidence.length} website
-                                        source{family.evidence.length === 1 ? "" : "s"})
-                                    </summary>
-                                    <div className="mt-2 space-y-2">
-                                        {family.evidence.map((evidence, evidenceIndex) => (
-                                            <div
-                                                key={`${evidence.url}-${evidenceIndex}`}
-                                                className="rounded-md bg-stone-50 p-2.5"
+                        {family.evidence.length > 0 ? (
+                            <details className="mt-3">
+                                <summary className="cursor-pointer text-[11px] text-stone-400 hover:text-stone-600">
+                                    Site evidence ({family.evidence.length})
+                                </summary>
+                                <div className="mt-2 space-y-2">
+                                    {family.evidence.map((evidence, evidenceIndex) => (
+                                        <div
+                                            key={`${evidence.url}-${evidenceIndex}`}
+                                            className="rounded-md bg-stone-50 px-3 py-2"
+                                        >
+                                            <q className="block text-xs leading-relaxed text-stone-600">
+                                                {evidence.quote}
+                                            </q>
+                                            <a
+                                                href={evidence.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-brand-600"
                                             >
-                                                <q className="block text-xs leading-relaxed text-stone-600">
-                                                    {evidence.quote}
-                                                </q>
-                                                <a
-                                                    href={evidence.url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-brand-600"
-                                                >
-                                                    Open source page
-                                                    <ExternalLink className="h-3 w-3" />
-                                                </a>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </details>
-                            ) : (
-                                <p className="text-xs text-stone-500">
-                                    Added or confirmed by you.
-                                </p>
-                            )}
-                        </div>
+                                                Open source
+                                                <ExternalLink className="h-3 w-3" />
+                                            </a>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+                        ) : null}
                     </article>
                 ))}
             </div>
 
             <Button
                 type="button"
-                variant="outline"
-                className="w-full"
+                variant="ghost"
+                className="h-9 w-full border border-dashed border-stone-200 text-stone-600 hover:bg-stone-50"
                 onClick={add}
                 disabled={ordered.length >= 12}
             >
-                <Plus className="mr-2 h-4 w-4" />
-                Add missing product area
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Add product area
             </Button>
         </section>
     )

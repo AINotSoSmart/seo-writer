@@ -529,7 +529,7 @@ export default function OnboardingPage() {
 
 
     return (
-        <div className="flex min-h-[calc(100vh-5rem)] flex-col items-center justify-center px-4 py-12 font-sans sm:px-6">
+        <div className={`flex min-h-[calc(100vh-5rem)] flex-col px-4 py-10 font-sans sm:px-6 ${brandData && step === "brand" ? "items-stretch sm:items-center" : "items-center justify-center"}`}>
             {/* Show loading while checking access */}
             {isCheckingAccess ? (
                 <div className="flex flex-col items-center gap-3 text-stone-500">
@@ -548,7 +548,7 @@ export default function OnboardingPage() {
           shadow-[0_0_0_1px_rgba(0,0,0,0.08),0px_1px_2px_rgba(0,0,0,0.04)]
           rounded-[20px]
           bg-stone-100
-          ${step === "audit-results" ? "max-w-[1400px] w-full px-4 sm:px-6" : brandData ? "max-w-4xl" : "max-w-xl"}
+          ${step === "audit-results" ? "max-w-[1400px] w-full px-4 sm:px-6" : brandData ? "max-w-5xl" : "max-w-xl"}
         `}
                     >
                         {/* Top Notch */}
@@ -679,14 +679,18 @@ export default function OnboardingPage() {
                                                 )}
                                             </div>
                                         ) : (
-                                            // Brand Review Form - Complete with all 10 sections
-                                            <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <h2 className={`text-lg font-bold text-stone-900`}>Confirm Your Business Scope</h2>
-                                                        <p className={`text-xs text-stone-500`}>Nothing is researched until the product areas and search direction below are correct.</p>
-                                                    </div>
-
+                                            // Brand review — page scrolls; no nested 60vh trap
+                                            <div className="space-y-8 pb-2">
+                                                <div className="max-w-2xl">
+                                                    <h2 className="font-serif text-2xl tracking-tight text-stone-900 sm:text-[1.75rem]">
+                                                        Confirm your business scope
+                                                    </h2>
+                                                    <p className="mt-2 text-sm leading-relaxed text-stone-500">
+                                                        Each block is one product area: a name, the
+                                                        customer job, and the Google searches we may
+                                                        research. Nothing starts until this list is
+                                                        right.
+                                                    </p>
                                                 </div>
 
                                                 <ScopeFamilyReview
@@ -703,11 +707,11 @@ export default function OnboardingPage() {
                                                 />
 
                                                 {scopeAnalysisIssues.length > 0 && (
-                                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
-                                                        <p className="font-semibold">
-                                                            Review these extraction notes
+                                                    <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
+                                                        <p className="font-medium">
+                                                            Extraction notes
                                                         </p>
-                                                        <ul className="mt-1.5 list-disc space-y-1 pl-4">
+                                                        <ul className="mt-1.5 list-disc space-y-1 pl-4 text-amber-900/90">
                                                             {scopeAnalysisIssues.map((issue, index) => (
                                                                 <li key={`${issue.family || "scope"}-${index}`}>
                                                                     {issue.family ? `${issue.family}: ` : ""}
@@ -717,6 +721,16 @@ export default function OnboardingPage() {
                                                         </ul>
                                                     </div>
                                                 )}
+
+                                                <div className="border-t border-stone-100 pt-6">
+                                                    <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-400">
+                                                        Brand details
+                                                    </p>
+                                                    <p className="mt-1 text-sm text-stone-500">
+                                                        Used later for writing voice — skim and fix
+                                                        anything wrong.
+                                                    </p>
+                                                </div>
 
                                                 {/* 1. Product Identity */}
                                                 <div className="space-y-3">
@@ -870,14 +884,14 @@ export default function OnboardingPage() {
                                                     <p className={`text-[10px] text-right text-stone-400`}>Select the style for AI-generated featured images.</p>
                                                 </div>
 
-                                                {/* Continue Button + Research Settings (sticky footer) */}
-                                                <div className="pt-4 border-t border-stone-100  sticky bottom-0 bg-white/80 /80 backdrop-blur-sm py-4 space-y-4">
-                                                    {/* Research Settings */}
+                                                <div className="sticky bottom-0 space-y-4 border-t border-stone-100 bg-white/95 py-4 backdrop-blur-sm">
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div>
-                                                            <label className="block text-xs font-semibold text-stone-600 mb-1">🌏 Search Country</label>
+                                                            <label className="mb-1 block text-[11px] font-medium text-stone-500">
+                                                                Search country
+                                                            </label>
                                                             <select
-                                                                className="w-full h-9 rounded-md border px-2 text-sm bg-white border-stone-200 text-stone-900"
+                                                                className="h-9 w-full rounded-md border border-stone-200 bg-white px-2 text-sm text-stone-900"
                                                                 value={brandData.search_country || ""}
                                                                 onChange={e => updateField('search_country', e.target.value)}
                                                             >
@@ -913,9 +927,11 @@ export default function OnboardingPage() {
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="block text-xs font-semibold text-stone-600 mb-1">📚 Topic Source</label>
+                                                            <label className="mb-1 block text-[11px] font-medium text-stone-500">
+                                                                Topic source
+                                                            </label>
                                                             <select
-                                                                className="w-full h-9 rounded-md border px-2 text-sm bg-white border-stone-200 text-stone-900"
+                                                                className="h-9 w-full rounded-md border border-stone-200 bg-white px-2 text-sm text-stone-900"
                                                                 value={brandData.search_topic || "general"}
                                                                 onChange={e => updateField('search_topic', e.target.value)}
                                                             >
@@ -926,7 +942,9 @@ export default function OnboardingPage() {
                                                             </select>
                                                         </div>
                                                     </div>
-                                                    <p className="text-[10px] text-stone-400">These settings filter research sources for audits, plans, and articles.</p>
+                                                    <p className="text-[10px] text-stone-400">
+                                                        Filters research sources for audits and articles.
+                                                    </p>
 
                                                     <Button
                                                         onClick={handleSaveBrand}
