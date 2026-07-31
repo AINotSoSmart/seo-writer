@@ -256,6 +256,67 @@ ${batch
                     "third_party_branded",
                     "publisher_specific",
                 ])
+                // #region agent log
+                const diag = {
+                    invalidDecision: 0,
+                    badReason: 0,
+                    unknownFamilyId: 0,
+                    directMissingFamily: 0,
+                    sampleUnknownFamilies: [] as string[],
+                    sampleInvalidDecisions: [] as string[],
+                    sampleDirectMissing: [] as number[],
+                    decisionCounts: {} as Record<string, number>,
+                    indexIssues: {
+                        nonInteger: 0,
+                        outOfRange: 0,
+                        duplicate: 0,
+                    },
+                }
+                const seenIndexes = new Set<number>()
+                for (const assignment of assignments) {
+                    const d = String(assignment?.decision ?? "undefined")
+                    diag.decisionCounts[d] = (diag.decisionCounts[d] || 0) + 1
+                    if (!validDecisions.has(assignment.decision)) {
+                        diag.invalidDecision++
+                        if (diag.sampleInvalidDecisions.length < 5) {
+                            diag.sampleInvalidDecisions.push(d)
+                        }
+                    }
+                    if (typeof assignment.reason !== "string") diag.badReason++
+                    const suppliedFamily =
+                        typeof assignment.family_id === "string" &&
+                        assignment.family_id.length > 0
+                    if (
+                        suppliedFamily &&
+                        !familyIds.has(assignment.family_id as string)
+                    ) {
+                        diag.unknownFamilyId++
+                        if (diag.sampleUnknownFamilies.length < 5) {
+                            diag.sampleUnknownFamilies.push(
+                                String(assignment.family_id),
+                            )
+                        }
+                    }
+                    if (assignment.decision === "direct" && !suppliedFamily) {
+                        diag.directMissingFamily++
+                        if (diag.sampleDirectMissing.length < 5) {
+                            diag.sampleDirectMissing.push(assignment.index)
+                        }
+                    }
+                    if (!Number.isInteger(assignment.index)) {
+                        diag.indexIssues.nonInteger++
+                    } else if (
+                        assignment.index < 0 ||
+                        assignment.index >= batch.length
+                    ) {
+                        diag.indexIssues.outOfRange++
+                    } else if (seenIndexes.has(assignment.index)) {
+                        diag.indexIssues.duplicate++
+                    } else {
+                        seenIndexes.add(assignment.index)
+                    }
+                }
+                // #endregion
                 const malformed = assignments.some((assignment) => {
                     const suppliedFamily =
                         typeof assignment.family_id === "string" &&
@@ -271,6 +332,45 @@ ${batch
                 })
                 if (malformed || assignments.length !== batch.length) {
                     lastError = "assignments violated the scope response contract"
+                    // #region agent log
+                    const payload = {
+                        sessionId: "56d2b8",
+                        runId: "pre-fix",
+                        hypothesisId: "A-E",
+                        location: "scope-classifier.ts:contract",
+                        message: "scope response contract violated",
+                        data: {
+                            attempt,
+                            offset,
+                            batchLength: batch.length,
+                            assignmentCount: assignments.length,
+                            lengthMismatch:
+                                assignments.length !== batch.length,
+                            malformed,
+                            familyCount: families.length,
+                            knownFamilyIds: families.map((f) => f.id),
+                            knownFamilyNames: families.map((f) => f.name),
+                            textLen: (response.text || "").length,
+                            ...diag,
+                        },
+                        timestamp: Date.now(),
+                    }
+                    console.error(
+                        "[debug-56d2b8] scope contract violation",
+                        JSON.stringify(payload.data),
+                    )
+                    fetch(
+                        "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "X-Debug-Session-Id": "56d2b8",
+                            },
+                            body: JSON.stringify(payload),
+                        },
+                    ).catch(() => {})
+                    // #endregion
                     continue
                 }
                 const candidate = new Map<number, RawAssignment>()
@@ -286,18 +386,135 @@ ${batch
                 }
                 if (candidate.size !== batch.length) {
                     lastError = `${candidate.size}/${batch.length} decisions`
+                    // #region agent log
+                    const payload = {
+                        sessionId: "56d2b8",
+                        runId: "pre-fix",
+                        hypothesisId: "A",
+                        location: "scope-classifier.ts:index-coverage",
+                        message: "assignment index coverage incomplete",
+                        data: {
+                            attempt,
+                            offset,
+                            batchLength: batch.length,
+                            assignmentCount: assignments.length,
+                            candidateSize: candidate.size,
+                            ...diag,
+                        },
+                        timestamp: Date.now(),
+                    }
+                    console.error(
+                        "[debug-56d2b8] index coverage fail",
+                        JSON.stringify(payload.data),
+                    )
+                    fetch(
+                        "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "X-Debug-Session-Id": "56d2b8",
+                            },
+                            body: JSON.stringify(payload),
+                        },
+                    ).catch(() => {})
+                    // #endregion
                     continue
                 }
                 byIndex = candidate
                 callsSucceeded++
+                // #region agent log
+                fetch(
+                    "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-Debug-Session-Id": "56d2b8",
+                        },
+                        body: JSON.stringify({
+                            sessionId: "56d2b8",
+                            runId: "pre-fix",
+                            hypothesisId: "ok",
+                            location: "scope-classifier.ts:batch-ok",
+                            message: "scope batch accepted",
+                            data: {
+                                attempt,
+                                offset,
+                                batchLength: batch.length,
+                                decisionCounts: diag.decisionCounts,
+                            },
+                            timestamp: Date.now(),
+                        }),
+                    },
+                ).catch(() => {})
+                // #endregion
                 break
             } catch (error) {
                 lastError =
                     error instanceof Error ? error.message : "unknown error"
+                // #region agent log
+                const payload = {
+                    sessionId: "56d2b8",
+                    runId: "pre-fix",
+                    hypothesisId: "E",
+                    location: "scope-classifier.ts:catch",
+                    message: "scope classification attempt threw",
+                    data: {
+                        attempt,
+                        offset,
+                        batchLength: batch.length,
+                        error: lastError,
+                    },
+                    timestamp: Date.now(),
+                }
+                console.error(
+                    "[debug-56d2b8] classification throw",
+                    JSON.stringify(payload.data),
+                )
+                fetch(
+                    "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-Debug-Session-Id": "56d2b8",
+                        },
+                        body: JSON.stringify(payload),
+                    },
+                ).catch(() => {})
+                // #endregion
             }
         }
 
         if (!byIndex) {
+            // #region agent log
+            fetch(
+                "http://127.0.0.1:7402/ingest/9eb5bbba-9e17-4d17-941f-d7f2c5a309b7",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-Debug-Session-Id": "56d2b8",
+                    },
+                    body: JSON.stringify({
+                        sessionId: "56d2b8",
+                        runId: "pre-fix",
+                        hypothesisId: "fatal",
+                        location: "scope-classifier.ts:fatal",
+                        message: "scope classification exhausted attempts",
+                        data: {
+                            offset,
+                            batchLength: batch.length,
+                            lastError,
+                            classifiableTotal: classifiable.length,
+                            familyCount: families.length,
+                        },
+                        timestamp: Date.now(),
+                    }),
+                },
+            ).catch(() => {})
+            // #endregion
             throw new Error(
                 `Business-scope classification failed after ${MAX_ATTEMPTS_PER_BATCH} bounded attempts: ${lastError}`,
             )
