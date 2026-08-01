@@ -331,14 +331,28 @@ research and evidence each downstream stage receives.
 
 Why this SQL is substantial: these values are part of an immutable paid scope,
 so saving them through later independent HTTP updates would create a partial-run
-window. The migration patches the current `confirm_brand_scope` and
-`finalize_audit_run` definitions, copies contracts through every customer and
-prospect snapshot path, validates recognized JSON versions, and guards completed
-rows against later contract edits. The finalizer is defined explicitly with the
-later subnode, origin-family and parent-rollup ownership behavior included. An
-earlier draft tried to patch `pg_get_functiondef()` text and failed on a valid
-database because PostgreSQL normalized the function text differently; do not
-restore that brittle replacement approach.
+window. The migration copies contracts through every customer and prospect
+snapshot path, validates recognized JSON versions, and guards completed rows
+against later contract edits. The finalizer is defined explicitly with the later
+subnode, origin-family and parent-rollup ownership behavior included.
+
+The mutable brand-scope copy is synchronized at database table boundaries. A
+`BEFORE INSERT` trigger hydrates a missing contract from the exact confirmed
+`brand_data.scope_families` payload; an `AFTER UPDATE OF brand_data` trigger
+synchronizes rows after onboarding replaces that payload; and an idempotent
+backfill repairs existing split-brain rows. The audit endpoint performs the same
+non-generative reconciliation from the confirmed payload as a deployment-safety
+fallback. This is deliberate: an earlier migration used textual replacement on
+`pg_get_functiondef(confirm_brand_scope)`. It added the validation clause but,
+on one valid production function format, failed to add the contract to the
+INSERT. Its check merely found the word `capability_contract` in the validation
+clause and reported success. Never restore function-text patching here.
+
+Production databases that already applied `20260807` receive the trigger and
+backfill through `20260808_repair_scope_capability_sync.sql`; clean databases get
+the safe definitions in `20260807` and harmlessly replace them again in
+`20260808`. The affected BringBack production brand was repaired from its own
+confirmed snapshot: 7 scope rows now contain `capability-v1`, 0 remain missing.
 
 Historical source context is honestly backfilled from `observed_value`. No old
 capability or article contract is fabricated. Historical articles remain

@@ -2630,6 +2630,31 @@ test("the writer contract blocks the BringBack semantic-drift failure upstream",
     assert.match(payload, /resolveCapabilityFacts/)
 })
 
+test("confirmed capability contracts cannot split between brand JSON and scope rows", async () => {
+    const [migration, repairMigration, auditRoute] = await Promise.all([
+        text("supabase/migrations/20260807_writer_intent_contracts.sql"),
+        text("supabase/migrations/20260808_repair_scope_capability_sync.sql"),
+        text("app/api/topical-audit/route.ts"),
+    ])
+
+    for (const sql of [migration, repairMigration]) {
+        assert.match(sql, /hydrate_brand_scope_capability_contract/)
+        assert.match(sql, /trg_hydrate_brand_scope_capability_contract/)
+        assert.match(sql, /sync_brand_scope_capability_contracts/)
+        assert.match(sql, /AFTER INSERT OR UPDATE OF brand_data/)
+    }
+    assert.match(repairMigration, /Repair every existing split-brain row/)
+    assert.doesNotMatch(migration, /SELECT pg_get_functiondef/)
+    assert.doesNotMatch(migration, /EXECUTE v_new/)
+    assert.doesNotMatch(repairMigration, /SELECT pg_get_functiondef/)
+    assert.doesNotMatch(repairMigration, /EXECUTE v_new/)
+
+    assert.match(auditRoute, /reconcileScopeCapabilityContracts/)
+    assert.match(auditRoute, /snapshotFamilies\.find\(\(family\) => family\.id === row\.id\)/)
+    assert.match(auditRoute, /confirmed product mechanics could not be synchronized/i)
+    assert.match(auditRoute, /missing their verified mechanics/i)
+})
+
 test("contract research can legitimately stop after broad search", async () => {
     const writer = await text("trigger/generate-blog.ts")
     assert.match(writer, /Return zero, one, or two targeted queries/)
