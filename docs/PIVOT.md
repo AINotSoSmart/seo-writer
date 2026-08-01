@@ -564,6 +564,36 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-02 - clustering: family demand floor vs thematic split (BringBack)
+
+**Production diagnosis** on audit `ce3aed21` (bringback.pro): harvest was **not**
+starved — 333 pool rows, **123 gaps**, 14–26 gaps per family. Collapse produced
+**40 article units** but **0 clusters** because:
+
+1. **Thematic over-split** — families with 8 collapsed units (e.g. 25 gaps → 8
+   units) were split into sub-groups that never reached 8, so `groupIntoClusters`
+   returned all units as orphans.
+2. **Sub-areas clustered alone** — `parent_scope_family_id` steered absorption
+   but not clustering; child domains like "Add Person to Photo" were clustered
+   separately from their parent.
+
+**Fix (policy `v3.2.0`):**
+
+- When a family has **≥8 collapsed units** but no thematic group of 8, emit a
+  sellable cluster from the full unit set (`splitOversized` still applies).
+- Roll **child scope families into their parent** before clustering (same FK
+  adoption pattern as absorption: `originScopeFamilyId` preserved).
+
+Re-audit required to pick up the new clustering behaviour.
+
+### 2026-08-02 - fix confirm_brand_scope `item` ambiguity on onboarding
+
+`20260804` parent-link UPDATE aliased `jsonb_array_elements` as `item` while the
+preceding `FOR item` loop was still in scope. Postgres raised *column reference
+'item' is ambiguous* and `save_onboarding_brand_with_scope` returned 400 at the
+brand step. Fixed in `20260805_fix_confirm_brand_scope_item_ambiguous.sql` by
+renaming the UPDATE alias to `family_row`.
+
 ### 2026-08-02 - founder test-article QA route fixed and fully wired
 
 `/founder/test-article` failed at article insert with

@@ -584,16 +584,54 @@ export async function assembleHarvest(
     }
     articleUnits = await titleArticles(articleUnits)
 
-    // Group per family, then absorb every family's orphans against every
-    // family's qualified clusters. Absorption has to happen here rather than
-    // inside groupIntoClusters, which only ever sees one family and therefore
-    // has no sibling to absorb into.
-    const groupings = input.scopeFamilies.map((family) =>
-        groupIntoClusters(
-            articleUnits.filter(
-                (article) => article.scopeFamilyId === family.id,
-            ),
-        ),
+    // Sub-areas declared at scope confirmation roll into their parent's
+    // clustering pool so thin child + parent demand can clear the node floor
+    // together (e.g. "Add Person to Photo" under "AI Family Portrait").
+    const clusterRoots = input.scopeFamilies.filter(
+        (family) => !family.parentScopeFamilyId,
+    )
+    const childIdsByParent = new Map<string, string[]>()
+    for (const family of input.scopeFamilies) {
+        if (!family.parentScopeFamilyId) continue
+        const siblings = childIdsByParent.get(family.parentScopeFamilyId) || []
+        siblings.push(family.id)
+        childIdsByParent.set(family.parentScopeFamilyId, siblings)
+    }
+
+    const unitsForClusterRoot = (root: (typeof input.scopeFamilies)[number]) => {
+        const childIds = new Set(childIdsByParent.get(root.id) || [])
+        const rolled = articleUnits
+            .filter(
+                (unit) =>
+                    unit.scopeFamilyId === root.id || childIds.has(unit.scopeFamilyId),
+            )
+            .map((unit) => {
+                if (unit.scopeFamilyId === root.id) return unit
+                return {
+                    ...unit,
+                    originScopeFamilyId: unit.originScopeFamilyId ?? unit.scopeFamilyId,
+                    scopeFamilyId: root.id,
+                }
+            })
+        if (childIds.size > 0 && rolled.length > 0) {
+            const own = articleUnits.filter((u) => u.scopeFamilyId === root.id).length
+            const fromChildren = rolled.length - own
+            if (fromChildren > 0) {
+                console.log(
+                    `[Assembly] Family "${root.name}": clustering ${own} own + ` +
+                        `${fromChildren} sub-area article units ` +
+                        `(${rolled.length} total)`,
+                )
+            }
+        }
+        return rolled
+    }
+
+    // Group per cluster root (parent domains), then absorb orphans across the
+    // audit. Absorption has to happen here rather than inside groupIntoClusters,
+    // which only ever sees one family's units at a time.
+    const groupings = clusterRoots.map((family) =>
+        groupIntoClusters(unitsForClusterRoot(family)),
     )
     const absorbed = absorbOrphanedUnits(
         groupings.flatMap((grouping) => grouping.clusters),

@@ -208,6 +208,25 @@ test("absorbed sub-node intents survive all the way to the writer", async () => 
     assert.match(review, /parent_hint/)
 })
 
+test("a family with enough collapsed units still qualifies when themes split", async () => {
+    const clusterer = await text("lib/harvest/clusterer.ts")
+    const assembly = await text("lib/harvest/assembly.ts")
+
+    // BringBack.pro: 25 gaps → 8 article units → 0 clusters because thematic
+    // grouping split eight intents into sub-groups below the floor. The demand
+    // was real; the second-level split was the bottleneck.
+    assert.match(
+        clusterer,
+        /family demand supports/,
+        "groupIntoClusters must qualify a family whose total units clear the floor",
+    )
+    assert.match(
+        assembly,
+        /unitsForClusterRoot|clusterRoots/,
+        "assembly must roll sub-areas into parent domains before clustering",
+    )
+})
+
 test("no measured query can be silently destroyed by clustering", async () => {
     // From absorption.ts, not clusterer.ts: the clusterer imports "@/..."
     // aliases that plain node cannot resolve.
@@ -1121,7 +1140,7 @@ test("qualified clusters are 8-15 unique articles; thin clusters are never progr
     assert.match(productTruth, /minClusterArticles:\s*8/)
     assert.match(productTruth, /maxClusterArticles:\s*15/)
     assert.match(policy, /minQualifiedClusterArticles:\s*8/)
-    assert.match(policy, /version:\s*"confirmed-business-scope-v3\.1\.0"/)
+    assert.match(policy, /version:\s*"confirmed-business-scope-v3\.2\.0"/)
     assert.match(pricing, /Between 8 and 15 per cluster/)
 
     // The undersized escape that forced one 1–7 article cluster is gone.
