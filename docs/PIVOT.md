@@ -12,10 +12,10 @@ for what to do next.
 
 Last implementation update: 2026-08-02
 
-Status: **competitor coverage failover (skip dead sites, fill from 12-candidate
-reserve); onboarding analyze streams progressive scope unlock; clustering
-family-floor + parent rollup; checkout remains disabled pending the
-staging/external release gate**
+Status: **finalize accepts absorbed/parent-rolled query ownership (20260806);
+competitor coverage failover; onboarding analyze streams; clustering family-floor
++ parent rollup; checkout remains disabled pending the staging/external release
+gate**
 
 ## 1. Locked product contract
 
@@ -561,6 +561,32 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-02 - competitor candidate pool must not block audit restart
+
+A failed run wrote the provisional 5–12 discovery list onto
+`brand_details.discovered_competitors`. The next attempt then hard-failed with
+"maximum is 4". Fix: treat the saved list as a candidate pool (cap 12), write
+candidates only to the audit row mid-run, and update the brand only after
+coverage succeeds with the usable working set.
+
+### 2026-08-02 - finalize accepts absorbed / parent-rolled query ownership
+
+**Production failure** on audit `7e9e8724` after a full harvest:
+
+> An article references a query outside its confirmed scope
+
+Parent-scope rollup and absorption correctly set `planned_articles.scope_family_id`
+to the host cluster family and record the measured family on
+`origin_scope_family_id`. `query_pool` rows keep the origin family. `finalize_audit_run`
+still required `qp.scope_family_id = pa.scope_family_id`, so every rolled-up or
+absorbed article failed at the last step.
+
+**Fix:** migration `20260806_fix_finalize_absorbed_query_scope.sql` widens the
+check to also accept `origin_scope_family_id` and child→parent
+`parent_scope_family_id` links. Apply in the Supabase SQL editor (already
+applied on production via MCP). Re-run the audit — no code deploy required for
+the SQL side.
 
 ### 2026-08-02 - competitor coverage failover (policy v3.3.0)
 

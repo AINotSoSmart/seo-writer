@@ -208,6 +208,23 @@ test("absorbed sub-node intents survive all the way to the writer", async () => 
     assert.match(review, /parent_hint/)
 })
 
+test("finalize accepts absorbed and parent-rolled query ownership", async () => {
+    // Parent rollup / absorption set article.scope_family_id to the host while
+    // source_query_ids still point at query_pool rows under the origin family.
+    // The strict equality check aborted completed harvests with
+    // "An article references a query outside its confirmed scope".
+    const migration = await text(
+        "supabase/migrations/20260806_fix_finalize_absorbed_query_scope.sql",
+    )
+    assert.match(migration, /pa\.origin_scope_family_id IS NOT NULL/)
+    assert.match(
+        migration,
+        /child_family\.parent_scope_family_id = pa\.scope_family_id/,
+    )
+    assert.match(migration, /AND qp\.scope_family_id = pa\.scope_family_id/)
+    assert.match(migration, /already accepts absorbed\/parent-rolled/)
+})
+
 test("a family with enough collapsed units still qualifies when themes split", async () => {
     const clusterer = await text("lib/harvest/clusterer.ts")
     const assembly = await text("lib/harvest/assembly.ts")
@@ -893,6 +910,12 @@ test("user-supplied competitors top up via discovery instead of freezing the lis
     assert.match(runAudit, /remainingCandidateSlots/)
     assert.match(runAudit, /maxCompetitorCandidates/)
     assert.match(runAudit, /competitorsUsed/)
+    assert.match(runAudit, /savedCompetitors/)
+    assert.doesNotMatch(
+        runAudit,
+        /maximum is \$\{HARVEST_POLICY\.maxCompetitors\}/,
+        "saved candidate pools above 4 must not hard-fail the audit restart",
+    )
     // The old binary skip — if any user competitors exist, never discover —
     // must stay gone.
     assert.doesNotMatch(

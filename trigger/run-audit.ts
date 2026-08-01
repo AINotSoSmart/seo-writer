@@ -75,10 +75,12 @@ export const runAuditTask = task({
                 discoveryCalls.set(source, row)
             }
 
-            // User-named competitors are preferred seeds. Discover a reserve
-            // pool (up to maxCompetitorCandidates) so coverage can skip
-            // unreadable sites and still fill the working set of four.
-            const userCompetitors = (
+            // Saved competitors may be a prior candidate pool (up to
+            // maxCompetitorCandidates) left behind by a failed run that wrote
+            // provisional discovery results before finalize. Treat them as
+            // preferred seeds for this run — never hard-fail above 4 here.
+            // The working set of 4 is enforced after coverage succeeds.
+            const savedCompetitors = (
                 Array.isArray(brandRecord?.discovered_competitors)
                     ? brandRecord.discovered_competitors
                     : []
@@ -91,15 +93,15 @@ export const runAuditTask = task({
                 }
             }) as Array<{ name: string; url: string; domain?: string }>
 
-            if (userCompetitors.length > HARVEST_POLICY.maxCompetitors) {
+            if (savedCompetitors.length > HARVEST_POLICY.maxCompetitorCandidates) {
                 throw new Error(
-                    `The saved audit input has ${userCompetitors.length} competitors; maximum is ${HARVEST_POLICY.maxCompetitors}. None were silently removed.`,
+                    `The saved audit input has ${savedCompetitors.length} competitor candidates; maximum is ${HARVEST_POLICY.maxCompetitorCandidates}. None were silently removed.`,
                 )
             }
 
             let discovered: Array<{ name: string; url: string; domain?: string }> = []
             const remainingCandidateSlots =
-                HARVEST_POLICY.maxCompetitorCandidates - userCompetitors.length
+                HARVEST_POLICY.maxCompetitorCandidates - savedCompetitors.length
             if (remainingCandidateSlots > 0) {
                 discovered = await discoverCompetitors(
                     brandData,
@@ -112,9 +114,9 @@ export const runAuditTask = task({
                         counts.attempted > 0 &&
                         counts.failed === counts.attempted
                     ) {
-                        // User seeds still let harvest proceed; only fail hard
-                        // when there was nothing user-supplied either.
-                        if (userCompetitors.length === 0) {
+                        // Saved seeds still let harvest proceed; only fail hard
+                        // when there was nothing saved either.
+                        if (savedCompetitors.length === 0) {
                             const failure = new Error(
                                 `Configured source failed completely: ${source}`,
                             )
@@ -124,7 +126,7 @@ export const runAuditTask = task({
                         }
                     }
                 }
-            } else if (userCompetitors.length > 0) {
+            } else if (savedCompetitors.length > 0) {
                 discoveryCalls.set("competitor_discovery", {
                     attempted: 0,
                     succeeded: 0,
@@ -134,7 +136,7 @@ export const runAuditTask = task({
             }
 
             const competitorCandidates = mergeUserFirstCompetitors(
-                userCompetitors,
+                savedCompetitors,
                 discovered.filter((competitor) => {
                     try {
                         const host = new URL(competitor.url).hostname.toLowerCase()
@@ -149,20 +151,10 @@ export const runAuditTask = task({
                 HARVEST_POLICY.maxCompetitorCandidates,
             )
 
-            // Provisional candidate list for the run; rewritten to the usable
-            // working set after coverage failover.
-            if (competitorCandidates.length > 0) {
-                await supabase
-                    .from("brand_details")
-                    .update({
-                        discovered_competitors: competitorCandidates.map(
-                            ({ name, url }) => ({ name, url }),
-                        ),
-                    })
-                    .eq("id", brandId)
-                    .eq("user_id", userId)
-            }
-
+            // Candidates stay on the audit row for this run. Do NOT write the
+            // provisional 5–12 list onto brand_details — a mid-run failure would
+            // then block the next attempt with "maximum is 4". Brand is updated
+            // only after coverage succeeds, with the usable working set.
             await supabase
                 .from("topical_audits")
                 .update({
