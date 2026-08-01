@@ -81,55 +81,116 @@ WHERE source_context IS NULL
     'Frozen article-contract-v1 controlling intent, product facts, research and length.';
 
 -- ---------------------------------------------------------------------------
--- Scope confirmation: require and persist a capability-v1 object for every
--- newly confirmed family. This patches the latest function in-place so future
--- fixes to unrelated parent-link behavior are not overwritten by an old copy.
+-- Scope confirmation: keep the mutable relational rows synchronized with the
+-- confirmed JSON snapshot. Do this at the table boundary instead of rewriting
+-- another function's pg_get_functiondef() output: textual rewrites are format
+-- dependent and can succeed after changing validation while missing INSERT.
 -- ---------------------------------------------------------------------------
-DO $$
+CREATE OR REPLACE FUNCTION public.hydrate_brand_scope_capability_contract()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
 DECLARE
-    v_src TEXT;
-    v_new TEXT;
+    v_contract JSONB;
 BEGIN
-    SELECT pg_get_functiondef(oid) INTO v_src
-    FROM pg_proc
-    WHERE oid = to_regprocedure(
-        'public.confirm_brand_scope(uuid,jsonb,text,text,jsonb)'
-    );
-    IF v_src IS NULL THEN
-        RAISE EXCEPTION 'confirm_brand_scope is missing';
-    END IF;
-    IF position('capability_contract' IN v_src) > 0 THEN
-        RETURN;
+    IF NEW.capability_contract IS NOT NULL THEN
+        RETURN NEW;
     END IF;
 
-    v_new := replace(
-        v_src,
-        '    DELETE FROM public.brand_scope_families WHERE brand_id = p_brand_id;',
-        '    IF EXISTS (' || chr(10) ||
-        '        SELECT 1 FROM jsonb_array_elements(p_families) family' || chr(10) ||
-        '        WHERE jsonb_typeof(family->''capability_contract'') IS DISTINCT FROM ''object''' || chr(10) ||
-        '           OR family->''capability_contract''->>''version'' <> ''capability-v1''' || chr(10) ||
-        '    ) THEN' || chr(10) ||
-        '        RAISE EXCEPTION ''Every confirmed product area requires capability-v1 mechanics'';' || chr(10) ||
-        '    END IF;' || chr(10) || chr(10) ||
-        '    DELETE FROM public.brand_scope_families WHERE brand_id = p_brand_id;'
-    );
-    v_new := replace(
-        v_new,
-        'source, priority, enabled' || chr(10) || '        ) VALUES',
-        'source, priority, enabled, capability_contract' || chr(10) || '        ) VALUES'
-    );
-    v_new := replace(
-        v_new,
-        '            TRUE' || chr(10) || '        );',
-        '            TRUE,' || chr(10) ||
-        '            item->''capability_contract''' || chr(10) || '        );'
-    );
-    IF v_new = v_src OR position('capability_contract' IN v_new) = 0 THEN
-        RAISE EXCEPTION 'Could not patch confirm_brand_scope for capability contracts';
+    SELECT family->'capability_contract'
+    INTO v_contract
+    FROM public.brand_details bd
+    CROSS JOIN LATERAL jsonb_array_elements(
+        COALESCE(bd.brand_data->'scope_families', '[]'::jsonb)
+    ) AS family
+    WHERE bd.id = NEW.brand_id
+      AND (
+          COALESCE(family->>'id', '') = NEW.id::text
+          OR lower(btrim(COALESCE(family->>'name', ''))) = lower(btrim(NEW.name))
+      )
+      AND jsonb_typeof(family->'capability_contract') = 'object'
+      AND family->'capability_contract'->>'version' = 'capability-v1'
+    LIMIT 1;
+
+    NEW.capability_contract := v_contract;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_hydrate_brand_scope_capability_contract ON public.brand_scope_families;
+CREATE TRIGGER trg_hydrate_brand_scope_capability_contract
+BEFORE INSERT ON public.brand_scope_families
+FOR EACH ROW EXECUTE FUNCTION public.hydrate_brand_scope_capability_contract();
+
+CREATE OR REPLACE FUNCTION public.sync_brand_scope_capability_contracts()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' AND NEW.brand_data IS NOT DISTINCT FROM OLD.brand_data THEN
+        RETURN NEW;
     END IF;
-    EXECUTE v_new;
-END $$;
+
+    UPDATE public.brand_scope_families sf
+    SET capability_contract = family->'capability_contract',
+        updated_at = now()
+    FROM jsonb_array_elements(
+        COALESCE(NEW.brand_data->'scope_families', '[]'::jsonb)
+    ) AS family
+    WHERE sf.brand_id = NEW.id
+      AND (
+          COALESCE(family->>'id', '') = sf.id::text
+          OR lower(btrim(COALESCE(family->>'name', ''))) = lower(btrim(sf.name))
+      )
+      AND jsonb_typeof(family->'capability_contract') = 'object'
+      AND family->'capability_contract'->>'version' = 'capability-v1'
+      AND sf.capability_contract IS DISTINCT FROM family->'capability_contract';
+
+    IF NEW.scope_contract_version = 'confirmed-business-scope-v2'
+       AND EXISTS (
+           SELECT 1
+           FROM public.brand_scope_families sf
+           WHERE sf.brand_id = NEW.id
+             AND sf.enabled = TRUE
+             AND (
+                 jsonb_typeof(sf.capability_contract) IS DISTINCT FROM 'object'
+                 OR sf.capability_contract->>'version' <> 'capability-v1'
+             )
+       )
+    THEN
+        RAISE EXCEPTION 'Every confirmed product area requires capability-v1 mechanics';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_sync_brand_scope_capability_contracts ON public.brand_details;
+CREATE TRIGGER trg_sync_brand_scope_capability_contracts
+AFTER INSERT OR UPDATE OF brand_data ON public.brand_details
+FOR EACH ROW EXECUTE FUNCTION public.sync_brand_scope_capability_contracts();
+
+-- Repair rows produced by an earlier run of this migration where brand_data
+-- was correct but confirm_brand_scope's INSERT was not actually rewritten.
+UPDATE public.brand_scope_families sf
+SET capability_contract = family->'capability_contract',
+    updated_at = now()
+FROM public.brand_details bd
+CROSS JOIN LATERAL jsonb_array_elements(
+    COALESCE(bd.brand_data->'scope_families', '[]'::jsonb)
+) AS family
+WHERE sf.brand_id = bd.id
+  AND (
+      COALESCE(family->>'id', '') = sf.id::text
+      OR lower(btrim(COALESCE(family->>'name', ''))) = lower(btrim(sf.name))
+  )
+  AND jsonb_typeof(family->'capability_contract') = 'object'
+  AND family->'capability_contract'->>'version' = 'capability-v1'
+  AND sf.capability_contract IS DISTINCT FROM family->'capability_contract';
 
 -- All audit creation paths already insert scope-family rows. A BEFORE trigger
 -- makes the immutable copy universal (customer, prospect and claim flows)
@@ -174,45 +235,9 @@ CREATE TRIGGER trg_copy_audit_capability_contract
 BEFORE INSERT ON public.audit_scope_families
 FOR EACH ROW EXECUTE FUNCTION public.copy_audit_capability_contract();
 
--- Claiming a prospect copies its immutable scope into the claimant's mutable
--- brand scope. Preserve the same capability contract in both the relational
--- rows and brand_data used by later onboarding/settings reads.
-DO $$
-DECLARE
-    v_src TEXT;
-    v_new TEXT;
-BEGIN
-    SELECT pg_get_functiondef(oid) INTO v_src
-    FROM pg_proc
-    WHERE oid = to_regprocedure('public.claim_prospect_audit(text)');
-    IF v_src IS NULL THEN
-        RAISE EXCEPTION 'claim_prospect_audit is missing';
-    END IF;
-    IF position('sf.capability_contract' IN v_src) > 0 THEN
-        RETURN;
-    END IF;
-
-    v_new := replace(
-        v_src,
-        '''parent_scope_family_id'', sf.parent_scope_family_id,',
-        '''parent_scope_family_id'', sf.parent_scope_family_id,' ||
-        ' ''capability_contract'', sf.capability_contract,'
-    );
-    v_new := replace(
-        v_new,
-        'source, priority, enabled, parent_scope_family_id',
-        'source, priority, enabled, parent_scope_family_id, capability_contract'
-    );
-    v_new := replace(
-        v_new,
-        'sf.priority, TRUE, sf.parent_scope_family_id',
-        'sf.priority, TRUE, sf.parent_scope_family_id, sf.capability_contract'
-    );
-    IF v_new = v_src OR position('sf.capability_contract' IN v_new) = 0 THEN
-        RAISE EXCEPTION 'Could not patch claim_prospect_audit for capability contracts';
-    END IF;
-    EXECUTE v_new;
-END $$;
+-- Prospect claims use the same table-bound hydration: brand_data is populated
+-- from the immutable audit snapshot and every later scope INSERT resolves its
+-- capability contract without depending on the current RPC function text.
 
 -- ---------------------------------------------------------------------------
 -- Atomic audit finalization: validate and save contexts, bindings and article

@@ -26,6 +26,82 @@ const MAX_FAILURES_PER_COOLDOWN = 3
  */
 const AUDIT_STALE_AFTER_MINUTES = 40
 
+type ScopeFamilyRow = {
+    id: string
+    name: string
+    description: string | null
+    seed_keywords: string[] | null
+    evidence: unknown
+    source: string | null
+    priority: number | null
+    capability_contract: Record<string, unknown> | null
+}
+
+function isCapabilityContract(value: unknown): value is Record<string, unknown> {
+    return Boolean(
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        (value as Record<string, unknown>).version === "capability-v1",
+    )
+}
+
+function normalizedScopeName(value: unknown): string {
+    return typeof value === "string" ? value.trim().toLocaleLowerCase() : ""
+}
+
+/**
+ * Repairs the one split-brain state created by the first writer-contract
+ * migration: onboarding saved capability contracts in brand_data, while its
+ * textual SQL patch failed to add them to brand_scope_families.
+ *
+ * brand_data is the exact confirmed payload from the same onboarding
+ * transaction, so this copies existing customer-confirmed facts; it does not
+ * infer or generate new product claims. Future writes are synchronized by DB
+ * triggers, but this also unblocks records created before that repair ships.
+ */
+async function reconcileScopeCapabilityContracts(
+    db: any,
+    brandId: string,
+    userId: string,
+    brandData: unknown,
+    rows: ScopeFamilyRow[],
+): Promise<{ rows: ScopeFamilyRow[]; error: unknown | null }> {
+    const snapshotFamilies =
+        brandData &&
+        typeof brandData === "object" &&
+        Array.isArray((brandData as Record<string, unknown>).scope_families)
+            ? ((brandData as Record<string, unknown>).scope_families as Array<Record<string, unknown>>)
+            : []
+
+    const repairedRows = [...rows]
+    for (let index = 0; index < repairedRows.length; index += 1) {
+        const row = repairedRows[index]
+        if (isCapabilityContract(row.capability_contract)) continue
+
+        const snapshot =
+            snapshotFamilies.find((family) => family.id === row.id) ??
+            snapshotFamilies.find(
+                (family) =>
+                    normalizedScopeName(family.name) === normalizedScopeName(row.name),
+            )
+        const contract = snapshot?.capability_contract
+        if (!isCapabilityContract(contract)) continue
+
+        const { error } = await db
+            .from("brand_scope_families")
+            .update({ capability_contract: contract })
+            .eq("id", row.id)
+            .eq("brand_id", brandId)
+            .eq("user_id", userId)
+        if (error) return { rows: repairedRows, error }
+
+        repairedRows[index] = { ...row, capability_contract: contract }
+    }
+
+    return { rows: repairedRows, error: null }
+}
+
 /**
  * Marks abandoned `running` rows as failed.
  *
@@ -173,7 +249,7 @@ export async function POST(req: NextRequest) {
 
         const brandData = brand.brand_data
         const brandUrl = brand.website_url
-        const { data: scopeFamilies, error: scopeError } = await db
+        const { data: storedScopeFamilies, error: scopeError } = await db
             .from("brand_scope_families")
             .select(
                 "id, name, description, seed_keywords, evidence, source, priority, capability_contract",
@@ -183,17 +259,22 @@ export async function POST(req: NextRequest) {
             .eq("enabled", true)
             .order("priority", { ascending: true })
 
-        if (
-            scopeError ||
-            !brand.scope_confirmed_at ||
-            brand.scope_contract_version !== "confirmed-business-scope-v2" ||
-            !brand.scope_hash ||
-            !Array.isArray(scopeFamilies) ||
-            scopeFamilies.length === 0 ||
-            scopeFamilies.some(
-                (family: any) =>
-                    family.capability_contract?.version !== "capability-v1",
+        if (scopeError) {
+            console.error("[Audit API] Could not load confirmed scope:", scopeError)
+            return NextResponse.json(
+                {
+                    error:
+                        "Your confirmed product areas could not be loaded. No research was started. Please retry shortly.",
+                },
+                { status: 503 },
             )
+        }
+
+        if (
+            !brand.scope_confirmed_at ||
+            !brand.scope_hash ||
+            !Array.isArray(storedScopeFamilies) ||
+            storedScopeFamilies.length === 0
         ) {
             return NextResponse.json(
                 {
@@ -201,6 +282,51 @@ export async function POST(req: NextRequest) {
                         "Confirm the product and service areas before running the audit. No research was started.",
                 },
                 { status: 422 },
+            )
+        }
+
+        if (brand.scope_contract_version !== "confirmed-business-scope-v2") {
+            return NextResponse.json(
+                {
+                    error:
+                        "Your saved product-area review predates verified business mechanics. Review and confirm it once before running this audit. No research was started.",
+                },
+                { status: 409 },
+            )
+        }
+
+        const reconciledScope = await reconcileScopeCapabilityContracts(
+            db,
+            brandId,
+            user.id,
+            brandData,
+            storedScopeFamilies as ScopeFamilyRow[],
+        )
+        if (reconciledScope.error) {
+            console.error(
+                "[Audit API] Could not reconcile confirmed capability contracts:",
+                reconciledScope.error,
+            )
+            return NextResponse.json(
+                {
+                    error:
+                        "Your confirmed product mechanics could not be synchronized. No research was started. Please retry shortly.",
+                },
+                { status: 503 },
+            )
+        }
+
+        if (
+            reconciledScope.rows.some(
+                (family) => !isCapabilityContract(family.capability_contract),
+            )
+        ) {
+            return NextResponse.json(
+                {
+                    error:
+                        "One or more confirmed product areas are missing their verified mechanics. Re-open the product-area review and confirm it before starting research.",
+                },
+                { status: 409 },
             )
         }
         // One immutable run may execute per brand at a time.
