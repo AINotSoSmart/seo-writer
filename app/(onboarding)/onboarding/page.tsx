@@ -26,6 +26,11 @@ import { AuditConsole } from "@/components/audit/audit-console"
 import { ScopeResults } from "@/components/audit/scope-results"
 import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
+import {
+    ANALYZE_PHASE_COPY,
+    consumeAnalyzeBrandStream,
+    emptyBrandShell,
+} from "@/lib/analyze-brand/stream"
 
 const STORAGE_KEYS = {
     STEP: 'onboarding_step',
@@ -37,12 +42,6 @@ const STORAGE_KEYS = {
     TARGET_SEEDS: 'onboarding_target_seeds',
     ANALYZING_STARTED_AT: 'onboarding_analyzing_started_at',
 } as const
-
-const ANALYZE_PHASES = [
-    { afterMs: 0, label: "Reading your site…" },
-    { afterMs: 8_000, label: "Finding product areas…" },
-    { afterMs: 18_000, label: "Building brand profile…" },
-] as const
 
 type Step = "brand" | "audit" | "audit-results"
 
@@ -71,9 +70,13 @@ export default function OnboardingPage() {
     const [competitors, setCompetitors] = useState<string[]>([])
     const [targetSeeds, setTargetSeeds] = useState<string[]>([])
     const [analyzing, setAnalyzing] = useState(false)
-    const [analyzePhase, setAnalyzePhase] = useState<string>(ANALYZE_PHASES[0].label)
+    const [analyzePhase, setAnalyzePhase] = useState<string>(ANALYZE_PHASE_COPY.crawl_started)
     const [analysisInterrupted, setAnalysisInterrupted] = useState(false)
     const [brandData, setBrandData] = useState<BrandDetails | null>(null)
+    /** Full validated persona+scope — Continue stays off until this is true. */
+    const [brandProfileReady, setBrandProfileReady] = useState(false)
+    /** Persona fields arrived; unlock the brand-details panel before complete. */
+    const [brandFieldsReady, setBrandFieldsReady] = useState(false)
     const [scopeAnalysisIssues, setScopeAnalysisIssues] = useState<
         Array<{ family?: string; message: string }>
     >([])
@@ -111,6 +114,8 @@ export default function OnboardingPage() {
             setBrandId(null)
             setUrl("")
             setBrandData(null)
+            setBrandProfileReady(false)
+            setBrandFieldsReady(false)
             setScopeAnalysisIssues([])
             setSeedsWithoutDemand([])
             setCompetitors([])
@@ -172,6 +177,9 @@ export default function OnboardingPage() {
                         parsed.scope_families || [],
                     ),
                 })
+                const restoredReady = Boolean(parsed?.product_name?.trim())
+                setBrandProfileReady(restoredReady)
+                setBrandFieldsReady(restoredReady)
             } catch { }
         }
         if (savedTargetSeeds) {
@@ -321,16 +329,19 @@ export default function OnboardingPage() {
             return
         }
         setAnalyzing(true)
-        setAnalyzePhase(ANALYZE_PHASES[0].label)
+        setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
         setAnalysisInterrupted(false)
+        setBrandProfileReady(false)
+        setBrandFieldsReady(false)
+        setBrandData(null)
+        setScopeAnalysisIssues([])
+        setSeedsWithoutDemand([])
         setError("")
         localStorage.setItem(
             STORAGE_KEYS.ANALYZING_STARTED_AT,
             String(Date.now()),
         )
-        const phaseTimers = ANALYZE_PHASES.slice(1).map((phase) =>
-            window.setTimeout(() => setAnalyzePhase(phase.label), phase.afterMs),
-        )
+        let completed = false
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
@@ -340,17 +351,63 @@ export default function OnboardingPage() {
                     targetSeeds,
                 }),
             })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || "Failed to analyze brand")
-            setScopeAnalysisIssues(
-                Array.isArray(data.scope_analysis_issues)
-                    ? data.scope_analysis_issues
-                    : [],
-            )
-            setBrandData({
-                ...data,
-                scope_families: trimFamiliesToSearchCap(data.scope_families || []),
+            if (!res.ok && !res.body) {
+                const data = await res.json().catch(() => ({}))
+                throw new Error(data.error || "Failed to analyze brand")
+            }
+
+            const complete = await consumeAnalyzeBrandStream(res, (event) => {
+                if (event.message) setAnalyzePhase(event.message)
+
+                if (event.phase === "scope_ready" && event.scope_families) {
+                    const families = trimFamiliesToSearchCap(event.scope_families)
+                    setScopeAnalysisIssues(
+                        Array.isArray(event.scope_analysis_issues)
+                            ? event.scope_analysis_issues
+                            : [],
+                    )
+                    setBrandData((current) => {
+                        if (current) {
+                            return { ...current, scope_families: families }
+                        }
+                        return emptyBrandShell(families, targetSeeds)
+                    })
+                }
+
+                if (event.phase === "brand_ready" && event.brand) {
+                    setBrandFieldsReady(true)
+                    setBrandData((current) => ({
+                        ...emptyBrandShell(
+                            current?.scope_families || [],
+                            targetSeeds,
+                        ),
+                        ...current,
+                        ...event.brand,
+                        scope_families: current?.scope_families || [],
+                        target_seed_keywords: targetSeeds,
+                    }))
+                }
+
+                if (event.phase === "complete" && event.data) {
+                    setScopeAnalysisIssues(
+                        Array.isArray(event.data.scope_analysis_issues)
+                            ? event.data.scope_analysis_issues
+                            : [],
+                    )
+                    setBrandData({
+                        ...event.data,
+                        scope_families: trimFamiliesToSearchCap(
+                            event.data.scope_families || [],
+                        ),
+                    })
+                    setBrandFieldsReady(true)
+                    setBrandProfileReady(true)
+                    completed = true
+                }
             })
+
+            const data = complete.data
+            if (!data) throw new Error("Failed to analyze brand")
 
             // Advisory-only and intentionally NOT awaited before this screen
             // renders — see the incident note on findSeedsWithoutDemand in
@@ -377,11 +434,15 @@ export default function OnboardingPage() {
             }
         } catch (e: any) {
             setError(e.message || "An error occurred")
+            if (!completed) {
+                setBrandData(null)
+                setBrandFieldsReady(false)
+                setBrandProfileReady(false)
+            }
         } finally {
-            phaseTimers.forEach((id) => window.clearTimeout(id))
             localStorage.removeItem(STORAGE_KEYS.ANALYZING_STARTED_AT)
             setAnalyzing(false)
-            setAnalyzePhase(ANALYZE_PHASES[0].label)
+            setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
         }
     }
 
@@ -538,7 +599,7 @@ export default function OnboardingPage() {
     }
 
     return (
-        <div className={`flex min-h-[calc(100vh-5rem)] flex-col px-4 py-10 font-sans sm:px-6 ${brandData && step === "brand" ? "items-stretch sm:items-center" : "items-center justify-center"}`}>
+        <div className={`flex min-h-[calc(100vh-5rem)] flex-col px-4 py-6 font-sans sm:px-6 ${brandData && step === "brand" ? "items-stretch sm:items-center" : "items-center justify-center"}`}>
             {/* Show loading while checking access */}
             {isCheckingAccess ? (
                 <div className="flex flex-col items-center gap-3 text-stone-500">
@@ -608,6 +669,7 @@ export default function OnboardingPage() {
                                                             placeholder="yourwebsite.com"
                                                             className="flex-1 bg-stone-50 border-stone-200 py-2 px-3 text-sm rounded-l-none focus:ring-0 focus:outline-none focus-visible:ring-0"
                                                             value={url}
+                                                            disabled={analyzing}
                                                             onChange={(e) => setUrl(e.target.value.replace(/^https?:\/\//i, ''))}
                                                         />
                                                     </div>
@@ -625,12 +687,11 @@ export default function OnboardingPage() {
                                                         onChange={setCompetitors}
                                                         placeholder="e.g. competitor.com (press Enter to add)"
                                                         variant="url"
+                                                        disabled={analyzing}
                                                     />
-                                                    {competitors.length === 0 && (
-                                                        <p className="text-[10px] text-stone-400">
-                                                            We&apos;ll auto-discover competitors if you skip this
-                                                        </p>
-                                                    )}
+                                                    <p className="text-[10px] text-stone-400">
+                                                        Optional. We&apos;ll keep yours and find others if you add fewer than four.
+                                                    </p>
                                                 </div>
 
                                                 <div className="space-y-2">
@@ -641,6 +702,7 @@ export default function OnboardingPage() {
                                                         value={targetSeeds}
                                                         onChange={setTargetSeeds}
                                                         placeholder="e.g. ai photo restoration (press Enter to add)"
+                                                        disabled={analyzing}
                                                     />
                                                     <p className="text-[10px] leading-relaxed text-stone-400">
                                                         Not your brand name — the words a stranger would search.
@@ -682,7 +744,7 @@ export default function OnboardingPage() {
                                                 </Button>
                                                 {analyzing && (
                                                     <p className="text-center text-[11px] text-stone-400">
-                                                        This usually takes under half a minute. Keep this tab open —
+                                                        Usually 1–3 minutes. Keep this tab open —
                                                         refreshing cannot resume the in-flight read.
                                                     </p>
                                                 )}
@@ -695,6 +757,13 @@ export default function OnboardingPage() {
                                                         Confirm what you sell
                                                     </h2>
                                                 </div>
+                                                {analyzing && !brandProfileReady && (
+                                                    <p className="text-[11px] text-stone-400">
+                                                        {brandFieldsReady
+                                                            ? analyzePhase
+                                                            : "Brand voice still loading… You can confirm product areas now."}
+                                                    </p>
+                                                )}
 
                                                 <ScopeFamilyReview
                                                     families={brandData.scope_families || []}
@@ -725,23 +794,30 @@ export default function OnboardingPage() {
                                                     </details>
                                                 )}
 
-                                                <details className="group rounded-lg border border-stone-200">
-                                                    <summary className="cursor-pointer list-none px-3 py-2.5 text-sm text-stone-600 marker:content-none [&::-webkit-details-marker]:hidden">
+                                                <details className="group rounded-lg border border-stone-200" open={brandFieldsReady ? undefined : false}>
+                                                    <summary className={`list-none px-3 py-2.5 text-sm text-stone-600 marker:content-none [&::-webkit-details-marker]:hidden ${brandFieldsReady ? "cursor-pointer" : "cursor-default opacity-60"}`}>
                                                         <span className="flex items-center justify-between gap-2">
                                                             <span>
                                                                 Brand voice &amp; details
                                                                 <span className="ml-1.5 text-xs text-stone-400">
-                                                                    optional review (we need it for brand aligned articles writing)
+                                                                    {brandFieldsReady
+                                                                        ? "optional review (we need it for brand aligned articles writing)"
+                                                                        : "loading…"}
                                                                 </span>
                                                             </span>
-                                                            <span className="text-xs text-stone-400 group-open:hidden">
-                                                                Show
-                                                            </span>
-                                                            <span className="hidden text-xs text-stone-400 group-open:inline">
-                                                                Hide
-                                                            </span>
+                                                            {brandFieldsReady && (
+                                                                <>
+                                                                    <span className="text-xs text-stone-400 group-open:hidden">
+                                                                        Show
+                                                                    </span>
+                                                                    <span className="hidden text-xs text-stone-400 group-open:inline">
+                                                                        Hide
+                                                                    </span>
+                                                                </>
+                                                            )}
                                                         </span>
                                                     </summary>
+                                                    {brandFieldsReady && (
                                                     <div className="space-y-5 border-t border-stone-100 px-3 py-4">
 
                                                 {/* 1. Product Identity */}
@@ -896,6 +972,7 @@ export default function OnboardingPage() {
                                                     <p className={`text-[10px] text-right text-stone-400`}>Select the style for AI-generated featured images.</p>
                                                 </div>
                                                     </div>
+                                                    )}
                                                 </details>
 
                                                 <div className="sticky bottom-0 space-y-3 border-t border-stone-100 bg-white/95 py-3 backdrop-blur-sm">
@@ -908,6 +985,7 @@ export default function OnboardingPage() {
                                                                 className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs text-stone-900"
                                                                 value={brandData.search_country || ""}
                                                                 onChange={e => updateField('search_country', e.target.value)}
+                                                                disabled={!brandProfileReady}
                                                             >
                                                                 <option value="">Global</option>
                                                                 <option value="australia">Australia</option>
@@ -959,7 +1037,7 @@ export default function OnboardingPage() {
 
                                                     <Button
                                                         onClick={handleSaveBrand}
-                                                        disabled={savingBrand}
+                                                        disabled={savingBrand || analyzing || !brandProfileReady}
                                                         className={`
                           w-full h-10 font-semibold
                           bg-gradient-to-b from-stone-800 to-stone-950

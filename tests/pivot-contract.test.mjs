@@ -782,11 +782,22 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     assert.match(route, /Plan name — \$price \/ period/)
 })
 
-test("brand analyze UX shows phases and survives a refresh mid-run", async () => {
-    const [onboarding, brandOnboarding] = await Promise.all([
+test("brand analyze streams real phases and unlocks scope before persona finishes", async () => {
+    const [onboarding, brandOnboarding, route, stream] = await Promise.all([
         text("app/(onboarding)/onboarding/page.tsx"),
         text("components/brand-onboarding.tsx"),
+        text("app/api/analyze-brand/route.ts"),
+        text("lib/analyze-brand/stream.ts"),
     ])
+
+    assert.match(route, /application\/x-ndjson/)
+    assert.match(route, /phase:\s*"scope_ready"/)
+    assert.match(route, /phase:\s*"brand_ready"/)
+    assert.match(route, /phase:\s*"complete"/)
+    assert.match(stream, /consumeAnalyzeBrandStream/)
+    assert.match(stream, /Reading your site/)
+    assert.match(stream, /Finding product areas/)
+    assert.match(stream, /Building brand profile/)
 
     for (const [file, source] of [
         ["onboarding/page.tsx", onboarding],
@@ -794,27 +805,93 @@ test("brand analyze UX shows phases and survives a refresh mid-run", async () =>
     ]) {
         assert.match(
             source,
-            /Reading your site/,
-            `${file}: phased copy while analyzing`,
+            /consumeAnalyzeBrandStream/,
+            `${file}: must consume NDJSON analyze stream`,
         )
         assert.match(
             source,
-            /Finding product areas/,
-            `${file}: phased copy while analyzing`,
+            /brandProfileReady/,
+            `${file}: Continue gated until validated complete payload`,
         )
         assert.match(
             source,
-            /Building brand profile/,
-            `${file}: phased copy while analyzing`,
+            /Brand voice still loading/,
+            `${file}: progressive unlock copy while persona finishes`,
+        )
+        assert.match(
+            source,
+            /Usually 1–3 minutes/,
+            `${file}: honest ETA (not under half a minute)`,
         )
         assert.match(
             source,
             /Last analysis was interrupted/,
             `${file}: refresh mid-analyze must restore inputs and prompt re-run`,
         )
+        assert.doesNotMatch(
+            source,
+            /LiveAnalysisConsole/,
+            `${file}: must not reuse AI terminal console chrome`,
+        )
+        assert.doesNotMatch(
+            source,
+            /under half a minute/,
+            `${file}: retired optimistic ETA`,
+        )
     }
     assert.match(onboarding, /ANALYZING_STARTED_AT/)
+    assert.match(onboarding, /keep yours and find others/)
     assert.match(brandOnboarding, /ANALYZING_STARTED_KEY/)
+    // Demand check stays out of the analyze critical path.
+    assert.match(onboarding, /analyze-brand\/demand-check/)
+    assert.doesNotMatch(
+        await text("app/api/analyze-brand/route.ts"),
+        /findSeedsWithoutDemand/,
+    )
+})
+
+test("user-supplied competitors top up via discovery instead of freezing the list", async () => {
+    const { mergeUserFirstCompetitors } = await import(
+        "../lib/audit/merge-competitors.ts"
+    )
+    const runAudit = await text("trigger/run-audit.ts")
+
+    const merged = mergeUserFirstCompetitors(
+        [{ name: "Rival", url: "https://rival.example/" }],
+        [
+            { name: "Rival Dup", url: "https://www.rival.example/pricing" },
+            { name: "Other", url: "https://other.example/" },
+            { name: "Third", url: "https://third.example/" },
+            { name: "Fourth", url: "https://fourth.example/" },
+            { name: "Fifth", url: "https://fifth.example/" },
+        ],
+        4,
+    )
+    assert.equal(merged.length, 4)
+    assert.equal(merged[0].url, "https://rival.example/")
+    assert.deepEqual(
+        merged.map((row) => row.name),
+        ["Rival", "Other", "Third", "Fourth"],
+    )
+
+    const emptyUser = mergeUserFirstCompetitors(
+        [],
+        [
+            { name: "A", url: "https://a.example/" },
+            { name: "B", url: "https://b.example/" },
+        ],
+        4,
+    )
+    assert.equal(emptyUser.length, 2)
+
+    assert.match(runAudit, /mergeUserFirstCompetitors/)
+    assert.match(runAudit, /remainingSlots/)
+    // The old binary skip — if any user competitors exist, never discover —
+    // must stay gone.
+    assert.doesNotMatch(
+        runAudit,
+        /if \(Array\.isArray\(brandRecord\?\.discovered_competitors\) && brandRecord\.discovered_competitors\.length\)/,
+    )
 })
 
 test("multi-table trigger functions dispatch on TG_TABLE_NAME before touching fields", async () => {

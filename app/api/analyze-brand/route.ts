@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { jsonrepair } from "jsonrepair"
@@ -13,6 +13,11 @@ import {
   buildRankedBrandCorpus,
   extractScopeFamilies,
 } from "@/lib/scope-extraction"
+import {
+  ANALYZE_PHASE_COPY,
+  encodeAnalyzeEvent,
+  type AnalyzeBrandStreamEvent,
+} from "@/lib/analyze-brand/stream"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -48,16 +53,49 @@ function totalContentChars(pages: CrawledPage[]): number {
   return pages.reduce((sum, page) => sum + (page.content?.trim().length || 0), 0)
 }
 
+function streamResponse(
+  run: (emit: (event: AnalyzeBrandStreamEvent) => void) => Promise<void>,
+): Response {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit = (event: AnalyzeBrandStreamEvent) => {
+        controller.enqueue(encoder.encode(encodeAnalyzeEvent(event)))
+      }
+      try {
+        await run(emit)
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error)
+        console.error("Brand analysis error:", error)
+        emit({ phase: "error", error: message })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Content-Type-Options": "nosniff",
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
-  try {
+  return streamResponse(async (emit) => {
     const { url, targetSeeds: rawTargetSeeds = [] } = await req.json()
     if (!url) {
-      return NextResponse.json({ error: "Missing URL" }, { status: 400 })
+      emit({ phase: "error", error: "Missing URL" })
+      return
     }
 
     const apiKey = process.env.TAVILY_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ error: "Tavily API key not configured" }, { status: 500 })
+      emit({ phase: "error", error: "Tavily API key not configured" })
+      return
     }
 
     const tvly = tavily({ apiKey })
@@ -70,13 +108,17 @@ export async function POST(req: NextRequest) {
       ),
     )
     if (targetSeeds.length > MAX_TOTAL_SCOPE_SEEDS) {
-      return NextResponse.json(
-        {
-          error: `Add no more than ${MAX_TOTAL_SCOPE_SEEDS} main customer searches.`,
-        },
-        { status: 400 },
-      )
+      emit({
+        phase: "error",
+        error: `Add no more than ${MAX_TOTAL_SCOPE_SEEDS} main customer searches.`,
+      })
+      return
     }
+
+    emit({
+      phase: "crawl_started",
+      message: ANALYZE_PHASE_COPY.crawl_started,
+    })
 
     // Prefer basic extract first — advanced was the main wall-clock and credit
     // cost. Escalate once only when the first pass is too thin to ground scope.
@@ -102,8 +144,18 @@ export async function POST(req: NextRequest) {
       JSON.stringify(crawlResponse).slice(0, 20000)
 
     if (!combinedContent || combinedContent.length < 50) {
-      return NextResponse.json({ error: "No content extracted from website" }, { status: 400 })
+      emit({ phase: "error", error: "No content extracted from website" })
+      return
     }
+
+    emit({
+      phase: "crawl_done",
+      message: ANALYZE_PHASE_COPY.crawl_done,
+      pages: crawledPages
+        .filter((page) => page.url)
+        .slice(0, 8)
+        .map((page) => ({ url: page.url })),
+    })
 
     const client = getGeminiClient()
 
@@ -158,180 +210,226 @@ export async function POST(req: NextRequest) {
 
     // Commercial scope is extracted by its own focused call (lib/scope-extraction.ts).
     // Started before the persona call and awaited after, so the split costs a
-    // few thousand tokens and no wall-clock time.
-    const scopePromise = extractScopeFamilies(url, crawledPages, targetSeeds)
+    // few thousand tokens and no wall-clock time. Events emit as each finishes
+    // so onboarding can unlock scope review early.
+    const scopePromise = extractScopeFamilies(url, crawledPages, targetSeeds).then(
+      (extractedFamilies) => {
+        const grounded = validateGroundedScope(
+          extractedFamilies,
+          crawledPages,
+          url,
+          targetSeeds,
+        )
+        if (grounded.families.length === 0) {
+          throw new Error(
+            grounded.issues[0]?.message ||
+              "We could not identify what this website sells. Please retry, or add your main customer searches so we can start from those.",
+          )
+        }
+        const scopedFamilies = trimFamiliesToSearchCap(grounded.families)
+        emit({
+          phase: "scope_ready",
+          message: `Mapped ${scopedFamilies.length} product area${
+            scopedFamilies.length === 1 ? "" : "s"
+          }…`,
+          scope_families: scopedFamilies,
+          scope_analysis_issues: grounded.issues,
+          unassigned_target_seeds: grounded.unassignedTargetSeeds,
+        })
+        return { scopedFamilies, grounded }
+      },
+    )
 
-    const response = await client.models.generateContent({
-      model: "gemini-3.1-flash-lite",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            product_name: { type: "STRING" },
-            product_identity: {
-              type: "OBJECT",
-              properties: {
-                literally: { type: "STRING" },
-                emotionally: { type: "STRING" },
-                not: { type: "STRING" }
-              },
-              required: ["literally", "emotionally", "not"]
-            },
-            mission: { type: "STRING" },
-            audience: {
-              type: "OBJECT",
-              properties: {
-                primary: { type: "STRING" },
-                psychology: { type: "STRING" }
-              },
-              required: ["primary", "psychology"]
-            },
-            enemy: {
-              type: "ARRAY",
-              items: { type: "STRING" }
-            },
-            category: {
-              type: "STRING",
-              description: "Product category, e.g., 'Privacy-First Web Analytics'"
-            },
-            uvp: {
-              type: "ARRAY",
-              items: { type: "STRING" },
-              description: "Unique Value Propositions - detailed selling points"
-            },
-            core_features: {
-              type: "ARRAY",
-              items: { type: "STRING" }
-            },
-            pricing: {
-              type: "ARRAY",
-              items: { type: "STRING" },
-              description:
-                "One string per plan: name — $price / period — key perks. Not a vague model label.",
-            },
-            how_it_works: {
-              type: "ARRAY",
-              items: { type: "STRING" }
-            },
-            brand_keywords: {
-              type: "ARRAY",
-              items: { type: "STRING" },
-              description: "4-5 short search keywords (2-4 words each) users would type to find this product type"
-            },
-            scope_families: {
-              type: "ARRAY",
-              items: {
+    const brandPromise = (async () => {
+      const response = await client.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              product_name: { type: "STRING" },
+              product_identity: {
                 type: "OBJECT",
                 properties: {
-                  name: { type: "STRING" },
-                  description: { type: "STRING" },
-                  seed_keywords: {
-                    type: "ARRAY",
-                    items: { type: "STRING" }
-                  },
-                  evidence: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        url: { type: "STRING" },
-                        quote: { type: "STRING" }
-                      },
-                      required: ["url", "quote"]
-                    }
-                  },
-                  source: { type: "STRING", enum: ["extracted"] },
-                  priority: { type: "INTEGER" },
-                  enabled: { type: "BOOLEAN" }
+                  literally: { type: "STRING" },
+                  emotionally: { type: "STRING" },
+                  not: { type: "STRING" },
                 },
-                required: ["name", "description", "seed_keywords", "evidence", "source", "priority", "enabled"]
-              }
+                required: ["literally", "emotionally", "not"],
+              },
+              mission: { type: "STRING" },
+              audience: {
+                type: "OBJECT",
+                properties: {
+                  primary: { type: "STRING" },
+                  psychology: { type: "STRING" },
+                },
+                required: ["primary", "psychology"],
+              },
+              enemy: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+              },
+              category: {
+                type: "STRING",
+                description: "Product category, e.g., 'Privacy-First Web Analytics'",
+              },
+              uvp: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description: "Unique Value Propositions - detailed selling points",
+              },
+              core_features: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+              },
+              pricing: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description:
+                  "One string per plan: name — $price / period — key perks. Not a vague model label.",
+              },
+              how_it_works: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+              },
+              brand_keywords: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description:
+                  "4-5 short search keywords (2-4 words each) users would type to find this product type",
+              },
+              scope_families: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    name: { type: "STRING" },
+                    description: { type: "STRING" },
+                    seed_keywords: {
+                      type: "ARRAY",
+                      items: { type: "STRING" },
+                    },
+                    evidence: {
+                      type: "ARRAY",
+                      items: {
+                        type: "OBJECT",
+                        properties: {
+                          url: { type: "STRING" },
+                          quote: { type: "STRING" },
+                        },
+                        required: ["url", "quote"],
+                      },
+                    },
+                    source: { type: "STRING", enum: ["extracted"] },
+                    priority: { type: "INTEGER" },
+                    enabled: { type: "BOOLEAN" },
+                  },
+                  required: [
+                    "name",
+                    "description",
+                    "seed_keywords",
+                    "evidence",
+                    "source",
+                    "priority",
+                    "enabled",
+                  ],
+                },
+              },
+              style_dna: {
+                type: "STRING",
+                description:
+                  "Complete writing voice and style guide as a single paragraph covering perspective, tone, sentence style, formality, patterns, and words to avoid",
+              },
             },
-            style_dna: {
-              type: "STRING",
-              description: "Complete writing voice and style guide as a single paragraph covering perspective, tone, sentence style, formality, patterns, and words to avoid"
-            }
+            required: [
+              "product_name",
+              "product_identity",
+              "mission",
+              "audience",
+              "enemy",
+              "category",
+              "uvp",
+              "core_features",
+              "pricing",
+              "how_it_works",
+              "brand_keywords",
+              "style_dna",
+            ],
           },
-          required: ["product_name", "product_identity", "mission", "audience", "enemy", "category", "uvp", "core_features", "pricing", "how_it_works", "brand_keywords", "style_dna"]
+        },
+      })
+
+      const text = response.text || ""
+      let brandData: Record<string, unknown> = {}
+      try {
+        brandData = JSON.parse(text || "{}")
+      } catch (e) {
+        console.warn("Brand analysis JSON parse failed, trying repair:", e)
+        try {
+          brandData = JSON.parse(jsonrepair(text || "{}"))
+        } catch (e2) {
+          console.error("Critical Brand Analysis JSON parse failure:", e2)
+          throw new Error("Failed to parse brand analysis results")
         }
       }
-    })
 
-    const text = response.text || ""
-    let brandData: any = {}
+      emit({
+        phase: "brand_ready",
+        message: ANALYZE_PHASE_COPY.brand_ready,
+        brand: brandData,
+      })
+      return brandData
+    })()
+
+    let scopeResult: Awaited<typeof scopePromise>
+    let brandData: Record<string, unknown>
     try {
-      brandData = JSON.parse(text || "{}")
-    } catch (e) {
-      console.warn("Brand analysis JSON parse failed, trying repair:", e)
-      try {
-        brandData = JSON.parse(jsonrepair(text || "{}"))
-      } catch (e2) {
-        console.error("Critical Brand Analysis JSON parse failure:", e2)
-        throw new Error("Failed to parse brand analysis results")
-      }
+      ;[scopeResult, brandData] = await Promise.all([scopePromise, brandPromise])
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "We could not read what your website sells. Please retry."
+      console.error("[Brand Analysis] Parallel extract failed:", error)
+      emit({ phase: "error", error: message })
+      return
     }
-
-    let extractedFamilies
-    try {
-      extractedFamilies = await scopePromise
-    } catch (scopeError) {
-      console.error("[Brand Analysis] Scope extraction failed:", scopeError)
-      return NextResponse.json(
-        { error: "We could not read what your website sells. Please retry." },
-        { status: 422 },
-      )
-    }
-
-    const grounded = validateGroundedScope(
-      extractedFamilies,
-      crawledPages,
-      url,
-      targetSeeds,
-    )
-    if (grounded.families.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            grounded.issues[0]?.message ||
-            "We could not identify what this website sells. Please retry, or add your main customer searches so we can start from those.",
-          scopeIssues: grounded.issues,
-        },
-        { status: 422 },
-      )
-    }
-
-    const scopedFamilies = trimFamiliesToSearchCap(grounded.families)
 
     const validated = BrandDetailsSchema.safeParse({
       ...brandData,
-      scope_families: scopedFamilies,
+      scope_families: scopeResult.scopedFamilies,
       target_seed_keywords: targetSeeds,
     })
     if (!validated.success) {
-      console.error("[Brand Analysis] Invalid response:", validated.error.flatten())
-      return NextResponse.json(
-        { error: "The website analysis returned an invalid business profile. Please retry." },
-        { status: 422 },
+      console.error(
+        "[Brand Analysis] Invalid response:",
+        validated.error.flatten(),
       )
+      emit({
+        phase: "error",
+        error:
+          "The website analysis returned an invalid business profile. Please retry.",
+      })
+      return
     }
 
     // Demand-checking seed keywords against Google Suggest is advisory only and
     // must never sit in this request's critical path — see the incident note
-    // on findSeedsWithoutDemand in lib/harvest/query-validation.ts. The client
+    // on seed demand validation in lib/harvest/query-validation.ts. The client
     // fetches it separately, after this response has already rendered, from
     // POST /api/analyze-brand/demand-check.
-    return NextResponse.json({
-      ...validated.data,
-      scope_analysis_issues: grounded.issues,
-      unassigned_target_seeds: grounded.unassignedTargetSeeds,
+    emit({
+      phase: "complete",
+      message: ANALYZE_PHASE_COPY.complete,
+      data: {
+        ...validated.data,
+        scope_analysis_issues: scopeResult.grounded.issues,
+        unassigned_target_seeds: scopeResult.grounded.unassignedTargetSeeds,
+      },
     })
-
-  } catch (e: unknown) {
-    console.error("Brand analysis error:", e)
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
+  })
 }

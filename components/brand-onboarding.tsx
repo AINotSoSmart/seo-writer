@@ -10,12 +10,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { PillInput } from "@/components/ui/pill-input"
 import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
-
-const ANALYZE_PHASES = [
-    { afterMs: 0, label: "Reading your site…" },
-    { afterMs: 8_000, label: "Finding product areas…" },
-    { afterMs: 18_000, label: "Building brand profile…" },
-] as const
+import {
+    ANALYZE_PHASE_COPY,
+    consumeAnalyzeBrandStream,
+    emptyBrandShell,
+} from "@/lib/analyze-brand/stream"
 
 const ANALYZING_STARTED_KEY = "brand_onboarding_analyzing_started_at"
 
@@ -30,9 +29,11 @@ interface BrandOnboardingProps {
 export default function BrandOnboarding({ onComplete, onCancel, initialData, initialUrl, brandId }: BrandOnboardingProps) {
     const [url, setUrl] = useState(initialUrl || "")
     const [analyzing, setAnalyzing] = useState(false)
-    const [analyzePhase, setAnalyzePhase] = useState<string>(ANALYZE_PHASES[0].label)
+    const [analyzePhase, setAnalyzePhase] = useState<string>(ANALYZE_PHASE_COPY.crawl_started)
     const [saving, setSaving] = useState(false)
     const [brandData, setBrandData] = useState<BrandDetails | null>(initialData || null)
+    const [brandProfileReady, setBrandProfileReady] = useState(Boolean(initialData?.product_name?.trim()))
+    const [brandFieldsReady, setBrandFieldsReady] = useState(Boolean(initialData?.product_name?.trim()))
     const [targetSeeds, setTargetSeeds] = useState<string[]>(
         initialData?.target_seed_keywords || [],
     )
@@ -57,24 +58,62 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             return
         }
         setAnalyzing(true)
-        setAnalyzePhase(ANALYZE_PHASES[0].label)
+        setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
+        setBrandProfileReady(false)
+        setBrandFieldsReady(false)
+        setBrandData(null)
+        setSeedsWithoutDemand([])
         setError("")
         localStorage.setItem(ANALYZING_STARTED_KEY, String(Date.now()))
-        const phaseTimers = ANALYZE_PHASES.slice(1).map((phase) =>
-            window.setTimeout(() => setAnalyzePhase(phase.label), phase.afterMs),
-        )
+        let completed = false
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url, targetSeeds }),
             })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || "Failed to analyze brand")
-            setBrandData({
-                ...data,
-                scope_families: trimFamiliesToSearchCap(data.scope_families || []),
+            if (!res.ok && !res.body) {
+                const data = await res.json().catch(() => ({}))
+                throw new Error(data.error || "Failed to analyze brand")
+            }
+
+            const complete = await consumeAnalyzeBrandStream(res, (event) => {
+                if (event.message) setAnalyzePhase(event.message)
+
+                if (event.phase === "scope_ready" && event.scope_families) {
+                    const families = trimFamiliesToSearchCap(event.scope_families)
+                    setBrandData((current) => {
+                        if (current) return { ...current, scope_families: families }
+                        return emptyBrandShell(families, targetSeeds)
+                    })
+                }
+
+                if (event.phase === "brand_ready" && event.brand) {
+                    setBrandFieldsReady(true)
+                    setBrandData((current) => ({
+                        ...emptyBrandShell(current?.scope_families || [], targetSeeds),
+                        ...current,
+                        ...event.brand,
+                        scope_families: current?.scope_families || [],
+                        target_seed_keywords: targetSeeds,
+                    }))
+                }
+
+                if (event.phase === "complete" && event.data) {
+                    setBrandData({
+                        ...event.data,
+                        scope_families: trimFamiliesToSearchCap(
+                            event.data.scope_families || [],
+                        ),
+                    })
+                    setBrandFieldsReady(true)
+                    setBrandProfileReady(true)
+                    completed = true
+                }
             })
+
+            const data = complete.data
+            if (!data) throw new Error("Failed to analyze brand")
 
             // Advisory-only and intentionally NOT awaited before this screen
             // renders — see the incident note on findSeedsWithoutDemand in
@@ -101,11 +140,15 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             }
         } catch (e: any) {
             setError(e.message || "An error occurred")
+            if (!completed) {
+                setBrandData(null)
+                setBrandFieldsReady(false)
+                setBrandProfileReady(false)
+            }
         } finally {
-            phaseTimers.forEach((id) => window.clearTimeout(id))
             localStorage.removeItem(ANALYZING_STARTED_KEY)
             setAnalyzing(false)
-            setAnalyzePhase(ANALYZE_PHASES[0].label)
+            setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
         }
     }
 
@@ -220,6 +263,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                         placeholder="https://example.com"
                         className="flex-1 w-full"
                         value={url}
+                        disabled={analyzing}
                         onChange={(e) => setUrl(e.target.value)}
                     />
                     <div>
@@ -230,6 +274,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                             value={targetSeeds}
                             onChange={setTargetSeeds}
                             placeholder="e.g. ai photo restoration"
+                            disabled={analyzing}
                         />
                         <p className="mt-1 text-[10px] text-stone-400">
                             Not your brand name — the words a stranger would search. Two to
@@ -249,7 +294,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                     </Button>
                     {analyzing && (
                         <p className="text-center text-[11px] text-stone-400">
-                            This usually takes under half a minute. Keep this tab open —
+                            Usually 1–3 minutes. Keep this tab open —
                             refreshing cannot resume the in-flight read.
                         </p>
                     )}
@@ -257,7 +302,8 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                 <div className="text-center">
                     <button
                         className="text-xs text-stone-500 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
-                        onClick={() => setBrandData({
+                        onClick={() => {
+                            setBrandData({
                             product_name: "",
                             product_identity: { literally: "", emotionally: "", not: "" },
                             mission: "",
@@ -276,7 +322,10 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                             search_country: "",
                             search_topic: "general",
                             article_length: "long",
-                        })}
+                        })
+                            setBrandFieldsReady(true)
+                            setBrandProfileReady(true)
+                        }}
                     >
                         Skip and fill manually
                     </button>
@@ -301,6 +350,13 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             </div>
 
             <div className="grid gap-6 p-4 sm:p-6 bg-white rounded-xl border border-stone-200">
+                {analyzing && !brandProfileReady && (
+                    <p className="text-[11px] text-stone-400">
+                        {brandFieldsReady
+                            ? analyzePhase
+                            : "Brand voice still loading… You can confirm product areas now."}
+                    </p>
+                )}
                 <ScopeFamilyReview
                     families={brandData.scope_families || []}
                     targetSeeds={brandData.target_seed_keywords || targetSeeds}
@@ -312,6 +368,8 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                     }
                 />
 
+                {brandFieldsReady ? (
+                <>
                 {/* 1. Product Identity */}
                 <div className="space-y-4">
                     <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">1. Product Identity</h3>
@@ -505,11 +563,15 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                         <p className="text-[10px] text-stone-400 mt-1">Select the style for AI-generated featured images.</p>
                     </div>
                 </div>
+                </>
+                ) : (
+                    <p className="text-sm text-stone-400">Brand voice &amp; details loading…</p>
+                )}
 
                 {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
 
                 <div className="flex justify-end pt-4 sticky bottom-0 bg-white/80 backdrop-blur-sm py-4 border-t border-stone-100 mt-4">
-                    <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto px-8 bg-stone-900 text-white hover:bg-stone-800">
+                    <Button onClick={handleSave} disabled={saving || analyzing || !brandProfileReady} className="w-full sm:w-auto px-8 bg-stone-900 text-white hover:bg-stone-800">
                         {saving ? (
                             <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...
