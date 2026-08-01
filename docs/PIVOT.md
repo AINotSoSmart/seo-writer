@@ -12,12 +12,10 @@ for what to do next.
 
 Last implementation update: 2026-08-02
 
-Status: **confirm-scope uses client-ready Category/Keywords labels; auto-trims
-to 12 searches (add disabled at cap); audit progress UI refined; audit/prospect
-Trigger maxDuration 1800s; SERP harvest parallelized; brandless users gated to
-onboarding; qualified cluster floor locked at 8–15; the 20260731 migration is
-not yet applied and checkout remains disabled pending the staging/external
-release gate**
+Status: **onboarding analyze streams progressive scope unlock; audit tops up
+partial competitor lists to max 4; clustering family-floor + parent rollup at
+v3.2.0; confirm-scope client-ready; checkout remains disabled pending the
+staging/external release gate**
 
 ## 1. Locked product contract
 
@@ -563,6 +561,18 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-02 - onboarding analyze streams; competitor top-up at audit
+
+**Wait UX.** `/api/analyze-brand` now returns NDJSON phases (`crawl_*`,
+`scope_ready`, `brand_ready`, `complete`) so onboarding can unlock the existing
+Confirm-what-you-sell review as soon as grounded families arrive, while persona
+fields finish. Continue stays gated on the validated `complete` payload.
+Honest ETA is 1–3 minutes. No AI-terminal console chrome.
+
+**Competitor coverage.** Naming 1–N competitors used to skip discovery entirely
+and starve gap ownership evidence. Audit now keeps user hosts first and fills
+remaining slots via `discoverCompetitors` up to `maxCompetitors` (4).
 
 ### 2026-08-02 - clustering: family demand floor vs thematic split (BringBack)
 

@@ -1,6 +1,7 @@
 import { task } from "@trigger.dev/sdk/v3"
 
 import { discoverCompetitors } from "@/lib/audit/competitor-scanner"
+import { mergeUserFirstCompetitors } from "@/lib/audit/merge-competitors"
 import { resend, EMAIL_FROM } from "@/lib/emails/client"
 import { AuditFailedEmail } from "@/lib/emails/templates/audit-failed"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
@@ -57,7 +58,6 @@ export const runAuditTask = task({
                 .eq("user_id", userId)
                 .single()
 
-            let competitors: Array<{ name: string; url: string; domain?: string }>
             const discoveryCalls = new Map<
                 string,
                 { attempted: number; succeeded: number; failed: number; cached: number }
@@ -74,18 +74,36 @@ export const runAuditTask = task({
                 else row.failed += 1
                 discoveryCalls.set(source, row)
             }
-            if (Array.isArray(brandRecord?.discovered_competitors) && brandRecord.discovered_competitors.length) {
-                competitors = brandRecord.discovered_competitors
-                discoveryCalls.set("competitor_discovery", {
-                    attempted: 0,
-                    succeeded: 0,
-                    failed: 0,
-                    cached: 1,
-                })
-            } else {
-                competitors = await discoverCompetitors(
+
+            // User-named competitors are preferred seeds, not a hard stop.
+            // Naming one rival used to skip discovery entirely and starve gap
+            // ownership evidence — top up to maxCompetitors instead.
+            const userCompetitors = (
+                Array.isArray(brandRecord?.discovered_competitors)
+                    ? brandRecord.discovered_competitors
+                    : []
+            ).filter((competitor: { url?: string }) => {
+                try {
+                    const host = new URL(String(competitor.url || "")).hostname.toLowerCase()
+                    return !host.endsWith("google.com") && !host.endsWith("apple.com")
+                } catch {
+                    return false
+                }
+            }) as Array<{ name: string; url: string; domain?: string }>
+
+            if (userCompetitors.length > HARVEST_POLICY.maxCompetitors) {
+                throw new Error(
+                    `The saved audit input has ${userCompetitors.length} competitors; maximum is ${HARVEST_POLICY.maxCompetitors}. None were silently removed.`,
+                )
+            }
+
+            let discovered: Array<{ name: string; url: string; domain?: string }> = []
+            const remainingSlots =
+                HARVEST_POLICY.maxCompetitors - userCompetitors.length
+            if (remainingSlots > 0) {
+                discovered = await discoverCompetitors(
                     brandData,
-                    HARVEST_POLICY.maxCompetitors,
+                    remainingSlots,
                     searchPrefs,
                     (call) => recordDiscoveryCall(call.source, call.succeeded),
                 )
@@ -94,32 +112,44 @@ export const runAuditTask = task({
                         counts.attempted > 0 &&
                         counts.failed === counts.attempted
                     ) {
-                        const failure = new Error(
-                            `Configured source failed completely: ${source}`,
-                        )
-                        ;(failure as Error & { code?: string }).code =
-                            "competitor_discovery_failed"
-                        throw failure
+                        // User seeds still let harvest proceed; only fail hard
+                        // when there was nothing user-supplied either.
+                        if (userCompetitors.length === 0) {
+                            const failure = new Error(
+                                `Configured source failed completely: ${source}`,
+                            )
+                            ;(failure as Error & { code?: string }).code =
+                                "competitor_discovery_failed"
+                            throw failure
+                        }
                     }
                 }
+            } else if (userCompetitors.length > 0) {
+                discoveryCalls.set("competitor_discovery", {
+                    attempted: 0,
+                    succeeded: 0,
+                    failed: 0,
+                    cached: 1,
+                })
             }
 
-            competitors = competitors
-                .filter((competitor) => {
+            const competitors = mergeUserFirstCompetitors(
+                userCompetitors,
+                discovered.filter((competitor) => {
                     try {
                         const host = new URL(competitor.url).hostname.toLowerCase()
-                        return !host.endsWith("google.com") && !host.endsWith("apple.com")
+                        return (
+                            !host.endsWith("google.com") &&
+                            !host.endsWith("apple.com")
+                        )
                     } catch {
                         return false
                     }
-                })
-            if (competitors.length > HARVEST_POLICY.maxCompetitors) {
-                throw new Error(
-                    `The saved audit input has ${competitors.length} competitors; maximum is ${HARVEST_POLICY.maxCompetitors}. None were silently removed.`,
-                )
-            }
+                }),
+                HARVEST_POLICY.maxCompetitors,
+            )
 
-            if (!brandRecord?.discovered_competitors?.length && competitors.length > 0) {
+            if (competitors.length > 0) {
                 await supabase
                     .from("brand_details")
                     .update({
