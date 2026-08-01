@@ -43,6 +43,13 @@ export const ArticleOutlineSchema = z.object({
           .enum(['how_it_works', 'core_features', 'pricing', 'uvp'])
           .nullable()
           .optional(),
+        /** Exact immutable facts this section may use. New program path only. */
+        capability_fact_ids: z.array(z.string()).max(8).optional().default([]),
+        research_fact_ids: z.array(z.string()).max(8).optional().default([]),
+        section_purpose: z
+          .enum(["answer", "workflow", "comparison", "limitation", "cta"])
+          .optional()
+          .default("answer"),
         /** True when this section contains a comparison the product must appear in. */
         is_comparison: z.boolean().nullable().optional().transform(v => v ?? false),
         // Optional: Should this section have an in-content image?

@@ -15,6 +15,7 @@ import { assembleHarvest, type HarvestOutput } from "./assembly"
 import { HARVEST_POLICY } from "./policy"
 import { selectQualifiedProgramScope } from "./program-contract"
 import type { AuditScopeFamily } from "./scope-classifier"
+import type { CapabilityContract } from "@/lib/writer/article-contract"
 
 const COUNTRY_ISO: Record<string, string> = {
     "united states": "us",
@@ -132,6 +133,8 @@ export async function persistHarvestOutput(
             // because of planned_articles_cluster_scope_fkey.
             origin_scope_family_id: article.originScopeFamilyId ?? null,
             article_type: article.articleType,
+            article_contract: article.articleContract,
+            contract_version: article.articleContract?.version,
             intent_role: articleIndex === 0 ? "pillar" : "supporting",
             is_pillar: articleIndex === 0,
         })),
@@ -145,6 +148,8 @@ export async function persistHarvestOutput(
         source_url: query.evidence.source_url,
         source_seed: query.evidence.source_seed,
         observed_value: query.evidence.observed_value,
+        source_context: query.evidence.source_context,
+        intent_binding: query.evidence.intent_binding,
         observed_at: query.evidence.observed_at,
         embedding: query.embedding,
         status: query.userCoverage.status,
@@ -200,13 +205,22 @@ export async function runHarvestAudit(
     const supabase = createAdminClient() as any
     const { data: scopeRows, error: scopeError } = await supabase
         .from("audit_scope_families")
-        .select("id, name, description, seed_keywords, priority, parent_scope_family_id")
+        .select("id, name, description, seed_keywords, priority, parent_scope_family_id, capability_contract")
         .eq("audit_id", options.auditId)
         .eq("user_id", userId)
         .order("priority", { ascending: true })
     if (scopeError || !scopeRows?.length) {
         throw new Error(
             "The audit has no immutable confirmed business scope snapshot.",
+        )
+    }
+    if (
+        scopeRows.some(
+            (row: any) => row.capability_contract?.version !== "capability-v1",
+        )
+    ) {
+        throw new Error(
+            "The audit scope predates verified capability mechanics. Confirm scope and start a new audit.",
         )
     }
     const scopeFamilies: AuditScopeFamily[] = scopeRows.map((row: any) => ({
@@ -218,6 +232,7 @@ export async function runHarvestAudit(
             : [],
         priority: row.priority,
         parentScopeFamilyId: row.parent_scope_family_id ?? null,
+        capabilityContract: row.capability_contract as CapabilityContract,
     }))
     const competitors = options.competitors
         .map((competitor) => competitor.url)
@@ -229,6 +244,7 @@ export async function runHarvestAudit(
         {
             subjectUrl: brandUrl,
             subjectName: brandData.product_name || "Customer site",
+            subjectType: brandData.product_identity?.literally || "Product or service",
             scopeFamilies,
             competitors,
             countryCode,

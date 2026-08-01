@@ -195,6 +195,11 @@ export function absorbOrphanedUnits(
             host.subNodes.push({
                 intent: unit.mainKeyword,
                 sourceQueryIds: unit.sourceQueryIds,
+                scopeFamilyId: unit.originScopeFamilyId ?? unit.scopeFamilyId,
+                operationKey: unit.operationKey,
+                capabilityFit: unit.capabilityFit,
+                solutionMode: unit.solutionMode,
+                sourceContext: unit.sourceContext,
             })
             folded++
         }

@@ -2,6 +2,10 @@ import "server-only"
 
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { MAX_SCOPE_FAMILIES, MAX_TOTAL_SCOPE_SEEDS } from "@/lib/brand-scope"
+import {
+    CAPABILITY_CONTRACT_VERSION,
+    type CapabilityContract,
+} from "@/lib/writer/article-contract"
 
 /**
  * Commercial scope extraction.
@@ -24,6 +28,7 @@ export type ExtractedScopeFamily = {
     description: string
     seed_keywords: string[]
     evidence: Array<{ url: string; quote: string }>
+    capability_contract: CapabilityContract
     /**
      * Name of the broader domain this one is a sub-intent of, when the model
      * judged it narrower than a peer.
@@ -198,6 +203,19 @@ For each family provide:
   from one of the PAGES above plus that page's EXACT url. Copy, do not
   paraphrase. If you cannot copy a real sentence, return an empty list rather
   than inventing one.
+- capability_contract: a compact, mechanics-only description of how this area
+  actually works:
+  - version: exactly "${CAPABILITY_CONTRACT_VERSION}".
+  - deliveryMode: where/how the customer receives the result (for example
+    browser software, API, installed software, or human-delivered service).
+  - operations: 1-6 distinct operations. Give each a short stable key (op1,
+    op2...), customerJob, concrete inputs, one action, concrete outputs, known
+    limits, and evidenceRefs.
+  - facts: the same kind of exact quoted evidence as above, each with a short
+    id (fact1, fact2...). evidenceRefs may reference only these ids.
+  Describe verified mechanics, not benefits or promises. Generalize an
+  operation only to the level its inputs/action/output support. Never invent
+  compatibility, performance, accuracy, timing, people, or guarantees.
 
 Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
 
@@ -237,12 +255,52 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
                                         required: ["url", "quote"],
                                     },
                                 },
+                                capability_contract: {
+                                    type: "OBJECT" as const,
+                                    properties: {
+                                        version: {
+                                            type: "STRING" as const,
+                                            enum: [CAPABILITY_CONTRACT_VERSION],
+                                        },
+                                        deliveryMode: { type: "STRING" as const },
+                                        operations: {
+                                            type: "ARRAY" as const,
+                                            items: {
+                                                type: "OBJECT" as const,
+                                                properties: {
+                                                    key: { type: "STRING" as const },
+                                                    customerJob: { type: "STRING" as const },
+                                                    inputs: { type: "ARRAY" as const, items: { type: "STRING" as const } },
+                                                    action: { type: "STRING" as const },
+                                                    outputs: { type: "ARRAY" as const, items: { type: "STRING" as const } },
+                                                    limits: { type: "ARRAY" as const, items: { type: "STRING" as const } },
+                                                    evidenceRefs: { type: "ARRAY" as const, items: { type: "STRING" as const } },
+                                                },
+                                                required: ["key", "customerJob", "inputs", "action", "outputs", "limits", "evidenceRefs"],
+                                            },
+                                        },
+                                        facts: {
+                                            type: "ARRAY" as const,
+                                            items: {
+                                                type: "OBJECT" as const,
+                                                properties: {
+                                                    id: { type: "STRING" as const },
+                                                    url: { type: "STRING" as const },
+                                                    quote: { type: "STRING" as const },
+                                                },
+                                                required: ["id", "url", "quote"],
+                                            },
+                                        },
+                                    },
+                                    required: ["version", "deliveryMode", "operations", "facts"],
+                                },
                             },
                             required: [
                                 "name",
                                 "description",
                                 "seed_keywords",
                                 "evidence",
+                                "capability_contract",
                             ],
                         },
                     },
@@ -274,7 +332,70 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
                       }),
                   )
                 : [],
+            capability_contract: normalizeCapabilityContract(family),
             source: "extracted",
         }),
     )
+}
+
+function normalizeCapabilityContract(
+    family: Record<string, unknown>,
+): CapabilityContract {
+    const raw =
+        family.capability_contract && typeof family.capability_contract === "object"
+            ? (family.capability_contract as Record<string, unknown>)
+            : {}
+    const rawFacts = Array.isArray(raw.facts)
+        ? (raw.facts as Array<Record<string, unknown>>)
+        : []
+    const facts = rawFacts.slice(0, 8).flatMap((fact, index) => {
+        const url = String(fact.url || "").trim()
+        const quote = String(fact.quote || "").trim()
+        if (!url || quote.length < 8) return []
+        return [{ id: String(fact.id || `fact${index + 1}`).trim(), url, quote }]
+    })
+    const validFactIds = new Set(facts.map((fact) => fact.id))
+    const rawOperations = Array.isArray(raw.operations)
+        ? (raw.operations as Array<Record<string, unknown>>)
+        : []
+    const operations = rawOperations.slice(0, 6).flatMap((operation, index) => {
+        const action = String(operation.action || "").trim()
+        const customerJob = String(operation.customerJob || family.description || "").trim()
+        if (action.length < 4 || customerJob.length < 4) return []
+        const strings = (value: unknown, max: number) =>
+            Array.isArray(value)
+                ? value.map(String).map((item) => item.trim()).filter(Boolean).slice(0, max)
+                : []
+        return [{
+            key: String(operation.key || `op${index + 1}`).trim(),
+            customerJob,
+            inputs: strings(operation.inputs, 8),
+            action,
+            outputs: strings(operation.outputs, 8),
+            limits: strings(operation.limits, 8),
+            evidenceRefs: strings(operation.evidenceRefs, 8).filter((id) => validFactIds.has(id)),
+        }]
+    })
+
+    // Structured output should always supply an operation. This fallback keeps
+    // the onboarding review usable if a provider omits the nested object; it is
+    // deliberately descriptive, not a new capability claim.
+    if (operations.length === 0) {
+        operations.push({
+            key: "op1",
+            customerJob: String(family.description || family.name || "Customer job"),
+            inputs: [],
+            action: String(family.description || family.name || "Provide the confirmed capability"),
+            outputs: [],
+            limits: [],
+            evidenceRefs: facts.map((fact) => fact.id),
+        })
+    }
+
+    return {
+        version: CAPABILITY_CONTRACT_VERSION,
+        deliveryMode: String(raw.deliveryMode || "Product or service described on the website").trim(),
+        operations,
+        facts,
+    }
 }

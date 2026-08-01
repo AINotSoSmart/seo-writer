@@ -3,6 +3,7 @@ import { task } from "@trigger.dev/sdk/v3"
 import { assembleHarvest } from "@/lib/harvest/assembly"
 import { persistHarvestOutput } from "@/lib/harvest/run-harvest"
 import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
+import type { CapabilityContract } from "@/lib/writer/article-contract"
 import { createAdminClient } from "@/utils/supabase/admin"
 
 interface ProspectAuditPayload {
@@ -63,15 +64,34 @@ export const runProspectAuditTask = task({
         }
 
         try {
-            const { data: scopeRows, error: scopeError } = await supabase
-                .from("audit_scope_families")
-                .select("id, name, description, seed_keywords, priority, parent_scope_family_id")
-                .eq("audit_id", payload.auditId)
-                .eq("user_id", payload.founderUserId)
-                .order("priority", { ascending: true })
+            const [
+                { data: scopeRows, error: scopeError },
+                { data: auditRow },
+            ] = await Promise.all([
+                supabase
+                    .from("audit_scope_families")
+                    .select("id, name, description, seed_keywords, priority, parent_scope_family_id, capability_contract")
+                    .eq("audit_id", payload.auditId)
+                    .eq("user_id", payload.founderUserId)
+                    .order("priority", { ascending: true }),
+                supabase
+                    .from("topical_audits")
+                    .select("brand_snapshot")
+                    .eq("id", payload.auditId)
+                    .maybeSingle(),
+            ])
             if (scopeError || !scopeRows?.length) {
                 throw new Error(
                     "Prospect audit has no confirmed business scope snapshot.",
+                )
+            }
+            if (
+                scopeRows.some(
+                    (row: any) => row.capability_contract?.version !== "capability-v1",
+                )
+            ) {
+                throw new Error(
+                    "Prospect audit scope is missing verified capability mechanics.",
                 )
             }
             const scopeFamilies: AuditScopeFamily[] = scopeRows.map(
@@ -84,13 +104,19 @@ export const runProspectAuditTask = task({
                         : [],
                     priority: Number(row.priority || 0),
                     parentScopeFamilyId: row.parent_scope_family_id ?? null,
+                    capabilityContract: row.capability_contract as CapabilityContract,
                 }),
             )
             await update({ generation_phase: "harvesting" })
             const output = await assembleHarvest(
                 {
                     subjectUrl: payload.subjectUrl,
-                    subjectName: new URL(payload.subjectUrl).hostname,
+                    subjectName:
+                        auditRow?.brand_snapshot?.product_name ||
+                        new URL(payload.subjectUrl).hostname,
+                    subjectType:
+                        auditRow?.brand_snapshot?.product_identity?.literally ||
+                        "Product or service",
                     scopeFamilies,
                     competitors: payload.competitors,
                 },

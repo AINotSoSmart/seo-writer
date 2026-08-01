@@ -1,8 +1,36 @@
 import { z } from "zod"
 
+import { CAPABILITY_CONTRACT_VERSION } from "../writer/article-contract.ts"
+
 export const ScopeEvidenceSchema = z.object({
   url: z.string().url(),
   quote: z.string().min(8).max(500),
+})
+
+export const CapabilityFactSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  url: z.string().refine(
+    (value) => value.startsWith("founder-confirmed:") || z.string().url().safeParse(value).success,
+    "Capability evidence must be a source URL or founder-confirmed onboarding reference",
+  ),
+  quote: z.string().trim().min(8).max(500),
+})
+
+export const CapabilityOperationSchema = z.object({
+  key: z.string().trim().min(1).max(80),
+  customerJob: z.string().trim().min(4).max(240),
+  inputs: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
+  action: z.string().trim().min(4).max(300),
+  outputs: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
+  limits: z.array(z.string().trim().min(1).max(240)).max(8).default([]),
+  evidenceRefs: z.array(z.string().trim().min(1).max(80)).max(8).default([]),
+})
+
+export const CapabilityContractSchema = z.object({
+  version: z.literal(CAPABILITY_CONTRACT_VERSION),
+  deliveryMode: z.string().trim().min(2).max(160),
+  operations: z.array(CapabilityOperationSchema).min(1).max(6),
+  facts: z.array(CapabilityFactSchema).max(12).default([]),
 })
 
 export const ScopeFamilySchema = z.object({
@@ -11,6 +39,7 @@ export const ScopeFamilySchema = z.object({
   description: z.string().trim().min(8).max(500),
   seed_keywords: z.array(z.string().trim().min(2).max(100)).min(1).max(8),
   evidence: z.array(ScopeEvidenceSchema).max(5).default([]),
+  capability_contract: CapabilityContractSchema.nullable().optional(),
   /**
    * Broader area this one is a sub-intent of, as judged at extraction.
    * Advisory: shown on the confirmation screen so the founder can merge or keep
@@ -78,4 +107,5 @@ export const BrandDetailsSchema = z.object({
 export type BrandDetails = z.infer<typeof BrandDetailsSchema>
 export type ScopeFamily = z.infer<typeof ScopeFamilySchema>
 export type ScopeEvidence = z.infer<typeof ScopeEvidenceSchema>
+export type CapabilityContract = z.infer<typeof CapabilityContractSchema>
 

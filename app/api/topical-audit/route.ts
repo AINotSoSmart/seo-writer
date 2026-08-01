@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
         const { data: scopeFamilies, error: scopeError } = await db
             .from("brand_scope_families")
             .select(
-                "id, name, description, seed_keywords, evidence, source, priority",
+                "id, name, description, seed_keywords, evidence, source, priority, capability_contract",
             )
             .eq("brand_id", brandId)
             .eq("user_id", user.id)
@@ -186,9 +186,14 @@ export async function POST(req: NextRequest) {
         if (
             scopeError ||
             !brand.scope_confirmed_at ||
+            brand.scope_contract_version !== "confirmed-business-scope-v2" ||
             !brand.scope_hash ||
             !Array.isArray(scopeFamilies) ||
-            scopeFamilies.length === 0
+            scopeFamilies.length === 0 ||
+            scopeFamilies.some(
+                (family: any) =>
+                    family.capability_contract?.version !== "capability-v1",
+            )
         ) {
             return NextResponse.json(
                 {

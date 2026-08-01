@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
                         ),
                     ),
                     evidence: [],
+                    capability_contract: candidate?.capabilityContract,
                     source: "user",
                     priority,
                     enabled: true,
@@ -105,6 +106,29 @@ export async function POST(request: NextRequest) {
                 {
                     error:
                         "Confirm at least one business area and its direct customer searches.",
+                },
+                { status: 400 },
+            )
+        }
+        if (
+            scopeFamilies.some(
+                (family) =>
+                    family.capability_contract?.version !== "capability-v1" ||
+                    !family.capability_contract.deliveryMode.trim() ||
+                    family.capability_contract.operations.length === 0 ||
+                    family.capability_contract.operations.some(
+                        (operation) =>
+                            !operation.action.trim() ||
+                            operation.inputs.length === 0 ||
+                            operation.outputs.length === 0 ||
+                            operation.evidenceRefs.length === 0,
+                    ),
+            )
+        ) {
+            return NextResponse.json(
+                {
+                    error:
+                        "Each business area needs delivery mode and verified input -> action -> output mechanics.",
                 },
                 { status: 400 },
             )

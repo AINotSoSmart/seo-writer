@@ -142,11 +142,22 @@ export async function createProgramPurchaseIntent(input: {
             .order("priority", { ascending: true }),
         supabase
             .from("audit_scope_families")
-            .select("id, priority")
+            .select("id, priority, capability_contract")
             .eq("audit_id", audit.id),
     ])
     if (clusterError) throw new PurchaseIntentError(clusterError.message, "cluster_load_failed")
     if (scopeError) throw new PurchaseIntentError(scopeError.message, "scope_load_failed")
+    if (
+        !(scopeRows || []).length ||
+        (scopeRows || []).some(
+            (scope: any) => scope.capability_contract?.version !== "capability-v1",
+        )
+    ) {
+        throw new PurchaseIntentError(
+            "This audit predates verified capability contracts. Run a fresh audit before checkout.",
+            "audit_contract_missing",
+        )
+    }
     const scopePriority = new Map(
         (scopeRows || []).map((scope: any) => [
             String(scope.id),
@@ -178,7 +189,7 @@ export async function createProgramPurchaseIntent(input: {
     const { data: articleRows, error: articleError } = await supabase
         .from("planned_articles")
         .select(
-            "id, cluster_id, title, main_keyword, is_pillar, source_query_ids",
+            "id, cluster_id, title, main_keyword, is_pillar, source_query_ids, article_contract, contract_version",
         )
         .eq("audit_id", audit.id)
         .in("cluster_id", clusterIds)
@@ -186,6 +197,18 @@ export async function createProgramPurchaseIntent(input: {
         throw new PurchaseIntentError(
             articleError?.message || "Planned articles are unavailable.",
             "article_load_failed",
+        )
+    }
+    if (
+        articleRows.some(
+            (article: any) =>
+                article.contract_version !== "article-contract-v1" ||
+                article.article_contract?.version !== "article-contract-v1",
+        )
+    ) {
+        throw new PurchaseIntentError(
+            "This audit is missing frozen writer contracts. Run a fresh audit before checkout.",
+            "article_contract_missing",
         )
     }
     const queryIds: string[] = Array.from(

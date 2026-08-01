@@ -24,6 +24,7 @@ import { filterToSearchedQueries } from "./query-validation"
 import {
     classifyQueriesToScope,
     type AuditScopeFamily,
+    type ScopedHarvestedQuery,
     type ScopeDecision,
 } from "./scope-classifier"
 import { roundRobinCap, selectSerpSeeds } from "./scope-cap"
@@ -36,6 +37,12 @@ import {
     type QuerySource,
     type SourceReport,
 } from "./types"
+import {
+    ARTICLE_CONTRACT_VERSION,
+    capabilityFactIdsForOperation,
+    selectIntentSizedLength,
+    type ArticleContractIntent,
+} from "@/lib/writer/article-contract"
 
 const EMBEDDING_CONCURRENCY = 5
 
@@ -45,12 +52,90 @@ export interface HarvestInput {
     competitors: string[]
     countryCode?: string
     subjectName?: string
+    subjectType?: string
+}
+
+function freezeArticleContracts(
+    clusters: ArticleCluster[],
+    families: AuditScopeFamily[],
+    evidenceById: Map<string, { evidence: ScopedHarvestedQuery; embedding: number[] }>,
+    input: HarvestInput,
+): void {
+    const familyById = new Map(families.map((family) => [family.id, family]))
+
+    for (const cluster of clusters) {
+        cluster.articles.forEach((article, articleIndex) => {
+            const queryIds = Array.from(new Set([
+                ...article.sourceQueryIds,
+                ...article.subNodes.flatMap((node) => node.sourceQueryIds),
+            ]))
+            const intents = queryIds.flatMap((queryId): ArticleContractIntent[] => {
+                const query = evidenceById.get(queryId)?.evidence
+                if (!query) return []
+                const family = familyById.get(query.intent_binding.scopeFamilyId)
+                return [{
+                    queryId,
+                    query: query.query,
+                    sourceUrl: query.source_url || "",
+                    sourceContext: query.source_context,
+                    operationKey: query.intent_binding.operationKey,
+                    capabilityFit: query.intent_binding.capabilityFit,
+                    capabilityFactIds: capabilityFactIdsForOperation(
+                        family?.capabilityContract,
+                        query.intent_binding.operationKey,
+                    ),
+                }]
+            })
+            const primary = intents.find((intent) =>
+                article.sourceQueryIds.includes(intent.queryId),
+            ) || intents[0]
+            if (!primary) {
+                throw new HarvestAssemblyError(
+                    `Article "${article.mainKeyword}" has no source intent.`,
+                    "internal_consistency",
+                )
+            }
+            const primaryBinding = evidenceById.get(primary.queryId)!.evidence.intent_binding
+            const primaryFamily = familyById.get(primaryBinding.scopeFamilyId)
+            const operation = primaryFamily?.capabilityContract.operations.find(
+                (candidate) => candidate.key === primaryBinding.operationKey,
+            )
+
+            article.articleContract = {
+                version: ARTICLE_CONTRACT_VERSION,
+                entity: {
+                    name: input.subjectName || "Customer site",
+                    entityType: input.subjectType || "Product or service",
+                    deliveryMode:
+                        primaryFamily?.capabilityContract.deliveryMode ||
+                        "Product or service",
+                },
+                primaryIntent: primary,
+                requiredIntents: intents,
+                scopeFamilyId: cluster.scopeFamilyId,
+                solutionMode: primaryBinding.solutionMode,
+                capabilityFactIds: Array.from(
+                    new Set(intents.flatMap((intent) => intent.capabilityFactIds)),
+                ),
+                researchQuery: [
+                    primary.query,
+                    primaryFamily?.capabilityContract.deliveryMode,
+                    operation?.action,
+                ].filter(Boolean).join(" ").slice(0, 300),
+                articleLength: selectIntentSizedLength({
+                    isPillar: articleIndex === 0,
+                    articleType: article.articleType,
+                    absorbedIntentCount: article.subNodes.length,
+                }),
+            }
+        })
+    }
 }
 
 export interface AssembledQuery {
     id: string
     scopeFamilyId: string
-    evidence: HarvestedQuery
+    evidence: ScopedHarvestedQuery
     embedding: number[]
     userCoverage: SiteCoverageResult["coverage"][number]
     competitorMatches: GapItem["competitors"]
@@ -456,6 +541,8 @@ export async function assembleHarvest(
             source: QuerySource
             sourceUrl: string | null
             scopeFamilyId: string
+            sourceContext: string
+            intentBinding: (typeof scopedQueries)[number]["intent_binding"]
         }
     >()
     const evidenceById = new Map<
@@ -482,6 +569,8 @@ export async function assembleHarvest(
             source: query.source,
             sourceUrl: query.source_url,
             scopeFamilyId: query.scope_family_id,
+            sourceContext: query.source_context,
+            intentBinding: query.intent_binding,
         })
         evidenceById.set(id, { evidence: query, embedding })
     }
@@ -606,7 +695,7 @@ export async function assembleHarvest(
             )
         }
     }
-    articleUnits = await titleArticles(articleUnits)
+    articleUnits = await titleArticles(articleUnits, input.scopeFamilies)
 
     // Sub-areas declared at scope confirmation roll into their parent's
     // clustering pool so thin child + parent demand can clear the node floor
@@ -675,6 +764,7 @@ export async function assembleHarvest(
                 (familyPriority.get(right.scopeFamilyId) ?? 99) ||
             right.priority - left.priority,
     )
+    freezeArticleContracts(clusters, input.scopeFamilies, evidenceById, input)
 
     const largestCluster = clusters.reduce(
         (largest, cluster) => Math.max(largest, cluster.articles.length),
@@ -831,13 +921,17 @@ export async function assembleHarvest(
             scopeFamilyId: query.scopeFamilyId,
             source: query.evidence.source,
             sourceUrl: query.evidence.source_url,
+            sourceContext: query.evidence.source_context,
+            intentBinding: query.evidence.intent_binding,
             coverage: query.userCoverage.status,
             competitors: query.competitorMatches.map((match) => match.matchedUrl).sort(),
         })).sort((a, b) => a.query.localeCompare(b.query)),
         clusters: clusters.map((cluster) =>
             [
                 cluster.scopeFamilyId,
-                ...cluster.articles.map((article) => article.mainKeyword).sort(),
+                ...cluster.articles
+                    .map((article) => [article.mainKeyword, article.articleContract])
+                    .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
             ],
         ).sort((a, b) => a.join("|").localeCompare(b.join("|"))),
     })

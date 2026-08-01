@@ -113,6 +113,17 @@ export function collapseToArticles(
             const candidateEmbedding = embeddings.get(candidate.queryId)
             if (!candidateEmbedding) continue
 
+            // Semantic similarity cannot override the product contract. This is
+            // what prevents a software workflow and a physical service from
+            // collapsing into the same article merely because their nouns match.
+            if (
+                candidate.intentBinding.operationKey !== gap.intentBinding.operationKey ||
+                candidate.intentBinding.solutionMode !== gap.intentBinding.solutionMode ||
+                classifyArticleType(candidate.query) !== classifyArticleType(gap.query)
+            ) {
+                continue
+            }
+
             const similarity = cosineSimilarity(primaryEmbedding, candidateEmbedding)
             if (similarity >= CLUSTER_THRESHOLDS.ARTICLE_MERGE) {
                 assigned.add(candidate.queryId)
@@ -135,6 +146,14 @@ export function collapseToArticles(
             mainKeyword: gap.query,
             supportingKeywords: supporting.map((s) => s.query),
             sourceQueryIds: members.map((m) => m.queryId),
+            operationKey: gap.intentBinding.operationKey,
+            capabilityFit: members.some(
+                (member) => member.intentBinding.capabilityFit === "mechanically_entailed",
+            )
+                ? "mechanically_entailed"
+                : gap.intentBinding.capabilityFit,
+            solutionMode: gap.intentBinding.solutionMode,
+            sourceContext: gap.sourceContext,
             subNodes: [],
             articleType: classifyArticleType(gap.query),
             priority: gap.priority,
@@ -363,7 +382,17 @@ function fallbackTitle(keyword: string): string {
  * falls back to its deterministic title. The model cannot add, remove, or
  * substitute a topic.
  */
-export async function titleArticles(units: ArticleUnit[]): Promise<ArticleUnit[]> {
+export async function titleArticles(
+    units: ArticleUnit[],
+    families: Array<{
+        id: string
+        name: string
+        capabilityContract: {
+            deliveryMode: string
+            operations: Array<{ key: string; action: string }>
+        }
+    }> = [],
+): Promise<ArticleUnit[]> {
     if (units.length === 0) return units
 
     const client = getGeminiClient()
@@ -377,14 +406,23 @@ STRICT RULES:
 - Return EXACTLY ${units.length} titles, in the same order as the input.
 - Title ${units.length} must correspond to query ${units.length}. Do not reorder.
 - Do NOT invent, merge, split, skip, or substitute topics. The queries are fixed.
+- Preserve the delivery modality in the supplied context. Software and API
+  workflows must not become physical-service tutorials, and services must not
+  become self-serve software.
 - The title must NOT be identical to the query — the query is what people search,
   the title is what earns the click.
 - Maximum 70 characters.
 - No "Ultimate Guide", "Everything You Need to Know", "The Complete Guide", or
   any variation of those.
 
-QUERIES:
-${units.map((u, i) => `${i + 1}. ${u.mainKeyword}`).join("\n")}`
+QUERIES AND FIXED CONTEXT:
+${units.map((unit, index) => {
+    const family = families.find((candidate) => candidate.id === unit.scopeFamilyId)
+    const operation = family?.capabilityContract.operations.find(
+        (candidate) => candidate.key === unit.operationKey,
+    )
+    return `${index + 1}. query=${unit.mainKeyword}\n   family=${family?.name || "confirmed product area"}; delivery=${family?.capabilityContract.deliveryMode || "product or service"}; operation=${operation?.action || "category education"}; mode=${unit.solutionMode}; source_context=${unit.sourceContext}`
+}).join("\n")}`
 
     try {
         const response = await client.models.generateContent({
@@ -515,6 +553,13 @@ export function findDuplicateArticlePairs(
 
     for (let i = 0; i < units.length; i++) {
         for (let j = i + 1; j < units.length; j++) {
+            if (
+                units[i].operationKey !== units[j].operationKey ||
+                units[i].solutionMode !== units[j].solutionMode ||
+                units[i].articleType !== units[j].articleType
+            ) {
+                continue
+            }
             const similarity = cosineSimilarity(units[i].embedding, units[j].embedding)
             if (similarity >= threshold) {
                 pairs.push({

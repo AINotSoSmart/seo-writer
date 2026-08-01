@@ -19,6 +19,7 @@
 import { createAdminClient } from "@/utils/supabase/admin"
 import { SiteCoverageResult, CoverageStatus } from "./coverage"
 import { QuerySource } from "./types"
+import type { QueryIntentBinding } from "../writer/article-contract"
 
 export interface CompetitorMatch {
     name: string
@@ -35,6 +36,8 @@ export interface GapItem {
     /** Where we observed this query — the provenance claim */
     source: QuerySource
     sourceUrl: string | null
+    sourceContext: string
+    intentBinding: QueryIntentBinding
     /** User's current state for this query */
     userStatus: CoverageStatus
     userMatchedUrl: string | null
@@ -107,6 +110,8 @@ export function computeGaps(
             source: QuerySource
             sourceUrl: string | null
             scopeFamilyId: string
+            sourceContext: string
+            intentBinding: QueryIntentBinding
         }
     >
 ): GapAnalysisResult {
@@ -156,6 +161,8 @@ export function computeGaps(
             scopeFamilyId: meta.scopeFamilyId,
             source,
             sourceUrl: meta?.sourceUrl ?? null,
+            sourceContext: meta.sourceContext,
+            intentBinding: meta.intentBinding,
             userStatus: userQuery.status,
             userMatchedUrl: userQuery.matchedUrl,
             userSimilarity: userQuery.similarity,

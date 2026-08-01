@@ -6,6 +6,13 @@
  * planned-article generation state.
  */
 
+import type {
+    ArticleContract,
+    CapabilityContract,
+    CapabilityFact,
+} from "./article-contract"
+import { resolveCapabilityFacts } from "./article-contract"
+
 export interface PlannedWriterInputs {
     plannedArticleId: string
     brandId: string
@@ -22,6 +29,9 @@ export interface PlannedWriterInputs {
     clusterPosition: number
     clusterId: string
     frozenLinks: Array<{ title: string; url: string; relationship?: string }>
+    articleContract: ArticleContract
+    capabilityFacts: CapabilityFact[]
+    auditBrandSnapshot: Record<string, unknown>
 }
 
 export async function loadPlannedWriterInputs(
@@ -32,12 +42,15 @@ export async function loadPlannedWriterInputs(
         .from("planned_articles")
         .select(
             "id, title, main_keyword, supporting_keywords, article_type, brand_id, audit_id, cluster_id, " +
-                "source_query_ids, is_pillar, sub_node_intents",
+                "source_query_ids, is_pillar, sub_node_intents, article_contract, contract_version",
         )
         .eq("id", plannedArticleId)
         .maybeSingle()
 
     if (error || !planned) return null
+    if (!planned.article_contract || planned.contract_version !== "article-contract-v1") {
+        return null
+    }
 
     const { data: siblings } = planned.cluster_id
         ? await db
@@ -55,7 +68,7 @@ export async function loadPlannedWriterInputs(
     const { data: sourceRows } = planned.source_query_ids?.length
         ? await db
               .from("query_pool")
-              .select("query")
+              .select("query, source_url, source_context, intent_binding")
               .in("id", planned.source_query_ids)
         : { data: [] }
 
@@ -66,6 +79,22 @@ export async function loadPlannedWriterInputs(
               .eq("id", planned.cluster_id)
               .maybeSingle()
         : { data: null }
+
+    const [{ data: audit }, { data: scopeRows }] = await Promise.all([
+        db
+            .from("topical_audits")
+            .select("brand_snapshot")
+            .eq("id", planned.audit_id)
+            .maybeSingle(),
+        db
+            .from("audit_scope_families")
+            .select("capability_contract")
+            .eq("audit_id", planned.audit_id),
+    ])
+    const capabilityContracts = (scopeRows || [])
+        .map((row: any) => row.capability_contract)
+        .filter(Boolean) as CapabilityContract[]
+    const articleContract = planned.article_contract as ArticleContract
 
     const clusterCompetitorUrls = Array.isArray(cluster?.competitor_urls)
         ? (cluster.competitor_urls as unknown[])
@@ -103,5 +132,14 @@ export async function loadPlannedWriterInputs(
             url: row.target_url,
             relationship: row.relationship,
         })),
+        articleContract,
+        capabilityFacts: resolveCapabilityFacts(
+            capabilityContracts,
+            articleContract.capabilityFactIds,
+        ),
+        auditBrandSnapshot:
+            audit?.brand_snapshot && typeof audit.brand_snapshot === "object"
+                ? audit.brand_snapshot
+                : {},
     }
 }

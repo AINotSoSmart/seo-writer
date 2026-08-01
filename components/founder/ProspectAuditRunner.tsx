@@ -66,8 +66,12 @@ export function ProspectAuditRunner() {
                 .map((value) => value.trim())
                 .filter(Boolean)
         try {
-            const businessAreas = lines("businessAreas").map((line) => {
-                const [name, seedText = ""] = line.split("|", 2)
+            const businessAreas = lines("businessAreas").map((line, priority) => {
+                const [name = "", seedText = "", deliveryMode = "", mechanics = ""] =
+                    line.split("|").map((part) => part.trim())
+                const [input = "", action = "", output = ""] = mechanics
+                    .split("->")
+                    .map((part) => part.trim())
                 return {
                     name: name.trim(),
                     description: `Content directly serving ${name.trim()}.`,
@@ -75,6 +79,24 @@ export function ProspectAuditRunner() {
                         .split(",")
                         .map((seed) => seed.trim())
                         .filter(Boolean),
+                    capabilityContract: {
+                        version: "capability-v1",
+                        deliveryMode,
+                        operations: [{
+                            key: "op1",
+                            customerJob: `Content directly serving ${name.trim()}.`,
+                            inputs: input ? [input] : [],
+                            action,
+                            outputs: output ? [output] : [],
+                            limits: [],
+                            evidenceRefs: [`prospect-${priority}-fact`],
+                        }],
+                        facts: [{
+                            id: `prospect-${priority}-fact`,
+                            url: "founder-confirmed:prospect-runner",
+                            quote: `Input: ${input}. Action: ${action}. Output: ${output}.`,
+                        }],
+                    },
                 }
             })
             const response = await fetch("/api/founder/prospect-audits", {
@@ -110,8 +132,8 @@ export function ProspectAuditRunner() {
                     <Field name="email" label="Claim email" placeholder="owner@example.com" type="email" required />
                     <TextArea
                         name="businessAreas"
-                        label="Confirmed business areas (required)"
-                        placeholder={"Photo restoration | restore old photos, fix damaged photos\nPhoto animation | animate old photos"}
+                        label="Areas: name | searches | delivery | input -> action -> output"
+                        placeholder={"Photo restoration | restore old photos, fix damaged photos | browser software | old photo upload -> repairs visible damage -> restored digital photo"}
                     />
                     <TextArea
                         name="competitors"

@@ -10,12 +10,12 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-02
+Last implementation update: 2026-08-01
 
-Status: **finalize accepts absorbed/parent-rolled query ownership (20260806);
-competitor coverage failover; onboarding analyze streams; clustering family-floor
-+ parent rollup; checkout remains disabled pending the staging/external release
-gate**
+Status: **domain-agnostic capability/article writer contracts implemented;
+source context + intent bindings persist atomically; research and section writing
+are evidence-bound; checkout remains disabled pending migration deployment and
+the staging/external release gate**
 
 ## 1. Locked product contract
 
@@ -213,6 +213,152 @@ Scope extraction itself lives in `lib/scope-extraction.ts` as a dedicated call �
 never as a field on the brand-persona prompt. Failing quote verification marks a
 family unverified for founder review; it must never delete one. See the
 2026-07-30 scope-extraction changelog entry.
+
+### 2.0.3 Domain-agnostic writer repair (2026-08-01)
+
+#### Failure that forced this change
+
+A real planned BringBack article for the query â€œCan I include pets in my family
+portrait?â€ had clean headings and extractable formatting, but most of the body
+became a physical-photography tutorial: cameras, lenses, shutter speed, leads,
+parks and permits. BringBack is browser software for restoration, animation and
+digital compositing. The article also invented product functions, processing
+times, output resolution, a physical team and first-hand testing.
+
+This was **not a BringBack wording bug**. The same failure could occur for a
+developer tool, fintech product, e-commerce platform, agency or any other tenant:
+
+1. Brand analysis saved broad prose, not a verified input/action/output contract.
+2. Harvest rows preserved the question but discarded the source answer context.
+3. Semantic collapse could merge similar language across different operations.
+4. The writer re-opened the topic through broad research, then saw too much brand
+   and competitor context with no hard distinction between first-party and
+   category evidence.
+5. Prompt instructions explicitly encouraged invented founder/team experience.
+
+The repaired pipeline is:
+
+> **Verified business mechanics -> query intent binding -> frozen article
+> contract -> contract-bound research -> focused outline -> evidence-bound
+> section writing.**
+
+#### Capability contracts
+
+The existing scope-extraction call now also returns `capability-v1` for every
+confirmed family. It contains delivery mode, operations, inputs, action, outputs,
+limits and exact evidence references. It is not another model call. The existing
+scope-review card has an expandable â€œHow we understand this worksâ€ editor, so a
+founder can correct mechanics without another onboarding page. A correction is
+stored as founder-confirmed evidence; extracted claims still have to match copied
+site text.
+
+Fact IDs are namespaced by scope-family ID. This is essential: every extracted
+family naturally starts with names such as `fact1`; without namespacing, an
+absorbed intent from another family could resolve `fact1` to the wrong product
+claim.
+
+`query_pool.intent_binding` records one family, operation, capability fit
+(`explicit`, `mechanically_entailed`, or `educational`) and solution mode
+(`product_led` or `category_educational`). Mechanics-bound inference may
+generalize only when verified inputs + action + output entail the variant. It
+never generalizes performance, quality, compatibility, timing, staff or results.
+There is no industry keyword blacklist.
+
+#### Article contracts and collapse
+
+Assembly deterministically creates `article-contract-v1`; no new reasoning call
+was added. The contract freezes entity/delivery mode, primary and absorbed
+intents, source URL/context, operation and fit, allowed capability fact IDs,
+research query and length. Contracts participate in the immutable result hash.
+
+Collapse now requires compatible operation, solution mode and article intent.
+Absorbed subnodes keep their original query bindings and fact IDs instead of
+inheriting every fact from their host cluster. The existing batched title call
+receives the original query, source context, delivery mode, operation and
+solution mode, and may improve wording without changing modality.
+
+Program article lengths are intent-sized:
+
+| Class | Range | Selection |
+|---|---:|---|
+| Short | 1,200â€“1,800 | Narrow informational intent with no absorbed subnode |
+| Medium | 1,600â€“2,200 | How-to, commercial, or one absorbed intent |
+| Long | 2,400â€“3,200 | Pillar or two-plus absorbed intents |
+
+Program generation never selects `very_long` or `extra_long`. The customer-facing
+fixed-length setting was removed; founder/manual test payloads retain an override.
+Section/H2 requirements are ranges, and planned articles can use a smaller
+intent-sized minimum instead of manufacturing sections to satisfy a quota.
+
+#### Research and writing behavior
+
+Broad research uses the frozen query + delivery mode + operation. It no longer
+automatically appends pricing, Reddit, reviews or comparison modifiers. The
+existing critic may return **zero, one or two** targeted queries; zero is valid,
+parse failure runs no fallback search, and the forced 3â€“5-gap behavior is gone.
+Synthesis keeps at most 12 sourced facts, three genuine limitations/trade-offs,
+three non-competitor authority links, and only intent-appropriate steps or
+comparison data. The separate Angle Architect call is not run for program
+articles, so provider cost should be flat or lower.
+
+Outline sections now declare `capability_fact_ids`, `research_fact_ids` and a
+section purpose. Each section writer receives only those referenced facts:
+
+- capability facts may support first-party product statements;
+- research facts may support category statements and retain attribution;
+- research can never be rewritten as proof of customer product behavior;
+- educational articles cannot pretend the customer product directly solves the
+  query;
+- first-person plural is allowed only for supplied first-party facts.
+
+The fabricated-experience instructions (founder persona, â€œour teamâ€, â€œafter
+testingâ€, subjective tool opinions) were removed. The useful answer-first,
+short-paragraph, active-voice, definitions, lists/tables, citation, frozen-link,
+regional-spelling and anti-fluff rules remain.
+
+There is deliberately **no post-generation semantic judge and no per-article QA
+model call**. Drift is prevented before generation by constraining the decisions,
+research and evidence each downstream stage receives.
+
+#### Persistence and migration
+
+`supabase/migrations/20260807_writer_intent_contracts.sql` adds:
+
+- `brand_scope_families.capability_contract`
+- `audit_scope_families.capability_contract`
+- `query_pool.source_context` and `intent_binding`
+- `planned_articles.article_contract` and `contract_version`
+
+Why this SQL is substantial: these values are part of an immutable paid scope,
+so saving them through later independent HTTP updates would create a partial-run
+window. The migration patches the current `confirm_brand_scope` and
+`finalize_audit_run` definitions, copies contracts through every customer and
+prospect snapshot path, validates recognized JSON versions, and guards completed
+rows against later contract edits. The finalizer is defined explicitly with the
+later subnode, origin-family and parent-rollup ownership behavior included. An
+earlier draft tried to patch `pg_get_functiondef()` text and failed on a valid
+database because PostgreSQL normalized the function text differently; do not
+restore that brittle replacement approach.
+
+Historical source context is honestly backfilled from `observed_value`. No old
+capability or article contract is fabricated. Historical articles remain
+viewable and generated/delivered work is untouched, but old audits are marked
+`requires_reaudit` and checkout/server generation reject them.
+
+Founder dry-run output now shows entity/delivery mode, primary and required
+intents, source context, intent bindings, allowed first-party facts, research
+query, selected length and the real outline prompt. `ship-cluster` also refuses
+an audit that lacks `article-contract-v1` before consuming a paid allowance.
+
+Verification on this implementation:
+
+- final `npx tsc --noEmit`: passed;
+- all 61 groups in `tests/pivot-contract.test.mjs` pass, including writer
+  contracts, persistence, modality, research-call and five-industry fixtures;
+- the local user edit in `components/audit/audit-console.tsx` was deliberately
+  preserved; its test now checks retry behavior rather than requiring deleted UI
+  copy;
+- `npm build` and repeated lint were intentionally not run.
 
 ### 2.1 Immutable audit lifecycle - implemented
 
@@ -2140,7 +2286,7 @@ Collapse ratio is now:
   composition logged, because that band tracks source mix
 - reported by `/api/harvest/verify` with an explicit "check source mix" note
 
-Current policy version: `confirmed-business-scope-v3.0.0`.
+Current policy version: `capability-bound-writer-v4.0.0`.
 `collapseMin`/`collapseMax` remain removed; the contract suite pins their absence
 plus the direct duplicate invariant so the proxy gate cannot be reintroduced.
 
