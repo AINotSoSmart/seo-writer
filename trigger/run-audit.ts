@@ -75,9 +75,9 @@ export const runAuditTask = task({
                 discoveryCalls.set(source, row)
             }
 
-            // User-named competitors are preferred seeds, not a hard stop.
-            // Naming one rival used to skip discovery entirely and starve gap
-            // ownership evidence — top up to maxCompetitors instead.
+            // User-named competitors are preferred seeds. Discover a reserve
+            // pool (up to maxCompetitorCandidates) so coverage can skip
+            // unreadable sites and still fill the working set of four.
             const userCompetitors = (
                 Array.isArray(brandRecord?.discovered_competitors)
                     ? brandRecord.discovered_competitors
@@ -98,12 +98,12 @@ export const runAuditTask = task({
             }
 
             let discovered: Array<{ name: string; url: string; domain?: string }> = []
-            const remainingSlots =
-                HARVEST_POLICY.maxCompetitors - userCompetitors.length
-            if (remainingSlots > 0) {
+            const remainingCandidateSlots =
+                HARVEST_POLICY.maxCompetitorCandidates - userCompetitors.length
+            if (remainingCandidateSlots > 0) {
                 discovered = await discoverCompetitors(
                     brandData,
-                    remainingSlots,
+                    remainingCandidateSlots,
                     searchPrefs,
                     (call) => recordDiscoveryCall(call.source, call.succeeded),
                 )
@@ -133,7 +133,7 @@ export const runAuditTask = task({
                 })
             }
 
-            const competitors = mergeUserFirstCompetitors(
+            const competitorCandidates = mergeUserFirstCompetitors(
                 userCompetitors,
                 discovered.filter((competitor) => {
                     try {
@@ -146,17 +146,18 @@ export const runAuditTask = task({
                         return false
                     }
                 }),
-                HARVEST_POLICY.maxCompetitors,
+                HARVEST_POLICY.maxCompetitorCandidates,
             )
 
-            if (competitors.length > 0) {
+            // Provisional candidate list for the run; rewritten to the usable
+            // working set after coverage failover.
+            if (competitorCandidates.length > 0) {
                 await supabase
                     .from("brand_details")
                     .update({
-                        discovered_competitors: competitors.map(({ name, url }) => ({
-                            name,
-                            url,
-                        })),
+                        discovered_competitors: competitorCandidates.map(
+                            ({ name, url }) => ({ name, url }),
+                        ),
                     })
                     .eq("id", brandId)
                     .eq("user_id", userId)
@@ -165,7 +166,9 @@ export const runAuditTask = task({
             await supabase
                 .from("topical_audits")
                 .update({
-                    input_competitors: competitors.map((competitor) => competitor.url),
+                    input_competitors: competitorCandidates.map(
+                        (competitor) => competitor.url,
+                    ),
                     updated_at: new Date().toISOString(),
                 })
                 .eq("id", auditId)
@@ -177,7 +180,10 @@ export const runAuditTask = task({
                 brandUrl,
                 {
                     auditId,
-                    competitors: competitors.map(({ name, url }) => ({ name, url })),
+                    competitors: competitorCandidates.map(({ name, url }) => ({
+                        name,
+                        url,
+                    })),
                     initialSourceCallLedger: Array.from(
                         discoveryCalls,
                         ([source, counts]) => ({ source, ...counts }),
@@ -202,6 +208,52 @@ export const runAuditTask = task({
                 },
             )
 
+            // Persist only competitors that produced readable coverage — drop
+            // failures like MyHeritage-with-no-sitemap from the brand record.
+            const usedByUrl = new Map(
+                competitorCandidates.map((competitor) => [
+                    competitor.url.replace(/\/$/, "").toLowerCase(),
+                    competitor,
+                ]),
+            )
+            const workingCompetitors = result.competitorsUsed.map((url) => {
+                const key = url.replace(/\/$/, "").toLowerCase()
+                const known = usedByUrl.get(key)
+                let host = url
+                try {
+                    host = new URL(url).hostname.replace(/^www\./i, "")
+                } catch {
+                    /* keep url */
+                }
+                return {
+                    name: known?.name || host,
+                    url,
+                }
+            })
+            await supabase
+                .from("brand_details")
+                .update({
+                    discovered_competitors: workingCompetitors,
+                })
+                .eq("id", brandId)
+                .eq("user_id", userId)
+            await supabase
+                .from("topical_audits")
+                .update({
+                    input_competitors: result.competitorsUsed,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", auditId)
+
+            if (result.competitorsSkipped.length > 0) {
+                console.log(
+                    `[Audit Task] Skipped ${result.competitorsSkipped.length} competitor(s): ` +
+                        result.competitorsSkipped
+                            .map((row) => `${row.url} (${row.reason})`)
+                            .join("; "),
+                )
+            }
+
             return {
                 success: true,
                 audit_id: auditId,
@@ -210,6 +262,7 @@ export const runAuditTask = task({
                 article_count: result.articleCount,
                 cluster_count: result.clusterCount,
                 competitors_scanned: result.competitorsScanned,
+                competitors_skipped: result.competitorsSkipped.length,
                 below_viable_threshold: result.belowViableThreshold,
                 public_token: result.publicToken,
                 policy_version: result.policyVersion,

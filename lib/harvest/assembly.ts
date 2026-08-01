@@ -95,6 +95,10 @@ export interface HarvestOutput {
     sitePages: Array<{ url: string; title: string; embedding: number[] }>
     policyVersion: string
     resultHash: string
+    /** Competitors that produced readable coverage (≤ maxCompetitors). */
+    competitorsUsed: string[]
+    /** Candidates skipped during coverage failover (sitemap/crawl failures). */
+    competitorsSkipped: Array<{ url: string; reason: string }>
     droppedByDemandFilter: Array<{ query: string; source: string }>
     droppedByScopeFilter: Array<{
         query: string
@@ -151,9 +155,9 @@ function validateInput(input: HarvestInput): HarvestInput {
     }
 
     const competitors = Array.from(new Set(input.competitors || []))
-    if (competitors.length > HARVEST_POLICY.maxCompetitors) {
+    if (competitors.length > HARVEST_POLICY.maxCompetitorCandidates) {
         throw new HarvestAssemblyError(
-            `The audit has ${competitors.length} competitors; maximum is ${HARVEST_POLICY.maxCompetitors}. None were silently removed.`,
+            `The audit has ${competitors.length} competitor candidates; maximum is ${HARVEST_POLICY.maxCompetitorCandidates}. None were silently removed.`,
             "invalid_input",
         )
     }
@@ -498,8 +502,14 @@ export async function assembleHarvest(
         phase: "scanning_competitors",
         sourceCallLedger: [...liveLedger],
     })
+    // Candidates may exceed maxCompetitors. Try in order until the working set
+    // is full; unreadable sites are skipped so one blocked rival (e.g. no
+    // sitemap) cannot abort an otherwise healthy audit.
     const competitorCoverages: SiteCoverageResult[] = []
+    const competitorsUsed: string[] = []
+    const competitorsSkipped: Array<{ url: string; reason: string }> = []
     for (const competitor of input.competitors) {
+        if (competitorCoverages.length >= HARVEST_POLICY.maxCompetitors) break
         try {
             const coverage = await scanCoverage(
                 competitor,
@@ -508,18 +518,32 @@ export async function assembleHarvest(
                 "competitor",
             )
             if (coverage.pagesScanned === 0) {
-                throw new Error("no readable content pages")
+                const reason = "no readable content pages"
+                console.warn(
+                    `[Assembly] Skipping competitor ${competitor}: ${reason}`,
+                )
+                competitorsSkipped.push({ url: competitor, reason })
+                continue
             }
             competitorCoverages.push(coverage)
+            competitorsUsed.push(competitor)
         } catch (error) {
-            throw new HarvestAssemblyError(
-                `Coverage scanning failed for configured competitor ${competitor}: ${
-                    error instanceof Error ? error.message : "unknown error"
-                }`,
-                "competitor_coverage_failure",
-                reports,
+            const reason =
+                error instanceof Error ? error.message : "unknown error"
+            console.warn(
+                `[Assembly] Skipping competitor ${competitor}: ${reason}`,
             )
+            competitorsSkipped.push({ url: competitor, reason })
         }
+    }
+    if (competitorsSkipped.length > 0) {
+        console.log(
+            `[Assembly] Competitor coverage: ${competitorsUsed.length} usable, ` +
+                `${competitorsSkipped.length} skipped` +
+                (competitorsUsed.length < HARVEST_POLICY.maxCompetitors
+                    ? ` (wanted ${HARVEST_POLICY.maxCompetitors})`
+                    : ""),
+        )
     }
     const coverageRequestCount =
         userCoverage.pagesAttempted +
@@ -829,6 +853,8 @@ export async function assembleHarvest(
         sitePages: userCoverage.pages,
         policyVersion: HARVEST_POLICY.version,
         resultHash,
+        competitorsUsed,
+        competitorsSkipped,
         droppedByDemandFilter: demandFiltered.dropped,
         droppedByScopeFilter: scopeClassified.dropped,
     }

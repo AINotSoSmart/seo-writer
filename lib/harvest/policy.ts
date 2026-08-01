@@ -3,8 +3,15 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "confirmed-business-scope-v3.2.0",
+    version: "confirmed-business-scope-v3.3.0",
+    /** Working set scanned for gap ownership evidence. */
     maxCompetitors: 4,
+    /**
+     * Discovery + coverage failover reserve. Unreadable candidates (no sitemap,
+     * blocked crawl) are skipped and the next reserve fills the working set
+     * instead of aborting the whole audit.
+     */
+    maxCompetitorCandidates: 12,
     maxCompetitorDiscoveryQueries: 12,
     maxScopeFamilies: 12,
     // A family may carry several genuinely different founder-confirmed searches.
