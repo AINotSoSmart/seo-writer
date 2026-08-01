@@ -116,3 +116,5 @@ WHERE sf.brand_id = bd.id
   AND family->'capability_contract'->>'version' = 'capability-v1'
   AND sf.capability_contract IS DISTINCT FROM family->'capability_contract';
 
+
+
