@@ -10,7 +10,7 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-07-31
+Last implementation update: 2026-08-02
 
 Status: **confirm-scope uses client-ready Category/Keywords labels; auto-trims
 to 12 searches (add disabled at cap); audit progress UI refined; audit/prospect
@@ -458,7 +458,7 @@ PROGRAM_COST_RATES_JSON=<real provider rates; no placeholder zeroes>
 
 Local verification completed on 2026-07-30:
 
-- `npm run test:pivot-contract`: **44/44 test groups passed**.
+- `npm run test:pivot-contract`: **52/52 test groups passed**.
 - `tsc --noEmit --pretty false`: **passed**.
 - `npm run build`: **not rerun for this scope change, per founder instruction**.
 - Public checkout remains disabled by default in code.
@@ -563,6 +563,135 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-02 - founder test-article QA route fixed and fully wired
+
+`/founder/test-article` failed at article insert with
+`articles_user_id_fkey` when the founder account had no `profiles` row.
+`ensureProfileRow` creates it before insert.
+
+Loading a planned article now hydrates the full writer payload from the database
+(source queries, sub-nodes, cluster competitors, frozen links when purchased)
+via `loadPlannedWriterInputs`, shared with `/api/writer/dry-run`. The writer
+task still never receives `plannedArticleId`, so cluster state is untouched.
+
+### 2026-08-02 - parent_hint now steers thin-domain absorption
+
+`parent_hint` from extraction was shown on the confirmation screen but absorption
+still routed thin domains purely by embedding proximity. That worked on replay,
+but it ignored the taxonomy the founder confirmed.
+
+- `parent_scope_family_id` added to `brand_scope_families` and
+  `audit_scope_families` (`20260804_parent_scope_family.sql`). `parent_hint` is
+  resolved to this id at confirm time in `resolveParentScopeFamilyIds`.
+- `confirm_brand_scope`, `create_customer_audit_with_scope`, and
+  `create_scoped_prospect_audit` persist stable family ids and parent links.
+  `claim_prospect_audit` copies them when a prospect claims an audit.
+- `absorbOrphanedUnits` prefers the parent's qualifying cluster for Pass 2 (and
+  for degenerate sub-node attachment when the parent has articles) and only
+  falls back to embedding adjacency when the parent has no cluster.
+
+Re-audit required for existing completed audits — parent links live on the scope
+snapshot, not retroactively on old runs.
+
+### 2026-08-02 - dynamic scope: the article floor was destroying measured demand
+
+**Production evidence.** One audit measured 6 confirmed domains and 373
+queries. Three domains produced real gap demand and **zero** articles:
+
+| domain | gap queries | clusters | articles |
+|---|---|---|---|
+| C | 14 | 0 | 0 |
+| D | 14 | 0 | 0 |
+| F | **24** | **0** | **0** |
+
+**52 of 156 gap queries — 33% — were silently destroyed** at
+`clusterer.ts`, where groups below the 8-article floor were filtered into a
+`residual` counter and never seen again. Sampling domain F showed they were not
+drift: they were high-intent commercial queries including the product's core
+use case. The audit then showed 4 clusters, failed the fixed six-cluster gate,
+and told a paying-ready customer their site was "not eligible for a program".
+
+**The four reported failures were not independent — Step 4 caused Step 1.**
+
+**Thin domains are now absorbed in two passes** (`lib/harvest/absorption.ts`):
+
+- **Pass 1** triages inside the thin domain by *demand weight*. A unit backed by
+  2+ independently observed phrasings has corroborated demand and becomes a
+  **standalone article**; a unit backed by exactly one becomes a **sub-node** —
+  an H2/FAQ section folded into one of those articles. Folding everything as
+  sub-nodes would bury searchable intents inside another domain's article where
+  they can never rank or be linked to, and the graph is what is sold.
+- **Pass 2** absorbs the promoted articles into the nearest qualifying cluster.
+  Absorbed articles adopt the host's `scope_family_id` because
+  `planned_articles_cluster_scope_fkey` requires article and cluster to share a
+  family — that guard is load-bearing and was not weakened. The new
+  `origin_scope_family_id` preserves where the demand was measured.
+- Degenerate cases are handled: nothing corroborated → all fold as sub-nodes;
+  nothing qualifies anywhere → surfaced as measured-but-unsold evidence.
+- **No FAQ padding.** Manufacturing nodes to reach a price threshold is exactly
+  the unoriginal-content pattern that lost ~71% of traffic.
+
+Verified by replaying the failing audit's shape: **58 queries in, 58 out, 0
+lost**, 16 promoted to standalone articles, 10 folded as sub-nodes, and the
+8–15 ceiling still held (24 → 12 + 12).
+
+**Scope is now dynamic.** `selectQualifiedProgramScope` sells every qualified
+cluster — 2, 4, 7 or 12. The only remaining rejections are "audit needs
+refreshing" and "nothing qualifies". No new Dodo product was needed: the three
+velocity tiers already price per cluster correctly, so `programPricing()` varies
+the *period count* instead of the price.
+
+**A second inversion surfaced while testing that.** Whole billing periods mean a
+scope that does not divide evenly leaves a half-empty final period the customer
+still pays for. At 3 clusters Accelerate came to $299.33/cluster against Close's
+$249 — the *faster* tier being *worse* value, the same defect that made the old
+4-clusters-per-month Dominate indefensible. A first fix using Close as a
+baseline still left an 8-cluster case ($224.63 vs $224.50). `availableTiers()`
+now walks slowest to fastest keeping a running best, so a tier is offered only
+when it beats **every** slower offered tier. Proven: **no value inversion at any
+count from 1 to 40.**
+
+**Also fixed while in here.** `platform_native` added to the scope classifier —
+autocomplete is a popularity engine, so "do this job inside someone else's
+platform" leaks in even when the job is exactly what the customer sells. Adding
+it exposed that `VALID_DECISIONS` had drifted from the response schema: a value
+the schema permitted but the validator rejected would have failed whole batches
+and aborted audits after harvest spend. A test now pins union, validator and
+schema in agreement.
+
+`20260803_sub_nodes_and_origin_family.sql` adds `sub_node_intents`,
+`sub_node_query_ids` and `origin_scope_family_id`, and patches
+`finalize_audit_run` to persist them — without which the absorption would have
+been recomputed and then dropped at persistence, the same loss one layer down.
+Both patch anchors were rehearsed read-only against the live function first.
+
+51/51 contract groups pass; `tsc` clean.
+
+**Completed in the same pass.**
+
+- **Sub-nodes reach the writer.** `run-harvest` persists `sub_node_intents`,
+  `sub_node_query_ids` and `origin_scope_family_id`; `ship-cluster` forwards
+  them; the outline prompt gains a `REQUIRED SUB-SECTIONS` block instructing a
+  dedicated H2 or FAQ entry per absorbed intent, in the searcher's own wording,
+  explicitly *not* padded. Without this the absorption would have been computed,
+  stored and then never written — the same loss two layers down. A contract test
+  pins every hop of the chain, because any one of them dropping the payload
+  reproduces the original bug silently.
+- **Peer-level extraction.** `lib/scope-extraction.ts` gains a PEER-LEVEL RULE
+  and a `parent_hint` field: emitting a broad capability beside one of its own
+  sub-cases is what produced areas too narrow to sustain a cluster. The hint is
+  plumbed through `validateGroundedScope` (self-referential hints stripped) and
+  surfaced on the confirmation screen as "Sub-area of X", so the founder merges
+  deliberately instead of discovering a thin area after the audit runs.
+- **Public copy is count-agnostic.** Every "six-cluster"/"all six" claim removed
+  from pricing, features, about, terms, SEO metadata, `llms.txt`, checkout and
+  restore paths — the site no longer promises a number the engine no longer
+  guarantees. `purchase-intent.ts`'s fallback rejection string was stale too;
+  its gate already delegated correctly.
+
+52/52 contract groups pass; `tsc` clean.
+
 
 ### 2026-07-31 - confirm-scope blocks use client-ready field labels
 
@@ -864,25 +993,25 @@ parses, every table and column resolves, and the run rolled back.
 **2. `/founder/test-article` (page) + `POST /api/founder/test-article`**
 
 Generating one article previously meant shipping a whole cluster. This runs the
-real writer against real brand data with an overridable title, keyword, article
-type, supporting keywords, source queries and `clusterPosition` (which selects
-the intro pattern under test).
+real writer against real brand data with the same inputs ship-cluster would send.
+When a planned article is loaded, `hydrateFromPlannedId` pulls audit evidence,
+sub-nodes, cluster context and any frozen links from the database — but
+`plannedArticleId` is never passed to the writer task, so no cluster generation
+state is mutated.
+
+`ensureProfileRow` fixes the `articles_user_id_fkey` failure when a founder
+account exists in auth without a matching `profiles` row.
 
 It stays outside the paid pipeline by *omission*, not by reimplementation:
 
-- **no `plannedArticleId`** — every generation/delivery status write inside the
-  task is already guarded on it, so no real cluster can be marked generating,
-  blocked, or delivered;
-- **no `frozenLinks`** — the graph is frozen at purchase-intent time and does
-  not exist for a test article, so the writer falls back to
-  `getRelevantInternalLinks`, the pre-program path it already supports. This is
-  the "internal linking freezing point" concern, and the writer handles it;
-- **no credit consumption** — `consume_program_credit` lives in ship-cluster,
-  never in the writer.
+- **no `plannedArticleId` on the writer task** — status writes inside the task
+  are guarded on it;
+- **no credit consumption** — `consume_program_credit` lives in ship-cluster;
+- **frozen links** are only forwarded when they already exist on the planned
+  article after purchase — never fabricated.
 
-The only row created is one `articles` record, and it is deleted again if the
-trigger call fails. Founder-gated via `isFounderUser`, returns 404 rather than
-403, and refuses a brand the caller does not own. Provider costs are real.
+The only row created is one `articles` record, deleted again if the trigger
+call fails.
 
 An admin page at `/founder/test-article` lists the founder's own planned
 articles (when an audit exists), loads one into an editable form in a click, and

@@ -16,6 +16,24 @@ import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { cosineSimilarity } from "@/lib/audit/site-scanner"
 import { GapItem } from "./gap-engine"
 import { HARVEST_POLICY } from "./policy"
+import type {
+    ArticleCluster,
+    ArticleType,
+    ArticleUnit,
+    ClusterGrouping,
+} from "./cluster-types.ts"
+export type {
+    ArticleCluster,
+    ArticleType,
+    ArticleUnit,
+    ClusterGrouping,
+    SubNode,
+} from "./cluster-types.ts"
+export {
+    absorbOrphanedUnits,
+    buildParentByFamilyId,
+    STANDALONE_MIN_BACKING_QUERIES,
+} from "./absorption.ts"
 
 /**
  * Merge thresholds.
@@ -34,33 +52,6 @@ export const CLUSTER_THRESHOLDS = {
 const MAX_SUPPORTING_KEYWORDS = 5
 const TARGET_CLUSTER_MIN = HARVEST_POLICY.minQualifiedClusterArticles
 const TARGET_CLUSTER_MAX = HARVEST_POLICY.maxClusterArticles
-
-export type ArticleType = "informational" | "commercial" | "howto"
-
-export interface ArticleUnit {
-    scopeFamilyId: string
-    /** The query this article primarily targets */
-    mainKeyword: string
-    /** Same-intent variants folded into this article */
-    supportingKeywords: string[]
-    /** Pool row IDs this unit was collapsed from — full traceability */
-    sourceQueryIds: string[]
-    articleType: ArticleType
-    priority: number
-    competitorUrls: string[]
-    /** Filled by the titler */
-    title: string
-    /** Centroid used for second-level grouping */
-    embedding: number[]
-}
-
-export interface ArticleCluster {
-    scopeFamilyId: string
-    name: string
-    articles: ArticleUnit[]
-    priority: number
-    competitorUrls: string[]
-}
 
 /**
  * Classifies intent from query shape. Deterministic, no model call.
@@ -144,6 +135,7 @@ export function collapseToArticles(
             mainKeyword: gap.query,
             supportingKeywords: supporting.map((s) => s.query),
             sourceQueryIds: members.map((m) => m.queryId),
+            subNodes: [],
             articleType: classifyArticleType(gap.query),
             priority: gap.priority,
             competitorUrls,
@@ -161,11 +153,13 @@ export function collapseToArticles(
 
 /**
  * Second-level grouping: article units into thematic clusters.
+ *
  * Undersized thematic groups fold into a neighbour that already reached the
- * minimum. If nothing reaches TARGET_CLUSTER_MIN, this family emits zero
- * clusters — never a padded 1–7 article "program cluster".
+ * minimum. A domain with no group reaching TARGET_CLUSTER_MIN emits zero
+ * clusters — a 1–7 article "program cluster" is not what is sold — but its
+ * units are now RETURNED as orphans for assembly to absorb, not discarded.
  */
-export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
+export function groupIntoClusters(units: ArticleUnit[]): ClusterGrouping {
     const assigned = new Set<number>()
     const raw: ArticleUnit[][] = []
 
@@ -198,15 +192,15 @@ export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
     const small = raw.filter((g) => g.length < TARGET_CLUSTER_MIN)
 
     if (large.length === 0) {
-        // Not enough distinct thematic depth for a qualified cluster. Emitting
-        // one undersized cluster used to make 5–6 article rows look like a
-        // program — and marketing promises 8–15. Keep the article units in
-        // logs; do not invent a cluster.
+        // Not enough distinct thematic depth for a qualified cluster of its own.
+        // The units are handed back so assembly can absorb them into another
+        // domain's cluster. Returning [] here is what destroyed 33% of one
+        // audit's measured demand.
         console.log(
             `[Clusterer] ${units.length} articles below minimum ${TARGET_CLUSTER_MIN} — ` +
-                `emitting 0 clusters (residual undersized groups: ${raw.length})`,
+                `0 clusters; ${units.length} units returned for absorption`,
         )
-        return []
+        return { clusters: [], orphanedUnits: units }
     }
 
     for (const group of small) {
@@ -235,14 +229,18 @@ export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
         .map(buildCluster)
         .sort((a, b) => b.priority - a.priority)
 
-    const residual = sized
+    // A pathological split can still leave a stub. It is returned for
+    // absorption rather than counted and forgotten.
+    const orphanedUnits = sized
         .filter((group) => group.length < TARGET_CLUSTER_MIN)
-        .reduce((sum, group) => sum + group.length, 0)
+        .flat()
 
     console.log(
         `[Clusterer] ${units.length} articles grouped into ${clusters.length} clusters ` +
             `(sizes: ${clusters.map((c) => c.articles.length).join(", ") || "none"}` +
-            (residual > 0 ? `; residual undersized articles=${residual}` : "") +
+            (orphanedUnits.length > 0
+                ? `; ${orphanedUnits.length} units returned for absorption`
+                : "") +
             `)`,
     )
 
@@ -253,7 +251,7 @@ export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
         )
     }
 
-    return clusters
+    return { clusters, orphanedUnits }
 }
 
 /**
@@ -263,7 +261,7 @@ export function groupIntoClusters(units: ArticleUnit[]): ArticleCluster[] {
  * ~13 instead of 15/15/10 — a trailing stub reads like a mistake to the customer
  * looking at their map.
  */
-function splitOversized(articles: ArticleUnit[]): ArticleUnit[][] {
+export function splitOversized(articles: ArticleUnit[]): ArticleUnit[][] {
     if (articles.length <= TARGET_CLUSTER_MAX) return [articles]
 
     const partCount = Math.ceil(articles.length / TARGET_CLUSTER_MAX)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { generateOutlineSystemPrompt } from "@/trigger/generate-blog"
 import { selectIntroPattern } from "@/lib/writer/composition"
+import { loadPlannedWriterInputs } from "@/lib/writer/planned-article-payload"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { createAdminClient } from "@/utils/supabase/admin"
 
@@ -60,55 +61,54 @@ export async function GET(req: NextRequest) {
 
     const db = createAdminClient() as any
 
-    // Select exactly what ship-cluster selects, plus the audit evidence that
-    // exists in the database but is NOT currently forwarded to the writer.
-    let query = db
-        .from("planned_articles")
-        .select(
-            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, " +
-                "article_id, generation_status, retry_count, brand_id, audit_id, cluster_id, " +
-                "scope_family_id, source_query_ids, intent_role, is_pillar",
-        )
-        .order("is_pillar", { ascending: false })
-        .limit(1)
+    const hydrated = plannedArticleId
+        ? await loadPlannedWriterInputs(db, plannedArticleId)
+        : auditId
+          ? await (async () => {
+                const { data: first } = await db
+                    .from("planned_articles")
+                    .select("id")
+                    .eq("audit_id", auditId)
+                    .order("is_pillar", { ascending: false })
+                    .limit(1)
+                    .maybeSingle()
+                return first?.id
+                    ? loadPlannedWriterInputs(db, first.id)
+                    : null
+            })()
+          : null
 
-    query = plannedArticleId
-        ? query.eq("id", plannedArticleId)
-        : query.eq("audit_id", auditId)
-
-    const { data: planned, error: plannedError } = await query.maybeSingle()
-    if (plannedError || !planned) {
+    if (!hydrated) {
         return NextResponse.json(
-            { error: plannedError?.message || "No planned article found" },
+            { error: "No planned article found" },
             { status: 404 },
         )
     }
 
-    // Resolve this article's position within its cluster exactly as ship-cluster
-    // does, so the reported intro pattern is the one a real run would use.
-    const { data: siblings } = planned.cluster_id
-        ? await db
-              .from("planned_articles")
-              .select("id")
-              .eq("audit_id", planned.audit_id)
-              .eq("cluster_id", planned.cluster_id)
-              .order("is_pillar", { ascending: false })
-        : { data: [] }
-    const clusterPosition = Math.max(
-        0,
-        (siblings || []).findIndex((row: any) => row.id === planned.id),
-    )
+    const { data: planned } = await db
+        .from("planned_articles")
+        .select(
+            "id, title, main_keyword, generation_status, intent_role, is_pillar, article_id",
+        )
+        .eq("id", hydrated.plannedArticleId)
+        .maybeSingle()
+
+    if (!planned) {
+        return NextResponse.json({ error: "No planned article found" }, { status: 404 })
+    }
+
+    const clusterPosition = hydrated.clusterPosition
 
     // --- Brand, loaded exactly as the writer loads it -----------------------
     const { data: brandRec } = await db
         .from("brand_details")
         .select("brand_data, website_url")
-        .eq("id", planned.brand_id)
+        .eq("id", hydrated.brandId)
         .maybeSingle()
 
     if (!brandRec) {
         return NextResponse.json(
-            { error: `Brand ${planned.brand_id} not found` },
+            { error: `Brand ${hydrated.brandId} not found` },
             { status: 404 },
         )
     }
@@ -126,60 +126,41 @@ export async function GET(req: NextRequest) {
     }
     const brandDetails = parsed.data
 
-    // --- Frozen links, loaded exactly as ship-cluster loads them ------------
-    const { data: linkRows } = await db
-        .from("planned_article_links")
-        .select("target_url, anchor_text, relationship")
-        .eq("source_article_id", planned.id)
+    const frozenLinks = hydrated.frozenLinks
 
-    const frozenLinks = (linkRows || []).map((row: any) => ({
-        title: row.anchor_text,
-        url: row.target_url,
-        relationship: row.relationship,
-    }))
+    const payload = {
+        articleId: planned.article_id || "(created at ship time)",
+        keyword: hydrated.keyword,
+        brandId: hydrated.brandId,
+        title: hydrated.title,
+        articleType: hydrated.articleType,
+        supportingKeywords: hydrated.supportingKeywords,
+        plannedArticleId: hydrated.plannedArticleId,
+        frozenLinks,
+        cluster: hydrated.cluster,
+        sourceQueries: hydrated.sourceQueries,
+        clusterCompetitorUrls: hydrated.clusterCompetitorUrls,
+        subNodeIntents: hydrated.subNodeIntents,
+        isPillar: hydrated.isPillar,
+        clusterPosition,
+        clusterId: hydrated.clusterId,
+    }
 
-    // --- Audit evidence, loaded the way ship-cluster loads it --------------
-    const { data: sourceQueries } = planned.source_query_ids?.length
+    const { data: sourceRows } = hydrated.sourceQueries.length
         ? await db
               .from("query_pool")
               .select("query, source, source_url, competitor_matches")
-              .in("id", planned.source_query_ids)
+              .eq("audit_id", hydrated.auditId)
+              .in("query", hydrated.sourceQueries)
         : { data: [] }
 
-    const { data: cluster } = planned.cluster_id
+    const { data: cluster } = hydrated.clusterId
         ? await db
               .from("audit_clusters")
               .select("name, description, competitor_urls")
-              .eq("id", planned.cluster_id)
+              .eq("id", hydrated.clusterId)
               .maybeSingle()
         : { data: null }
-
-    const competitorUrls = Array.isArray(cluster?.competitor_urls)
-        ? (cluster.competitor_urls as unknown[])
-              .map((entry) =>
-                  typeof entry === "string" ? entry : String((entry as any)?.url || ""),
-              )
-              .filter(Boolean)
-              .slice(0, 6)
-        : []
-
-    // --- The exact payload ship-cluster would trigger with -----------------
-    const payload = {
-        articleId: planned.article_id || "(created at ship time)",
-        keyword: planned.main_keyword,
-        brandId: planned.brand_id,
-        title: planned.title,
-        articleType: planned.article_type || "informational",
-        supportingKeywords: planned.supporting_keywords || [],
-        plannedArticleId: planned.id,
-        frozenLinks,
-        cluster: cluster?.name || "",
-        sourceQueries: (sourceQueries || []).slice(0, 8).map((row: any) => row.query),
-        clusterCompetitorUrls: competitorUrls,
-        isPillar: Boolean(planned.is_pillar),
-        clusterPosition,
-        clusterId: planned.cluster_id || "",
-    }
 
     const introPattern = selectIntroPattern(
         payload.articleType as any,
@@ -204,6 +185,7 @@ export async function GET(req: NextRequest) {
             clusterName: payload.cluster || undefined,
             sourceQueries: payload.sourceQueries,
             competitorUrls: payload.clusterCompetitorUrls,
+            subNodeIntents: payload.subNodeIntents,
             isPillar: payload.isPillar,
         },
     )
@@ -257,13 +239,24 @@ export async function GET(req: NextRequest) {
             clusterName: cluster?.name ?? null,
             clusterDescription: cluster?.description ?? null,
             competitorUrlsOwningThisCluster: cluster?.competitor_urls ?? [],
-            sourceQueryCount: sourceQueries?.length || 0,
-            sourceQueries: (sourceQueries || []).map((row: any) => ({
+            sourceQueryCount: sourceRows?.length || 0,
+            sourceQueries: (sourceRows || []).map((row: any) => ({
                 query: row.query,
                 source: row.source,
                 sourceUrl: row.source_url,
                 competitorMatches: (row.competitor_matches || []).length,
             })),
+        },
+
+        /**
+         * Intents absorbed from a domain too thin to sustain its own cluster.
+         * This article is the only page that will ever answer them, so each
+         * must appear as a required H2/FAQ in the outline prompt below.
+         */
+        absorbedSubNodes: {
+            count: hydrated.subNodeIntents.length,
+            intents: hydrated.subNodeIntents,
+            absorbedFromDomain: null,
         },
 
         frozenLinks: {

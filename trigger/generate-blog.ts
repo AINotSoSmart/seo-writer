@@ -874,7 +874,7 @@ const brandList = (value: unknown): string => {
  * behaviour; it exists so the writer's input contract can be inspected for
  * free instead of inferred from a paid run.
  */
-export const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long', instructions?: string, angleInsights: AngleInsights | null = null, auditEvidence: { clusterName?: string; sourceQueries?: string[]; competitorUrls?: string[]; isPillar?: boolean } = {}) => {
+export const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long', instructions?: string, angleInsights: AngleInsights | null = null, auditEvidence: { clusterName?: string; sourceQueries?: string[]; competitorUrls?: string[]; subNodeIntents?: string[]; isPillar?: boolean } = {}) => {
   const strategy = getArticleStrategy(articleType)
 
   // Extract authority links from competitor data for external linking
@@ -918,6 +918,21 @@ ${auditEvidence.competitorUrls?.length ? `
 Competitors already ranking for this cluster (beat their depth, never copy them, and never recommend them):
 ${auditEvidence.competitorUrls.map((u) => `- ${u}`).join('\n')}` : ''}
 ` : ''}
+${auditEvidence.subNodeIntents?.length ? `
+### REQUIRED SUB-SECTIONS — these were absorbed into THIS article
+Each of the following is a real observed search from a related product area that
+was too narrow to justify its own article. They were folded in here rather than
+discarded, so this article is the only page that will ever answer them.
+
+${auditEvidence.subNodeIntents.map((intent) => `- ${intent}`).join('\n')}
+
+The outline MUST contain a dedicated H2 (or a clearly-labelled FAQ entry near the
+end) that answers each one directly and specifically.
+- Answer them in the searcher's own words — reuse the phrasing above in the heading.
+- These are additional REQUIRED sections, not replacements for the main sections.
+- Do NOT merge two of them into one vague heading; each was a distinct search.
+- Do NOT pad them. If one only needs three sentences, give it three sentences.
+  Manufactured filler is worse than a short, direct answer.` : ''}
 4. COMPETITOR & GAP DATA: "${JSON.stringify(competitorData)}"
 5. ${brandDetails ? `### BRAND CONTEXT (Strategic Integration)
 - Brand: ${brandDetails.product_name}
@@ -1579,6 +1594,12 @@ interface GenerateBlogPayload {
    */
   sourceQueries?: string[];
   clusterCompetitorUrls?: string[];
+  /**
+   * Intents absorbed from a domain too thin to sustain its own cluster. They
+   * must be answered as H2/FAQ sections inside this article — that absorption
+   * is the only reason the demand was not discarded.
+   */
+  subNodeIntents?: string[];
   isPillar?: boolean;
   /** Position within the cluster — drives deterministic intro-pattern rotation. */
   clusterPosition?: number;
@@ -1642,6 +1663,7 @@ export const generateBlogPost = task({
       instructions,
       sourceQueries = [],
       clusterCompetitorUrls = [],
+      subNodeIntents = [],
       isPillar = false,
       clusterPosition = 0,
       clusterId = ""
@@ -1817,6 +1839,7 @@ export const generateBlogPost = task({
         clusterName: cluster || undefined,
         sourceQueries,
         competitorUrls: clusterCompetitorUrls,
+        subNodeIntents,
         isPillar,
       })
       console.log(`[Blog Gen] Audit evidence: ${sourceQueries.length} source queries, cluster="${cluster || 'none'}", pillar=${isPillar}`)

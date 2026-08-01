@@ -29,7 +29,7 @@ export default async function TestArticlePage() {
         ? await db
               .from("planned_articles")
               .select(
-                  "id, brand_id, cluster_id, title, main_keyword, supporting_keywords, article_type, is_pillar, generation_status",
+                  "id, brand_id, cluster_id, title, main_keyword, supporting_keywords, sub_node_intents, article_type, is_pillar, generation_status",
               )
               .in("brand_id", brandIds)
               .order("is_pillar", { ascending: false })
@@ -78,6 +78,7 @@ export default async function TestArticlePage() {
                     title: row.title,
                     mainKeyword: row.main_keyword,
                     supportingKeywords: row.supporting_keywords || [],
+                    subNodeIntents: row.sub_node_intents || [],
                     articleType: row.article_type || "informational",
                     isPillar: Boolean(row.is_pillar),
                     generationStatus: row.generation_status,

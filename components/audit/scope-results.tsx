@@ -145,34 +145,41 @@ export function ScopeResults({
                             {showAllClusters
                                 ? "All measured clusters"
                                 : scope.hasActiveProgram || scope.checkoutEligible
-                                  ? "Your six-cluster program"
+                                  ? `Your ${recommended.length}-cluster program`
                                   : "Measured clusters (not yet a program)"}
                         </h3>
                         <p className="mt-1 text-sm text-stone-500">
+                            {/*
+                              * Scope is whatever the audit measured. A fixed six turned away
+                              * every business whose real depth was smaller, and told them
+                              * their site was ineligible rather than that the program was
+                              * simply shorter.
+                              */}
                             {scope.hasActiveProgram ? (
                                 <>
-                                    Your program covers {scope.recommendedArticleCount} articles
-                                    across {recommendedFamilyCount} confirmed business{" "}
+                                    Your program covers {recommended.length} cluster
+                                    {recommended.length === 1 ? "" : "s"} and{" "}
+                                    {scope.recommendedArticleCount} articles across{" "}
+                                    {recommendedFamilyCount} confirmed business{" "}
                                     {recommendedFamilyCount === 1 ? "area" : "areas"}. Clusters are
                                     delivered complete, in priority order.
                                 </>
                             ) : scope.checkoutEligible ? (
                                 <>
-                                    The selected six contain {scope.recommendedArticleCount}{" "}
-                                    articles. They cover {recommendedFamilyCount} confirmed business{" "}
+                                    This audit measured {recommended.length} qualified cluster
+                                    {recommended.length === 1 ? "" : "s"} containing{" "}
+                                    {scope.recommendedArticleCount} articles, across{" "}
+                                    {recommendedFamilyCount} confirmed business{" "}
                                     {recommendedFamilyCount === 1 ? "area" : "areas"}. Review every
                                     title and its supporting searches before choosing a delivery
                                     speed.
                                 </>
                             ) : (
                                 <>
-                                    This audit measured {recommended.length} qualified cluster
-                                    {recommended.length === 1 ? "" : "s"} (
-                                    {scope.recommendedArticleCount} articles) across{" "}
-                                    {recommendedFamilyCount} confirmed business{" "}
-                                    {recommendedFamilyCount === 1 ? "area" : "areas"}. A program
-                                    requires six clusters of 8–15 articles each — no checkout until
-                                    that depth exists. Evidence below is still shareable.
+                                    This audit measured no cluster with the depth to sell — every
+                                    cluster needs 8–15 articles. The evidence below is still
+                                    shareable, and a refreshed audit may qualify after the business
+                                    adds products, services, or markets.
                                 </>
                             )}
                         </p>
@@ -204,7 +211,7 @@ export function ScopeResults({
                             >
                                 {showAllClusters
                                     ? scope.checkoutEligible || scope.hasActiveProgram
-                                      ? "Show six-cluster program"
+                                      ? `Show ${recommended.length}-cluster program`
                                       : "Show measured program candidates"
                                     : `Show ${remainder.length} additional clusters`}
                                 {showAllClusters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}

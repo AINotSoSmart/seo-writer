@@ -10,7 +10,7 @@ import { features } from "./data"
 export const metadata: Metadata = {
     title: "How FlipAEO's finite content program works",
     description:
-        "Source-linked audit evidence, six qualified topic clusters, frozen internal links, complete batch delivery, and a finite program burn-down.",
+        "Source-linked audit evidence, qualified topic clusters, frozen internal links, complete batch delivery, and a finite program burn-down.",
     alternates: { canonical: `${defaultSEO.siteUrl}/features` },
 }
 
@@ -27,7 +27,7 @@ export default function FeaturesPage() {
                         Evidence first. Complete clusters second.
                     </h1>
                     <p className="mt-5 text-lg leading-7 text-stone-600">
-                        FlipAEO sells one finite six-cluster scope at three delivery speeds.
+                        FlipAEO sells one finite, measured scope at up to three delivery speeds.
                         It makes no ranking, traffic, or citation promise, and the program
                         does not run indefinitely.
                     </p>

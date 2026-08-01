@@ -4,7 +4,7 @@ import { LegalPage, LegalSection } from "@/components/legal/LegalPage"
 
 export const metadata: Metadata = {
     title: "Terms of Service | FlipAEO",
-    description: "Terms for FlipAEO immutable audits and finite six-cluster delivery programs.",
+    description: "Terms for FlipAEO immutable audits and finite cluster delivery programs.",
 }
 
 export default function TermsPage() {
@@ -39,7 +39,7 @@ export default function TermsPage() {
             <LegalSection title="Billing and program end">
                 <p>
                     The selected subscription determines delivery cadence, not scope. Pausing
-                    stops new deliveries but billing continues. After all six clusters are
+                    stops new deliveries but billing continues. Once every cluster is
                     delivered, FlipAEO requests cancellation at the end of the paid billing
                     period. A later program requires a new checkout.
                 </p>

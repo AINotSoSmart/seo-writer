@@ -20,6 +20,9 @@ interface VerifyRequest {
         seedKeywords?: string[]
         seed_keywords?: string[]
         priority?: number
+        parentScopeFamilyId?: string | null
+        parent_scope_family_id?: string | null
+        parent_hint?: string | null
     }>
     competitors?: string[]
     countryCode?: string
@@ -48,6 +51,10 @@ export async function POST(req: NextRequest) {
             seedKeywords:
                 family.seedKeywords || family.seed_keywords || [],
             priority: family.priority ?? index,
+            parentScopeFamilyId:
+                family.parentScopeFamilyId ??
+                family.parent_scope_family_id ??
+                null,
         }))
         const input: HarvestInput = {
             subjectUrl: body.url,

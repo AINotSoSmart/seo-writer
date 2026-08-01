@@ -11,7 +11,7 @@ import { createAdminClient } from "@/utils/supabase/admin"
 export const metadata: Metadata = generateSeoMetadata({
     title: "Six-cluster program delivery speeds",
     description:
-        "Choose how quickly FlipAEO delivers the same evidence-backed six-cluster scope: one, two, or four complete clusters per month.",
+        "Choose how quickly FlipAEO delivers your evidence-backed scope: one, two, or three complete clusters per billing period.",
     keywords: ["FlipAEO pricing", "topic cluster program", "content delivery"],
     canonical: "/pricing",
 })
@@ -56,7 +56,7 @@ export default async function PricingPage() {
                         Pay for delivery speed, not filler.
                     </h1>
                     <p className="mt-6 text-lg leading-8 text-stone-600">
-                        Every eligible program contains the same six qualified clusters.
+                        Every eligible program contains the qualified clusters your audit measured.
                         Faster tiers change the schedule only. Checkout requires a fresh
                         eligible audit and a confirmed permanent URL pattern.
                     </p>
@@ -85,7 +85,7 @@ export default async function PricingPage() {
                             </p>
                             <ul className="my-7 flex-1 space-y-3">
                                 {[
-                                    "The same six-cluster scope",
+                                    "The same measured scope",
                                     "Frozen URLs and link graph",
                                     "Whole-cluster delivery",
                                     "End-of-scope cancellation request",

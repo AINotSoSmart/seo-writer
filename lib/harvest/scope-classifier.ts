@@ -9,6 +9,8 @@ export type AuditScopeFamily = {
     description: string
     seedKeywords: string[]
     priority: number
+    /** Broader confirmed domain this area is a sub-intent of, when declared. */
+    parentScopeFamilyId?: string | null
 }
 
 export type ScopedHarvestedQuery = HarvestedQuery & {
@@ -31,6 +33,13 @@ export type ScopeDecision =
     | "third_party_branded"
     /** Answerable only by whoever published it — "Our Turnaround Times" */
     | "publisher_specific"
+    /**
+     * Asks how to do the job inside another platform's built-in feature —
+     * "add person to photo google pixel", "sync database in Airtable".
+     * Autocomplete is a popularity engine, so mass-market platform questions
+     * leak in even when the job itself is exactly what the customer sells.
+     */
+    | "platform_native"
 
 export type ScopeRejectedQuery = {
     query: string
@@ -70,12 +79,19 @@ type RawAssignment = {
     reason: string
 }
 
+/**
+ * Must stay in step with both the ScopeDecision union AND the responseSchema
+ * enum below. A value the schema permits but this set omits is treated as a
+ * contract violation, which fails the whole batch and — after four attempts —
+ * aborts an audit whose harvest spend is already committed.
+ */
 const VALID_DECISIONS = new Set<ScopeDecision>([
     "direct",
     "adjacent",
     "unrelated",
     "third_party_branded",
     "publisher_specific",
+    "platform_native",
 ])
 
 // findThirdPartyBrand lives in ./types.ts beside brandTokensFromUrls and
@@ -242,6 +258,13 @@ Your task is classification, not brainstorming. For every observed search:
   correctly. Company policies, turnaround times, accepted formats, shipping,
   pricing terms, refund and cancellation rules, privacy handling, staff, and
   customer testimonials are all publisher-specific.
+- "platform_native": asks how to do the job using another platform's own
+  built-in feature rather than a product like this one. The job may be exactly
+  what this business does and it still belongs here — what disqualifies it is
+  that the asker wants to do it somewhere this business does not operate.
+  Device and OS qualifiers are the usual tell ("on iphone", "in google sheets",
+  "google pixel", "windows built-in"), but the test is the destination, not the
+  wording.
 
 Only "direct" searches enter the customer's content program. A search must be
 both relevant AND deliverable: something we could write for THIS business
@@ -283,6 +306,7 @@ WORKED EXAMPLES for a business with f1=Photo Restoration, f2=Photo Animation:
 - "Our Easy Cancellation Policy and Terms"        -> publisher_specific, family_id=null
 - "Real Reviews: What Our Clients Say"            -> publisher_specific, family_id=null
 - "How We Protect Your Privacy and Your Images"   -> publisher_specific, family_id=null
+- "restore a photo on iphone photos app"          -> platform_native
 - "best dslr camera for landscapes"               -> adjacent, family_id=null
 - "how to file a tax return"                       -> unrelated, family_id=null
 
@@ -344,6 +368,7 @@ ${batch
                                                     "unrelated",
                                                     "third_party_branded",
                                                     "publisher_specific",
+                                                    "platform_native",
                                                 ],
                                             },
                                             reason: { type: "STRING" as const },

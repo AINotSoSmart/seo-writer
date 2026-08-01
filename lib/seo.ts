@@ -397,14 +397,14 @@ export const commonPageMetadata = {
 
   pricing: () => generateMetadata({
     title: 'Program Delivery Speeds',
-    description: 'Choose delivery cadence for one fixed, eligible six-cluster scope after confirming the permanent publication URL pattern.',
+    description: 'Choose delivery cadence for your eligible measured scope after confirming the permanent publication URL pattern.',
     canonical: '/pricing',
     keywords: ['FlipAEO pricing', 'AI content pricing', 'GEO pricing', 'content engine cost'],
   }),
 
   subscribe: () => generateMetadata({
     title: 'Choose Delivery Speed',
-    description: 'Confirm the frozen publication URL pattern and select a delivery cadence for an eligible six-cluster program.',
+    description: 'Confirm the frozen publication URL pattern and select a delivery cadence for an eligible measured program.',
     canonical: '/subscribe',
     keywords: ['subscribe', 'FlipAEO subscription', 'content strategy'],
     noindex: true,

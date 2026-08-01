@@ -219,6 +219,13 @@ export function validateGroundedScope(
             id: family.id || randomUUID(),
             seed_keywords: seeds,
             evidence,
+            // Never let an area point at itself; that renders as a nonsense
+            // "sub-area of itself" badge on the confirmation screen.
+            parent_hint:
+                family.parent_hint &&
+                normalizeText(family.parent_hint) !== nameNorm
+                    ? family.parent_hint
+                    : null,
             verified,
             priority: families.length,
             enabled: true,
@@ -265,6 +272,31 @@ export function validateGroundedScope(
     ).filter((seed) => !assigned.has(seed))
 
     return { families, issues, unassignedTargetSeeds }
+}
+
+/**
+ * Turn extraction's advisory `parent_hint` into a stable family id link.
+ * Absorption uses this to fold thin sub-intents into the parent's cluster
+ * before falling back to embedding proximity.
+ */
+export function resolveParentScopeFamilyIds(
+    families: ScopeFamily[],
+): ScopeFamily[] {
+    const idByName = new Map(
+        families
+            .filter((family) => family.id)
+            .map((family) => [normalizeText(family.name), family.id!]),
+    )
+
+    return families.map((family) => {
+        let parentId = family.parent_scope_family_id ?? null
+        if (!parentId && family.parent_hint) {
+            const hinted = idByName.get(normalizeText(family.parent_hint))
+            if (hinted && hinted !== family.id) parentId = hinted
+        }
+        if (parentId === family.id) parentId = null
+        return { ...family, parent_scope_family_id: parentId }
+    })
 }
 
 export function validateConfirmedScope(brandData: BrandDetails): {
@@ -337,7 +369,20 @@ export function validateConfirmedScope(brandData: BrandDetails): {
         )
     }
 
-    return { families, errors }
+    const resolved = resolveParentScopeFamilyIds(families)
+    const familyIds = new Set(resolved.map((family) => family.id).filter(Boolean))
+    for (const family of resolved) {
+        if (
+            family.parent_scope_family_id &&
+            !familyIds.has(family.parent_scope_family_id)
+        ) {
+            errors.push(
+                `Product area "${family.name}" points at a parent that is not in the confirmed scope.`,
+            )
+        }
+    }
+
+    return { families: resolved, errors }
 }
 
 export function scopeHash(families: ScopeFamily[]): string {
@@ -349,6 +394,7 @@ export function scopeHash(families: ScopeFamily[]): string {
             description: normalizeText(family.description),
             seeds: [...family.seed_keywords].map(normalizeSeed).sort(),
             priority: family.priority,
+            parent: family.parent_scope_family_id ?? null,
         }))
     return createHash("sha256").update(JSON.stringify(stable)).digest("hex")
 }

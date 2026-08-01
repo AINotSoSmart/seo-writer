@@ -156,7 +156,23 @@ export function ScopeFamilyReview({
                                         placeholder="e.g. AI photo restoration"
                                         className="h-8 flex-1 border-stone-200 bg-transparent px-2 text-sm font-medium shadow-none"
                                     />
-                                    {(family.verified === false || rare) && (
+                                    {/*
+                                      * `parent_hint` is set when extraction judged
+                                      * this area a sub-case of a broader one.
+                                      * Areas emitted at inconsistent depth measure
+                                      * too little demand to sustain a cluster, so
+                                      * surfacing the suggested parent lets the
+                                      * founder merge deliberately rather than find
+                                      * out later that an area produced nothing.
+                                      */}
+                                    {family.parent_hint ? (
+                                        <span
+                                            className="hidden shrink-0 text-[10px] text-stone-400 sm:inline"
+                                            title={`Extraction judged this a sub-area of "${family.parent_hint}". Merge it in, or keep it separate if it is genuinely its own customer job.`}
+                                        >
+                                            Sub-area of {family.parent_hint}
+                                        </span>
+                                    ) : (family.verified === false || rare) && (
                                         <span className="hidden shrink-0 text-[10px] text-stone-400 sm:inline">
                                             {family.verified === false
                                                 ? "Not on site"

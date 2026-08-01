@@ -557,7 +557,7 @@ export default function OnboardingPage() {
           shadow-[0_0_0_1px_rgba(0,0,0,0.08),0px_1px_2px_rgba(0,0,0,0.04)]
           rounded-[20px]
           bg-stone-100
-          ${step === "audit-results" ? "max-w-[1400px] w-full px-4 sm:px-6" : brandData ? "max-w-5xl" : "max-w-xl"}
+          ${step === "audit-results" ? "max-w-[1400px] w-full px-4 sm:px-6" : brandData ? "max-w-3xl" : "max-w-xl"}
         `}
                     >
                         {/* Top Notch */}

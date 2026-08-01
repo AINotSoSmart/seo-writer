@@ -13,7 +13,7 @@ const VALID_TIERS = new Set<VelocityTier>(["close", "accelerate", "dominate"])
 
 /**
  * Closed-pool checkout accepts product intent, not an arbitrary Dodo cart.
- * The database intent pins the immutable audit, six clusters, URLs, and graph.
+ * The database intent pins the immutable audit, its clusters, URLs, and graph.
  */
 export async function POST(req: NextRequest) {
     if (process.env.CLOSED_POOL_CHECKOUT_ENABLED !== "true") {

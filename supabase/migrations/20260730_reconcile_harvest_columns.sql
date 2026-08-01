@@ -81,6 +81,11 @@ ALTER TABLE public.planned_articles ADD COLUMN IF NOT EXISTS is_pillar BOOLEAN N
 ALTER TABLE public.planned_articles ADD COLUMN IF NOT EXISTS scheduled_date DATE;
 ALTER TABLE public.planned_articles ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ;
 
+ALTER TABLE public.brand_scope_families
+    ADD COLUMN IF NOT EXISTS parent_scope_family_id UUID;
+ALTER TABLE public.audit_scope_families
+    ADD COLUMN IF NOT EXISTS parent_scope_family_id UUID;
+
 
 -- ----------------------------------------------------------------------------
 -- programs

@@ -169,7 +169,7 @@ export async function createProgramPurchaseIntent(input: {
     if (!selection.eligible) {
         throw new PurchaseIntentError(
             selection.reason ||
-                "This audit does not contain enough qualified depth for FlipAEO's six-cluster program.",
+                "This audit does not contain a qualified cluster to sell.",
             "small_niche",
         )
     }

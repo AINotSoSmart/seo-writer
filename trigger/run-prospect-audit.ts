@@ -65,7 +65,7 @@ export const runProspectAuditTask = task({
         try {
             const { data: scopeRows, error: scopeError } = await supabase
                 .from("audit_scope_families")
-                .select("id, name, description, seed_keywords, priority")
+                .select("id, name, description, seed_keywords, priority, parent_scope_family_id")
                 .eq("audit_id", payload.auditId)
                 .eq("user_id", payload.founderUserId)
                 .order("priority", { ascending: true })
@@ -83,6 +83,7 @@ export const runProspectAuditTask = task({
                         ? row.seed_keywords
                         : [],
                     priority: Number(row.priority || 0),
+                    parentScopeFamilyId: row.parent_scope_family_id ?? null,
                 }),
             )
             await update({ generation_phase: "harvesting" })

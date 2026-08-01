@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json(
                 {
                     error:
-                        'This finite program is complete. A future six-cluster program requires a new checkout.',
+                        'This finite program is complete. A future program requires a new checkout.',
                 },
                 { status: 409 },
             )

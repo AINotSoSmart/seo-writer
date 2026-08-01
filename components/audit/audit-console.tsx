@@ -410,7 +410,7 @@ export function AuditConsole({
     }
 
     return (
-        <div className="w-full max-w-md mx-auto py-10 sm:py-14">
+        <div className="w-full max-w-3xl mx-auto py-10 sm:py-14">
             <div className="mb-12 text-center">
                 <div className="relative mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200/80 bg-white">
                     <ShieldCheck className="h-5 w-5 text-stone-800" strokeWidth={1.5} />

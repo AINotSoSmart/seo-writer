@@ -9,6 +9,9 @@ import {
     findDuplicateArticlePairs,
     collapseToArticles,
     groupIntoClusters,
+    absorbOrphanedUnits,
+    buildParentByFamilyId,
+    splitOversized,
     titleArticles,
     nameClusters,
     type ArticleCluster,
@@ -569,24 +572,37 @@ export async function assembleHarvest(
         }
 
         if (familyUnits.length < HARVEST_POLICY.minQualifiedClusterArticles) {
-            // Distinct intents after merge are fewer than a qualified cluster.
-            // Do not invent articles or un-merge variants into near-duplicates.
-            console.warn(
+            // Too thin for a cluster of its own. Its units are absorbed into
+            // another domain's cluster below — never discarded, never padded.
+            console.log(
                 `[Assembly] Family "${family.name}" (${family.id}): ` +
                     `${familyGaps.length} gaps → ${familyUnits.length} unique articles ` +
                     `(below ${HARVEST_POLICY.minQualifiedClusterArticles}) — ` +
-                    `insufficient distinct demand-backed depth for a qualified cluster.`,
+                    `will be absorbed into the nearest qualifying cluster.`,
             )
         }
     }
     articleUnits = await titleArticles(articleUnits)
-    let clusters = input.scopeFamilies.flatMap((family) =>
+
+    // Group per family, then absorb every family's orphans against every
+    // family's qualified clusters. Absorption has to happen here rather than
+    // inside groupIntoClusters, which only ever sees one family and therefore
+    // has no sibling to absorb into.
+    const groupings = input.scopeFamilies.map((family) =>
         groupIntoClusters(
             articleUnits.filter(
                 (article) => article.scopeFamilyId === family.id,
             ),
         ),
     )
+    const absorbed = absorbOrphanedUnits(
+        groupings.flatMap((grouping) => grouping.clusters),
+        groupings.flatMap((grouping) => grouping.orphanedUnits),
+        splitOversized,
+        { parentByFamilyId: buildParentByFamilyId(input.scopeFamilies) },
+    )
+    let clusters = absorbed.clusters
+    const unsoldUnits = absorbed.unsold
     clusters = await nameClusters(clusters)
     const familyPriority = new Map(
         input.scopeFamilies.map((family) => [family.id, family.priority]),

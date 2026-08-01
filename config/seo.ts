@@ -16,7 +16,7 @@ export interface SEOConfig {
 export const defaultSEO: SEOConfig = {
   title: "FlipAEO — Evidence-Backed Content Clusters for Founder-Led B2B SaaS",
   description:
-    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers six qualified clusters across their confirmed business areas as one finite, interlinked program.",
+    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers every qualified cluster it measures across their confirmed business areas as one finite, interlinked program.",
   keywords: [
     "topical authority",
     "how to build topical authority",
@@ -85,7 +85,7 @@ export const pageSEO = {
   pricing: {
     title: "Six-cluster program delivery speeds",
     description:
-      "Choose the delivery cadence for one fixed six-cluster scope. Checkout appears only after an eligible audit and confirmed publishing URL pattern.",
+      "Choose the delivery cadence for your measured scope. Checkout appears only after an eligible audit and confirmed publishing URL pattern.",
     keywords: ["topic cluster pricing", "content program pricing"],
   },
   about: {
@@ -116,7 +116,7 @@ export const pageSEO = {
   subscribe: {
     title: "Choose program delivery speed",
     description:
-      "Confirm the frozen publication URL pattern and choose delivery speed for an eligible six-cluster scope.",
+      "Confirm the frozen publication URL pattern and choose delivery speed for an eligible measured scope.",
     keywords: ["FlipAEO program"],
     robots: "noindex, nofollow",
   },
@@ -186,7 +186,7 @@ export const schemaTemplates = {
     featureList: [
       "Source-linked topical audit",
       "Competitor gap evidence",
-      "Finite six-cluster program",
+      "Finite measured-scope program",
       "Frozen internal-link graph",
       "Complete cluster delivery",
       "WordPress draft and manual delivery",

@@ -131,42 +131,297 @@ test("frozen graph contains the complete deterministic pillar/leaf/sibling contr
     assert.throws(() => validateFrozenGraph(tampered), LinkGraphError)
 })
 
-test("legacy flat scope selects six priority unsold qualified clusters", () => {
+test("parent scope family links persist and steer absorption", async () => {
+    const [migration, absorption, brandScope, assembly, runHarvest] =
+        await Promise.all([
+            text("supabase/migrations/20260804_parent_scope_family.sql"),
+            text("lib/harvest/absorption.ts"),
+            text("lib/brand-scope.ts"),
+            text("lib/harvest/assembly.ts"),
+            text("lib/harvest/run-harvest.ts"),
+        ])
+
+    assert.match(migration, /parent_scope_family_id/)
+    assert.match(migration, /confirm_brand_scope/)
+    assert.match(migration, /create_customer_audit_with_scope/)
+    assert.match(migration, /claim_prospect_audit/)
+    assert.match(absorption, /parentByFamilyId/)
+    assert.match(absorption, /preferredParentId/)
+    assert.match(brandScope, /resolveParentScopeFamilyIds/)
+    assert.match(assembly, /buildParentByFamilyId/)
+    assert.match(runHarvest, /parent_scope_family_id/)
+})
+
+test("absorbed sub-node intents survive all the way to the writer", async () => {
+    const [runHarvest, migration, shipCluster, writer, dryRun, extraction, review] =
+        await Promise.all([
+            text("lib/harvest/run-harvest.ts"),
+            text("supabase/migrations/20260803_sub_nodes_and_origin_family.sql"),
+            text("trigger/ship-cluster.ts"),
+            text("trigger/generate-blog.ts"),
+            text("app/api/writer/dry-run/route.ts"),
+            text("lib/scope-extraction.ts"),
+            text("components/onboarding/scope-family-review.tsx"),
+        ])
+
+    // Absorption keeps a thin domain's demand alive, but every hop after it can
+    // drop the payload again — which would be the same 33% loss, one layer
+    // further down. Each link in the chain is pinned.
+
+    // 1. assembly -> persistence payload
+    assert.match(runHarvest, /sub_node_intents: article\.subNodes\.map/)
+    assert.match(runHarvest, /sub_node_query_ids: article\.subNodes\.flatMap/)
+    assert.match(runHarvest, /origin_scope_family_id: article\.originScopeFamilyId/)
+
+    // 2. persistence columns + the finalize_audit_run patch
+    for (const column of [
+        "sub_node_intents",
+        "sub_node_query_ids",
+        "origin_scope_family_id",
+    ]) {
+        assert.ok(migration.includes(column), `migration must add ${column}`)
+    }
+    // The patch must fail loudly rather than leave sub-nodes unpersisted.
+    assert.match(migration, /Could not patch finalize_audit_run/)
+
+    // 3. ship-cluster -> writer payload
+    assert.match(shipCluster, /sub_node_intents/)
+    assert.match(shipCluster, /subNodeIntents:/)
+
+    // 4. writer accepts and RENDERS them as required sections
+    assert.match(writer, /subNodeIntents\?: string\[\]/)
+    assert.match(writer, /subNodeIntents = \[\]/)
+    assert.match(writer, /REQUIRED SUB-SECTIONS/)
+    assert.match(writer, /auditEvidence\.subNodeIntents\?\.length \?/)
+    // This article is the only page that will ever answer them.
+    assert.match(writer, /only page that will ever answer them/)
+    // And they must not be turned into filler to look substantial.
+    assert.match(writer, /Do NOT pad them/)
+
+    // 5. inspectable for free before paying to generate
+    assert.match(dryRun, /absorbedSubNodes/)
+
+    // Peer-level extraction: emitting a broad area beside its own sub-case is
+    // what produced areas too thin to sustain a cluster in the first place.
+    assert.match(extraction, /PEER-LEVEL RULE/)
+    assert.match(extraction, /parent_hint/)
+    assert.match(review, /parent_hint/)
+})
+
+test("no measured query can be silently destroyed by clustering", async () => {
+    // From absorption.ts, not clusterer.ts: the clusterer imports "@/..."
+    // aliases that plain node cannot resolve.
+    const { absorbOrphanedUnits, STANDALONE_MIN_BACKING_QUERIES } = await import(
+        "../lib/harvest/absorption.ts"
+    )
+
+    const unit = (id, familyId, backing, embedding) => ({
+        scopeFamilyId: familyId,
+        mainKeyword: id,
+        supportingKeywords: [],
+        sourceQueryIds: Array.from({ length: backing }, (_, i) => `${id}-q${i}`),
+        subNodes: [],
+        articleType: "informational",
+        priority: 1,
+        competitorUrls: [],
+        title: id,
+        embedding,
+    })
+
+    // A qualifying host cluster, plus a thin domain that would previously have
+    // been deleted: two corroborated intents and two single-query intents.
+    const host = {
+        scopeFamilyId: "host",
+        name: "Host",
+        priority: 1,
+        competitorUrls: [],
+        articles: Array.from({ length: 8 }, (_, i) =>
+            unit(`host-${i}`, "host", 2, [1, 0.1 * i]),
+        ),
+    }
+    const orphans = [
+        unit("thin-strong-a", "thin", 3, [0.9, 0.2]),
+        unit("thin-strong-b", "thin", 2, [0.88, 0.25]),
+        unit("thin-weak-a", "thin", 1, [0.87, 0.22]),
+        unit("thin-weak-b", "thin", 1, [0.86, 0.21]),
+    ]
+
+    const queriesIn = [
+        ...host.articles.flatMap((a) => a.sourceQueryIds),
+        ...orphans.flatMap((o) => o.sourceQueryIds),
+    ]
+
+    const result = absorbOrphanedUnits([host], orphans)
+
+    // CONSERVATION: every query that entered leaves as either an article's own
+    // source query or a sub-node's. One audit lost 52 of 156 gap queries (33%)
+    // because undersized groups were filtered into a counter and dropped.
+    const queriesOut = result.clusters.flatMap((cluster) =>
+        cluster.articles.flatMap((article) => [
+            ...article.sourceQueryIds,
+            ...article.subNodes.flatMap((node) => node.sourceQueryIds),
+        ]),
+    )
+    assert.deepEqual(
+        queriesOut.slice().sort(),
+        queriesIn.slice().sort(),
+        "clustering must neither lose nor duplicate a measured query",
+    )
+    assert.equal(result.unsold.length, 0)
+
+    // Corroborated intents become real, addressable articles — not buried H2s.
+    const allArticles = result.clusters.flatMap((c) => c.articles)
+    for (const keyword of ["thin-strong-a", "thin-strong-b"]) {
+        const promoted = allArticles.find((a) => a.mainKeyword === keyword)
+        assert.ok(promoted, `${keyword} must be promoted to a standalone article`)
+        // FK planned_articles_cluster_scope_fkey requires article family ===
+        // cluster family, so it adopts the host's — origin keeps the truth.
+        assert.equal(promoted.scopeFamilyId, "host")
+        assert.equal(promoted.originScopeFamilyId, "thin")
+    }
+    // Single-query intents are sub-nodes of their OWN family's articles.
+    const subNodeIntents = allArticles.flatMap((a) => a.subNodes.map((n) => n.intent))
+    assert.deepEqual(subNodeIntents.slice().sort(), ["thin-weak-a", "thin-weak-b"])
+    assert.equal(STANDALONE_MIN_BACKING_QUERIES, 2)
+
+    // With nothing to absorb into, evidence is surfaced rather than deleted.
+    const nowhere = absorbOrphanedUnits([], orphans)
+    assert.equal(nowhere.unsold.length, 4)
+
+    // Absorption grows the host, so the ceiling must still hold afterwards.
+    // Without the injected splitter this same input yields one cluster of 24.
+    const MAX = 15
+    const split = (arts) => {
+        if (arts.length <= MAX) return [arts]
+        const parts = Math.ceil(arts.length / MAX)
+        const size = Math.ceil(arts.length / parts)
+        const out = []
+        for (let i = 0; i < arts.length; i += size) out.push(arts.slice(i, i + size))
+        return out
+    }
+    const bigHost = {
+        scopeFamilyId: "host",
+        name: "Host",
+        priority: 1,
+        competitorUrls: [],
+        articles: Array.from({ length: 14 }, (_, i) => unit(`big-${i}`, "host", 2, [1, 0.05 * i])),
+    }
+    const manyOrphans = Array.from({ length: 10 }, (_, i) =>
+        unit(`orphan-${i}`, "thin2", 2, [0.9, 0.2 + 0.01 * i]),
+    )
+    const split_result = absorbOrphanedUnits([bigHost], manyOrphans, split)
+    for (const cluster of split_result.clusters) {
+        assert.ok(
+            cluster.articles.length <= MAX,
+            `absorption produced a cluster of ${cluster.articles.length}, over the ${MAX} ceiling`,
+        )
+    }
+    assert.equal(split_result.unsold.length, 0)
+})
+
+test("thin domains absorb into their declared parent before embedding proximity", async () => {
+    const { absorbOrphanedUnits } = await import("../lib/harvest/absorption.ts")
+
+    const unit = (id, familyId, backing, embedding) => ({
+        scopeFamilyId: familyId,
+        mainKeyword: id,
+        supportingKeywords: [],
+        sourceQueryIds: Array.from({ length: backing }, (_, i) => `${id}-q${i}`),
+        subNodes: [],
+        articleType: "informational",
+        priority: 1,
+        competitorUrls: [],
+        title: id,
+        embedding,
+    })
+
+    const parentCluster = {
+        scopeFamilyId: "parent",
+        name: "Parent",
+        priority: 1,
+        competitorUrls: [],
+        articles: Array.from({ length: 8 }, (_, i) =>
+            unit(`parent-${i}`, "parent", 2, [1, 0.1 * i]),
+        ),
+    }
+    const decoyCluster = {
+        scopeFamilyId: "decoy",
+        name: "Decoy",
+        priority: 2,
+        competitorUrls: [],
+        articles: Array.from({ length: 8 }, (_, i) =>
+            unit(`decoy-${i}`, "decoy", 2, [0, 1 - 0.1 * i]),
+        ),
+    }
+    const orphans = [
+        unit("thin-strong", "thin", 2, [0, 1]),
+        unit("thin-weak", "thin", 1, [0, 0.99]),
+    ]
+
+    const byEmbedding = absorbOrphanedUnits([parentCluster, decoyCluster], orphans)
+    const promotedByEmbedding = byEmbedding.clusters
+        .flatMap((cluster) => cluster.articles)
+        .find((article) => article.mainKeyword === "thin-strong")
+    assert.equal(
+        promotedByEmbedding?.scopeFamilyId,
+        "decoy",
+        "without a parent link, embedding proximity wins",
+    )
+
+    const byParent = absorbOrphanedUnits(
+        [parentCluster, decoyCluster],
+        orphans,
+        (articles) => [articles],
+        { parentByFamilyId: new Map([["thin", "parent"]]) },
+    )
+    const promotedByParent = byParent.clusters
+        .flatMap((cluster) => cluster.articles)
+        .find((article) => article.mainKeyword === "thin-strong")
+    assert.equal(
+        promotedByParent?.scopeFamilyId,
+        "parent",
+        "declared parent must steer absorption before embedding adjacency",
+    )
+    assert.equal(promotedByParent?.originScopeFamilyId, "thin")
+})
+
+test("scope is whatever the audit measured — no fixed cluster count", () => {
+    // A hard six turned away any business whose audit measured fewer. One real
+    // audit measured 4 qualified clusters of genuine demand and was told
+    // "Not eligible… the program requires six", with no checkout offered.
     const clusters = Array.from({ length: 9 }, (_, index) => ({
         id: `cluster-${index + 1}`,
         priority: index + 1,
         // Floor is 8 — cluster-1 stays unqualified; sold cluster-2 is skipped.
         articleCount: index === 0 ? 2 : 8,
     }))
-    const selection = selectQualifiedProgramScope(
-        clusters,
-        ["cluster-2"],
-        false,
-    )
+    const selection = selectQualifiedProgramScope(clusters, ["cluster-2"], false)
     assert.equal(selection.eligible, true)
+    // Every qualified, unsold cluster is sold — not the first six of them.
     assert.deepEqual(
         selection.selected.map((cluster) => cluster.id),
-        [
-            "cluster-3",
-            "cluster-4",
-            "cluster-5",
-            "cluster-6",
-            "cluster-7",
-            "cluster-8",
-        ],
+        ["cluster-3", "cluster-4", "cluster-5", "cluster-6", "cluster-7", "cluster-8", "cluster-9"],
     )
-    assert.equal(selection.selectedArticleCount, 48)
+    assert.equal(selection.selectedArticleCount, 56)
 
-    const small = selectQualifiedProgramScope(clusters.slice(0, 6), [], false)
-    assert.equal(small.eligible, false)
-    assert.match(small.reason, /requires six/i)
+    // A narrow product with 3 qualified clusters must be able to buy.
+    const narrow = selectQualifiedProgramScope(clusters.slice(0, 4), [], false)
+    assert.equal(narrow.eligible, true, "a 3-cluster audit must reach checkout")
+    assert.equal(narrow.selected.length, 3)
+    assert.equal(narrow.reason, null)
+
+    // The only remaining rejections are "unusable" and "nothing left to sell".
+    const nothing = selectQualifiedProgramScope([{ id: "thin", priority: 1, articleCount: 2 }], [], false)
+    assert.equal(nothing.eligible, false)
+    assert.match(nothing.reason, /no qualified clusters/i)
+    assert.doesNotMatch(nothing.reason, /six/i)
 
     const legacy = selectQualifiedProgramScope(clusters, [], true)
     assert.equal(legacy.eligible, false)
     assert.match(legacy.reason, /refreshed/i)
 })
 
-test("six-cluster selection represents confirmed business families before taking depth", () => {
+test("selection represents confirmed business families before taking depth", () => {
     const clusters = [
         ...Array.from({ length: 7 }, (_, index) => ({
             id: `restoration-${index + 1}`,
@@ -187,8 +442,11 @@ test("six-cluster selection represents confirmed business families before taking
     ]
     const selection = selectQualifiedProgramScope(clusters, [], false)
     assert.equal(selection.eligible, true)
+    // Round-robin still governs ORDER — every represented domain is served
+    // before any domain gets a second cluster — but nothing is truncated now,
+    // so the verbose family's remaining 6 clusters follow rather than vanish.
     assert.deepEqual(
-        selection.selected.map((cluster) => cluster.scopeFamilyId),
+        selection.selected.slice(0, 6).map((cluster) => cluster.scopeFamilyId),
         [
             "restoration",
             "animation",
@@ -197,6 +455,12 @@ test("six-cluster selection represents confirmed business families before taking
             "hug",
             "memory-book",
         ],
+    )
+    assert.equal(selection.selected.length, 12, "no qualified cluster may be dropped")
+    assert.equal(
+        new Set(selection.selected.map((c) => c.id)).size,
+        12,
+        "selection must not duplicate a cluster",
     )
 })
 
@@ -752,30 +1016,25 @@ test("founder-only surfaces are gated in two independent layers", async () => {
 
 test("single-article test generation stays outside the program pipeline", async () => {
     const route = await text("app/api/founder/test-article/route.ts")
-    // Strip comments: the file documents what it deliberately does NOT do, and
-    // prose naming a symbol is not a use of it.
     const routeCode = route
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/^\s*\/\/.*$/gm, "")
 
-    // Founder-only, and 404 so the route is not discoverable.
     assert.match(route, /isFounderUser\(user\.id\)/)
     assert.match(route, /status: 404/)
-    // Must not let a founder generate against someone else's brand data.
     assert.match(route, /brand\.user_id !== user\.id/)
+    assert.match(route, /ensureProfileRow/)
+    assert.match(route, /loadPlannedWriterInputs/)
+    assert.match(route, /hydrateFromPlannedId/)
+    assert.match(route, /subNodeIntents/)
+    assert.match(route, /clusterCompetitorUrls/)
 
-    // The three omissions that keep this out of the paid pipeline. Passing
-    // either of these would let a QA run mutate real cluster state or expect a
-    // link graph that only exists after purchase.
+    // Must not pass plannedArticleId into the writer task — that would let a
+    // QA run mark a real cluster generating/blocked on failure.
     assert.doesNotMatch(
         routeCode,
-        /plannedArticleId:/,
-        "passing plannedArticleId would let a test run mark a real cluster generating/blocked",
-    )
-    assert.doesNotMatch(
-        routeCode,
-        /frozenLinks:/,
-        "the frozen graph is created at purchase-intent time and must not be faked for a test",
+        /generateBlogPost\.trigger\([\s\S]*plannedArticleId/,
+        "plannedArticleId must hydrate inputs only, never reach the writer task",
     )
     assert.doesNotMatch(
         routeCode,
@@ -783,12 +1042,8 @@ test("single-article test generation stays outside the program pipeline", async 
         "a QA article must not touch billing or program state",
     )
 
-    // It must still exercise the REAL writer, or it proves nothing.
     assert.match(route, /generateBlogPost\.trigger\(/)
-    // And be able to target a specific intro pattern, since that is the main
-    // thing being quality-checked.
     assert.match(route, /clusterPosition/)
-    // A failed trigger must not leave an orphan article row behind.
     assert.match(route, /\.delete\(\)\.eq\("id", article\.id\)/)
 })
 
@@ -828,17 +1083,22 @@ test("a purchased audit is never shown as ineligible", async () => {
         "the not-eligible banner must never render to someone who already bought",
     )
 
-    // Ineligible audits must not keep the happy-path "selected six" copy.
+    // Ineligible audits must not keep the happy-path program copy.
     assert.match(
         scopeResults,
         /Measured clusters \(not yet a program\)/,
         "ineligible audits must title measured clusters honestly",
     )
-    assert.match(
+    // Counts are always derived from what the audit measured. A hard-coded
+    // "six" told a business with 4 real clusters that its site was ineligible.
+    assert.match(scopeResults, /\$\{recommended\.length\}-cluster program/)
+    assert.doesNotMatch(
         scopeResults,
-        /scope\.checkoutEligible \? \([\s\S]*?The selected six contain/,
-        "selected-six copy may only render when checkoutEligible",
+        /six-cluster program|The selected six|requires six/,
+        "no fixed cluster count may remain in audit copy",
     )
+    // The ineligible branch must explain depth, not a magic number.
+    assert.match(scopeResults, /every\s*\n?\s*cluster needs 8–15 articles/)
 })
 
 test("qualified clusters are 8-15 unique articles; thin clusters are never program rows", async () => {
@@ -869,18 +1129,25 @@ test("qualified clusters are 8-15 unique articles; thin clusters are never progr
         clusterer,
         /No group reached the minimum size, so everything merges into one/,
     )
-    assert.match(clusterer, /emitting 0 clusters/)
     assert.match(
         clusterer,
         /TARGET_CLUSTER_MIN = HARVEST_POLICY\.minQualifiedClusterArticles/,
     )
 
-    // Persist path must reject any cluster below the floor.
-    assert.match(assembly, /"cluster_too_small"/)
-    assert.match(
-        assembly,
-        /insufficient distinct demand-backed depth for a qualified cluster/,
+    // A thin domain still never becomes a program row — but its units are now
+    // RETURNED for absorption instead of being filtered into a counter and
+    // destroyed. That silent drop cost one audit 33% of its measured demand.
+    assert.match(clusterer, /orphanedUnits/)
+    assert.match(clusterer, /returned for absorption/)
+    assert.doesNotMatch(
+        clusterer,
+        /residual undersized articles=/,
+        "undersized units must be absorbed, not counted and discarded",
     )
+
+    // Persist path must still reject any cluster below the floor.
+    assert.match(assembly, /"cluster_too_small"/)
+    assert.match(assembly, /will be absorbed into the nearest qualifying cluster/)
     assert.match(assembly, /0 gaps —/)
     assert.match(assembly, /findDuplicateArticlePairs/)
     assert.match(linkGraph, /qualified clusters require 8-15/)
@@ -1175,10 +1442,37 @@ test("scope classification rejects undeliverable topics, not just irrelevant one
         "Understanding Our Easy Cancellation Policy and Subscription Terms",
     ]
 
-    // Both classes must exist as machine-readable decisions, so a drop can be
+    // Each class must exist as a machine-readable decision, so a drop can be
     // told apart from a merely-adjacent one in diagnostics.
     assert.match(classifier, /"third_party_branded"/)
     assert.match(classifier, /"publisher_specific"/)
+    // Autocomplete is a popularity engine, so mass-market "how do I do this in
+    // <someone else's platform>" questions leak in even when the job is exactly
+    // what the customer sells.
+    assert.match(classifier, /"platform_native"/)
+
+    // The union, the validator set and the response schema must agree. A value
+    // the schema permits but VALID_DECISIONS omits fails the entire batch and,
+    // after the retry budget, aborts an audit whose spend is already committed.
+    const validatorSet = classifier.slice(
+        classifier.indexOf("const VALID_DECISIONS"),
+        classifier.indexOf("])", classifier.indexOf("const VALID_DECISIONS")),
+    )
+    const schemaEnum = classifier.slice(
+        classifier.indexOf("enum: ["),
+        classifier.indexOf("],", classifier.indexOf("enum: [")),
+    )
+    for (const decision of [
+        "direct",
+        "adjacent",
+        "unrelated",
+        "third_party_branded",
+        "publisher_specific",
+        "platform_native",
+    ]) {
+        assert.ok(validatorSet.includes(`"${decision}"`), `VALID_DECISIONS missing ${decision}`)
+        assert.ok(schemaEnum.includes(`"${decision}"`), `responseSchema enum missing ${decision}`)
+    }
     // Deliverability must outrank relevance, or an on-subject branded topic
     // still lands in the plan.
     assert.match(classifier, /Deliverability outranks relevance/)
@@ -1414,7 +1708,70 @@ test("every pivot migration survives being re-run", async () => {
     }
 })
 
-test("every tier divides the six-cluster scope into whole billing periods", async () => {
+test("any cluster count prices coherently without a new billing product", async () => {
+    const { programPricing, availableTiers, PRODUCT_TRUTH } = await import(
+        "../config/product-truth.ts"
+    )
+
+    // A fixed six meant a narrower business simply could not buy. Scope is now
+    // whatever the audit measured, and the three existing velocity products
+    // already price per cluster correctly — only the period count varies.
+    // 8 is included deliberately: it is where Dominate ($224.63) crept above
+    // Accelerate ($224.50) under the earlier baseline-only rule.
+    for (const clusters of [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12]) {
+        // Only tiers the scope can actually fill. A 2-cluster scope cannot be
+        // sold at "3 clusters per period" — the customer would pay a full
+        // period for two clusters, making the fastest tier the worst value.
+        const offerable = availableTiers(clusters)
+        assert.ok(offerable.length >= 1, `no tier offerable at ${clusters} clusters`)
+        // Close is always offerable and always the baseline price per cluster.
+        assert.ok(offerable.includes("close"), "Close must always be offerable")
+
+        const quotes = offerable.map((tier) => programPricing(clusters, tier))
+        for (const quote of quotes) {
+            assert.equal(quote.clusters, clusters)
+            assert.ok(
+                Number.isInteger(quote.billingPeriods) && quote.billingPeriods >= 1,
+                "billing periods must be a whole number so cancellation lands on a boundary",
+            )
+            // A period may be partial in clusters, never in price.
+            assert.equal(
+                quote.total,
+                quote.billingPeriods * quote.pricePerPeriod,
+                "total must be whole periods at the tier price",
+            )
+            assert.ok(
+                quote.billingPeriods * quote.clustersPerMonth >= clusters,
+                "the schedule must cover every purchased cluster",
+            )
+        }
+        // Faster delivery stays cheaper per cluster — an ordinary volume
+        // discount, and what makes any count defensible without new products.
+        for (let i = 1; i < quotes.length; i++) {
+            assert.ok(
+                quotes[i].perCluster <= quotes[i - 1].perCluster,
+                `per-cluster price must not rise with velocity at ${clusters} clusters: ` +
+                    quotes.map((q) => q.perCluster.toFixed(2)).join(" / "),
+            )
+        }
+    }
+
+    // Zero clusters must not divide by zero or invent a charge.
+    const none = programPricing(0, "close")
+    assert.equal(none.billingPeriods, 0)
+    assert.equal(none.total, 0)
+    assert.equal(none.perCluster, 0)
+    assert.equal(none.available, false)
+    assert.deepEqual(availableTiers(0), [])
+
+    // The retired invariant must not creep back as a hard gate.
+    const productTruth = await text("config/product-truth.ts")
+    assert.doesNotMatch(productTruth, /MUST DIVIDE .*EXACTLY/)
+    assert.match(productTruth, /SCOPE IS DYNAMIC/)
+    assert.ok(PRODUCT_TRUTH.tiers.close.clustersPerMonth === 1)
+})
+
+test("tier metadata still describes whole periods for the default scope", async () => {
     // The invariant is documented at the top of config/product-truth.ts but was
     // never enforced, and it has already been violated once in production copy:
     // Dominate shipped 4 clusters/month, leaving a half-empty second period that
@@ -1953,7 +2310,8 @@ test("the completed audit remains inspectable before purchase", async () => {
         assert.match(source, /articles=\{articles\}/)
     }
 
-    assert.match(scopeResults, /Your six-cluster program/)
+    // Title reflects the measured count, not a fixed six.
+    assert.match(scopeResults, /Your \$\{recommended\.length\}-cluster program/)
     assert.match(scopeResults, /Expand all articles/)
     assert.match(scopeResults, /sourceQueryIds/)
     assert.match(scopeResults, /source-linked/)

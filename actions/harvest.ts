@@ -185,7 +185,8 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
     ].map(({ tier, clustersPerMonth }) => ({
         tier,
         clustersPerMonth,
-        months: Math.ceil(HARVEST_POLICY.recommendedClusterCount / clustersPerMonth),
+        // Derived from what this audit actually measured, not a fixed six.
+        months: Math.max(1, Math.ceil(displayClusterIds.length / clustersPerMonth)),
     }))
 
     return {

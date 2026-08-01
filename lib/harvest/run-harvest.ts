@@ -118,6 +118,16 @@ export async function persistHarvestOutput(
             main_keyword: article.mainKeyword,
             supporting_keywords: article.supportingKeywords,
             source_query_ids: article.sourceQueryIds,
+            // Intents from a domain too thin to stand alone, answered as H2/FAQ
+            // sections inside this article. Omitting them here would drop the
+            // demand at persistence — the same loss the clusterer fix removed,
+            // one layer down.
+            sub_node_intents: article.subNodes.map((node) => node.intent),
+            sub_node_query_ids: article.subNodes.flatMap((node) => node.sourceQueryIds),
+            // Where the demand was measured, when this article was absorbed into
+            // another domain's cluster. scope_family_id must match the cluster's
+            // because of planned_articles_cluster_scope_fkey.
+            origin_scope_family_id: article.originScopeFamilyId ?? null,
             article_type: article.articleType,
             intent_role: articleIndex === 0 ? "pillar" : "supporting",
             is_pillar: articleIndex === 0,
@@ -187,7 +197,7 @@ export async function runHarvestAudit(
     const supabase = createAdminClient() as any
     const { data: scopeRows, error: scopeError } = await supabase
         .from("audit_scope_families")
-        .select("id, name, description, seed_keywords, priority")
+        .select("id, name, description, seed_keywords, priority, parent_scope_family_id")
         .eq("audit_id", options.auditId)
         .eq("user_id", userId)
         .order("priority", { ascending: true })
@@ -204,6 +214,7 @@ export async function runHarvestAudit(
             ? row.seed_keywords
             : [],
         priority: row.priority,
+        parentScopeFamilyId: row.parent_scope_family_id ?? null,
     }))
     const competitors = options.competitors
         .map((competitor) => competitor.url)

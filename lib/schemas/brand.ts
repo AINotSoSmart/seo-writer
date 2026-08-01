@@ -12,6 +12,15 @@ export const ScopeFamilySchema = z.object({
   seed_keywords: z.array(z.string().trim().min(2).max(100)).min(1).max(8),
   evidence: z.array(ScopeEvidenceSchema).max(5).default([]),
   /**
+   * Broader area this one is a sub-intent of, as judged at extraction.
+   * Advisory: shown on the confirmation screen so the founder can merge or keep
+   * it deliberately. Extraction emitting areas at inconsistent depth is what
+   * produced areas too narrow to sustain a cluster.
+   */
+  parent_hint: z.string().trim().max(100).nullable().optional(),
+  /** Resolved at confirm time from parent_hint; steers thin-domain absorption. */
+  parent_scope_family_id: z.string().uuid().nullable().optional(),
+  /**
    * extracted — read off the site by the scope model.
    * founder   — created from a target search the founder typed. Authoritative:
    *             the founder knows what they sell better than a crawler does.

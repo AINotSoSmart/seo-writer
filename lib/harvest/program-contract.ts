@@ -57,7 +57,7 @@ export function selectQualifiedProgramScope(
 
     // Portfolio selection: take one cluster from each confirmed commercial
     // family before taking a second from any family. A flat global sort let one
-    // verbose feature consume the entire six-cluster program.
+    // verbose feature dominate the delivery order.
     const byFamily = new Map<string, ScopeCluster[]>()
     for (const cluster of qualified) {
         const familyId = cluster.scopeFamilyId || "__legacy_flat_scope__"
@@ -71,16 +71,18 @@ export function selectQualifiedProgramScope(
                 (right[0]?.scopeFamilyPriority ?? 99) ||
             leftId.localeCompare(rightId),
     )
+    // Every qualified cluster is sold. The scope is whatever the audit measured
+    // — 2, 4, 7 or 12 — because a hyper-focused tool and a broad platform do not
+    // have the same number of problem pillars, and a fixed count turned the
+    // narrower one away at checkout. Round-robin ordering is kept so that when
+    // clusters are delivered in sequence, each represented domain is served
+    // before any domain gets a second cluster.
     const selected: ScopeCluster[] = []
     let round = 0
-    while (
-        selected.length < HARVEST_POLICY.recommendedClusterCount &&
-        familyOrder.some(([, rows]) => rows.length > round)
-    ) {
+    while (familyOrder.some(([, rows]) => rows.length > round)) {
         for (const [, rows] of familyOrder) {
             const cluster = rows[round]
             if (cluster) selected.push(cluster)
-            if (selected.length >= HARVEST_POLICY.recommendedClusterCount) break
         }
         round++
     }
@@ -90,14 +92,17 @@ export function selectQualifiedProgramScope(
         0,
     )
 
+    // The only remaining ineligible states are "this audit is not usable" and
+    // "there is nothing left to sell". A count that is merely small is a
+    // smaller program, not a rejection — and the node floor already guarantees
+    // every cluster sold is a real one.
     let reason: string | null = null
     if (requiresReaudit) {
         reason =
             "This legacy audit must be refreshed before a program can be purchased."
-    } else if (selected.length < HARVEST_POLICY.recommendedClusterCount) {
-        reason = `This site currently has ${selected.length} unsold qualified clusters. The program requires six.`
-    } else if (selectedArticleCount < HARVEST_POLICY.minProgramArticles) {
-        reason = `The six-cluster scope contains ${selectedArticleCount} articles. At least ${HARVEST_POLICY.minProgramArticles} are required.`
+    } else if (selected.length === 0) {
+        reason =
+            "No qualified clusters remain for this audit. Refresh it after the business adds products, services, or markets."
     }
 
     return {

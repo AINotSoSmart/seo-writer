@@ -24,6 +24,7 @@ type PlannedArticle = {
     title: string
     mainKeyword: string
     supportingKeywords: string[]
+    subNodeIntents: string[]
     articleType: string
     isPillar: boolean
     generationStatus: string
@@ -46,9 +47,11 @@ export function TestArticleRunner({
     const [articleType, setArticleType] = useState("informational")
     const [supporting, setSupporting] = useState("")
     const [sourceQueries, setSourceQueries] = useState("")
+    const [subNodeIntents, setSubNodeIntents] = useState("")
     const [clusterName, setClusterName] = useState("")
     const [clusterPosition, setClusterPosition] = useState(0)
     const [isPillar, setIsPillar] = useState(false)
+    const [hydrateFromPlannedId, setHydrateFromPlannedId] = useState<string | null>(null)
     const [running, setRunning] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [result, setResult] = useState<Result | null>(null)
@@ -60,10 +63,12 @@ export function TestArticleRunner({
 
     /** Loads a planned article's real inputs, still fully editable afterwards. */
     const loadPlanned = (row: PlannedArticle) => {
+        setHydrateFromPlannedId(row.id)
         setTitle(row.title)
         setKeyword(row.mainKeyword)
         setArticleType(row.articleType)
         setSupporting(row.supportingKeywords.join(", "))
+        setSubNodeIntents(row.subNodeIntents.join("\n"))
         setClusterName(row.clusterName || "")
         setClusterPosition(row.clusterPosition)
         setIsPillar(row.isPillar)
@@ -88,11 +93,16 @@ export function TestArticleRunner({
                     title: title.trim(),
                     keyword: keyword.trim(),
                     articleType,
+                    hydrateFromPlannedId,
                     supportingKeywords: supporting
                         .split(",")
                         .map((value) => value.trim())
                         .filter(Boolean),
                     sourceQueries: sourceQueries
+                        .split("\n")
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                    subNodeIntents: subNodeIntents
                         .split("\n")
                         .map((value) => value.trim())
                         .filter(Boolean),
@@ -271,6 +281,22 @@ export function TestArticleRunner({
                                 Fills the MEASURED SEARCH DEMAND block the real pipeline sends.
                             </p>
                         </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-stone-600">
+                                Absorbed sub-node intents — one per line
+                            </label>
+                            <textarea
+                                value={subNodeIntents}
+                                onChange={(e) => setSubNodeIntents(e.target.value)}
+                                rows={3}
+                                placeholder={"how to fix a torn photo edge\nbest app to colorize black and white photos"}
+                                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                            />
+                            <p className="mt-1 text-[10px] text-stone-400">
+                                Fills the REQUIRED SUB-SECTIONS block for thin-domain
+                                intents folded into this article.
+                            </p>
+                        </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label className="mb-1 block text-xs font-medium text-stone-600">
@@ -293,6 +319,14 @@ export function TestArticleRunner({
                         </div>
                     </div>
                 </details>
+
+                {hydrateFromPlannedId && (
+                    <p className="text-xs text-stone-500">
+                        Loaded from a planned article — observed searches, sub-nodes,
+                        cluster competitors and frozen links (if purchased) hydrate from
+                        the database unless you override them here.
+                    </p>
+                )}
 
                 {error && (
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">

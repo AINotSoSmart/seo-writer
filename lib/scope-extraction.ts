@@ -24,6 +24,18 @@ export type ExtractedScopeFamily = {
     description: string
     seed_keywords: string[]
     evidence: Array<{ url: string; quote: string }>
+    /**
+     * Name of the broader domain this one is a sub-intent of, when the model
+     * judged it narrower than a peer.
+     *
+     * Extraction was emitting domains at inconsistent depth — a broad
+     * capability beside one of its own sub-cases — and the narrow ones then
+     * measured too little demand to sustain a cluster. Under the old pipeline
+     * those were silently destroyed. They are now absorbed instead, and this
+     * hint tells the absorber which domain they belong under rather than
+     * leaving it to embedding proximity alone.
+     */
+    parent_hint: string | null
     source: "extracted"
 }
 
@@ -152,6 +164,18 @@ A family is a capability a customer would buy or use on its own — the job they
 came to get done. Name it the way its customers would name it when searching,
 not the way an engineer would describe the mechanism.
 
+PEER-LEVEL RULE (important):
+Emit families at CONSISTENT depth. If one candidate is a specific case of
+another, do not present them as equals — emit the broader one as the family and
+set "parent_hint" on the narrower to the broader one's exact name.
+- Broad job and a narrow variant of that same job -> one family
+- Two genuinely different customer jobs           -> two families
+Getting this wrong is expensive in both directions: split a single job into
+marketing sub-features and each fragment measures too little real demand to
+stand on its own; merge two different jobs and the audit researches the wrong
+one. When unsure, emit both and set parent_hint — it is recoverable, silence is
+not.
+
 - "Generative AI Mobile UI" is a family. "Design Handoff and Implementation" is
   a step inside one, and naming it that way points the whole audit at the wrong
   competitors.
@@ -166,6 +190,8 @@ not the way an engineer would describe the mechanism.
 For each family provide:
 - name: 2-100 characters, customer-facing.
 - description: one concrete sentence naming the customer job.
+- parent_hint: exact name of the broader family this is a sub-intent of, or null
+  when it stands on its own. Never point a family at itself.
 - seed_keywords: 1-8 phrases someone would type into Google. No brand names, no
   sentences. Maximum ${MAX_TOTAL_SCOPE_SEEDS} across all families combined.
 - evidence: 1-3 items, each an EXACT sentence copied character-for-character
@@ -192,6 +218,10 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
                             properties: {
                                 name: { type: "STRING" as const },
                                 description: { type: "STRING" as const },
+                                parent_hint: {
+                                    type: "STRING" as const,
+                                    nullable: true,
+                                },
                                 seed_keywords: {
                                     type: "ARRAY" as const,
                                     items: { type: "STRING" as const },
@@ -229,6 +259,10 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
         (family: Record<string, unknown>): ExtractedScopeFamily => ({
             name: String(family.name || "").trim(),
             description: String(family.description || "").trim(),
+            parent_hint:
+                typeof family.parent_hint === "string" && family.parent_hint.trim()
+                    ? family.parent_hint.trim()
+                    : null,
             seed_keywords: Array.isArray(family.seed_keywords)
                 ? family.seed_keywords.map(String)
                 : [],

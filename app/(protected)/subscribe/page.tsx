@@ -3,7 +3,7 @@ import Link from "next/link"
 import { AlertCircle, Layers3, Sparkles } from "lucide-react"
 
 import { getAuditScope } from "@/actions/harvest"
-import { PRODUCT_TRUTH, type ProductTier } from "@/config/product-truth"
+import { PRODUCT_TRUTH, availableTiers, type ProductTier } from "@/config/product-truth"
 import { ProgramCheckout } from "@/components/subscribe/ProgramCheckout"
 import ManageSubscription from "@/components/subscribe/ManageSubscription"
 import RealtimeSubscriptionSync from "@/components/subscribe/RealtimeSubscriptionSync"
@@ -144,6 +144,15 @@ export default async function SubscribePage() {
         cadence: string
     }>
 
+    // Only tiers this scope can honestly be sold at. Billing periods are whole,
+    // so a scope that does not divide evenly by a tier's cadence leaves a
+    // half-empty final period the customer still pays for — which can make the
+    // faster tier the worse value. availableTiers refuses to represent that.
+    const offerableTiers = availableTiers(scope?.recommendedClusterIds.length ?? 0)
+    const offerablePlans = recognizedPlans.filter((plan) =>
+        offerableTiers.includes(plan.tier),
+    )
+
     return (
         <main className="flex min-h-screen items-center justify-center py-8 text-stone-900">
             <RealtimeSubscriptionSync userId={user?.id} />
@@ -151,29 +160,30 @@ export default async function SubscribePage() {
                 <header className="border-b border-stone-100 px-6 py-10 text-center">
                     <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-stone-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-600">
                         <Sparkles className="h-3.5 w-3.5" />
-                        Finite six-cluster program
+                        Finite {scope?.recommendedClusterIds.length ?? 0}-cluster program
                     </div>
                     <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
                         One verified scope. Three delivery speeds.
                     </h1>
                     <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-stone-500 sm:text-base">
-                        Each program delivers the same six priority clusters. The tier
-                        changes cadence, not scope. Billing is scheduled to end after all
-                        six clusters are delivered.
+                        {/* Scope is what the audit measured — never a fixed count. */}
+                        Every tier delivers the same qualified clusters this audit found.
+                        The tier changes cadence, not scope. Billing is scheduled to end
+                        once the last cluster is delivered.
                     </p>
                 </header>
 
                 {!scope ? (
                     <EmptyState
                         title="Complete an evidence-backed audit first"
-                        body="Checkout is only available after a current immutable audit measures a qualified six-cluster scope."
+                        body="Checkout is only available after a current immutable audit measures at least one qualified cluster."
                     />
                 ) : !scope.checkoutEligible ? (
                     <EmptyState
                         title="This audit is not subscription-eligible"
                         body={
                             scope.eligibilityReason ||
-                            "The measured scope does not currently contain six qualified clusters and at least 25 articles."
+                            "The measured scope does not currently contain a cluster with 8-15 articles."
                         }
                     >
                         <div className="mt-4 flex justify-center gap-6 text-sm text-stone-600">
@@ -186,16 +196,17 @@ export default async function SubscribePage() {
                             offered for an undersized scope.
                         </p>
                     </EmptyState>
-                ) : recognizedPlans.length !== 3 ? (
+                ) : offerablePlans.length === 0 ? (
                     <EmptyState
                         title="Checkout plans are not fully configured"
-                        body="Close, Accelerate, and Dominate must all be active before checkout can open."
+                        body="At least one active velocity plan is required before checkout can open."
                     />
                 ) : (
                     <ProgramCheckout
                         auditId={scope.auditId}
                         subjectUrl={brand?.website_url || ""}
-                        plans={recognizedPlans}
+                        plans={offerablePlans}
+                        clusterCount={scope.recommendedClusterIds.length}
                         checkoutEnabled={
                             process.env.CLOSED_POOL_CHECKOUT_ENABLED === "true"
                         }

@@ -39,7 +39,7 @@ export const features: Record<string, FeatureTruth> = {
         slug: "topic-cluster-delivery",
         name: "Complete topic-cluster delivery",
         summary:
-            "One program selects six qualified priority clusters, each containing one pillar and 2–14 supporting articles.",
+            "A program contains every qualified priority cluster the audit measured, each with one pillar and 7–14 supporting articles.",
         promise:
             "A cluster is delivered as one batch only after every member has generated successfully.",
         inputs: ["Six unsold qualified clusters", "At least 25 total articles", "A paid velocity tier"],
@@ -72,9 +72,9 @@ export const features: Record<string, FeatureTruth> = {
         slug: "program-burn-down",
         name: "Program burn-down",
         summary:
-            "Track generated, delivered, and published counts separately across the fixed six-cluster scope.",
+            "Track generated, delivered, and published counts separately across the whole measured scope.",
         promise:
-            "After all six clusters are delivered, FlipAEO requests cancellation at the end of the paid billing period.",
+            "Once every cluster is delivered, FlipAEO requests cancellation at the end of the paid billing period.",
         inputs: ["Frozen program schedule", "Cluster state", "Billing-period events"],
         outputs: ["Separate progress counts", "Pause-aware dates", "Cancellation status"],
         safeguards: ["Idempotent billing grants", "No rescheduling on generic updates", "No work after scope delivery"],

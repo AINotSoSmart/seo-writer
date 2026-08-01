@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { generateBlogPost } from "@/trigger/generate-blog"
 import { isFounderUser } from "@/lib/founder"
+import { ensureProfileRow } from "@/lib/writer/ensure-profile"
+import { loadPlannedWriterInputs } from "@/lib/writer/planned-article-payload"
 import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
 
@@ -10,38 +12,18 @@ export const maxDuration = 60
 /**
  * Founder-only single-article generation, for quality checks.
  *
- * Generating one article previously meant shipping a whole cluster: paying for
- * 10+ articles and waiting for the program scheduler, just to read one intro.
- * This runs the REAL writer against real brand data with an overridable title
- * and keyword, and nothing else.
- *
- * It deliberately bypasses the program pipeline rather than reproducing it:
- *
- *   - **No planned_articles row.** `plannedArticleId` is omitted, so every
- *     generation/delivery status write inside the task is skipped. Nothing can
- *     mark a real cluster generating, blocked, or delivered.
- *   - **No frozen link graph.** `frozenLinks` is empty, so the writer falls
- *     back to `getRelevantInternalLinks` — the same path used before programs
- *     existed. This is the "internal linking freezing point" concern: the graph
- *     is frozen at purchase-intent time and simply does not exist for a test
- *     article, and the writer already handles that.
- *   - **No credit consumption.** `consume_program_credit` lives in
- *     ship-cluster, never in the writer, so no paid allowance is spent.
- *   - **No program, cluster, or audit is touched.** The only row created is one
- *     `articles` record, tagged so it is obvious it was a test.
- *
- * Provider costs are real — this makes live Gemini, Tavily and fal.ai calls.
+ * Runs the REAL writer with the same inputs ship-cluster would send. When
+ * `hydrateFromPlannedId` is supplied, audit evidence, sub-nodes, cluster
+ * context and any frozen links already in the database are loaded from that
+ * planned article — but `plannedArticleId` is deliberately NOT passed to the
+ * writer task, so no real cluster generation state is mutated.
  *
  * POST body:
- *   brandId            required — supplies style_dna, product facts, search prefs
- *   title              required — the headline to test
- *   keyword            required — the primary search intent
- *   articleType        optional — informational | commercial | howto
- *   supportingKeywords optional string[]
- *   sourceQueries      optional string[] — simulates audit evidence
- *   cluster            optional — cluster name, for the topical-context block
- *   clusterPosition    optional number — selects the intro pattern to test
- *   isPillar           optional boolean
+ *   brandId              required unless hydrateFromPlannedId supplies it
+ *   title, keyword       required unless hydrating from a planned article
+ *   hydrateFromPlannedId optional — load production writer inputs from DB
+ *   articleType, supportingKeywords, sourceQueries, cluster, clusterPosition,
+ *   isPillar, subNodeIntents, clusterCompetitorUrls — manual overrides
  */
 export async function POST(req: NextRequest) {
     const supabase = await createClient()
@@ -49,15 +31,43 @@ export async function POST(req: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser()
 
-    // Founder-only, and 404 rather than 403 so the route is not discoverable.
     if (!user || !isFounderUser(user.id)) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
     const body = await req.json().catch(() => ({}))
-    const brandId = typeof body.brandId === "string" ? body.brandId.trim() : ""
-    const title = typeof body.title === "string" ? body.title.trim() : ""
-    const keyword = typeof body.keyword === "string" ? body.keyword.trim() : ""
+    const db = createAdminClient() as any
+
+    const hydrateFromPlannedId =
+        typeof body.hydrateFromPlannedId === "string"
+            ? body.hydrateFromPlannedId.trim()
+            : typeof body.plannedArticleId === "string"
+              ? body.plannedArticleId.trim()
+              : ""
+
+    let hydrated = hydrateFromPlannedId
+        ? await loadPlannedWriterInputs(db, hydrateFromPlannedId)
+        : null
+
+    if (hydrateFromPlannedId && !hydrated) {
+        return NextResponse.json(
+            { error: "Planned article not found for hydration." },
+            { status: 404 },
+        )
+    }
+
+    const brandId =
+        (typeof body.brandId === "string" ? body.brandId.trim() : "") ||
+        hydrated?.brandId ||
+        ""
+    const title =
+        (typeof body.title === "string" ? body.title.trim() : "") ||
+        hydrated?.title ||
+        ""
+    const keyword =
+        (typeof body.keyword === "string" ? body.keyword.trim() : "") ||
+        hydrated?.keyword ||
+        ""
 
     if (!brandId || !title || !keyword) {
         return NextResponse.json(
@@ -68,12 +78,55 @@ export async function POST(req: NextRequest) {
 
     const articleType = ["informational", "commercial", "howto"].includes(body.articleType)
         ? body.articleType
-        : "informational"
+        : hydrated?.articleType || "informational"
 
-    const db = createAdminClient() as any
+    const pickStrings = (
+        manual: unknown,
+        fallback: string[] | undefined,
+    ): string[] => {
+        if (Array.isArray(manual)) {
+            const values = manual.filter((entry): entry is string => typeof entry === "string")
+            if (values.length > 0) return values
+        }
+        return fallback || []
+    }
 
-    // Brand must exist and belong to the caller — this route reads real brand
-    // data, so it must not become a way to generate against someone else's.
+    const supportingKeywords = pickStrings(
+        body.supportingKeywords,
+        hydrated?.supportingKeywords,
+    )
+
+    const sourceQueries = pickStrings(body.sourceQueries, hydrated?.sourceQueries)
+
+    const subNodeIntents = pickStrings(body.subNodeIntents, hydrated?.subNodeIntents)
+
+    const cluster =
+        typeof body.cluster === "string" && body.cluster.trim()
+            ? body.cluster.trim()
+            : hydrated?.cluster || ""
+
+    const clusterCompetitorUrls = pickStrings(
+        body.clusterCompetitorUrls,
+        hydrated?.clusterCompetitorUrls,
+    )
+
+    const clusterPosition = Number.isInteger(body.clusterPosition)
+        ? body.clusterPosition
+        : hydrated?.clusterPosition ?? 0
+
+    const clusterId =
+        typeof body.clusterId === "string" && body.clusterId.trim()
+            ? body.clusterId.trim()
+            : hydrated?.clusterId || `qa-${brandId}`
+
+    const isPillar =
+        typeof body.isPillar === "boolean" ? body.isPillar : hydrated?.isPillar ?? false
+
+    const frozenLinks =
+        hydrated?.frozenLinks?.length && !Array.isArray(body.skipFrozenLinks)
+            ? hydrated.frozenLinks
+            : []
+
     const { data: brand } = await db
         .from("brand_details")
         .select("id, user_id, website_url")
@@ -87,6 +140,27 @@ export async function POST(req: NextRequest) {
         )
     }
 
+    if (hydrated && hydrated.brandId !== brandId) {
+        return NextResponse.json(
+            { error: "Planned article does not belong to the selected brand." },
+            { status: 400 },
+        )
+    }
+
+    try {
+        await ensureProfileRow(db, brand.user_id, user.email)
+    } catch (profileError) {
+        return NextResponse.json(
+            {
+                error:
+                    profileError instanceof Error
+                        ? profileError.message
+                        : "Could not ensure profile row.",
+            },
+            { status: 500 },
+        )
+    }
+
     const slug = `qa-test-${title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
@@ -96,12 +170,11 @@ export async function POST(req: NextRequest) {
     const { data: article, error: articleError } = await db
         .from("articles")
         .insert({
-            user_id: user.id,
+            user_id: brand.user_id,
             brand_id: brandId,
             keyword,
             slug,
             status: "queued",
-            // Visible immediately: cluster withholding does not apply to a test.
             delivery_visible_at: new Date().toISOString(),
         })
         .select("id")
@@ -114,45 +187,46 @@ export async function POST(req: NextRequest) {
         )
     }
 
+    const writerPayload = {
+        articleId: article.id,
+        brandId,
+        keyword,
+        title,
+        articleType,
+        supportingKeywords,
+        sourceQueries,
+        subNodeIntents,
+        cluster,
+        clusterCompetitorUrls,
+        clusterPosition,
+        clusterId,
+        isPillar,
+        ...(frozenLinks.length > 0 ? { frozenLinks } : {}),
+    }
+
     try {
-        const handle = await generateBlogPost.trigger({
-            articleId: article.id,
-            brandId,
-            keyword,
-            title,
-            articleType,
-            supportingKeywords: Array.isArray(body.supportingKeywords)
-                ? body.supportingKeywords.filter((k: unknown) => typeof k === "string")
-                : [],
-            // Audit-evidence inputs are optional everywhere downstream, so a
-            // test can exercise them or leave them out.
-            sourceQueries: Array.isArray(body.sourceQueries)
-                ? body.sourceQueries.filter((q: unknown) => typeof q === "string")
-                : [],
-            cluster: typeof body.cluster === "string" ? body.cluster : "",
-            clusterPosition: Number.isInteger(body.clusterPosition) ? body.clusterPosition : 0,
-            clusterId: `qa-${brandId}`,
-            isPillar: Boolean(body.isPillar),
-            // Explicitly omitted: plannedArticleId and frozenLinks. See the note
-            // at the top of this file — that omission is what keeps this run
-            // outside the program pipeline.
-        })
+        const handle = await generateBlogPost.trigger(writerPayload)
 
         return NextResponse.json({
             articleId: article.id,
             runId: handle.id,
             slug,
+            hydratedFrom: hydrateFromPlannedId || null,
+            writerReceives: {
+                ...writerPayload,
+                frozenLinkCount: frozenLinks.length,
+            },
             testing: {
                 title,
                 keyword,
                 articleType,
-                introPatternPosition: Number.isInteger(body.clusterPosition)
-                    ? body.clusterPosition
-                    : 0,
+                introPatternPosition: clusterPosition,
+                sourceQueryCount: sourceQueries.length,
+                subNodeCount: subNodeIntents.length,
             },
             note:
-                "Real generation with real provider cost. No planned article, no frozen link graph, " +
-                "no credit consumed, no cluster or program touched.",
+                "Real generation with real provider cost. No planned-article status " +
+                "writes, no credit consumed, no program touched.",
         })
     } catch (triggerError) {
         await db.from("articles").delete().eq("id", article.id)

@@ -126,7 +126,7 @@ async function advanceCluster(
     const { data: plannedRows, error } = await supabase
         .from("planned_articles")
         .select(
-            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, article_id, generation_status, retry_count, source_query_ids, is_pillar",
+            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, article_id, generation_status, retry_count, source_query_ids, is_pillar, sub_node_intents",
         )
         .eq("audit_id", program.audit_id)
         .eq("cluster_id", auditClusterId)
@@ -278,6 +278,13 @@ async function advanceCluster(
                 cluster: clusterEvidence.clusterName || "",
                 sourceQueries: clusterEvidence.queriesByArticle.get(planned.id) || [],
                 clusterCompetitorUrls: clusterEvidence.competitorUrls,
+                // Intents from a domain too thin to sustain its own cluster.
+                // They were absorbed into this article and MUST be answered as
+                // H2/FAQ sections, or the demand that justified keeping them
+                // never reaches a page.
+                subNodeIntents: Array.isArray(planned.sub_node_intents)
+                    ? planned.sub_node_intents
+                    : [],
                 isPillar: Boolean(planned.is_pillar),
                 // Drives deterministic intro-pattern rotation. Taken from the
                 // full cluster ordering (not the retry-filtered candidate list)

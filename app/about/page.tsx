@@ -7,7 +7,7 @@ import { Navbar } from "@/components/landing/Navbar"
 export const metadata: Metadata = {
     title: "About FlipAEO",
     description:
-        "Why FlipAEO measures public evidence before delivering a finite, frozen six-cluster content program.",
+        "Why FlipAEO measures public evidence before delivering a finite, frozen content program.",
     alternates: { canonical: "/about" },
 }
 
@@ -36,7 +36,7 @@ export default function AboutPage() {
                     </p>
                     <p>
                         Delivery is finite. The customer chooses the speed, the measured scope
-                        remains fixed, and billing is scheduled to end after all six clusters
+                        remains fixed, and billing is scheduled to end once every cluster
                         are delivered. FlipAEO does not guarantee rankings, traffic, or AI
                         citations.
                     </p>

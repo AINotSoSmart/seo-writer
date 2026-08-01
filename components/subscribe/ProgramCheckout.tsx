@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { Check, LockKeyhole, Zap } from "lucide-react"
 
 import { checkout } from "@/lib/dodopayments"
-import type { ProductTier } from "@/config/product-truth"
+import { programPricing, type ProductTier } from "@/config/product-truth"
 
 type Plan = {
     id: string
@@ -26,11 +26,14 @@ export function ProgramCheckout({
     auditId,
     subjectUrl,
     plans,
+    clusterCount,
     checkoutEnabled,
 }: {
     auditId: string
     subjectUrl: string
     plans: Plan[]
+    /** Qualified clusters this audit measured. Drives the quote. */
+    clusterCount: number
     checkoutEnabled: boolean
 }) {
     const site = new URL(subjectUrl)
@@ -155,6 +158,32 @@ export function ProgramCheckout({
                             </div>
                             <p className="mt-2 min-h-10 text-sm font-medium text-stone-700">
                                 {plan.cadence}
+                            </p>
+                            {/*
+                              * The quote is derived, never fixed. A tier sets the price
+                              * per period and clusters per period; the audit sets how
+                              * many clusters there are. Periods follow, so any count is
+                              * priced coherently without a new Dodo product.
+                              */}
+                            <p className="mt-2 text-sm text-stone-700">
+                                {(() => {
+                                    const quote = programPricing(clusterCount, plan.tier)
+                                    return (
+                                        <>
+                                            <span className="font-semibold">
+                                                {formatPrice(quote.total, plan.currency)}
+                                            </span>{" "}
+                                            total — {quote.billingPeriods} payment
+                                            {quote.billingPeriods === 1 ? "" : "s"} of{" "}
+                                            {formatPrice(quote.pricePerPeriod, plan.currency)}
+                                            <span className="block text-xs text-stone-500">
+                                                {formatPrice(quote.perCluster, plan.currency)} per
+                                                cluster · {clusterCount} cluster
+                                                {clusterCount === 1 ? "" : "s"} total
+                                            </span>
+                                        </>
+                                    )
+                                })()}
                             </p>
                             <div className="my-6 flex-1 space-y-3">
                                 {[
