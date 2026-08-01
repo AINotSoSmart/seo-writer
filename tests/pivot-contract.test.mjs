@@ -18,6 +18,10 @@ import {
     roundRobinCap,
     selectSerpSeeds,
 } from "../lib/harvest/scope-cap.ts"
+import {
+    capabilityFactIdsForOperation,
+    selectIntentSizedLength,
+} from "../lib/writer/article-contract.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const text = (relativePath) =>
@@ -693,7 +697,6 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
 
     // The failure state must offer a deliberate retry, never an automatic one.
     assert.match(console_, /Run the audit again/)
-    assert.match(console_, /Refreshing this page will not start a new audit/)
     assert.match(console_, /disabled=\{!canRetry \|\| isRetrying\}/)
     // And it must not bounce the customer back to re-enter their brand.
     assert.doesNotMatch(console_, /onError/)
@@ -1257,7 +1260,7 @@ test("qualified clusters are 8-15 unique articles; thin clusters are never progr
     assert.match(productTruth, /minClusterArticles:\s*8/)
     assert.match(productTruth, /maxClusterArticles:\s*15/)
     assert.match(policy, /minQualifiedClusterArticles:\s*8/)
-    assert.match(policy, /version:\s*"confirmed-business-scope-v3\.3\.0"/)
+    assert.match(policy, /version:\s*"capability-bound-writer-v4\.0\.0"/)
     assert.match(pricing, /Between 8 and 15 per cluster/)
 
     // The undersized escape that forced one 1–7 article cluster is gone.
@@ -1435,8 +1438,11 @@ test("sections only receive the product knowledge they were flagged as needing",
     assert.match(writer, /brandList\(brandDetails\[aspect\]\)/)
     // And must stay silent when the outline did not ask for it.
     assert.match(writer, /if \(!brandDetails \|\| !currentSection\?\.needs_product_detail\) return ""/)
-    // The outline must be told the writer gets nothing unless it flags the section.
-    assert.match(writer, /The writer receives NO product knowledge unless you flag it here/)
+    // New program articles receive only explicit fact IDs for the section.
+    assert.match(outlineSchema, /capability_fact_ids/)
+    assert.match(outlineSchema, /research_fact_ids/)
+    assert.match(writer, /allowedIds\.has\(fact\.id\)/)
+    assert.match(writer, /Use only these facts for product-specific claims/)
 })
 
 test("audit evidence reaches the writer and degrades safely without it", async () => {
@@ -1544,13 +1550,9 @@ test("the writer's other input surfaces fail loudly, not silently", async () => 
     const shipCluster = await text("trigger/ship-cluster.ts")
     assert.match(shipCluster, /title: row\.anchor_text/)
 
-    // 3. ANGLE INSIGHTS are enrichment. They must degrade to null, never
-    //    half-apply or abort a paid generation.
-    assert.match(
-        writer,
-        /catch[\s\S]{0,200}angleInsights = null/,
-        "angle insights must fail closed to null rather than aborting generation",
-    )
+    // 3. Program articles no longer pay for or depend on a separate angle call.
+    assert.match(writer, /const angleInsights: AngleInsights \| null = null/)
+    assert.doesNotMatch(writer, /await deriveAngleInsights\(/)
 })
 
 test("scope classification rejects undeliverable topics, not just irrelevant ones", async () => {
@@ -2508,4 +2510,131 @@ test("program generation records provider usage for the manual margin gate", asy
     assert.match(accounting, /usage_complete/)
     assert.match(accounting, /usage_unavailable/)
     assert.match(accounting, /cost_usd/)
+})
+
+test("intent-sized program lengths use the frozen short, medium and long ranges", async () => {
+    assert.equal(
+        selectIntentSizedLength({
+            isPillar: false,
+            articleType: "informational",
+            absorbedIntentCount: 0,
+        }),
+        "short",
+    )
+    assert.equal(
+        selectIntentSizedLength({
+            isPillar: false,
+            articleType: "howto",
+            absorbedIntentCount: 0,
+        }),
+        "medium",
+    )
+    assert.equal(
+        selectIntentSizedLength({
+            isPillar: false,
+            articleType: "commercial",
+            absorbedIntentCount: 0,
+        }),
+        "medium",
+    )
+    assert.equal(
+        selectIntentSizedLength({
+            isPillar: false,
+            articleType: "informational",
+            absorbedIntentCount: 2,
+        }),
+        "long",
+    )
+    assert.equal(
+        selectIntentSizedLength({
+            isPillar: true,
+            articleType: "informational",
+            absorbedIntentCount: 0,
+        }),
+        "long",
+    )
+
+    const lengths = await text("lib/prompts/article-length.ts")
+    for (const [minimum, maximum] of [["1,200", "1,800"], ["1,600", "2,200"], ["2,400", "3,200"]]) {
+        assert.match(lengths, new RegExp(`${minimum}[^0-9]+${maximum}`))
+    }
+})
+
+test("capability facts stay operation-bound across unrelated industries", () => {
+    const fixtures = [
+        ["ai-consumer", "compose", "Upload photos", "Create a digital composite"],
+        ["developer-tools", "trace", "Send a trace ID", "Return a trace timeline"],
+        ["fintech", "reconcile", "Upload a ledger", "Return matched transactions"],
+        ["ecommerce-infra", "sync", "Connect a catalogue", "Sync inventory records"],
+        ["agency", "audit", "Provide a site URL", "Deliver an evidence audit"],
+    ]
+
+    for (const [industry, operationKey, input, action] of fixtures) {
+        const contract = {
+            version: "capability-v1",
+            deliveryMode: industry,
+            operations: [{
+                key: operationKey,
+                customerJob: action,
+                inputs: [input],
+                action,
+                outputs: [action],
+                limits: [],
+                evidenceRefs: [`${industry}-fact`],
+            }],
+            facts: [{
+                id: `${industry}-fact`,
+                url: `https://example.com/${industry}`,
+                quote: `${input}. ${action}.`,
+            }],
+        }
+        assert.deepEqual(
+            capabilityFactIdsForOperation(contract, operationKey),
+            [`${industry}-fact`],
+        )
+        assert.deepEqual(capabilityFactIdsForOperation(contract, "other"), [])
+    }
+})
+
+test("the writer contract blocks the BringBack semantic-drift failure upstream", async () => {
+    const [classifier, clusterer, assembly, writer, schema, migration, payload] =
+        await Promise.all([
+            text("lib/harvest/scope-classifier.ts"),
+            text("lib/harvest/clusterer.ts"),
+            text("lib/harvest/assembly.ts"),
+            text("trigger/generate-blog.ts"),
+            text("lib/schemas/outline.ts"),
+            text("supabase/migrations/20260807_writer_intent_contracts.sql"),
+            text("lib/writer/planned-article-payload.ts"),
+        ])
+
+    assert.match(classifier, /mechanically_entailed/)
+    assert.match(classifier, /delivery=/)
+    assert.match(classifier, /source_context=/)
+    assert.match(clusterer, /candidate\.intentBinding\.operationKey !== gap\.intentBinding\.operationKey/)
+    assert.match(clusterer, /candidate\.intentBinding\.solutionMode !== gap\.intentBinding\.solutionMode/)
+    assert.match(assembly, /capabilityFactIdsForOperation/)
+    assert.match(assembly, /sourceContext: query\.source_context/)
+    assert.match(assembly, /articleContract/)
+    assert.match(writer, /FROZEN ENTITY AND INTENT BOUNDARY/)
+    assert.match(writer, /A digital product cannot become a physical service/)
+    assert.match(writer, /External research is not evidence of this product's behavior/)
+    assert.match(writer, /Never invent testing, customers, employees/)
+    assert.doesNotMatch(writer, /Founder = "I\/My team"/)
+    assert.doesNotMatch(writer, /I found this tool snappy/)
+    assert.match(schema, /capability_fact_ids/)
+    assert.match(schema, /research_fact_ids/)
+    assert.match(migration, /source_context/)
+    assert.match(migration, /intent_binding/)
+    assert.match(migration, /article_contract/)
+    assert.match(payload, /resolveCapabilityFacts/)
+})
+
+test("contract research can legitimately stop after broad search", async () => {
+    const writer = await text("trigger/generate-blog.ts")
+    assert.match(writer, /Return zero, one, or two targeted queries/)
+    assert.match(writer, /targeted_queries\.slice\(0, 2\)/)
+    assert.match(writer, /no targeted searches will run/)
+    assert.doesNotMatch(writer, /forced three-to-five-gap/i)
+    assert.match(writer, /const angleInsights: AngleInsights \| null = null/)
 })

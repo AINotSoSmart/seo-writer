@@ -25,8 +25,13 @@ export const AuthorityLinkSchema = z.object({
   snippet: z.string().optional().default("")
 })
 
+export const ResearchFactSchema = z.object({
+  fact: z.string().min(1),
+  url: z.string().url(),
+})
+
 export const CompetitorDataSchema = z.object({
-  fact_sheet: z.array(z.string()),
+  fact_sheet: z.array(ResearchFactSchema),
   content_gap: z.object({
     missing_topics: z.array(z.string()),
     outdated_info: z.string().optional().default(""),

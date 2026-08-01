@@ -4,6 +4,7 @@ import {
     BrandDetailsSchema,
     ScopeFamilySchema,
     type BrandDetails,
+    type CapabilityContract,
     type ScopeFamily,
 // Relative, not "@/lib/...": this module is imported directly by the contract
 // suite, which runs under plain node and cannot resolve the tsconfig alias.
@@ -12,8 +13,9 @@ import {
     MAX_SEARCH_DIRECTIONS,
     trimFamiliesToSearchCap,
 } from "./scope-search-cap.ts"
+import { fallbackCapabilityContract } from "./writer/article-contract.ts"
 
-export const SCOPE_CONTRACT_VERSION = "confirmed-business-scope-v1"
+export const SCOPE_CONTRACT_VERSION = "confirmed-business-scope-v2"
 export const MAX_SCOPE_FAMILIES = 12
 export const MAX_TOTAL_SCOPE_SEEDS = MAX_SEARCH_DIRECTIONS
 export { trimFamiliesToSearchCap }
@@ -203,6 +205,37 @@ export function validateGroundedScope(
             if (!page) return false
             return verifyQuote(item.quote, page)
         })
+        const familyId = family.id || randomUUID()
+        const rawCapability = family.capability_contract || fallbackCapabilityContract(family)
+        const verifiedCapabilityFacts = rawCapability.facts.filter((fact) => {
+            if (family.source !== "extracted") return true
+            const canonical = canonicalEvidenceUrl(fact.url)
+            const page = canonical ? pageByUrl.get(canonical) : undefined
+            return Boolean(page && verifyQuote(fact.quote, page))
+        })
+        const factIdMap = new Map(
+            verifiedCapabilityFacts.map((fact) => [
+                fact.id,
+                fact.id.startsWith(`${familyId}:`)
+                    ? fact.id
+                    : `${familyId}:${fact.id}`,
+            ]),
+        )
+        const capabilityFacts = verifiedCapabilityFacts.map((fact) => ({
+            ...fact,
+            id: factIdMap.get(fact.id)!,
+        }))
+        const capabilityContract: CapabilityContract = {
+            ...rawCapability,
+            facts: capabilityFacts,
+            operations: rawCapability.operations.map((operation) => ({
+                ...operation,
+                evidenceRefs: operation.evidenceRefs.flatMap((id) => {
+                    const mapped = factIdMap.get(id)
+                    return mapped ? [mapped] : []
+                }),
+            })),
+        }
 
         const verified = family.source !== "extracted" || evidence.length > 0
         if (!verified) {
@@ -216,9 +249,10 @@ export function validateGroundedScope(
         seenNames.add(nameNorm)
         families.push({
             ...family,
-            id: family.id || randomUUID(),
+            id: familyId,
             seed_keywords: seeds,
             evidence,
+            capability_contract: capabilityContract,
             // Never let an area point at itself; that renders as a nonsense
             // "sub-area of itself" badge on the confirmation screen.
             parent_hint:
@@ -253,6 +287,10 @@ export function validateGroundedScope(
             description: `Searches about ${seed}. Rename this to match how you describe it.`,
             seed_keywords: [seed],
             evidence: [],
+            capability_contract: fallbackCapabilityContract({
+                name,
+                description: `Help customers with ${seed}.`,
+            }),
             source: "founder",
             verified: true,
             priority: families.length,
@@ -313,6 +351,8 @@ export function validateConfirmedScope(brandData: BrandDetails): {
         .sort((a, b) => a.priority - b.priority)
         .map((family, index) => ({
             ...family,
+            capability_contract:
+                family.capability_contract || fallbackCapabilityContract(family),
             priority: index,
             seed_keywords: Array.from(
                 new Set(family.seed_keywords.map(normalizeSeed).filter(Boolean)),
@@ -344,6 +384,24 @@ export function validateConfirmedScope(brandData: BrandDetails): {
             errors.push(`Product area names must be unique: ${family.name}.`)
         }
         familyNames.add(normalizedName)
+
+        const capability = family.capability_contract
+        if (
+            !capability ||
+            !capability.deliveryMode.trim() ||
+            capability.facts.length === 0 ||
+            capability.operations.length === 0 ||
+            capability.operations.some(
+                (operation) =>
+                    !operation.action.trim() ||
+                    /^describe\b/i.test(operation.action.trim()) ||
+                    operation.evidenceRefs.length === 0,
+            )
+        ) {
+            errors.push(
+                `${family.name} needs confirmed mechanics in “How we understand this works.”`,
+            )
+        }
 
         for (const seed of family.seed_keywords) {
             const existingOwner = seedOwners.get(seed)
@@ -395,6 +453,7 @@ export function scopeHash(families: ScopeFamily[]): string {
             seeds: [...family.seed_keywords].map(normalizeSeed).sort(),
             priority: family.priority,
             parent: family.parent_scope_family_id ?? null,
+            capability: family.capability_contract ?? fallbackCapabilityContract(family),
         }))
     return createHash("sha256").update(JSON.stringify(stable)).digest("hex")
 }

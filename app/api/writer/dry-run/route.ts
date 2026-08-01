@@ -113,7 +113,9 @@ export async function GET(req: NextRequest) {
         )
     }
 
-    const parsed = BrandDetailsSchema.safeParse(brandRec.brand_data)
+    const parsed = BrandDetailsSchema.safeParse(
+        hydrated.auditBrandSnapshot || brandRec.brand_data,
+    )
     if (!parsed.success) {
         // The real writer throws here, so surface it as the blocking failure it is.
         return NextResponse.json(
@@ -144,12 +146,14 @@ export async function GET(req: NextRequest) {
         isPillar: hydrated.isPillar,
         clusterPosition,
         clusterId: hydrated.clusterId,
+        articleContract: hydrated.articleContract,
+        capabilityFacts: hydrated.capabilityFacts,
     }
 
     const { data: sourceRows } = hydrated.sourceQueries.length
         ? await db
               .from("query_pool")
-              .select("query, source, source_url, competitor_matches")
+              .select("query, source, source_url, source_context, intent_binding, competitor_matches")
               .eq("audit_id", hydrated.auditId)
               .in("query", hydrated.sourceQueries)
         : { data: [] }
@@ -178,7 +182,7 @@ export async function GET(req: NextRequest) {
         payload.title,
         frozenLinks,
         payload.supportingKeywords,
-        brandDetails.article_length || "long",
+        hydrated.articleContract?.articleLength || "long",
         undefined,
         null,
         {
@@ -188,6 +192,8 @@ export async function GET(req: NextRequest) {
             subNodeIntents: payload.subNodeIntents,
             isPillar: payload.isPillar,
         },
+        hydrated.articleContract || undefined,
+        hydrated.capabilityFacts,
     )
 
     // Every brand fact the outline prompt renders as absent. `brandList()`
@@ -218,6 +224,18 @@ export async function GET(req: NextRequest) {
         /** Exactly what generate-blog-post receives today. */
         writerReceives: payload,
 
+        frozenWriterContract: hydrated.articleContract
+            ? {
+                  entity: hydrated.articleContract.entity,
+                  primaryIntent: hydrated.articleContract.primaryIntent,
+                  requiredIntents: hydrated.articleContract.requiredIntents,
+                  solutionMode: hydrated.articleContract.solutionMode,
+                  allowedProductFacts: hydrated.capabilityFacts,
+                  researchQuery: hydrated.articleContract.researchQuery,
+                  selectedLength: hydrated.articleContract.articleLength,
+              }
+            : null,
+
         brandFacts: {
             productName: brandDetails.product_name,
             audience: brandDetails.audience?.primary,
@@ -244,6 +262,8 @@ export async function GET(req: NextRequest) {
                 query: row.query,
                 source: row.source,
                 sourceUrl: row.source_url,
+                sourceContext: row.source_context,
+                intentBinding: row.intent_binding,
                 competitorMatches: (row.competitor_matches || []).length,
             })),
         },

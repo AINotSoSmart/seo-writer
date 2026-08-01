@@ -8,7 +8,8 @@ import {
     Trash2,
 } from "lucide-react"
 
-import type { ScopeFamily } from "@/lib/schemas/brand"
+import type { CapabilityContract, ScopeFamily } from "@/lib/schemas/brand"
+import { CAPABILITY_CONTRACT_VERSION } from "@/lib/writer/article-contract"
 import { MAX_SEARCH_DIRECTIONS } from "@/lib/scope-search-cap"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +29,39 @@ export function countScopeSearches(families: ScopeFamily[]): number {
 }
 
 const fieldLabelClass = "text-[10px] font-medium uppercase tracking-wide text-stone-400"
+
+function withFounderConfirmedOperation(
+    contract: CapabilityContract,
+    familyId: string,
+    operationIndex: number,
+    patch: Partial<CapabilityContract["operations"][number]>,
+): CapabilityContract {
+    const operation = { ...contract.operations[operationIndex], ...patch }
+    const factId = `${familyId}:founder-${operation.key}`.slice(0, 80)
+    const quote = [
+        operation.inputs.length ? `Inputs: ${operation.inputs.join(", ")}.` : "",
+        `Action: ${operation.action}.`,
+        operation.outputs.length ? `Outputs: ${operation.outputs.join(", ")}.` : "",
+        operation.limits.length ? `Limits: ${operation.limits.join(", ")}.` : "",
+    ].filter(Boolean).join(" ")
+    const operations = [...contract.operations]
+    operations[operationIndex] = {
+        ...operation,
+        evidenceRefs: Array.from(new Set([...operation.evidenceRefs, factId])).slice(0, 8),
+    }
+    return {
+        ...contract,
+        operations,
+        facts: [
+            ...contract.facts.filter((fact) => fact.id !== factId),
+            {
+                id: factId,
+                url: "founder-confirmed:onboarding",
+                quote,
+            },
+        ].slice(-12),
+    }
+}
 
 export function ScopeFamilyReview({
     families,
@@ -98,6 +132,20 @@ export function ScopeFamilyReview({
                 description: "",
                 seed_keywords: [],
                 evidence: [],
+                capability_contract: {
+                    version: CAPABILITY_CONTRACT_VERSION,
+                    deliveryMode: "Browser software, API, installed product, or human-delivered service",
+                    operations: [{
+                        key: "op1",
+                        customerJob: "Describe the customer job",
+                        inputs: [],
+                        action: "Describe what your product or service does",
+                        outputs: [],
+                        limits: [],
+                        evidenceRefs: [],
+                    }],
+                    facts: [],
+                },
                 source: "user",
                 verified: true,
                 priority: ordered.length,
@@ -237,6 +285,17 @@ export function ScopeFamilyReview({
                                         replace(index, {
                                             ...family,
                                             description: event.target.value,
+                                            capability_contract: family.capability_contract
+                                                ? {
+                                                      ...family.capability_contract,
+                                                      operations: family.capability_contract.operations.map(
+                                                          (operation) => ({
+                                                              ...operation,
+                                                              customerJob: event.target.value,
+                                                          }),
+                                                      ),
+                                                  }
+                                                : family.capability_contract,
                                             priority: index,
                                         })
                                     }
@@ -244,6 +303,89 @@ export function ScopeFamilyReview({
                                     className="mt-0.5 h-7 border-0 bg-transparent px-1.5 text-xs text-stone-500 shadow-none placeholder:text-stone-300"
                                 />
                             </div>
+
+                            {family.capability_contract ? (
+                                <details className="rounded-md bg-stone-50/80 px-2 py-1.5">
+                                    <summary className="cursor-pointer text-[10px] font-medium text-stone-500 hover:text-stone-700">
+                                        How we understand this works
+                                    </summary>
+                                    <div className="mt-2 space-y-2">
+                                        <div>
+                                            <p className={fieldLabelClass}>Delivered as</p>
+                                            <Input
+                                                value={family.capability_contract.deliveryMode}
+                                                onChange={(event) =>
+                                                    replace(index, {
+                                                        ...family,
+                                                        capability_contract: {
+                                                            ...family.capability_contract!,
+                                                            deliveryMode: event.target.value,
+                                                        },
+                                                    })
+                                                }
+                                                placeholder="e.g. Browser-based software"
+                                                className="mt-0.5 h-7 border-stone-200 bg-white px-2 text-xs shadow-none"
+                                            />
+                                        </div>
+                                        {family.capability_contract.operations.map((operation, operationIndex) => (
+                                            <div key={operation.key} className="space-y-1.5 border-t border-stone-200 pt-2 first:border-0 first:pt-0">
+                                                <Input
+                                                    value={operation.action}
+                                                    onChange={(event) => {
+                                                        replace(index, {
+                                                            ...family,
+                                                            capability_contract: withFounderConfirmedOperation(
+                                                                family.capability_contract!,
+                                                                family.id || `scope-${index}`,
+                                                                operationIndex,
+                                                                {
+                                                                    action: event.target.value,
+                                                                    customerJob: family.description || operation.customerJob,
+                                                                },
+                                                            ),
+                                                        })
+                                                    }}
+                                                    aria-label={`How ${family.name} works`}
+                                                    placeholder="What the product does to the input"
+                                                    className="h-7 border-stone-200 bg-white px-2 text-xs shadow-none"
+                                                />
+                                                <div className="grid gap-1.5 sm:grid-cols-3">
+                                                    {(["inputs", "outputs", "limits"] as const).map((field) => (
+                                                        <Input
+                                                            key={field}
+                                                            value={operation[field].join(", ")}
+                                                            onChange={(event) => {
+                                                                const values = event.target.value
+                                                                    .split(",")
+                                                                    .map((item) => item.trim())
+                                                                    .filter(Boolean)
+                                                                    .slice(0, 8)
+                                                                replace(index, {
+                                                                    ...family,
+                                                                    capability_contract: withFounderConfirmedOperation(
+                                                                        family.capability_contract!,
+                                                                        family.id || `scope-${index}`,
+                                                                        operationIndex,
+                                                                        { [field]: values },
+                                                                    ),
+                                                                })
+                                                            }}
+                                                            placeholder={
+                                                                field === "inputs"
+                                                                    ? "Inputs, comma separated"
+                                                                    : field === "outputs"
+                                                                      ? "Outputs, comma separated"
+                                                                      : "Known limits, comma separated"
+                                                            }
+                                                            className="h-7 border-stone-200 bg-white px-2 text-[11px] shadow-none"
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </details>
+                            ) : null}
 
                             {family.evidence.length > 0 ? (
                                 <details>

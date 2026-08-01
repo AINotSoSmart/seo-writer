@@ -26,6 +26,7 @@ import {
     dedupeQueries,
     mapWithConcurrency,
     buildSourceReport,
+    sanitizeSourceContext,
 } from "./types"
 import { fetchSuggest, type SuggestResult } from "./suggest-client"
 
@@ -82,6 +83,9 @@ function toHarvestedQuery(suggestion: string, response: SuggestResponse): Harves
         source_url: response.requestUrl,
         source_seed: response.prefix,
         observed_value: suggestion,
+        source_context: sanitizeSourceContext(
+            `Google suggestion "${suggestion}" returned for the prefix "${response.prefix}".`,
+        ),
         observed_at: new Date().toISOString(),
     }
 }

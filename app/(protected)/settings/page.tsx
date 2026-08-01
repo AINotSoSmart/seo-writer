@@ -5,14 +5,13 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { getUserBrandStatus } from "@/actions/brand"
 import { getUserDefaults, setDefaultBrand } from "@/actions/preferences"
 import { createClient } from "@/utils/supabase/client"
-import { Check, Globe, Plus, Edit, Settings2, Loader2, ExternalLink, AlertCircle, FileText, Search } from "lucide-react"
+import { Check, Globe, Plus, Edit, Settings2, Loader2, ExternalLink, AlertCircle, Search } from "lucide-react"
 import BrandOnboarding from "@/components/brand-onboarding"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { GlobalCard } from "@/components/ui/global-card"
 import { CustomSpinner } from "@/components/CustomSpinner"
-import { ARTICLE_LENGTHS } from "@/lib/prompts/article-length"
 
 type BrandInfo = { id: string; website_url: string; created_at: string; brand_data: BrandDetails }
 
@@ -195,29 +194,6 @@ export default function SettingsPage() {
                             <Edit className="w-3.5 h-3.5" />
                             EDIT BRAND DATA
                           </Button>
-                        </div>
-
-                        {/* Panel: Content Strategy */}
-                        <div className="p-4 bg-white rounded-lg border border-stone-100 flex flex-col hover:border-stone-200 transition-colors">
-                          <div className="flex items-center gap-2 mb-4">
-                            <div className="p-1.5 bg-indigo-50 text-indigo-500 rounded-md">
-                              <FileText className="w-4 h-4" />
-                            </div>
-                            <h3 className="text-[10px] font-bold text-stone-900 uppercase tracking-wider">Content Strategy</h3>
-                          </div>
-                          <div className="flex-1 select-none">
-                            <label className="block text-xs font-medium text-stone-500 mb-1.5">Default Article Length</label>
-                            <select
-                              className="w-full h-9 rounded-md border px-3 text-xs bg-white border-stone-200 text-stone-900 focus:ring-1 focus:ring-stone-500 focus:border-stone-500 outline-none transition-all"
-                              value={b.brand_data?.article_length || 'long'}
-                              onChange={e => handleUpdateSearchPrefs(b.id, 'article_length', e.target.value)}
-                            >
-                              {ARTICLE_LENGTHS.map(len => (
-                                <option key={len.value} value={len.value}>{len.label} ({len.wordRange} words)</option>
-                              ))}
-                            </select>
-                            <p className="text-[10px] text-stone-400 mt-2">Applied to all new articles by default.</p>
-                          </div>
                         </div>
 
                         {/* Panel: Research Context */}

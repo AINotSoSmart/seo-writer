@@ -26,6 +26,7 @@ import {
     dedupeQueries,
     buildSourceReport,
     containsExcludedBrand,
+    sanitizeSourceContext,
 } from "./types"
 
 /**
@@ -124,6 +125,10 @@ export async function harvestCompetitorCorpus(
                     source_url: doc.url,
                     source_seed: competitorUrl,
                     observed_value: topic,
+                    source_context: sanitizeSourceContext([topic, doc.description]
+                        .filter(Boolean)
+                        .join(" — ")
+                        .slice(0, 700)),
                     observed_at: new Date().toISOString(),
                 })
             }

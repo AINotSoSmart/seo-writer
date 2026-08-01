@@ -2,6 +2,12 @@ import "server-only"
 
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { findThirdPartyBrand, type HarvestedQuery } from "./types"
+import type { CapabilityContract } from "../writer/article-contract"
+import type {
+    CapabilityFit,
+    QueryIntentBinding,
+    SolutionMode,
+} from "../writer/article-contract"
 
 export type AuditScopeFamily = {
     id: string
@@ -11,10 +17,12 @@ export type AuditScopeFamily = {
     priority: number
     /** Broader confirmed domain this area is a sub-intent of, when declared. */
     parentScopeFamilyId?: string | null
+    capabilityContract: CapabilityContract
 }
 
 export type ScopedHarvestedQuery = HarvestedQuery & {
     scope_family_id: string
+    intent_binding: QueryIntentBinding
 }
 
 /**
@@ -77,7 +85,20 @@ type RawAssignment = {
     family_id?: string | null
     decision: ScopeDecision
     reason: string
+    operation_key?: string | null
+    capability_fit: CapabilityFit
+    solution_mode: SolutionMode
 }
+
+const VALID_CAPABILITY_FITS = new Set<CapabilityFit>([
+    "explicit",
+    "mechanically_entailed",
+    "educational",
+])
+const VALID_SOLUTION_MODES = new Set<SolutionMode>([
+    "product_led",
+    "category_educational",
+])
 
 /**
  * Must stay in step with both the ScopeDecision union AND the responseSchema
@@ -274,7 +295,8 @@ Rules:
 1. Assign a direct search to exactly one family_id. family_id MUST be one of
    the short aliases listed below (f1, f2, …) — never invent an id and never
    use the family display name as family_id.
-2. For non-direct decisions, set family_id to null.
+2. For non-direct decisions, set family_id and operation_key to null, with
+   capability_fit="educational" and solution_mode="category_educational".
 3. Never infer a new product area.
 4. A generic technology phrase is not direct merely because every family uses
    that technology.
@@ -293,6 +315,17 @@ Rules:
    still publisher-specific with the pronoun removed.
 9. Return exactly one assignment for every numbered query, preserving indexes.
    The assignments array length must equal the number of observed searches.
+10. For every direct search, also choose:
+   - operation_key: one operation key from its assigned family, or null only for
+     category education that does not claim the product performs the job.
+   - capability_fit: explicit when the exact use is stated; mechanically_entailed
+     only when the confirmed inputs + action + output genuinely support the
+     variant; educational when the brand has relevant expertise but should not
+     claim the product directly performs it.
+   - solution_mode: product_led for explicit/mechanically_entailed operations,
+     category_educational for educational coverage.
+   Mechanics-bound does not mean family-level guessing. Never infer performance,
+   compatibility, accuracy, timing, people, or guarantees.
 
 WORKED EXAMPLES for a business with f1=Photo Restoration, f2=Photo Animation:
 - "how to restore a faded photograph"            -> direct, family_id=f1
@@ -314,7 +347,10 @@ CONFIRMED FAMILIES:
 ${families
     .map((family) => {
         const alias = idToAlias.get(family.id)!
-        return `- family_id=${alias}\n  name=${family.name}\n  customer job=${family.description}\n  confirmed searches=${family.seedKeywords.join(" | ")}`
+        const operations = family.capabilityContract.operations.map((operation) =>
+            `    operation_key=${operation.key}; job=${operation.customerJob}; inputs=${operation.inputs.join(", ") || "not stated"}; action=${operation.action}; outputs=${operation.outputs.join(", ") || "not stated"}; limits=${operation.limits.join(", ") || "none stated"}`,
+        ).join("\n")
+        return `- family_id=${alias}\n  name=${family.name}\n  customer job=${family.description}\n  delivery=${family.capabilityContract.deliveryMode}\n  confirmed searches=${family.seedKeywords.join(" | ")}\n  operations:\n${operations}`
     })
     .join("\n")}
 
@@ -322,7 +358,7 @@ OBSERVED SEARCHES (${batch.length} items — return exactly ${batch.length} assi
 ${batch
     .map(
         (query, index) =>
-            `${index}. ${query.query} [source=${query.source}; discovered_from=${query.source_seed || "page"}]`,
+            `${index}. ${query.query} [source=${query.source}; discovered_from=${query.source_seed || "page"}]\n   source_context=${query.source_context}`,
     )
     .join("\n")}`
 
@@ -372,12 +408,27 @@ ${batch
                                                 ],
                                             },
                                             reason: { type: "STRING" as const },
+                                            operation_key: {
+                                                type: "STRING" as const,
+                                                nullable: true,
+                                            },
+                                            capability_fit: {
+                                                type: "STRING" as const,
+                                                enum: ["explicit", "mechanically_entailed", "educational"],
+                                            },
+                                            solution_mode: {
+                                                type: "STRING" as const,
+                                                enum: ["product_led", "category_educational"],
+                                            },
                                         },
                                         required: [
                                             "index",
                                             "family_id",
                                             "decision",
                                             "reason",
+                                            "operation_key",
+                                            "capability_fit",
+                                            "solution_mode",
                                         ],
                                     },
                                 },
@@ -406,7 +457,9 @@ ${batch
                     }
                     if (
                         !VALID_DECISIONS.has(assignment.decision) ||
-                        typeof assignment.reason !== "string"
+                        typeof assignment.reason !== "string" ||
+                        !VALID_CAPABILITY_FITS.has(assignment.capability_fit) ||
+                        !VALID_SOLUTION_MODES.has(assignment.solution_mode)
                     ) {
                         malformed = true
                         break
@@ -424,9 +477,28 @@ ${batch
                             malformed = true
                             break
                         }
+                        const family = families.find((candidate) => candidate.id === resolved)
+                        const operationKey =
+                            typeof assignment.operation_key === "string" && assignment.operation_key.trim()
+                                ? assignment.operation_key.trim()
+                                : null
+                        const operationExists = Boolean(
+                            family?.capabilityContract.operations.some(
+                                (operation) => operation.key === operationKey,
+                            ),
+                        )
+                        if (
+                            (assignment.solution_mode === "product_led" && !operationExists) ||
+                            (assignment.capability_fit === "educational" && assignment.solution_mode !== "category_educational") ||
+                            (assignment.capability_fit !== "educational" && assignment.solution_mode !== "product_led")
+                        ) {
+                            malformed = true
+                            break
+                        }
                         candidate.set(assignment.index, {
                             ...assignment,
                             family_id: resolved,
+                            operation_key: operationExists ? operationKey : null,
                         })
                     } else {
                         // Non-direct: an unknown/mangled family_id must not
@@ -495,7 +567,17 @@ ${batch
                     : null
 
             if (assignment.decision === "direct" && familyId) {
-                kept.push({ ...query, scope_family_id: familyId })
+                kept.push({
+                    ...query,
+                    scope_family_id: familyId,
+                    intent_binding: {
+                        scopeFamilyId: familyId,
+                        operationKey: assignment.operation_key || null,
+                        capabilityFit: assignment.capability_fit,
+                        solutionMode: assignment.solution_mode,
+                        reason: assignment.reason,
+                    },
+                })
             } else {
                 dropped.push({
                     query: query.query,

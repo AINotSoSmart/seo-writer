@@ -5,6 +5,7 @@ import {
     HarvestAssemblyError,
     type HarvestInput,
 } from "@/lib/harvest/assembly"
+import { CapabilityContractSchema } from "@/lib/schemas/brand"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
 
 export const maxDuration = 300
@@ -21,6 +22,7 @@ interface VerifyRequest {
         seed_keywords?: string[]
         priority?: number
         parentScopeFamilyId?: string | null
+        capabilityContract?: unknown
         parent_scope_family_id?: string | null
         parent_hint?: string | null
     }>
@@ -44,6 +46,17 @@ export async function POST(req: NextRequest) {
                 { status: 400 },
             )
         }
+        const invalidCapability = body.scopeFamilies.find(
+            (family) => !CapabilityContractSchema.safeParse(family.capabilityContract).success,
+        )
+        if (invalidCapability) {
+            return NextResponse.json(
+                {
+                    error: `scope family "${invalidCapability.name}" requires a valid capability-v1 contract`,
+                },
+                { status: 400 },
+            )
+        }
         const scopeFamilies = body.scopeFamilies.map((family, index) => ({
             id: family.id || `verify-scope-${index}`,
             name: family.name,
@@ -55,6 +68,7 @@ export async function POST(req: NextRequest) {
                 family.parentScopeFamilyId ??
                 family.parent_scope_family_id ??
                 null,
+            capabilityContract: CapabilityContractSchema.parse(family.capabilityContract),
         }))
         const input: HarvestInput = {
             subjectUrl: body.url,

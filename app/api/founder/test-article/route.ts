@@ -201,6 +201,13 @@ export async function POST(req: NextRequest) {
         clusterPosition,
         clusterId,
         isPillar,
+        ...(hydrated?.articleContract
+            ? {
+                  articleContract: hydrated.articleContract,
+                  capabilityFacts: hydrated.capabilityFacts,
+                  auditBrandSnapshot: hydrated.auditBrandSnapshot,
+              }
+            : {}),
         ...(frozenLinks.length > 0 ? { frozenLinks } : {}),
     }
 

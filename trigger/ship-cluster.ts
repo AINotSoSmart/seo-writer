@@ -3,6 +3,11 @@ import { schedules } from "@trigger.dev/sdk/v3"
 import { scheduleEndOfScopeCancellation } from "@/lib/harvest/billing-lifecycle"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { generateBlogPost } from "./generate-blog"
+import {
+    resolveCapabilityFacts,
+    type ArticleContract,
+    type CapabilityContract,
+} from "@/lib/writer/article-contract"
 
 const MAX_GENERATION_RETRIES = 2
 
@@ -126,7 +131,7 @@ async function advanceCluster(
     const { data: plannedRows, error } = await supabase
         .from("planned_articles")
         .select(
-            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, article_id, generation_status, retry_count, source_query_ids, is_pillar, sub_node_intents",
+            "id, title, main_keyword, supporting_keywords, article_type, slug, target_url, article_id, generation_status, retry_count, source_query_ids, is_pillar, sub_node_intents, article_contract, contract_version",
         )
         .eq("audit_id", program.audit_id)
         .eq("cluster_id", auditClusterId)
@@ -139,6 +144,35 @@ async function advanceCluster(
         )
         return { triggered: 0, blocked: true, ready: false }
     }
+    if (
+        plannedRows.some(
+            (article: any) =>
+                article.contract_version !== "article-contract-v1" ||
+                !article.article_contract,
+        )
+    ) {
+        await markClusterBlocked(
+            supabase,
+            programClusterId,
+            "audit_requires_writer_contract_refresh",
+        )
+        return { triggered: 0, blocked: true, ready: false }
+    }
+
+    const [{ data: audit }, { data: scopeRows }] = await Promise.all([
+        supabase
+            .from("topical_audits")
+            .select("brand_snapshot")
+            .eq("id", program.audit_id)
+            .maybeSingle(),
+        supabase
+            .from("audit_scope_families")
+            .select("capability_contract")
+            .eq("audit_id", program.audit_id),
+    ])
+    const capabilityContracts = (scopeRows || [])
+        .map((row: any) => row.capability_contract)
+        .filter(Boolean) as CapabilityContract[]
 
     const allGenerated = plannedRows.every(
         (article: any) => article.generation_status === "generated",
@@ -266,6 +300,7 @@ async function advanceCluster(
         }
 
         try {
+            const articleContract = planned.article_contract as ArticleContract
             await generateBlogPost.trigger({
                 articleId,
                 keyword: planned.main_keyword,
@@ -274,6 +309,15 @@ async function advanceCluster(
                 articleType: planned.article_type || "informational",
                 supportingKeywords: planned.supporting_keywords || [],
                 plannedArticleId: planned.id,
+                articleContract,
+                capabilityFacts: resolveCapabilityFacts(
+                    capabilityContracts,
+                    articleContract.capabilityFactIds,
+                ),
+                auditBrandSnapshot:
+                    audit?.brand_snapshot && typeof audit.brand_snapshot === "object"
+                        ? audit.brand_snapshot
+                        : {},
                 frozenLinks,
                 cluster: clusterEvidence.clusterName || "",
                 sourceQueries: clusterEvidence.queriesByArticle.get(planned.id) || [],

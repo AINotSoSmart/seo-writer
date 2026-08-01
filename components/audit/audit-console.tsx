@@ -402,9 +402,6 @@ export function AuditConsole({
                     </div>
                 )}
 
-                <p className="mt-5 text-center text-xs text-stone-400">
-                    Refreshing this page will not start a new audit.
-                </p>
             </div>
         )
     }

@@ -34,8 +34,19 @@ export interface HarvestedQuery {
      * was actually seen; `source_url` is how to go look again.
      */
     observed_value: string
+    /** Short surrounding source text that preserves what the observed phrase meant. */
+    source_context: string
     /** ISO timestamp of observation */
     observed_at: string
+}
+
+export function sanitizeSourceContext(value: string, maxChars = 700): string {
+    return value
+        .replace(/<[^>]*>/g, " ")
+        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, maxChars)
 }
 
 /**

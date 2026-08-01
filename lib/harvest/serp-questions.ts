@@ -25,6 +25,7 @@ import {
     containsExcludedBrand,
     brandTokensFromUrls,
     mapWithConcurrency,
+    sanitizeSourceContext,
 } from "./types"
 
 /** Interrogatives that make a heading a question even without a "?" */
@@ -64,12 +65,27 @@ function isQuestionShaped(text: string): boolean {
  * Looks at markdown headings and bold standalone lines, which is how FAQ
  * blocks survive Tavily's HTML-to-markdown conversion.
  */
-function extractQuestions(markdown: string): string[] {
+type ExtractedQuestion = { question: string; context: string }
+
+function cleanContextLine(value: string): string {
+    return stripUiArtifacts(
+        value
+            .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+            .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+            .replace(/[*_`>#]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim(),
+    )
+}
+
+function extractQuestions(markdown: string): ExtractedQuestion[] {
     if (!markdown) return []
 
-    const found: string[] = []
+    const found: ExtractedQuestion[] = []
+    const lines = markdown.split("\n")
 
-    for (const rawLine of markdown.split("\n")) {
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const rawLine = lines[lineIndex]
         const line = rawLine.trim()
         if (!line) continue
 
@@ -100,7 +116,20 @@ function extractQuestions(markdown: string): string[] {
         if (!isQuestionShaped(deUi)) continue
         if (!isPlausibleQuery(deUi)) continue
 
-        found.push(deUi)
+        const answer: string[] = []
+        for (let next = lineIndex + 1; next < lines.length; next++) {
+            const rawAnswerLine = lines[next].trim()
+            if (/^#{1,6}\s+/.test(rawAnswerLine) || /^\*\*.+?\*\*:?$/.test(rawAnswerLine)) break
+            const cleanedAnswer = cleanContextLine(rawAnswerLine)
+            if (!cleanedAnswer) continue
+            answer.push(cleanedAnswer)
+            if (answer.join(" ").length >= 620) break
+        }
+        const context = sanitizeSourceContext([deUi, answer.join(" ")]
+            .filter(Boolean)
+            .join(" — ")
+            .slice(0, 700))
+        found.push({ question: deUi, context })
         if (found.length >= MAX_QUESTIONS_PER_PAGE) break
     }
 
@@ -184,7 +213,8 @@ export async function harvestSerpQuestions(
                     // list. Every harvested page supplies its own exclusion.
                     const sourceBrand = brandTokensFromUrls([result.url])
 
-                    for (const question of questions) {
+                    for (const extracted of questions) {
+                        const question = extracted.question
                         // A rival's own support FAQ is observed but useless as a topic
                         if (containsExcludedBrand(question, excludeBrands)) continue
                         if (containsExcludedBrand(question, sourceBrand)) continue
@@ -197,6 +227,7 @@ export async function harvestSerpQuestions(
                             source_url: result.url,
                             source_seed: seed,
                             observed_value: question,
+                            source_context: extracted.context,
                             observed_at: new Date().toISOString(),
                         })
                     }
