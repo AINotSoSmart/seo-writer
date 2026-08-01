@@ -161,15 +161,15 @@ BEGIN
     END LOOP;
 
     UPDATE public.brand_scope_families child
-    SET parent_scope_family_id = NULLIF(item->>'parent_scope_family_id', '')::uuid
-    FROM jsonb_array_elements(p_families) item
+    SET parent_scope_family_id = NULLIF(family_row->>'parent_scope_family_id', '')::uuid
+    FROM jsonb_array_elements(p_families) AS family_row
     WHERE child.brand_id = p_brand_id
-      AND child.id = COALESCE(NULLIF(item->>'id', '')::uuid, child.id)
-      AND NULLIF(item->>'parent_scope_family_id', '') IS NOT NULL
-      AND NULLIF(item->>'parent_scope_family_id', '')::uuid <> child.id
+      AND child.id = COALESCE(NULLIF(family_row->>'id', '')::uuid, child.id)
+      AND NULLIF(family_row->>'parent_scope_family_id', '') IS NOT NULL
+      AND NULLIF(family_row->>'parent_scope_family_id', '')::uuid <> child.id
       AND EXISTS (
           SELECT 1 FROM public.brand_scope_families parent
-          WHERE parent.id = NULLIF(item->>'parent_scope_family_id', '')::uuid
+          WHERE parent.id = NULLIF(family_row->>'parent_scope_family_id', '')::uuid
             AND parent.brand_id = p_brand_id
       );
 
@@ -201,12 +201,14 @@ GRANT EXECUTE ON FUNCTION public.confirm_brand_scope(UUID, JSONB, TEXT, TEXT, JS
 
 -- ---------------------------------------------------------------------------
 -- create_customer_audit_with_scope: copy parent links into the audit snapshot.
+-- Parameter order MUST match 20260731 — Postgres rejects CREATE OR REPLACE
+-- when input parameter names change.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.create_customer_audit_with_scope(
     p_user_id UUID,
     p_brand_id UUID,
-    p_policy_version TEXT,
-    p_public_token TEXT
+    p_public_token TEXT,
+    p_policy_version TEXT
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -214,26 +216,41 @@ SECURITY DEFINER
 SET search_path = public, pg_catalog
 AS $$
 DECLARE
-    v_brand RECORD;
+    v_brand public.brand_details%ROWTYPE;
     v_audit_id UUID;
     v_seeds TEXT[];
 BEGIN
-    SELECT bd.website_url, bd.brand_data, bd.scope_contract_version, bd.scope_hash
-    INTO v_brand
-    FROM public.brand_details bd
-    WHERE bd.id = p_brand_id AND bd.user_id = p_user_id;
+    SELECT * INTO v_brand
+    FROM public.brand_details
+    WHERE id = p_brand_id
+      AND user_id = p_user_id
+      AND deleted_at IS NULL
+    FOR UPDATE;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Brand not found';
     END IF;
-    IF COALESCE(v_brand.scope_hash, '') = '' THEN
-        RAISE EXCEPTION 'Business scope must be confirmed before starting an audit';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM public.brand_scope_families
-        WHERE brand_id = p_brand_id AND user_id = p_user_id AND enabled = TRUE
+    IF EXISTS (
+        SELECT 1
+        FROM public.topical_audits
+        WHERE brand_id = p_brand_id
+          AND user_id = p_user_id
+          AND audit_kind = 'customer'
+          AND run_status = 'running'
     ) THEN
-        RAISE EXCEPTION 'Confirmed business scope is empty';
+        RAISE EXCEPTION 'An audit is already running for this brand';
+    END IF;
+    IF v_brand.scope_confirmed_at IS NULL
+       OR COALESCE(v_brand.scope_contract_version, '') = ''
+       OR COALESCE(v_brand.scope_hash, '') = ''
+       OR NOT EXISTS (
+           SELECT 1 FROM public.brand_scope_families
+           WHERE brand_id = p_brand_id
+             AND user_id = p_user_id
+             AND enabled = TRUE
+       )
+    THEN
+        RAISE EXCEPTION 'Brand has no confirmed business scope';
     END IF;
 
     SELECT array_agg(seed ORDER BY family_priority, seed_order)
@@ -403,15 +420,15 @@ BEGIN
     END LOOP;
 
     UPDATE public.audit_scope_families child
-    SET parent_scope_family_id = NULLIF(item->>'parent_scope_family_id', '')::uuid
-    FROM jsonb_array_elements(p_scope_families) item
+    SET parent_scope_family_id = NULLIF(family_row->>'parent_scope_family_id', '')::uuid
+    FROM jsonb_array_elements(p_scope_families) AS family_row
     WHERE child.audit_id = v_audit_id
-      AND child.id = COALESCE(NULLIF(item->>'id', '')::uuid, child.id)
-      AND NULLIF(item->>'parent_scope_family_id', '') IS NOT NULL
-      AND NULLIF(item->>'parent_scope_family_id', '')::uuid <> child.id
+      AND child.id = COALESCE(NULLIF(family_row->>'id', '')::uuid, child.id)
+      AND NULLIF(family_row->>'parent_scope_family_id', '') IS NOT NULL
+      AND NULLIF(family_row->>'parent_scope_family_id', '')::uuid <> child.id
       AND EXISTS (
           SELECT 1 FROM public.audit_scope_families parent
-          WHERE parent.id = NULLIF(item->>'parent_scope_family_id', '')::uuid
+          WHERE parent.id = NULLIF(family_row->>'parent_scope_family_id', '')::uuid
             AND parent.audit_id = v_audit_id
       );
 

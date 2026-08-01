@@ -3,7 +3,7 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "confirmed-business-scope-v3.1.0",
+    version: "confirmed-business-scope-v3.2.0",
     maxCompetitors: 4,
     maxCompetitorDiscoveryQueries: 12,
     maxScopeFamilies: 12,

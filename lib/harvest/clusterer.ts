@@ -192,10 +192,30 @@ export function groupIntoClusters(units: ArticleUnit[]): ClusterGrouping {
     const small = raw.filter((g) => g.length < TARGET_CLUSTER_MIN)
 
     if (large.length === 0) {
-        // Not enough distinct thematic depth for a qualified cluster of its own.
-        // The units are handed back so assembly can absorb them into another
-        // domain's cluster. Returning [] here is what destroyed 33% of one
-        // audit's measured demand.
+        // Enough collapsed intents for a sellable cluster, but thematic grouping
+        // split them into sub-groups that never reached the floor on their own.
+        // BringBack.pro measured 25 gaps → 8 article units → 0 clusters because
+        // the eight intents were four distinct jobs, not one theme — the demand
+        // was real; the grouping step was the bottleneck.
+        if (units.length >= TARGET_CLUSTER_MIN) {
+            const sized = splitOversized(units)
+            const clusters = sized
+                .filter((group) => group.length >= TARGET_CLUSTER_MIN)
+                .map(buildCluster)
+            const orphanedUnits = sized
+                .filter((group) => group.length < TARGET_CLUSTER_MIN)
+                .flat()
+            console.log(
+                `[Clusterer] ${units.length} article units had no thematic group of ` +
+                    `${TARGET_CLUSTER_MIN}+ but family demand supports ` +
+                    `${clusters.length} cluster(s)` +
+                    (orphanedUnits.length > 0
+                        ? `; ${orphanedUnits.length} units returned for absorption`
+                        : ""),
+            )
+            return { clusters, orphanedUnits }
+        }
+
         console.log(
             `[Clusterer] ${units.length} articles below minimum ${TARGET_CLUSTER_MIN} — ` +
                 `0 clusters; ${units.length} units returned for absorption`,
