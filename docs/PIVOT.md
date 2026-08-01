@@ -12,9 +12,9 @@ for what to do next.
 
 Last implementation update: 2026-08-02
 
-Status: **onboarding analyze streams progressive scope unlock; audit tops up
-partial competitor lists to max 4; clustering family-floor + parent rollup at
-v3.2.0; confirm-scope client-ready; checkout remains disabled pending the
+Status: **competitor coverage failover (skip dead sites, fill from 12-candidate
+reserve); onboarding analyze streams progressive scope unlock; clustering
+family-floor + parent rollup; checkout remains disabled pending the
 staging/external release gate**
 
 ## 1. Locked product contract
@@ -561,6 +561,20 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     company's private operational facts. `direct` means both. Do not widen it.
 
 ## 7. Changelog
+
+### 2026-08-02 - competitor coverage failover (policy v3.3.0)
+
+**Production failure:** BringBack audit died after full autocomplete/PAA spend
+with `competitor_coverage_failure` because `https://www.myheritage.com` had no
+readable sitemap pages. `scanCoverage` already returned soft zero; assembly
+re-threw it as fatal.
+
+**Fix:**
+
+- Discover up to `maxCompetitorCandidates` (12), user hosts first.
+- During coverage, skip unreadable candidates and continue until 4 succeed
+  (or the pool is exhausted). Never abort the audit for one bad rival.
+- Persist only `competitorsUsed` on brand + audit; drop failures from the list.
 
 ### 2026-08-02 - onboarding analyze streams; competitor top-up at audit
 

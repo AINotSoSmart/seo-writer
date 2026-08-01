@@ -854,7 +854,11 @@ test("user-supplied competitors top up via discovery instead of freezing the lis
     const { mergeUserFirstCompetitors } = await import(
         "../lib/audit/merge-competitors.ts"
     )
-    const runAudit = await text("trigger/run-audit.ts")
+    const [runAudit, policy, assembly] = await Promise.all([
+        text("trigger/run-audit.ts"),
+        text("lib/harvest/policy.ts"),
+        text("lib/harvest/assembly.ts"),
+    ])
 
     const merged = mergeUserFirstCompetitors(
         [{ name: "Rival", url: "https://rival.example/" }],
@@ -884,13 +888,26 @@ test("user-supplied competitors top up via discovery instead of freezing the lis
     )
     assert.equal(emptyUser.length, 2)
 
+    assert.match(policy, /maxCompetitorCandidates:\s*12/)
     assert.match(runAudit, /mergeUserFirstCompetitors/)
-    assert.match(runAudit, /remainingSlots/)
+    assert.match(runAudit, /remainingCandidateSlots/)
+    assert.match(runAudit, /maxCompetitorCandidates/)
+    assert.match(runAudit, /competitorsUsed/)
     // The old binary skip — if any user competitors exist, never discover —
     // must stay gone.
     assert.doesNotMatch(
         runAudit,
         /if \(Array\.isArray\(brandRecord\?\.discovered_competitors\) && brandRecord\.discovered_competitors\.length\)/,
+    )
+
+    // One unreadable competitor must not abort the audit; reserves fill the set.
+    assert.match(assembly, /Skipping competitor/)
+    assert.match(assembly, /competitorsSkipped/)
+    assert.doesNotMatch(assembly, /competitor_coverage_failure/)
+    assert.match(
+        assembly,
+        /maxCompetitorCandidates/,
+        "assembly accepts a candidate pool larger than the working set of 4",
     )
 })
 
@@ -1217,7 +1234,7 @@ test("qualified clusters are 8-15 unique articles; thin clusters are never progr
     assert.match(productTruth, /minClusterArticles:\s*8/)
     assert.match(productTruth, /maxClusterArticles:\s*15/)
     assert.match(policy, /minQualifiedClusterArticles:\s*8/)
-    assert.match(policy, /version:\s*"confirmed-business-scope-v3\.2\.0"/)
+    assert.match(policy, /version:\s*"confirmed-business-scope-v3\.3\.0"/)
     assert.match(pricing, /Between 8 and 15 per cluster/)
 
     // The undersized escape that forced one 1–7 article cluster is gone.

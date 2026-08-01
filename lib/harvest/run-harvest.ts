@@ -59,6 +59,9 @@ export interface HarvestAuditResult {
     policyVersion: string
     resultHash: string
     durationMs: number
+    /** Competitors that produced readable coverage (persisted working set). */
+    competitorsUsed: string[]
+    competitorsSkipped: Array<{ url: string; reason: string }>
 }
 
 export type PhaseReporter = (phase: string, detail?: string) => Promise<void> | void
@@ -268,5 +271,7 @@ export async function runHarvestAudit(
         policyVersion: output.policyVersion,
         resultHash: output.resultHash,
         durationMs: Date.now() - startedAt,
+        competitorsUsed: output.competitorsUsed,
+        competitorsSkipped: output.competitorsSkipped,
     }
 }
