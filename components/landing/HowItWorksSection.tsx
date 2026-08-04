@@ -187,12 +187,12 @@ const HowItWorksSection: React.FC = () => {
               HOW IT WORKS
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1.1]">
-              How FlipAEO builds <br /><span className='italic text-stone-500'>your topical authority</span>
+              The same four steps <br /><span className='italic text-stone-500'>an agency would run</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              Four steps, no invented topics. We read your site, confirm what you sell, map the real questions in your market, show where your coverage breaks, then deliver six qualified clusters across your confirmed business areas as one fixed program.
+              Audit, strategy, production, delivery — the sequence a good agency charges four figures a month for. The difference is that you can check every claim it makes, you approve the scope before you spend anything, and it finishes.
             </p>
           </div>
         </div>
@@ -222,10 +222,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                We read your site first
+                We read your site, you confirm it
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                Every page you have already published is read and indexed. Nothing we propose later will repeat work you have already paid for.
+                Every page you have published is read first. Then you confirm your real product areas in your own words, so nothing later is written for a business you are not in.
               </p>
             </div>
           </div>
@@ -260,7 +260,7 @@ const HowItWorksSection: React.FC = () => {
                 You see the scope and price
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                The gaps are grouped into themed batches. You see the whole map, the six batches worth doing first, and exactly how long each pricing option takes to finish them.
+                The gaps are grouped into themed batches of 8 to 15 articles. You see every batch your site justifies — it might be three, it might be twelve — and what each delivery speed costs.
               </p>
             </div>
           </div>
@@ -278,7 +278,7 @@ const HowItWorksSection: React.FC = () => {
                 We deliver complete batches
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                A batch arrives whole, with its internal links already working. If one article fails, the batch waits rather than shipping you a half-built set. After the last one, billing stops.
+                A batch arrives whole, with its internal links already working. If one article fails its checks, the batch waits rather than shipping you a half-built set. After the last batch, billing stops.
               </p>
             </div>
           </div>

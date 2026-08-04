@@ -29,12 +29,12 @@ const ProblemSection: React.FC = () => {
               Why Content Fails
             </span>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-              Scattered articles don’t <br /><span className='italic text-stone-500'>add up to authority.</span>
+              200 posts. <br /><span className='italic text-stone-500'>No pipeline.</span>
             </h2>
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              A hundred posts spread thinly across sixty unrelated topics makes you a shallow source on all of them. Depth on one subject is what earns trust — and depth means covering a topic completely, not publishing near it.
+              This is how it usually goes. Two years of publishing, a respectable archive, and no way to say which posts did anything. The problem was never the volume. It was writing hard in a direction nobody ever checked.
             </p>
           </div>
         </div>
@@ -71,10 +71,10 @@ const ProblemSection: React.FC = () => {
             </div>
             <div className="mt-auto">
               <h3 className="font-serif text-2xl text-stone-900 mb-4 tracking-tight">
-                You have articles, not coverage
+                Nobody’s job is content
               </h3>
               <p className="text-stone-500 leading-relaxed text-sm lg:text-base">
-                Most sites are not short of content. They are short of depth. Publishing one post each about sixty things leaves you the authority on none of them, and every one of those posts cost real money.
+                Every SEO playbook assumes a strategist, a writer and an editor. You have four to eight hours a week and a product to ship. The advice isn’t wrong — it’s just written for a team you do not have.
               </p>
             </div>
           </div>
@@ -86,10 +86,10 @@ const ProblemSection: React.FC = () => {
             </div>
             <div className="mt-auto">
               <h3 className="font-serif text-2xl text-stone-900 mb-4 tracking-tight">
-                One missing piece breaks the cluster
+                The two real options both hurt
               </h3>
               <p className="text-stone-500 leading-relaxed text-sm lg:text-base">
-                Authority comes from answering a question and everything around it. Miss the sub-topics and the cluster reads as incomplete — to a reader, to Google, and to any AI system deciding which source to lean on.
+                Hire an agency at $3,000 to $15,000 a month, forever. Or buy a $19 tool that writes about anything you type and proves none of it. One is unaffordable early; the other is why your archive is full of posts nobody reads.
               </p>
             </div>
           </div>
@@ -104,7 +104,7 @@ const ProblemSection: React.FC = () => {
                 Nobody shows their working
               </h3>
               <p className="text-stone-500 leading-relaxed text-sm lg:text-base">
-                Ask most tools where a suggested topic came from and there is no answer, because a model imagined it. You cannot tell a real gap from a confident hallucination, and you are the one paying to find out.
+                Ask either one where a topic came from and you get a shrug or a model’s guess. You cannot tell a real opportunity from a confident invention, and you are the one who pays to find out which it was.
               </p>
             </div>
           </div>

@@ -50,26 +50,26 @@ export default function Hero() {
 
       {/* Main Headline */}
       <h1 className="font-serif text-4xl md:text-7xl lg:text-8xl text-stone-900 leading-[1.1] mb-6 tracking-tight">
-        Own your topic, <br />
-        <span className="italic font-light">not just a keyword</span>
+        Agencies charge $5,000 <br />
+        <span className="italic font-light">a month. We charge $249.</span>
       </h1>
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-        Built for SaaS teams with a real product and website, but no dedicated content strategy team.
-        <strong className="text-black font-normal">{" "}See the source-linked gaps first, then get six clusters across your confirmed business areas delivered as one finite program.</strong>
+        You have a product, a website, and nobody whose actual job is content.
+        <strong className="text-black font-normal">{" "}We find every question your market is searching that your site does not answer — and show you where we found each one. Then we write the missing articles and deliver them in complete, interlinked sets, until the work is done.</strong>
       </p>
 
       {/* CTA Button Container */}
       <div className="relative group z-10">
         <Link href="/login?next=/onboarding">
           <Button variant="primary" className="text-brand-600">
-            Find My Content Gaps
+            Show Me What I'm Missing
           </Button>
         </Link>
 
         <p className="mt-4 text-[11px] text-stone-400 tracking-wide">
-          Full evidence audit, free &middot; valid for 30 days &middot; verify every source
+          Free audit &middot; no credit card &middot; every gap links to its source
         </p>
       </div>
 

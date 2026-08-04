@@ -9,8 +9,24 @@ const FAQS = [
     answer: "Check them. Every gap in your report links to the page or the search where we observed that question. Open a few at random. We built the audit this way because the honest answer to 'trust us' is that you should not have to."
   },
   {
-    question: "How is this different from other AI blog writers?",
-    answer: "Most of them will write about anything you type in. The hard part is not writing, it is knowing what to write and being able to prove it was worth writing. We show you the finite list of what your site is missing, back each item with a source, deliver it in complete batches, and then stop billing you."
+    question: "How is this different from hiring an agency?",
+    answer: "Scope and price. An agency runs $3,000 to $15,000 a month and keeps running until you cancel, because a retainer has no natural end. Here the audit sizes the work up front, you approve it before paying, and the subscription cancels itself when the last batch lands. What an agency gives you that we do not: a human strategist on a call, link building, and someone to chase your team for input."
+  },
+  {
+    question: "Why not just buy a $19 AI blog writer?",
+    answer: "Because writing was never the bottleneck. Those tools will happily produce fifty articles about whatever you type in, which is how sites end up with a large archive and nothing to show for it. The expensive part is knowing which articles are worth writing and being able to check that answer. That is the part we do first, and the part we let you audit."
+  },
+  {
+    question: "How many articles will I actually get?",
+    answer: "Whatever your site genuinely justifies. Your audit groups the gaps into batches of 8 to 15 articles each, and you buy the batches that qualify — that might be three, it might be twelve. You see the exact article count and what it costs before you pay anything. We do not sell a fixed number and then go looking for topics to fill it."
+  },
+  {
+    question: "How do you stop it inventing things about my product?",
+    answer: "Anything an article claims about your product has to trace back to your own website or something you confirmed during setup. Facts from anywhere else are attributed to the page they came from, and never rewritten as though they were about you. Articles are checked against that rule before delivery, and a failing one is rewritten rather than shipped."
+  },
+  {
+    question: "What happens to the smaller topics that don't fill a batch?",
+    answer: "They are not thrown away. If a question has enough real demand behind it, it becomes its own article. If it does not, it becomes a clearly labelled section inside a related article instead of disappearing. What we will not do is pad an article with filler sections to make a number look bigger."
   },
   {
     question: "What happens when you run out of topics?",
@@ -21,12 +37,12 @@ const FAQS = [
     answer: "Read them before publishing, always. Research, structure, internal links and images are done, so you are editing rather than writing. Anyone promising zero human review is selling you something they have not read either."
   },
   {
-    question: "Can you work on my clients' sites?",
-    answer: "Yes. Each site gets its own audit and its own program. Publish straight to WordPress or export the drafts and put them anywhere. There is nothing to install on a client server."
+    question: "What if my site is too small to qualify?",
+    answer: "Then we will not sell you a program. There is no minimum number of batches you have to hit — a small scope is simply a smaller program. But if nothing on your site qualifies at all, the audit says so and checkout stays closed. A refund in month two costs us both more than a no today."
   },
   {
-    question: "What if my niche is too small?",
-    answer: "Then we will not sell you a program. If your site cannot fill six real batches, the audit says so and checkout stays closed. A refund in month two costs us both more than a no today."
+    question: "Can I use this for more than one product?",
+    answer: "Yes — each site gets its own audit and its own program, so a founder running two products can run two. It is built for the person who owns the product, though, not for agencies: there are no client workspaces, white-label reports or approval chains."
   },
   {
     question: "Do you promise rankings or traffic?",
@@ -34,7 +50,7 @@ const FAQS = [
   },
   {
     question: "What languages do you support?",
-    answer: "Currently, we specialize in high-quality English (US/UK) content to ensure maximum nuance and authority. Multi-language support is on our roadmap for Q4."
+    answer: "English only for now, in either US or UK spelling. We would rather do one language properly than several badly, so we will announce another when it genuinely reaches the same standard."
   },
 ];
 

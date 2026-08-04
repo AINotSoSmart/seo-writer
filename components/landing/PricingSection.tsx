@@ -21,19 +21,22 @@ const FeatureItem = ({ icon: Icon, title, description }: { icon: any, title: str
 );
 
 /**
- * Every tier buys the identical six clusters. `clustersPerMonth` must divide 6
- * exactly so the subscription ends on a whole billing period — see
- * config/product-truth.ts. Per-cluster price is shown, never charged: billing
- * is a plain fixed monthly subscription.
+ * Scope is dynamic — the audit decides the cluster count, not the tier. A tier
+ * fixes the monthly price and how many clusters land inside one billing period,
+ * so the total is simply (clusters ÷ cadence, rounded up) × price. See
+ * `programPricing()` in config/product-truth.ts.
+ *
+ * The example totals below are for a six-cluster scope only, and are labelled
+ * as an example on the page. Never present them as the price: a customer whose
+ * audit measures four clusters pays four months on Close, not six.
  */
 const TIERS = [
     {
         name: 'Close',
         price: 249,
         perMonth: '1 cluster a month',
-        payments: 6,
-        total: 1494,
         perCluster: '$249',
+        exampleTotal: 1494,
         note: 'Smallest monthly commitment. Stop after any cluster.',
         featured: false,
     },
@@ -41,20 +44,18 @@ const TIERS = [
         name: 'Accelerate',
         price: 449,
         perMonth: '2 clusters a month',
-        payments: 3,
-        total: 1347,
         perCluster: '$224.50',
-        note: 'Half the wait, and cheaper overall than Close.',
+        exampleTotal: 1347,
+        note: 'Half the wait, and less per cluster than Close.',
         featured: true,
     },
     {
         name: 'Dominate',
         price: 599,
         perMonth: '3 clusters a month',
-        payments: 2,
-        total: 1198,
         perCluster: '$199.67',
-        note: 'Lowest total cost. Biggest monthly cheque.',
+        exampleTotal: 1198,
+        note: 'Lowest cost per cluster. Biggest monthly payment.',
         featured: false,
     },
 ];
@@ -74,12 +75,12 @@ const PricingSection: React.FC = () => {
                             Pricing
                         </span>
                         <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-                            Everyone gets six clusters.  <br /><span className='italic text-stone-500'>You choose how fast.</span>
+                            One agency month.  <br /><span className='italic text-stone-500'>Your whole programme.</span>
                         </h2>
                     </div>
                     <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
                         <p className="font-sans text-stone-500 text-lg leading-relaxed">
-                            The tiers below change one thing: delivery speed. The work is identical, the total is fixed, and you see your exact article count in the free audit before you pay anything.
+                            A B2B SaaS content agency runs $3,000 to $15,000 a month, indefinitely. This is the same work — research, planning, writing, internal linking, delivery — priced as software and scoped to end. Your audit sets the size; the tier only sets the speed.
                         </p>
                     </div>
                 </div>
@@ -100,23 +101,23 @@ const PricingSection: React.FC = () => {
 
                     <div className="p-4 md:p-8 md:border-r border-b md:border-b-0 border-stone-200">
                         <span className="font-sans text-[10px] font-bold text-brand-500 uppercase tracking-widest">What you buy</span>
-                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">6 clusters</p>
+                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">Your qualified clusters</p>
                         <p className="text-sm text-stone-500 leading-relaxed">
-                            A cluster is a pillar article plus its supporting articles, all interlinked. Every tier delivers the same six.
+                            A cluster is a pillar article plus its supporting articles, all interlinked. Your audit measures how many your site justifies, and you buy those — not a number we picked.
                         </p>
                     </div>
                     <div className="p-4 md:p-8 md:border-r border-b md:border-b-0 border-stone-200">
                         <span className="font-sans text-[10px] font-bold text-brand-500 uppercase tracking-widest">How many articles</span>
-                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">25&ndash;90</p>
+                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">8&ndash;15 each</p>
                         <p className="text-sm text-stone-500 leading-relaxed">
-                            Between 8 and 15 per cluster, with at least 25 across the selected six. Your free audit shows the exact scope before you pay.
+                            Between 8 and 15 per cluster, every one of them a gap we can point you at. Your free audit shows the exact article count before you pay.
                         </p>
                     </div>
                     <div className="p-4 md:p-8">
                         <span className="font-sans text-[10px] font-bold text-brand-500 uppercase tracking-widest">When it ends</span>
-                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">After cluster 6</p>
+                        <p className="font-serif text-2xl text-stone-900 mt-3 mb-2">After your last cluster</p>
                         <p className="text-sm text-stone-500 leading-relaxed">
-                            The subscription cancels itself. There is no seventh payment, and nothing to remember to switch off.
+                            The subscription cancels itself once everything in your scope is delivered. There is no extra payment, and nothing to remember to switch off.
                         </p>
                     </div>
                 </div>
@@ -176,16 +177,16 @@ const PricingSection: React.FC = () => {
                             {/* Plain-English maths so nobody has to do it themselves */}
                             <div className="border-t border-stone-200 pt-4 space-y-2 text-sm mb-6">
                                 <div className="flex justify-between">
-                                    <span className="text-stone-500">Payments</span>
-                                    <span className="text-stone-900 font-medium">{tier.payments} &times; ${tier.price}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-stone-500">Total you pay</span>
-                                    <span className="font-serif text-lg text-stone-900">${tier.total.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
                                     <span className="text-stone-500">Works out at</span>
                                     <span className="text-stone-900 font-medium">{tier.perCluster} / cluster</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-stone-500">You pay for</span>
+                                    <span className="text-stone-900 font-medium">as many months as your scope needs</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-stone-500">6 clusters would be</span>
+                                    <span className="font-serif text-lg text-stone-900">${tier.exampleTotal.toLocaleString()}</span>
                                 </div>
                             </div>
 
@@ -199,12 +200,36 @@ const PricingSection: React.FC = () => {
                                         variant={tier.featured ? 'primary' : 'secondary'}
                                         className="w-full px-6 py-3.5"
                                     >
-                                        Find my content gaps
+                                        Show me what I'm missing
                                     </Button>
                                 </Link>
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* How a dynamic scope turns into a fixed, predictable total */}
+                <div className="w-full border-x border-b border-stone-200 bg-white p-4 md:p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+                        <div>
+                            <h3 className="font-serif text-xl text-stone-900 mb-2">What the same work costs elsewhere</h3>
+                            <p className="font-sans text-sm text-stone-500 leading-relaxed">
+                                A B2B SaaS content agency retainer starts around $3,000 a month and keeps going. A six-cluster programme here is $1,198 to $1,494 in total, paid across a few months, and then it stops. We are not cheaper per article — we are finite.
+                            </p>
+                        </div>
+                        <div>
+                            <h3 className="font-serif text-xl text-stone-900 mb-2">How your total is worked out</h3>
+                            <p className="font-sans text-sm text-stone-500 leading-relaxed">
+                                Count your clusters, divide by how many arrive each month, round up. That is how many monthly payments you make, and then it stops. Nine clusters on Accelerate is five months. Four clusters on Close is four months. Your audit shows the exact figure before checkout.
+                            </p>
+                        </div>
+                        <div>
+                            <h3 className="font-serif text-xl text-stone-900 mb-2">Faster is never worse value</h3>
+                            <p className="font-sans text-sm text-stone-500 leading-relaxed">
+                                Because months are whole, a scope that does not divide evenly can leave a half-empty final month you still pay for. So a faster tier is only offered to you when it genuinely costs less per cluster than every slower one. If the arithmetic does not work out for your scope, you will not be shown that tier at all.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Shared inclusions */}
@@ -219,8 +244,8 @@ const PricingSection: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-7">
                         <FeatureItem
                             icon={Bot}
-                            title="The same six clusters, whichever tier"
-                            description="Paying more never buys more articles. It buys them sooner, at a lower price per cluster. Your scope is fixed before the first payment."
+                            title="The same scope, whichever tier"
+                            description="Paying more never buys more articles. It buys them sooner, at a lower price per cluster. Your scope is fixed before the first payment and cannot grow after it."
                         />
                         <FeatureItem
                             icon={Zap}
@@ -239,8 +264,8 @@ const PricingSection: React.FC = () => {
                         />
                         <FeatureItem
                             icon={ShieldCheck}
-                            title="Clear structure for readers and machines"
-                            description="Answer-first sections, tables where data belongs, and clean headings. We format for comprehension; we do not promise rankings or citations."
+                            title="Every claim about you, checked"
+                            description="What an article says about your product must trace to your own site or something you confirmed in setup. Outside facts are cited to their source. Articles that fail are rewritten, not shipped."
                         />
                         <FeatureItem
                             icon={Globe}
@@ -255,7 +280,7 @@ const PricingSection: React.FC = () => {
                         <FeatureItem
                             icon={ShieldCheck}
                             title="We turn down bad fits"
-                            description="If your audit cannot fill six real clusters, checkout stays closed and we tell you why. A no today is cheaper than a refund in month two."
+                            description="If nothing on your site qualifies, checkout stays closed and we tell you why rather than selling you a program that runs dry. A no today is cheaper than a refund in month two."
                         />
                     </div>
                 </div>

@@ -373,9 +373,27 @@ export const seoValidation = {
 export const generateProductSchema = generateProductJsonLd;
 
 export const commonPageMetadata = {
+  // The landing page targets the agency-replacement query set, not the
+  // practitioner one. A founder-led B2B SaaS buyer does not search for a "content
+  // gap analysis" — that is vocabulary belonging to the strategist they do not
+  // employ. They search for an agency, at the moment they have decided to spend
+  // money on this, and the real competitor is a $3k–$15k/month retainer.
   home: () => generateMetadata({
-    title: '',
-    description: defaultSEO.description,
+    title: 'The SaaS SEO Agency Alternative — From $249/mo',
+    description:
+      'B2B SaaS content agencies charge $3,000–$15,000 a month. FlipAEO finds what your market searches that your site misses, then writes and delivers the articles. From $249.',
+    keywords: [
+      'saas seo agency',
+      'b2b saas seo agency',
+      'saas seo agency alternative',
+      'b2b saas content marketing agency',
+      'seo agency alternative',
+      'outsource saas content marketing',
+      'done for you seo content',
+      'saas content marketing',
+      'saas seo',
+      'topical authority',
+    ],
     canonical: '/',
     ogType: 'website',
   }),
