@@ -372,8 +372,8 @@ const FEATURES = [
   },
   {
     id: '03',
-    title: 'A scope that ends',
-    description: "Six batches, then your subscription cancels itself. We would rather tell you the work is done and lose the monthly fee than bill you for rewrites of articles you already own.",
+    title: 'Nothing we find gets thrown away',
+    description: "Small pockets of demand used to be dropped for being too thin to carry their own article. Now each one either becomes an article or a named section inside a related one. What we never do is pad an article with filler to reach a number.",
     visual: SniperVisual,
     colSpan: 'col-span-1'
   },
@@ -386,15 +386,15 @@ const FEATURES = [
   },
   {
     id: '05',
-    title: 'We turn down bad fits',
-    description: "If your niche cannot fill six real batches, the system refuses the sale rather than selling you a plan that runs dry in month two. A no now is cheaper for both of us than a refund later.",
+    title: "If we can't back a claim, we don't write it",
+    description: "Anything an article says about your product has to trace back to your own site or something you confirmed during setup. Outside facts get cited to the page they came from. An article that fails those checks is rejected and rewritten — it does not quietly ship.",
     visual: AntiFluffVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '06',
-    title: 'Yours to edit and own',
-    description: "Drafts arrive with headings, tables and images, ready for your edit before anything goes live. Publish straight to WordPress or export and take them anywhere. No lock-in, no plugin on your server.",
+    title: 'A scope that ends, and work you keep',
+    description: "When your last batch lands, the subscription cancels itself rather than billing you for rewrites of articles you already own. Drafts arrive with headings, tables and images — publish straight to WordPress or export them anywhere. No lock-in, no plugin on your server.",
     visual: CMSVisual,
     colSpan: 'col-span-1'
   }
@@ -455,7 +455,7 @@ const FeaturesSection: React.FC = () => {
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              Plenty of tools claim to build topical authority. Every gap we show you links to the page we observed it on — so you can check the work before you pay.
+              An agency asks you to trust the retainer. A $19 tool asks you to trust the model. We show our working at both ends: every topic links to the page we found it on, and every article is checked against evidence before it reaches you.
             </p>
           </div>
         </div>

@@ -18,7 +18,7 @@ const CTASection: React.FC = () => {
 
         <div className="flex flex-col items-center justify-center">
           <h2 className="font-serif text-xl md:text-5xl text-stone-900 mb-16 tracking-tight font-normal text-center">
-            See if your site has six clusters worth building
+            Get the agency's answer, without the agency's invoice
           </h2>
 
           <div className="relative group">
@@ -30,7 +30,7 @@ const CTASection: React.FC = () => {
                   variant="primary"
                   className="text-xl md:text-3xl px-10 py-5 md:px-20 md:py-7 rounded-xl"
                 >
-                  <span className="text-brand-800 font-medium tracking-tight">Find My Content Gaps</span>
+                  <span className="text-brand-800 font-medium tracking-tight">Show Me What I'm Missing</span>
                 </Button>
               </Link>
             </div>
@@ -54,7 +54,7 @@ const CTASection: React.FC = () => {
 
               {/* 2. Top Right: Outsource your work */}
               <div className="absolute -top-14 sm:-top-8 -right-[120px] sm:-right-[200px] w-48 flex flex-col items-start">
-                <span className="font-hand text-[14px] sm:text-2xl text-stone-500 mb-1 rotate-6 leading-none">Know the six <br />priorities</span>
+                <span className="font-hand text-[14px] sm:text-2xl text-stone-500 mb-1 rotate-6 leading-none">Know what to <br />write next</span>
                 <span className="text-stone-500 rotate-x-180">
                   <svg className="w-[20px] h-[22px] sm:w-[39px] sm:h-[43px]" viewBox="0 0 39 43" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M35.3098 41.3831C38.805 33.6161 39.7653 17.8871 22.106 16.5287C12.0089 15.752 15.1157 28.9559 24.4361 27.4025C32.203 26.108 39.5817 5.6549 1.52344 4.1015M1.52344 4.1015L4.63023 7.59665M1.52344 4.1015L5.40693 1.38305" stroke="#767676ff" strokeWidth="2" strokeLinecap="round" />

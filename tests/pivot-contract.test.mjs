@@ -2492,6 +2492,9 @@ test("active product copy has no retired contract claims", async () => {
         "config/seo.ts",
         "config/product-truth.ts",
         "components/blog-cta-banner.tsx",
+        // Renders the only outcome evidence on the site, so it is the file most
+        // able to drift back into a guarantee. It must be governed like the rest.
+        "components/landing/AICitations.tsx",
         "components/landing/CTASection.tsx",
         "components/landing/FeaturesSection.tsx",
         "components/landing/FounderNote.tsx",
@@ -2541,6 +2544,19 @@ test("the public buyer is founder-led B2B SaaS and signup credits are retired", 
 
     assert.match(hero, /FOR FOUNDER-LED B2B SAAS/)
     assert.match(founderNote, /full evidence audit is on me/i)
+
+    // The case study may report what happened on our own property; it may never
+    // convert that record into a promise to a customer. Three passes over this
+    // page drifted, so the disclaimer is pinned rather than trusted.
+    const citations = await text("components/landing/AICitations.tsx")
+    assert.match(citations, /not because we can promise you the same/i)
+    assert.match(citations, /cannot honestly guarantee rankings|Nobody can honestly guarantee rankings/i)
+    assert.doesNotMatch(citations, /\byou will (?:rank|get cited|be cited)\b/i)
+    // Only AFFIRMATIVE guarantees are forbidden. The disclaimer itself has to be
+    // able to say nobody can guarantee rankings, so a blanket ban on the word
+    // would forbid the very sentence that keeps this section honest.
+    assert.doesNotMatch(citations, /\bwe guarantee\b/i)
+    assert.doesNotMatch(citations, /\bguaranteed (?:rankings|traffic|citations)\b/i)
     assert.match(seo, /founder-led B2B SaaS/i)
     assert.match(migration, /ALTER COLUMN credits SET DEFAULT 0/)
     assert.match(migration, /ALTER COLUMN credits_remaining SET DEFAULT 0/)

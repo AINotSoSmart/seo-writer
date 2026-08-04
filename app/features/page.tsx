@@ -8,9 +8,9 @@ import { defaultSEO } from "@/config/seo"
 import { features } from "./data"
 
 export const metadata: Metadata = {
-    title: "How FlipAEO's finite content program works",
+    title: "How it works — done-for-you SEO content for B2B SaaS | FlipAEO",
     description:
-        "Source-linked audit evidence, qualified topic clusters, frozen internal links, complete batch delivery, and a finite program burn-down.",
+        "What you actually get: a gap audit you can fact-check, articles written against evidence, internal links that work on arrival, and a programme that ends.",
     alternates: { canonical: `${defaultSEO.siteUrl}/features` },
 }
 
@@ -21,15 +21,16 @@ export default function FeaturesPage() {
             <main className="mx-auto max-w-5xl px-6 pb-24 pt-32">
                 <header className="mx-auto mb-14 max-w-3xl text-center">
                     <div className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wider text-stone-600">
-                        <Sparkles className="h-3.5 w-3.5" /> Product contract
+                        <Sparkles className="h-3.5 w-3.5" /> What you actually get
                     </div>
                     <h1 className="mt-5 font-serif text-4xl text-stone-900 md:text-6xl">
-                        Evidence first. Complete clusters second.
+                        Six promises, and how we keep each one.
                     </h1>
                     <p className="mt-5 text-lg leading-7 text-stone-600">
-                        FlipAEO sells one finite, measured scope at up to three delivery speeds.
-                        It makes no ranking, traffic, or citation promise, and the program
-                        does not run indefinitely.
+                        The research, planning, writing and delivery an agency retainer covers —
+                        priced as software and scoped to finish. We do not promise rankings,
+                        traffic or AI citations, and be careful with anyone who does. Here is
+                        exactly what we promise instead.
                     </p>
                 </header>
                 <section className="grid gap-4 md:grid-cols-2">
@@ -45,7 +46,7 @@ export default function FeaturesPage() {
                             <h2 className="mt-3 font-serif text-2xl text-stone-900">{feature.name}</h2>
                             <p className="mt-2 text-sm leading-6 text-stone-600">{feature.summary}</p>
                             <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium">
-                                Read the contract <ArrowRight className="h-4 w-4" />
+                                See how it works <ArrowRight className="h-4 w-4" />
                             </div>
                         </Link>
                     ))}

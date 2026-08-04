@@ -40,7 +40,7 @@ export function Footer() {
               </div>
 
               <p className="font-sans text-stone-500 text-sm leading-relaxed max-w-sm">
-                The first strategic content engine designed to reverse-engineer AI search models. Win the answer, not just the link.
+                The SaaS SEO agency alternative for founder-led B2B SaaS. We find what your market searches that your site misses, show you where we found it, then write and deliver the articles — and stop when the work is done.
               </p>
 
 

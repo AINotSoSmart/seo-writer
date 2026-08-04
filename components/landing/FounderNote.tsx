@@ -61,7 +61,7 @@ export default function FounderNote() {
                                 "Your full evidence audit is on me. I want you to see every source-linked content gap before I ask you to pay."
                             </p>
                             <p className="font-serif text-xl md:text-2xl leading-relaxed text-stone-500 italic">
-                                "If six clusters qualify, you choose how quickly we deliver them. If they do not, checkout stays closed."
+                                "You buy however many clusters your site actually earns — not a number I picked. You see that count and its price before anything is charged, and if nothing qualifies, checkout stays closed."
                             </p>
                         </blockquote>
 
@@ -114,7 +114,7 @@ export default function FounderNote() {
                                         variant="primary"
                                         className="px-8 py-3.5 text-sm"
                                     >
-                                        Find My Content Gaps
+                                        Show Me What I'm Missing
                                     </Button>
                                 </Link>
                                 <p className="text-[9px] text-stone-400 font-bold uppercase tracking-widest text-center">

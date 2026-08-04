@@ -50,26 +50,27 @@ export default function Hero() {
 
       {/* Main Headline */}
       <h1 className="font-serif text-4xl md:text-7xl lg:text-8xl text-stone-900 leading-[1.1] mb-6 tracking-tight">
-        Own your topic, <br />
-        <span className="italic font-light">not just a keyword</span>
+        Own the whole topic, <br />
+        <span className="italic font-light">not just one keyword </span>
       </h1>
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-        Built for SaaS teams with a real product and website, but no dedicated content strategy team.
-        <strong className="text-black font-normal">{" "}See the source-linked gaps first, then get six clusters across your confirmed business areas delivered as one finite program.</strong>
+        Google and AI assistants both lean on sites that cover a subject completely, not sites that publish near it.
+        <strong className="text-black font-normal">{" "}We find every question your market asks that your site does not answer — each traced to where we found it — then write and deliver them as complete, interlinked clusters.</strong>{" "}
+        The work an agency bills $3,000&ndash;$15,000 a month for, from $249, finished and finite.
       </p>
 
       {/* CTA Button Container */}
       <div className="relative group z-10">
         <Link href="/login?next=/onboarding">
           <Button variant="primary" className="text-brand-600">
-            Find My Content Gaps
+            Show Me What I'm Missing
           </Button>
         </Link>
 
         <p className="mt-4 text-[11px] text-stone-400 tracking-wide">
-          Full evidence audit, free &middot; valid for 30 days &middot; verify every source
+          Free audit &middot; no credit card &middot; every gap links to its source
         </p>
       </div>
 

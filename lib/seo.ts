@@ -373,9 +373,13 @@ export const seoValidation = {
 export const generateProductSchema = generateProductJsonLd;
 
 export const commonPageMetadata = {
+  // Layered, not single-note — see the note above `defaultSEO` in config/seo.ts.
+  // The title leads with the deliverable, the description carries the answer-
+  // engine reason and the agency comparison in that order.
   home: () => generateMetadata({
-    title: '',
-    description: defaultSEO.description,
+    title: 'Build Topical Authority Google and AI Both Trust',
+    description:
+      'Search engines and AI assistants favour sites that cover a subject completely. We find what your market asks that your site misses, then write and deliver it as interlinked clusters. From $249, not $5,000 a month.',
     canonical: '/',
     ogType: 'website',
   }),

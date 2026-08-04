@@ -60,7 +60,7 @@ export default async function FeaturePage({
                     <h1 className="font-serif text-4xl text-stone-900 md:text-6xl">{feature.name}</h1>
                     <p className="mt-5 max-w-3xl text-lg leading-8 text-stone-600">{feature.summary}</p>
                     <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5 text-sm leading-6 text-stone-700">
-                        <strong>Product promise:</strong> {feature.promise}
+                        <strong>Our promise:</strong> {feature.promise}
                     </div>
                 </header>
                 <div className="mt-12 grid gap-5 md:grid-cols-2">
@@ -69,7 +69,7 @@ export default async function FeaturePage({
                 </div>
                 <section className="mt-5 rounded-2xl bg-stone-950 p-7 text-white">
                     <div className="flex items-center gap-2 text-sm font-semibold">
-                        <ShieldCheck className="h-5 w-5" /> Contract safeguards
+                        <ShieldCheck className="h-5 w-5" /> What we will not do
                     </div>
                     <ul className="mt-5 grid gap-3 md:grid-cols-2">
                         {feature.safeguards.map((item) => (
@@ -82,7 +82,7 @@ export default async function FeaturePage({
                 </section>
                 <div className="mt-10 text-center">
                     <Link href="/login?next=/onboarding" className="inline-flex rounded-lg bg-stone-950 px-5 py-3 text-sm font-semibold text-white">
-                        Run an evidence-backed audit
+                        Show me what I&rsquo;m missing
                     </Link>
                 </div>
             </main>
