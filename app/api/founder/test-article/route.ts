@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { generateBlogPost } from "@/trigger/generate-blog"
 import { isFounderUser } from "@/lib/founder"
+import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import { ensureProfileRow } from "@/lib/writer/ensure-profile"
 import { loadPlannedWriterInputs } from "@/lib/writer/planned-article-payload"
 import { createClient } from "@/utils/supabase/server"
@@ -53,6 +54,26 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
             { error: "Planned article not found for hydration." },
             { status: 404 },
+        )
+    }
+
+    // A QA run against a stale audit measures the old policy's evidence, not the
+    // current writer. One test article was hydrated from a v4 audit whose only
+    // capability fact was a credit-cost sentence; the writer looked far worse
+    // than production would have been, and the real writer bugs were masked.
+    if (hydrated && hydrated.auditPolicyVersion !== HARVEST_POLICY.version && body.allowStalePolicy !== true) {
+        return NextResponse.json(
+            {
+                error:
+                    `Planned article was produced under harvest policy ` +
+                    `"${hydrated.auditPolicyVersion || "unknown"}", but the current writer policy is ` +
+                    `"${HARVEST_POLICY.version}". Its capability contract and evidence predate the ` +
+                    `current writer, so this run would not measure the current writer. Re-audit the ` +
+                    `brand, or pass "allowStalePolicy": true to run it anyway.`,
+                auditPolicyVersion: hydrated.auditPolicyVersion,
+                currentPolicyVersion: HARVEST_POLICY.version,
+            },
+            { status: 409 },
         )
     }
 

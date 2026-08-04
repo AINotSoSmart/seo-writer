@@ -6,7 +6,7 @@ import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { CompetitorDataSchema, CompetitorData, type ResearchEvidence } from "@/lib/schemas/research"
 import { AngleInsightsSchema, AngleInsights } from "@/lib/schemas/angle-insights"
 import { ArticleOutlineSchema } from "@/lib/schemas/outline"
-import { selectIntroPattern, requiredLinksMissingFrom } from "@/lib/writer/composition"
+import { selectIntroPattern, requiredLinksMissingFrom, type IntroPattern } from "@/lib/writer/composition"
 import { z } from "zod"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { marked } from "marked"
@@ -33,8 +33,16 @@ import type {
   ArticleContract,
   CapabilityFact,
 } from "@/lib/writer/article-contract"
-import { normalizeContractOutline } from "@/lib/writer/section-packet"
+import { normalizeContractOutline, ARTICLE_TARGET_WORDS } from "@/lib/writer/section-packet"
 import { isEvidenceQuoteSupported, isKnownCompetitorUrl } from "@/lib/writer/research-evidence"
+import {
+  articleQualityVerdict,
+  countProseWords,
+  firstPartyClaimCandidates,
+  removeSentences,
+  truncationReason,
+  type SectionDefect,
+} from "@/lib/writer/draft-quality"
 
 /**
  * Tactical Deduplication Layer: Enriches outline sections with link instructions
@@ -864,7 +872,12 @@ EXTERNAL RESEARCH EVIDENCE:\n${JSON.stringify(evidence)}
 FROZEN INTERNAL LINKS:\n${JSON.stringify(internalLinks)}
 STYLE DNA: ${styleDNA}
 
-Return JSON matching the outline schema. Use no more than ${length.sections.max} sections. Create only the sections required to answer the intents; there is no minimum section quota.
+Return JSON matching the outline schema. Use no more than ${length.sections.max} sections.
+
+TARGET LENGTH: ${length.wordRange} words. The section budget is split evenly across
+whatever sections you create, so the count must be sized to that target: too few
+sections gives each one an unwritable budget, and too many starves them all. For
+this length, ${Math.max(3, Math.min(length.sections.max, Math.round(ARTICLE_TARGET_WORDS[articleContract.articleLength] / 380)))} to ${length.sections.max} sections is the workable range.
 
 Rules:
 - Preserve entity type and delivery mode. Do not turn software into a physical service, or a service into software.
@@ -876,7 +889,21 @@ Rules:
 - Answer first. Use natural headings and only useful tables/lists. Do not manufacture history, tests, reviewers, statistics, UI paths, timings, or experience.
 - Internal links must retain their frozen URL and anchor. Do not invent additional internal URLs.
 - Use at most one CTA section. Educational articles must not pretend the product directly solves the query.
-- instruction_note is compatibility metadata only: keep it concise and factual. The contract-bound writer will not consume it.
+- **instruction_note is the section brief and it is the only per-section
+  instruction the writer receives.** There will be more sections than intents.
+  Each brief must name the distinct job that section does — the specific
+  question it answers, the angle it takes, and what it must NOT cover because a
+  neighbouring section covers it. A vague brief produces a section that repeats
+  its neighbour. Never write "expand on the above" or restate the heading.
+- Every section needs a brief that stands on its own, including sections that own
+  no intent_ids. Those sections support the primary intent from a different
+  angle; say which angle.
+${articleType === "commercial" ? `- This is COMMERCIAL comparison intent ("best", "top", "vs", "alternatives").
+  The outline MUST contain at least one section with is_comparison: true that
+  evaluates named alternatives against stated criteria, and the criteria must
+  come from the supplied research evidence. An outline that only describes
+  ${articleContract.entity.name} does not satisfy this intent and will not rank
+  for it — it reads as an advertisement.` : ""}
 - Set needs_image only when a diagram materially helps: short=0, medium<=1, long<=2. Never request a fake screenshot, UI, dataset, or before/after.
 
 JSON SHAPE:
@@ -1204,7 +1231,7 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
 }
 
 
-const generateWritingSystemPrompt = (styleDNA: string, outline: any, currentSectionIndex: number, brandDetails: any = null, articleType: string = 'informational', instructions?: string, articleContract?: ArticleContract, capabilityFacts: CapabilityFact[] = [], researchFacts: Array<{ id: string; value: string; url?: string; sourceTitle?: string; sourceKind?: string; supportsIntentIds?: string[] }> = []) => {
+const generateWritingSystemPrompt = (styleDNA: string, outline: any, currentSectionIndex: number, brandDetails: any = null, articleType: string = 'informational', instructions?: string, articleContract?: ArticleContract, capabilityFacts: CapabilityFact[] = [], researchFacts: Array<{ id: string; value: string; url?: string; sourceTitle?: string; sourceKind?: string; supportsIntentIds?: string[] }> = [], introPattern?: IntroPattern) => {
   // styleDNA is now a paragraph describing the writing style
 
   // --- SEMANTIC CONTEXT (Previous/Next Section Instructions) ---
@@ -1226,19 +1253,39 @@ const generateWritingSystemPrompt = (styleDNA: string, outline: any, currentSect
     const intents = [articleContract.primaryIntent, ...articleContract.requiredIntents]
       .filter((intent, index, all) => all.findIndex((candidate) => candidate.queryId === intent.queryId) === index)
       .filter((intent) => assignedIntentIds.includes(intent.queryId))
-    const allowedCapabilityIds = new Set(isIntro ? [] : (currentSection.capability_fact_ids || []))
-    const allowedEvidenceIds = new Set(isIntro ? [] : (currentSection.research_evidence_ids || []))
+    const supportingIntentIds: string[] = isIntro ? [] : (currentSection.supporting_intent_ids || [])
+    const supportingIntents = [articleContract.primaryIntent, ...articleContract.requiredIntents]
+      .filter((intent) => supportingIntentIds.includes(intent.queryId))
+    const allowedCapabilityIds = new Set<string>(
+      isIntro ? (outline.intro?.capability_fact_ids || []) : (currentSection.capability_fact_ids || []),
+    )
+    const allowedEvidenceIds = new Set<string>(
+      isIntro ? (outline.intro?.research_evidence_ids || []) : (currentSection.research_evidence_ids || []),
+    )
+    const wordBudget: number = isIntro
+      ? (articleContract.articleLength === "short" ? 160 : 200)
+      : (currentSection.word_budget || 300)
     const packet = {
       heading: isIntro ? "Introduction" : currentSection.heading,
       purpose: isIntro ? "answer" : currentSection.section_purpose,
+      // The section brief. Dropping this is what left surplus sections with no
+      // executable instruction at all; it is load-bearing, not metadata.
+      brief: isIntro ? outline.intro?.instruction_note : currentSection.instruction_note,
+      keywords: (isIntro ? outline.intro?.keywords_to_include : currentSection.keywords_to_include) || [],
       intents: intents.map((intent) => ({ id: intent.queryId, query: intent.query, sourceContext: intent.sourceContext })),
+      supportingIntents: supportingIntents.map((intent) => ({ id: intent.queryId, query: intent.query })),
       capabilityFacts: capabilityFacts.filter((fact) => allowedCapabilityIds.has(fact.id)),
       researchEvidence: researchFacts.filter((fact) => allowedEvidenceIds.has(fact.id)),
       internalLink: isIntro ? null : currentSection.internal_link || null,
       externalLink: isIntro ? null : currentSection.external_link || null,
-      wordBudget: isIntro ? (articleContract.articleLength === "short" ? 160 : 200) : currentSection.word_budget,
+      wordBudget,
     }
     const previousHeadings = isIntro ? [] : outline.sections.slice(0, currentSectionIndex).map((section: any) => section.heading)
+    const nextHeading = isIntro
+      ? outline.sections[0]?.heading
+      : outline.sections[currentSectionIndex + 1]?.heading
+    const minWords = Math.round(wordBudget * 0.85)
+    const maxWords = Math.round(wordBudget * 1.2)
     return `You are an informed brand editor writing one bounded part of an evidence-based article.
 
 ENTITY: ${articleContract.entity.name} (${articleContract.entity.entityType})
@@ -1246,19 +1293,41 @@ DELIVERY MODE: ${articleContract.entity.deliveryMode}
 SOLUTION MODE: ${articleContract.solutionMode}
 STYLE DNA: ${styleDNA}
 ARTICLE TYPE: ${articleType}
-PREVIOUS HEADINGS: ${JSON.stringify(previousHeadings)}
+PREVIOUS HEADINGS (already written — do not repeat them): ${JSON.stringify(previousHeadings)}
+NEXT HEADING (do not cover it here): ${JSON.stringify(nextHeading || null)}
 SECTION EVIDENCE PACKET:\n${JSON.stringify(packet)}
+${isIntro && introPattern ? `
+INTRODUCTION SHAPE — this exact shape is assigned to this article:
+${introPattern.brief}
+` : ""}
+LENGTH — this is a hard requirement, not a suggestion:
+- Write between ${minWords} and ${maxWords} words of body prose for this ${isIntro ? "introduction" : "section"}.
+- A short, thin answer fails. If you are near the floor, add another concrete
+  fact from the packet, a comparison, or a worked case — never filler sentences
+  restating what you already wrote.
+- Finish the final sentence. Never stop mid-sentence, mid-table or mid-list. If
+  you are running long, close the current sentence and stop there.
 
-Write only this section in Markdown. Answer the assigned intents directly, then stop near the word budget. Use short paragraphs, active voice, and natural lists or tables only when they improve understanding.
+Write only this ${isIntro ? "introduction" : "section"} in Markdown. Execute the packet's "brief" — it names the specific job this ${isIntro ? "introduction" : "section"} does that no other part of the article does. Answer the assigned intents directly. Use short paragraphs, active voice, and natural lists or tables only when they improve understanding.
 
 Evidence rules:
-- Product-specific claims may use only capabilityFacts in the packet.
+- Product-specific claims may use only capabilityFacts in the packet. A claim is
+  product-specific if it says what ${articleContract.entity.name} is, does, uses,
+  guarantees, costs, or produces — including any "we"/"our" sentence.
+- If a capability fact does not state it, you may not write it. That covers
+  architecture, model names, algorithms, accuracy or quality percentages, DPI,
+  resolution, file formats, processing time, hardware, and internal mechanics.
 - External specifics may use only researchEvidence in the packet and must cite its URL. If sourceKind is known_competitor, name/attribute sourceTitle; never generalize it into an industry fact.
+- ⛔️ NEVER restate an external research fact as something ${articleContract.entity.name}
+  does. Research describes the category. It is not evidence about this product.
+  If the only evidence for a capability is an external page, write it as a
+  category statement with its citation, or leave it out.
 - Do not invent implementation details, UI paths, performance, timing, prices, customers, employees, tests, measurements, personal experience, or physical operations.
 - Preserve the entity's delivery mode and the reader's modality.
 - Include supplied links naturally and exactly. Never invent a URL.
 - Do not mention evidence IDs or the packet. Do not add a CTA unless purpose is cta.
-- Do not output the section heading; the system adds it. For the introduction, start with the direct answer.`
+- Do not output the section heading; the system adds it. For the introduction, start with the direct answer.
+- Write ${isIntro ? "the opening sentence" : "a fresh opening sentence"} as a complete new sentence. Never continue or complete a sentence from the preceding context.`
   })()
   if (contractWritingPrompt) return contractWritingPrompt
 
@@ -1692,6 +1761,187 @@ State facts confidently from the provided instructions notes for wiritng the sec
 **START WRITING the body content for "${currentSection.heading}" NOW (Direct Markdown):**
 ⚠️ **DO NOT include the section heading, system already adds it. Start directly with the content.**
 `
+}
+
+const WRITER_MODEL = "gemini-3-flash-preview"
+
+/**
+ * One writing call, with the finish reason preserved.
+ *
+ * `generateContentStream` was previously consumed for `.text` alone, so a
+ * response that stopped because it hit `maxOutputTokens` was indistinguishable
+ * from one that stopped because the section was finished. That is the whole
+ * reason a 176-word article could be written to the database as `completed`.
+ *
+ * Thinking is set explicitly rather than left at the model default: Gemini 3
+ * reasons by default and those tokens are billed against `maxOutputTokens`, so
+ * an unbounded thinking budget against a small ceiling starves the prose. The
+ * fallback retry exists because a model that rejects `thinkingConfig` must
+ * degrade to a normal call rather than fail the article.
+ */
+async function callWriterModel(
+  genAI: any,
+  input: { prompt: string; maxOutputTokens: number },
+): Promise<{ text: string; finishReason: string | null }> {
+  const run = async (config: Record<string, unknown>) => {
+    const stream = await genAI.models.generateContentStream({
+      model: WRITER_MODEL,
+      config,
+      contents: [{ role: "user", parts: [{ text: input.prompt }] }],
+    })
+    let text = ""
+    let finishReason: string | null = null
+    for await (const chunk of stream) {
+      text += (chunk as any).text || ""
+      const reason = (chunk as any).candidates?.[0]?.finishReason
+      if (reason) finishReason = String(reason)
+    }
+    return { text, finishReason }
+  }
+
+  const base = { maxOutputTokens: input.maxOutputTokens }
+  try {
+    return await run({ ...base, thinkingConfig: { thinkingLevel: "LOW" } })
+  } catch (thinkingError) {
+    console.warn(
+      `[Writer] thinkingConfig rejected by ${WRITER_MODEL}, retrying without it:`,
+      thinkingError instanceof Error ? thinkingError.message : thinkingError,
+    )
+    return await run(base)
+  }
+}
+
+/**
+ * Writes one bounded piece of prose and proves it actually finished.
+ *
+ * Returns the best attempt plus the defect that survived every retry, if any.
+ * A defect is never swallowed — the caller records it and the article-level
+ * gate decides whether the article may be marked complete.
+ */
+async function writeContractProse(input: {
+  genAI: any
+  label: string
+  systemPrompt: string
+  userPrompt: string
+  wordBudget: number
+}): Promise<{ text: string; defect: SectionDefect | null }> {
+  // Prose tokens run ~1.4x words, markdown tables and bolding inflate that, and
+  // thinking is billed from the same ceiling. The reserve is what the old
+  // `wordBudget * 1.8` formula was missing entirely.
+  const tokensFor = (multiplier: number) =>
+    Math.min(16_000, Math.ceil(input.wordBudget * 5 * multiplier) + 3_000)
+  const floor = Math.round(input.wordBudget * 0.7)
+
+  let best: { text: string; words: number; truncated: string | null } | null = null
+  let correction = ""
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const { text, finishReason } = await callWriterModel(input.genAI, {
+      prompt: `${input.systemPrompt}\n${input.userPrompt}${correction}`,
+      maxOutputTokens: tokensFor(attempt),
+    })
+    const truncated = truncationReason(text, finishReason)
+    const words = countProseWords(text)
+
+    if (!best || (best.truncated && !truncated) || (!truncated && words > best.words)) {
+      best = { text, words, truncated }
+    }
+    if (!truncated && words >= floor) {
+      if (attempt > 1) console.log(`[Writer] "${input.label}" recovered on attempt ${attempt} (${words} words)`)
+      return { text, defect: null }
+    }
+
+    if (truncated) {
+      console.warn(`[Writer] "${input.label}" attempt ${attempt} truncated (${truncated}, ${words} words) — retrying`)
+      correction = `
+
+### REWRITE — YOUR PREVIOUS ATTEMPT WAS CUT OFF
+The previous draft stopped before it was finished (${truncated}). Write the whole
+piece this time and finish the final sentence. If you cannot fit everything,
+cover less ground rather than stopping mid-sentence.`
+    } else {
+      console.warn(`[Writer] "${input.label}" attempt ${attempt} under length (${words} words, floor ${floor}) — retrying`)
+      correction = `
+
+### REWRITE — YOUR PREVIOUS ATTEMPT WAS TOO SHORT
+The previous draft was ${words} words. This piece must be at least ${floor} words.
+Do not pad with restatement. Add substance the packet supports: another fact
+from the evidence, a comparison table, a concrete worked case, or the specific
+limitation a reader hits. Then finish the final sentence.`
+    }
+  }
+
+  const final = best || { text: "", words: 0, truncated: "empty" as const }
+  const defect: SectionDefect = final.truncated
+    ? { heading: input.label, kind: "truncated", detail: `${final.truncated} after 3 attempts (${final.words} words)` }
+    : { heading: input.label, kind: "under_length", detail: `${final.words} words after 3 attempts, floor ${floor}` }
+  console.error(`[Writer] "${input.label}" failed quality after 3 attempts: ${defect.detail}`)
+  return { text: final.text, defect }
+}
+
+/**
+ * Which first-party claims in a draft no supplied fact actually supports.
+ *
+ * A model judges entailment, not a phrase list. Two earlier attempts to police
+ * this with regex blocklists each caught the previous batch of examples and
+ * missed the next, which is why the rule in CLAUDE.md is to prefer evidential
+ * tests. `firstPartyClaimCandidates` only narrows the draft to the sentences
+ * worth judging; the verdict is always about whether a specific sentence
+ * follows from a specific fact.
+ */
+async function unsupportedFirstPartyClaims(input: {
+  genAI: any
+  entityName: string
+  deliveryMode: string
+  facts: CapabilityFact[]
+  draft: string
+}): Promise<string[]> {
+  const candidates = firstPartyClaimCandidates(input.draft, input.entityName)
+  if (candidates.length === 0) return []
+
+  const prompt = `You are an evidence auditor. Decide which sentences make a claim about a specific product that the supplied facts do not support.
+
+PRODUCT: ${input.entityName}
+DELIVERY MODE: ${input.deliveryMode}
+
+VERIFIED FACTS ABOUT THIS PRODUCT (the complete set — there are no others):
+${input.facts.length
+  ? input.facts.map((fact) => `- ${fact.quote}`).join("\n")
+  : "- (none: no verified fact about this product is available)"}
+
+SENTENCES:
+${candidates.map((sentence, index) => `${index + 1}. ${sentence}`).join("\n")}
+
+A sentence is UNSUPPORTED when it asserts something about ${input.entityName} — what it is,
+what it does, how it works internally, what technology or model it uses, its
+accuracy, quality, speed, resolution, output format, price, or guaranteed
+result — and no verified fact above states or directly entails it.
+
+A sentence is SUPPORTED when it is:
+- entailed by a verified fact above, or
+- editorial guidance to the reader ("choose a photo taken in daylight"), or
+- a statement about the category or a named third party rather than about ${input.entityName}, or
+- an instruction to the reader about using the product that claims no capability beyond the facts.
+
+Judge each sentence on its own. When genuinely unsure, treat it as SUPPORTED.
+
+Return JSON only: { "unsupported": number[] } listing the numbers of unsupported sentences.`
+
+  try {
+    const response = await input.genAI.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      config: { responseMimeType: "application/json" },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    })
+    const parsed = cleanAndParse(response.text || "{}")
+    const flagged = Array.isArray(parsed.unsupported) ? parsed.unsupported : []
+    return flagged
+      .map((index: unknown) => candidates[Number(index) - 1])
+      .filter((sentence: unknown): sentence is string => typeof sentence === "string" && sentence.length > 0)
+  } catch (auditError) {
+    console.warn(`[Writer] First-party claim audit failed (non-blocking):`, auditError)
+    return []
+  }
 }
 
 interface GenerateBlogPayload {
@@ -2175,15 +2425,19 @@ ${JSON.stringify(outline)}`
         console.log(`[Checkpoint] Resuming from section index ${startIndex}`)
       }
 
+      // Every quality defect that survived its retries. A non-empty blocking
+      // set must stop this article from ever being written as `completed`.
+      const sectionDefects: SectionDefect[] = []
+
       // 4.1 Write Intro (The Hook) - Separately
       // Only write intro if not resuming (startIndex === 0)
       if (startIndex === 0 && outline.intro) {
-        const systemPrompt = generateWritingSystemPrompt(styleDNA, outline, -1, brandDetails, articleType, instructions, articleContract ? effectiveContract : undefined, capabilityFacts, researchFacts)
         const introPattern = selectIntroPattern(articleType, clusterPosition, clusterId)
         console.log(
           `[Blog Gen] Intro pattern: ${introPattern.framing} + ${introPattern.secondMove} ` +
           `(cluster position ${clusterPosition})`,
         )
+        const systemPrompt = generateWritingSystemPrompt(styleDNA, outline, -1, brandDetails, articleType, instructions, articleContract ? effectiveContract : undefined, capabilityFacts, researchFacts, introPattern)
         const userPrompt = articleContract ? "Write the introduction from the section evidence packet." : generateWritingUserPrompt(currentDraft, {
           heading: "Introduction / Hook (COLD OPEN)",
           instruction_note: `
@@ -2198,26 +2452,19 @@ CRITICAL EXECUTION RULES:
           keywords_to_include: outline.intro.keywords_to_include
         }, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
 
-        const writeConfig = articleContract ? { maxOutputTokens: 700 } : {}
-        const writeContents = [
-          {
-            role: "user",
-            parts: [{ text: systemPrompt + "\n" + userPrompt }],
-          },
-        ]
-
-        const writeStream = await genAI.models.generateContentStream({
-          model: "gemini-3-flash-preview",
-          config: writeConfig,
-          contents: writeContents
+        const introBudget = articleContract
+          ? (effectiveContract.articleLength === "short" ? 160 : 200)
+          : 200
+        const intro = await writeContractProse({
+          genAI,
+          label: "Introduction",
+          systemPrompt,
+          userPrompt,
+          wordBudget: introBudget,
         })
+        if (intro.defect) sectionDefects.push(intro.defect)
 
-        let writeText = ""
-        for await (const c of writeStream) {
-          writeText += (c as any).text || ""
-        }
-
-        currentDraft += `${writeText} \n\n`
+        currentDraft += `${intro.text} \n\n`
 
         // Real-time Save
         await supabase
@@ -2243,71 +2490,154 @@ CRITICAL EXECUTION RULES:
         // THE BRIDGE: Pass last 500 chars for sentence-level flow (semantic context is now in system prompt)
         // FIX: Clean context to prevent LLM from hallucinating placeholders
         const cleanContext = currentDraft.slice(-500).replace(/<!--IMAGE_PLACEHOLDER_\d+-->/g, '')
+        // The bridge is a *flow* cue, not a continuation instruction. Phrased as
+        // "continue naturally from this context", every truncated section was
+        // completed by the next one, so the article read as a single severed
+        // paragraph with headings wedged between the fragments.
         const userPrompt = articleContract
-          ? `Continue naturally from this final prose context only:\n${cleanContext}\n\nWrite the current section from the section evidence packet.`
+          ? `The previous section ended with the text below. It is context for tone and flow only — do NOT continue or complete its sentence, and do not repeat its content.\n\n<<<${cleanContext}>>>\n\nWrite the current section from the section evidence packet, starting with a complete new sentence.`
           : generateWritingUserPrompt(cleanContext, section, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
 
-        // Using Gemini 2.5 Flash for Speed & Context
-        const writeConfig = articleContract
-          ? { maxOutputTokens: Math.min(5000, Math.max(500, Math.ceil((section.word_budget || 300) * 1.8))) }
-          : {}
-        const writeContents = [
-          {
-            role: "user",
-            parts: [{ text: systemPrompt + "\n" + userPrompt }],
-          },
-        ]
+        const sectionBudget = articleContract
+          ? (section.word_budget || 300)
+          : Number((getArticleLengthConfig(effectiveArticleLength).wordsPerSection.match(/(\d+)/)?.[1]) || 300)
 
-        const writeStream = await genAI.models.generateContentStream({
-          model: "gemini-3-flash-preview",
-          config: writeConfig,
-          contents: writeContents
+        const written = await writeContractProse({
+          genAI,
+          label: section.heading,
+          systemPrompt,
+          userPrompt,
+          wordBudget: sectionBudget,
         })
-
-        let writeText = ""
-        for await (const c of writeStream) {
-          writeText += (c as any).text || ""
-        }
+        let writeText = written.text
+        // Carried rather than recorded immediately: a rewrite below may replace
+        // this draft, and the defect that matters is the one on the text that
+        // actually ships.
+        let activeDefect: SectionDefect | null = written.defect
 
         // A required link the model quietly skipped is the most common failure
-        // here. Re-prompt this ONE section once rather than appending a
-        // tacked-on "read our blog on X" callout at the end, which is what made
-        // the links read as bolted on. Never fabricate a citation.
-        const missingLinks = requiredLinksMissingFrom(writeText, section)
-        if (missingLinks.length > 0) {
-          console.log(`🔗 [Blog Gen] Section "${section.heading}" omitted ${missingLinks.length} required link(s) — retrying once`)
+        // here. Re-prompt this ONE section rather than appending a tacked-on
+        // "read our blog on X" callout at the end, which is what made the links
+        // read as bolted on. Never fabricate a citation.
+        let missingLinks = requiredLinksMissingFrom(writeText, section)
+        for (let linkAttempt = 1; linkAttempt <= 2 && missingLinks.length > 0; linkAttempt++) {
+          console.log(`🔗 [Blog Gen] Section "${section.heading}" omitted ${missingLinks.length} required link(s) — retry ${linkAttempt}/2`)
           try {
-            const retryStream = await genAI.models.generateContentStream({
-              model: "gemini-3-flash-preview",
-              config: writeConfig,
-              contents: [{
-                role: "user",
-                parts: [{
-                  text: `${systemPrompt}\n${userPrompt}\n
+            const retry = await writeContractProse({
+              genAI,
+              label: `${section.heading} (link retry ${linkAttempt})`,
+              systemPrompt,
+              userPrompt: `${userPrompt}
 ### REWRITE — REQUIRED LINK WAS OMITTED
 Your previous draft of this section left out ${missingLinks.length === 1 ? 'a required link' : 'required links'}:
 ${missingLinks.map((url) => `- ${url}`).join('\n')}
 
 Rewrite the section at the same length and quality, weaving ${missingLinks.length === 1 ? 'that link' : 'those links'} into a sentence MID-PARAGRAPH.
+- Reproduce the URL exactly as written above.
 - The anchor must be 2-5 lowercase words that read naturally in the sentence.
 - ⛔️ Do NOT append it as a trailing "To learn more about X, read our guide on Y."
 - ⛔️ Do NOT add a "Related reading" or "Further reading" list.
 - The sentence must still make sense if the link were removed.`,
-                }],
-              }],
+              wordBudget: sectionBudget,
             })
-            let retryText = ""
-            for await (const c of retryStream) {
-              retryText += (c as any).text || ""
-            }
-            if (retryText.trim() && requiredLinksMissingFrom(retryText, section).length < missingLinks.length) {
-              writeText = retryText
-            } else {
-              console.log(`🔗 [Blog Gen] Retry did not add the link(s); keeping original draft`)
+            // A rewrite that lands the citation but comes in slightly short is
+            // still the better draft — only a truncated one is worse than what
+            // we already have.
+            const retryMissing = requiredLinksMissingFrom(retry.text, section)
+            if (retry.text.trim() && retryMissing.length < missingLinks.length &&
+                retry.defect?.kind !== "truncated") {
+              writeText = retry.text
+              missingLinks = retryMissing
+              activeDefect = retry.defect
             }
           } catch (retryError) {
-            console.warn(`🔗 [Blog Gen] Link retry failed (non-blocking):`, retryError)
+            console.warn(`🔗 [Blog Gen] Link retry failed:`, retryError)
+            break
           }
+        }
+        // Evidence boundary: an external research fact rewritten as a first-party
+        // capability claim is the failure that turned one competitor's selection
+        // criteria into "we ensure shadows align perfectly". Judge entailment,
+        // rewrite once, and delete what still has nothing behind it.
+        if (articleContract) {
+          const allowedFacts = capabilityFacts.filter((fact) =>
+            (section.capability_fact_ids || []).includes(fact.id),
+          )
+          let unsupported = await unsupportedFirstPartyClaims({
+            genAI,
+            entityName: effectiveContract.entity.name,
+            deliveryMode: effectiveContract.entity.deliveryMode,
+            facts: allowedFacts,
+            draft: writeText,
+          })
+          if (unsupported.length > 0) {
+            console.warn(`🧪 [Blog Gen] Section "${section.heading}" has ${unsupported.length} unsupported product claim(s) — rewriting once`)
+            try {
+              const rewrite = await writeContractProse({
+                genAI,
+                label: `${section.heading} (evidence rewrite)`,
+                systemPrompt,
+                userPrompt: `${userPrompt}
+### REWRITE — UNSUPPORTED PRODUCT CLAIMS
+These sentences assert something about ${effectiveContract.entity.name} that no verified fact supports:
+${unsupported.map((sentence) => `- ${sentence}`).join('\n')}
+
+Rewrite the section at the same length. For each sentence above, either:
+- state it as a category fact and cite the external evidence that supports it, or
+- replace it with something the capabilityFacts in the packet actually state, or
+- drop the claim and use the space for evidence you do have.
+Do not restate an external research fact as something ${effectiveContract.entity.name} does.`,
+                wordBudget: sectionBudget,
+              })
+              const rewriteMissing = requiredLinksMissingFrom(rewrite.text, section)
+              if (rewrite.text.trim() && rewrite.defect?.kind !== "truncated" &&
+                  rewriteMissing.length <= missingLinks.length) {
+                const stillUnsupported = await unsupportedFirstPartyClaims({
+                  genAI,
+                  entityName: effectiveContract.entity.name,
+                  deliveryMode: effectiveContract.entity.deliveryMode,
+                  facts: allowedFacts,
+                  draft: rewrite.text,
+                })
+                if (stillUnsupported.length < unsupported.length) {
+                  writeText = rewrite.text
+                  unsupported = stillUnsupported
+                  missingLinks = rewriteMissing
+                  activeDefect = rewrite.defect
+                }
+              }
+            } catch (rewriteError) {
+              console.warn(`🧪 [Blog Gen] Evidence rewrite failed:`, rewriteError)
+            }
+          }
+          if (unsupported.length > 0) {
+            // Deleting whole sentences is safe and self-correcting: if enough
+            // fabrication is removed to drop the article under its word floor,
+            // the article-level gate fails it instead of publishing padding.
+            console.warn(`🧪 [Blog Gen] Removing ${unsupported.length} unsupported claim(s) from "${section.heading}"`)
+            writeText = removeSentences(writeText, unsupported)
+            // A removed sentence can take the citation with it, so provenance
+            // is re-checked against the text that will actually ship.
+            missingLinks = requiredLinksMissingFrom(writeText, section)
+            sectionDefects.push({
+              heading: section.heading,
+              kind: "unsupported_claim",
+              detail: `${unsupported.length} sentence(s) removed`,
+            })
+          }
+        }
+
+        if (activeDefect) sectionDefects.push(activeDefect)
+        if (missingLinks.length > 0) {
+          // "Required citation" previously meant "try once, then silently keep
+          // the uncited text". An assigned citation that never lands is a
+          // provenance hole, so it is recorded and the article-level gate
+          // decides — it is never quietly dropped.
+          sectionDefects.push({
+            heading: section.heading,
+            kind: "missing_citation",
+            detail: missingLinks.join(", "),
+          })
         }
 
         // Append to Snowball - Strip any duplicate heading the LLM might have added
@@ -2354,13 +2684,33 @@ Rewrite the section at the same length and quality, weaving ${missingLinks.lengt
         await new Promise(r => setTimeout(r, 500))
       }
 
-      // --- LENGTH CONTROL: Post-write word count monitoring ---
-      const finalWordCount = currentDraft.split(/\s+/).filter(w => w.length > 0).length
+      // --- QUALITY GATE: the article must prove it was actually written ---
+      // There used to be only an over-length warning here, so an under-length or
+      // truncated article fell straight through to a completed status. A
+      // broken response must never be recorded as successful work.
+      const finalWordCount = countProseWords(currentDraft)
       const maxRangeMatch = lengthConfig.wordRange.match(/[\d,]+\s*[–-]\s*([\d,]+)/)
       const maxTargetWords = Number((maxRangeMatch?.[1] || "3200").replace(/,/g, ""))
       console.log(`[Length Control] 📊 Final word count: ${finalWordCount} words (target: ${lengthConfig.wordRange}, sections written: ${outline.sections.length})`)
       if (finalWordCount > maxTargetWords * 1.25) {
         console.warn(`[Length Control] ⚠️ Article exceeded target by ${Math.round((finalWordCount / maxTargetWords - 1) * 100)}% — outline may need tighter section limits`)
+      }
+
+      if (sectionDefects.length > 0) {
+        console.warn(`[Quality Gate] ${sectionDefects.length} defect(s):`, JSON.stringify(sectionDefects))
+      }
+      if (articleContract) {
+        const verdict = articleQualityVerdict({
+          wordCount: finalWordCount,
+          articleLength: effectiveContract.articleLength,
+          defects: sectionDefects,
+        })
+        if (!verdict.ok) {
+          throw new Error(
+            `Article failed the writer quality gate and was not published:\n- ${verdict.blocking.join("\n- ")}`,
+          )
+        }
+        console.log(`[Quality Gate] ✅ ${finalWordCount} words, no blocking defects`)
       }
 
       // --- PHASE 4.5: PARALLEL IN-CONTENT IMAGE GENERATION ---

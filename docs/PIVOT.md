@@ -15,10 +15,95 @@ Last implementation update: 2026-08-04
 Status: **domain-agnostic capability/article contracts and the evidence-bound
 writer repair are implemented; representative first-party page selection,
 exact-quote research, deterministic section packets, intent-sized output and
-bounded images are active; checkout remains disabled pending the staging and
+bounded images are active. The writer now proves each section finished before an
+article may be marked complete — a truncated, under-length or uncited article
+fails instead of publishing. Checkout remains disabled pending the staging and
 external release gate**
 
-## 0. 2026-08-04 writer repair handoff
+## 0. 2026-08-04 (second pass) writer completion gate
+
+### Failure that triggered this work
+
+The first repair (§0.1) shipped output-token ceilings small enough to starve the
+model, and the pipeline had no way to notice. One article was written to the
+database as `completed` at **176 words against a 1,600–2,200 word contract** —
+11% of its minimum — with `current_step_index: 4`, meaning the system believed
+all four sections had succeeded.
+
+Two independently generated articles from the two preceding commits were
+reviewed alongside it. Both were the same shape of failure: fabricated
+first-party mechanics (architecture names, accuracy percentages, DPI, ray
+tracing, storage media), category research restated as verified product
+capability, and — in the 176-word case — one severed paragraph with headings
+wedged between the fragments.
+
+### Root causes and implemented repairs
+
+1. **Gemini output was starved by unsafe token limits.** The intro was capped at
+   `700` output tokens and each section at `word_budget × 1.8` — 765 tokens for a
+   425-word section. `gemini-3-flash-preview` reasons by default and thinking
+   tokens are billed against `maxOutputTokens`, so most of that ceiling was spent
+   before a word of prose was emitted. Thinking is now set explicitly
+   (`thinkingLevel: "LOW"`, with a graceful retry if the model rejects the
+   field), and the ceiling is `wordBudget × 5 + 3,000` reserve, capped at 16k.
+
+2. **Truncated responses were accepted as finished work.** The stream was
+   consumed for `.text` alone, so a response that stopped at `MAX_TOKENS` was
+   indistinguishable from one that finished. `callWriterModel` now preserves
+   `finishReason`, and `lib/writer/draft-quality.ts` adds evidential completion
+   tests — unterminated sentence, unbalanced emphasis, dangling heading, dangling
+   table, empty — for the streamed responses where the provider omits it. Every
+   writing call goes through `writeContractProse`, which retries up to three
+   times with a doubling ceiling and a correction naming the actual word count.
+
+3. **Most outline sections could receive empty evidence packets.** Each intent
+   was assigned to exactly one section and every surplus section kept
+   `intent_ids: []`, cascading into no capability facts and no research. Combined
+   with a writer prompt that deliberately ignored `instruction_note`, those
+   sections were handed a heading, a purpose label and the tail of the previous
+   paragraph — so "continue the previous sentence" was the only executable
+   instruction left, which is exactly what the model did. Now: intent ownership
+   stays exclusive, surplus sections receive `supporting_intent_ids` granting
+   read access to that intent's evidence, research evidence falls back to sharing
+   rather than leaving a section blind, the intro carries the primary intent's
+   facts (it previously carried none while being asked for the direct answer),
+   and `instruction_note` is restored as the load-bearing per-section brief.
+
+4. **External evidence still became first-party product claims.** A competitor's
+   selection criteria were rewritten as "we ensure shadows align perfectly". Per
+   the standing rule against regex blocklists, this is enforced as an evidential
+   test: candidate sentences (first-person or entity-naming) are extracted
+   deterministically, a model judges each one for entailment against that
+   section's capability facts, the section is rewritten once naming the offending
+   sentences, and anything still unbacked is deleted sentence-by-sentence.
+
+5. **A required citation meant "try once, then silently ignore".** The link
+   retry kept the uncited draft on failure. It now retries twice, re-checks after
+   sentence deletion (a removed sentence can take the citation with it), and
+   records a blocking defect if the citation never lands.
+
+6. **Commercial intent produced an advertisement.** A "best AI app to…" keyword
+   yielded an outline with `is_comparison: false` and no evaluated alternatives.
+   The contract outline prompt now requires at least one comparison section with
+   criteria drawn from supplied research whenever `articleType` is commercial.
+
+7. **Section count was untethered from target length.** The outline prompt said
+   "no minimum section quota" while the section budget is the target divided by
+   the section count, so a thin outline gave each section an unwritable budget.
+   The prompt now states the workable section range for the contract length.
+
+### The gate itself
+
+`articleQualityVerdict` runs before the completed write. It blocks on: total
+prose below the contract floor (short 1,080 / medium 1,440 / long 2,160 — the
+published minimum less 10%), any section still truncated after its retries, and
+any required citation that never landed. A blocked article throws, which the
+existing handler turns into `status: "failed"` with the reason recorded — no
+migration required. Deleted fabrications are deliberately non-blocking on their
+own; if enough is removed to drop the article under the word floor, the floor
+fails it.
+
+## 0.1 2026-08-04 writer repair handoff (first pass)
 
 ### Failure that triggered this work
 
@@ -64,9 +149,10 @@ infrastructure, agencies and consumer software.
    that section's first-party and external evidence from the ownership itself.
    Invalid references and invented URLs are removed without another model call.
    The writer receives only this compact section packet, previous headings and
-   the last 500 characters of prose for continuity. It does not receive the
-   outline's `instruction_note`, the full research dump or free-form founder
-   instructions on the paid program path.
+   the last 500 characters of prose for continuity. It does not receive the full
+   research dump or free-form founder instructions on the paid program path.
+   **Superseded by §0 item 3:** the packet withheld `instruction_note` as well,
+   which left surplus sections with no instruction at all. It is now included.
 
 4. **Prompts manufactured authority.** The active contract prompt no longer
    asks for rankings/citations, fake testing, teams, customers, physical work,
@@ -79,17 +165,20 @@ infrastructure, agencies and consumer software.
 5. **Length and images were advisory.** A supplied article contract now controls
    length even in the founder single-article test, where `plannedArticleId` is
    intentionally absent. Planning targets are 1,500 / 1,900 / 2,800 words for
-   the existing short / medium / long ranges. There is no minimum section quota;
-   maxima are 5 / 7 / 10. Each section gets a word budget and bounded output
-   tokens. In-content image caps are 0 / 1 / 2 respectively; prompts use only
+   the existing short / medium / long ranges. Maxima are 5 / 7 / 10. Each
+   section gets a word budget and bounded output tokens. **Superseded by §0
+   items 1 and 7:** those output-token bounds were far too small for a thinking
+   model, and "no minimum section quota" left the per-section budget unwritable.
+   In-content image caps are 0 / 1 / 2 respectively; prompts use only
    the section evidence packet, and Markdown is normalized around injected
    images. Featured-image behaviour is unchanged.
 
 6. **Program articles repeated legacy work.** Paid planned articles skip the
    old embedding link enrichment, topic-memory save and post-write coverage
    analysis. Their audit and frozen graph already own those decisions. Legacy
-   and manual articles retain those paths for compatibility. There is still
-   **no post-generation semantic judge and no per-article QA model call**.
+   and manual articles retain those paths for compatibility. There is still no
+   post-generation semantic judge over the whole article; §0 item 4 added a
+   bounded **per-section** entailment check for first-party claims only.
 
 ### Compatibility and release behaviour
 
@@ -103,8 +192,11 @@ infrastructure, agencies and consumer software.
 - The founder dry-run explains the new bounded research path and displays the
   frozen word range. The real founder generation path now respects the contract
   length without mutating program state.
-- Contract verification on 2026-08-04: 66/66 pivot tests pass and TypeScript is
-  clean. `npm build` was deliberately skipped per the founder's instruction.
+- Contract verification on 2026-08-04 (second pass): 68/68 pivot tests pass and
+  TypeScript is clean on every touched path. `npm build` was deliberately
+  skipped per the founder's standing instruction. **No article has yet been
+  generated end-to-end against the repaired writer** — that run is the next
+  action and the only thing that can confirm the gate holds in production.
 
 ## 1. Locked product contract
 
@@ -406,9 +498,14 @@ testingâ€, subjective tool opinions) were removed. The useful answer-first,
 short-paragraph, active-voice, definitions, lists/tables, citation, frozen-link,
 regional-spelling and anti-fluff rules remain.
 
-There is deliberately **no post-generation semantic judge and no per-article QA
-model call**. Drift is prevented before generation by constraining the decisions,
-research and evidence each downstream stage receives.
+There is deliberately **no post-generation semantic judge over the whole
+article**. Drift is prevented before generation by constraining the decisions,
+research and evidence each downstream stage receives. The one exception, added
+2026-08-04 (§0 item 4), is a bounded per-section entailment check: only sentences
+that make a first-party claim are judged, and only against that section's own
+capability facts. Constraining inputs did not stop external research being
+rewritten as verified product truth, and a regex blocklist is ruled out by the
+standing rule in `CLAUDE.md`.
 
 #### Persistence and migration
 
@@ -752,6 +849,11 @@ open and must be performed against staging/Dodo sandbox/WordPress:
 - Crawl public routes and confirm redirects/410s/canonicals/schema/sitemap.
 - Set real `PROGRAM_COST_RATES_JSON`, complete a cluster, and verify every
   `program_cost_events` row has complete usage and a non-null cost.
+- Generate one article end-to-end against the repaired writer and confirm the
+  quality gate holds: it must land inside its contract word range, every section
+  must end on a complete sentence, and every assigned citation must be present.
+  Then generate one deliberately starved case (a contract with a single intent
+  and no capability facts) and confirm it fails rather than completing.
 - Archive the retired Trigger.dev schedules only after the replacement is live.
 - Repair `supabase_migrations.schema_migrations`, which records nothing after
   `20260404014829`. Every pivot migration was applied by hand, so the CLI
@@ -809,8 +911,90 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 19. Relevance is not sufficiency. A query must also be *deliverable*: not
     centred on a third party's product, and not dependent on the publishing
     company's private operational facts. `direct` means both. Do not widen it.
+20. **Never cap writer output tokens from a word budget alone.** The active
+    model reasons by default and bills thinking against `maxOutputTokens`, so a
+    ceiling sized for the prose alone starves the prose. Set thinking
+    explicitly and keep a reserve on top of the prose estimate.
+21. **A generated article must prove it finished before it can be completed.**
+    Read `finishReason`, test the text for truncation, count the words, and
+    fail the article rather than writing a broken response as successful work.
+    An under-length warning is not a gate.
+22. **No section may leave `normalizeContractOutline` empty.** There will be
+    more sections than intents. A section with no intent, no facts, no evidence
+    and no brief has only the previous paragraph to continue — and it will
+    continue it, straight across the heading.
 
 ## 7. Changelog
+
+### 2026-08-04 - the writer shipped a 176-word article as completed
+
+**Symptom.** An article with `status: "completed"` and `current_step_index: 4`
+contained 176 words against a 1,600–2,200 word contract. Two other recent
+articles were long enough but were full of invented first-party mechanics —
+architecture names, accuracy percentages, DPI, ray tracing, archival media —
+none of which any capability fact supported.
+
+**Cause.** Four independent failures compounding:
+
+1. The previous repair added `maxOutputTokens: 700` for the intro and
+   `word_budget × 1.8` (765 tokens) per section. `gemini-3-flash-preview`
+   reasons by default and thinking is billed from that same ceiling, so most
+   calls ended after 20–35 visible words, several mid-sentence.
+2. Nothing checked whether generation succeeded. The stream was consumed for
+   `.text`; `finishReason`, word count and sentence completeness were never
+   inspected. The only length check warned about articles that were too *long*.
+   `status: "completed"` was then written unconditionally.
+3. `normalizeContractOutline` gave each intent exactly one section and left
+   surplus sections with no intent, no capability facts and no research. The
+   contract writer also withheld `instruction_note` by design, so those sections
+   received a heading, a purpose label and the previous 500 characters under the
+   instruction "continue naturally from this final prose context". Every
+   truncated section was therefore completed by the next one, producing one
+   severed paragraph with headings wedged between the fragments.
+4. External research was rewritten as first-party capability. One competitor's
+   selection criteria became "we ensure skin tones, lighting direction, and
+   shadows align perfectly", against a capability contract whose only attached
+   fact was a credit-cost sentence.
+
+**Fix.**
+
+- `lib/writer/draft-quality.ts` (new): pure evidential tests — prose word count
+  that ignores images/comments/table rules, truncation detection (max-tokens,
+  unterminated sentence, unbalanced emphasis, dangling heading, dangling table,
+  empty), sentence splitting, first-party claim candidate extraction, sentence
+  removal, and the article-level verdict with per-length word floors.
+- `callWriterModel` preserves `finishReason` and sets `thinkingLevel: "LOW"`
+  explicitly, retrying without `thinkingConfig` if the model rejects the field.
+  The ceiling is `wordBudget × 5 + 3,000`, capped at 16k.
+- `writeContractProse` wraps every writing call — intro, sections, link retries
+  and evidence rewrites — retrying up to three times with a doubling ceiling and
+  a correction that names the actual word count or truncation reason.
+- `normalizeContractOutline` keeps intent ownership exclusive but gives surplus
+  sections `supporting_intent_ids`, falls back to shared research evidence
+  rather than leaving a section blind, and gives the intro the primary intent's
+  facts (it previously had none while being asked for the direct answer).
+- `instruction_note` is restored as the per-section brief and the outline prompt
+  now demands a brief that names each section's distinct job.
+- The bridge prompt is a flow cue, not a continuation instruction.
+- Per-section entailment audit for first-party claims: rewrite once naming the
+  offending sentences, then delete what remains unbacked.
+- Citation retries go from one to two, are re-checked after sentence deletion,
+  and record a blocking defect instead of silently keeping uncited text.
+- Commercial intent requires a comparison section with criteria from research.
+- `articleQualityVerdict` runs before the completed write and throws on a
+  blocking defect, which the existing handler records as `status: "failed"`.
+
+**Also fixed.** `/api/founder/test-article` refused nothing when hydrating a
+planned article from an audit produced under an older harvest policy, so a v4
+contract — whose only attached capability fact was a credit-cost sentence — was
+replayed through the v5 writer. That made the failing article look worse than
+production would have been and masked the four bugs above. The route now returns
+409 unless the request passes `"allowStalePolicy": true`.
+
+**Not verified.** No article has been generated end-to-end against the repaired
+writer. Everything above is proven by unit tests over pure functions and by
+source assertions over the pipeline; the gate's behaviour under a real Gemini
+response is the next thing to check (§5).
 
 ### 2026-08-02 - competitor candidate pool must not block audit restart
 

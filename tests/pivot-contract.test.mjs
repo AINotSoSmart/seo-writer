@@ -24,6 +24,13 @@ import {
 } from "../lib/writer/article-contract.ts"
 import { selectRepresentativeBrandUrls } from "../lib/brand/representative-pages.ts"
 import { normalizeContractOutline } from "../lib/writer/section-packet.ts"
+import {
+    articleQualityVerdict,
+    countProseWords,
+    firstPartyClaimCandidates,
+    removeSentences,
+    truncationReason,
+} from "../lib/writer/draft-quality.ts"
 import { isEvidenceQuoteSupported, isKnownCompetitorUrl } from "../lib/writer/research-evidence.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -103,6 +110,117 @@ test("section packets own every intent once and bind only matching evidence", ()
     assert.deepEqual(normalized.sections[0].research_evidence_ids.sort(), ["research-a", "research-b"])
     assert.equal(normalized.sections.filter((section) => section.needs_image).length, 1)
     assert.equal(normalized.sections[0].word_budget, Math.floor((1900 - 200) / 3))
+
+    // No section may leave normalization empty. Surplus sections previously got
+    // no intent, no facts and no evidence, so the only instruction left to them
+    // was the tail of the previous paragraph.
+    for (const section of normalized.sections) {
+        const readable = [...section.intent_ids, ...section.supporting_intent_ids]
+        assert.ok(readable.length > 0, `section "${section.heading}" has no intent`)
+        assert.ok(
+            section.capability_fact_ids.length > 0 || section.research_evidence_ids.length > 0,
+            `section "${section.heading}" has no evidence`,
+        )
+    }
+    // The intro answers the primary intent, so it must carry that intent's evidence.
+    assert.deepEqual(normalized.intro.intent_ids, ["intent-a"])
+    assert.deepEqual(normalized.intro.capability_fact_ids, ["fact-a"])
+    assert.deepEqual(normalized.intro.research_evidence_ids, ["research-a"])
+})
+
+test("draft quality tests catch truncation, thin sections and unbacked claims", () => {
+    // finishReason is authoritative when the provider supplies it.
+    assert.equal(truncationReason("A complete sentence.", "MAX_TOKENS"), "max_tokens")
+    // ...and the textual checks cover the streamed responses where it is absent,
+    // which is exactly the case the 176-word article fell through.
+    assert.equal(truncationReason("You need a"), "unterminated_sentence")
+    assert.equal(truncationReason("We ship it. **Bold start"), "unterminated_emphasis")
+    assert.equal(truncationReason("Intro text.\n\n### Next up"), "dangling_heading")
+    assert.equal(truncationReason("| A | B |\n| --- | --- |"), "dangling_table")
+    assert.equal(truncationReason("   "), "empty")
+    assert.equal(truncationReason("Upload the photo. Then crop it."), null)
+    assert.equal(truncationReason("| A | B |\n| --- | --- |\n| 1 | 2 |"), null)
+    assert.equal(truncationReason("The result is **sharp**."), null)
+
+    // Images, comment placeholders and table rules are not prose.
+    assert.equal(countProseWords("![alt](https://x.example/a.webp)\n\nTwo real words here."), 4)
+
+    const draft = "BringBack uses latent diffusion. Choose a photo taken in daylight. We match the grain."
+    const candidates = firstPartyClaimCandidates(draft, "BringBack")
+    assert.ok(candidates.some((sentence) => sentence.includes("latent diffusion")))
+    assert.ok(candidates.some((sentence) => sentence.startsWith("We match")))
+    assert.equal(candidates.length, 2)
+    assert.equal(
+        removeSentences(draft, ["BringBack uses latent diffusion."]),
+        "Choose a photo taken in daylight. We match the grain.",
+    )
+
+    // A broken response must never be recorded as successful work.
+    assert.deepEqual(
+        articleQualityVerdict({ wordCount: 176, articleLength: "medium", defects: [] }).ok,
+        false,
+    )
+    assert.equal(
+        articleQualityVerdict({ wordCount: 1900, articleLength: "medium", defects: [] }).ok,
+        true,
+    )
+    assert.equal(
+        articleQualityVerdict({
+            wordCount: 1900,
+            articleLength: "medium",
+            defects: [{ heading: "A", kind: "truncated", detail: "max_tokens" }],
+        }).ok,
+        false,
+    )
+    assert.equal(
+        articleQualityVerdict({
+            wordCount: 1900,
+            articleLength: "medium",
+            defects: [{ heading: "A", kind: "missing_citation", detail: "https://x.example" }],
+        }).ok,
+        false,
+    )
+    // Removed fabrications are not themselves blocking — the word floor is what
+    // catches an article that lost too much to survive.
+    assert.equal(
+        articleQualityVerdict({
+            wordCount: 1900,
+            articleLength: "medium",
+            defects: [{ heading: "A", kind: "unsupported_claim", detail: "2 removed" }],
+        }).ok,
+        true,
+    )
+})
+
+test("the writer proves each section finished before completing an article", async () => {
+    const writer = await text("trigger/generate-blog.ts")
+
+    // Gemini 3 reasons by default and bills thinking against maxOutputTokens, so
+    // a 700-token ceiling starved every section. Thinking is now explicit and
+    // the ceiling carries a reserve.
+    assert.doesNotMatch(writer, /maxOutputTokens: 700/)
+    assert.doesNotMatch(writer, /word_budget \|\| 300\) \* 1\.8/)
+    assert.match(writer, /thinkingConfig: \{ thinkingLevel: "LOW" \}/)
+    assert.match(writer, /Math\.min\(16_000, Math\.ceil\(input\.wordBudget \* 5 \* multiplier\) \+ 3_000\)/)
+
+    // Every writing call must read the finish reason and act on it.
+    assert.match(writer, /candidates\?\.\[0\]\?\.finishReason/)
+    assert.match(writer, /truncationReason\(text, finishReason\)/)
+    assert.match(writer, /writeContractProse/)
+    assert.doesNotMatch(writer, /Retry did not add the link\(s\); keeping original draft/)
+
+    // A defect must be able to stop the article, not just log.
+    assert.match(writer, /Article failed the writer quality gate and was not published/)
+    assert.match(writer, /articleQualityVerdict\(\{/)
+    assert.match(writer, /unsupportedFirstPartyClaims/)
+    assert.match(writer, /kind: "missing_citation"/)
+
+    // The quality gate must sit before the completed write, or it gates nothing.
+    assert.ok(
+        writer.indexOf("Article failed the writer quality gate") <
+            writer.indexOf('status: "completed"'),
+        "quality gate must run before the article is marked completed",
+    )
 })
 
 test("research evidence rejects fabricated quotes and identifies competitor subdomains", () => {
@@ -2772,14 +2890,20 @@ test("program writing uses bounded packets and skips legacy enrichment", async (
     assert.match(writer, /if \(userId && !plannedArticleId\)/)
     assert.match(writer, /short" \? 0 : effectiveContract\.articleLength === "medium" \? 1 : 2/)
     assert.match(writer, /section\.word_budget/)
-    assert.match(writer, /Continue naturally from this final prose context only/)
-    assert.doesNotMatch(
-        writer.match(/const userPrompt = articleContract[\s\S]*?: generateWritingUserPrompt/)?.[0] || "",
-        /instruction_note/,
-    )
+    // The bridge must be a flow cue, never a continuation instruction: phrased
+    // as "continue naturally", a truncated section was completed by the next
+    // one and the article read as one severed paragraph split by headings.
+    assert.doesNotMatch(writer, /Continue naturally from this final prose context only/)
+    assert.match(writer, /do NOT continue or complete its sentence/)
+    // instruction_note is the only per-section brief the contract writer gets.
+    assert.match(writer, /brief: isIntro \? outline\.intro\?\.instruction_note : currentSection\.instruction_note/)
     assert.match(purchaseIntent, /harvest_policy_version/)
     assert.match(purchaseIntent, /audit_policy_stale/)
     assert.doesNotMatch(founderTest, /plannedArticleId:\s*hydrated/)
     assert.match(founderTest, /founderLengthOverride/)
     assert.match(founderTest, /articleLength:\s*founderLengthOverride/)
+    // A QA run hydrated from a stale audit measures the old policy's evidence,
+    // not the current writer — it masked the real writer bugs once already.
+    assert.match(founderTest, /hydrated\.auditPolicyVersion !== HARVEST_POLICY\.version/)
+    assert.match(founderTest, /allowStalePolicy/)
 })

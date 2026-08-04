@@ -32,6 +32,16 @@ export interface PlannedWriterInputs {
     articleContract: ArticleContract
     capabilityFacts: CapabilityFact[]
     auditBrandSnapshot: Record<string, unknown>
+    /**
+     * The harvest policy the source audit was produced under.
+     *
+     * Surfaced because a QA run against a stale audit measures the old policy's
+     * evidence, not the current writer. One BringBack test article was hydrated
+     * from a v4 audit whose only attached capability fact was a credit-cost
+     * sentence, which made the writer's output look worse than production would
+     * have been — and made the real writer bugs harder to see.
+     */
+    auditPolicyVersion: string | null
 }
 
 export async function loadPlannedWriterInputs(
@@ -83,7 +93,7 @@ export async function loadPlannedWriterInputs(
     const [{ data: audit }, { data: scopeRows }] = await Promise.all([
         db
             .from("topical_audits")
-            .select("brand_snapshot")
+            .select("brand_snapshot, harvest_policy_version")
             .eq("id", planned.audit_id)
             .maybeSingle(),
         db
@@ -141,5 +151,6 @@ export async function loadPlannedWriterInputs(
             audit?.brand_snapshot && typeof audit.brand_snapshot === "object"
                 ? audit.brand_snapshot
                 : {},
+        auditPolicyVersion: audit?.harvest_policy_version || null,
     }
 }
