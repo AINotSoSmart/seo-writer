@@ -11,6 +11,9 @@ export const ArticleOutlineSchema = z.object({
   intro: z.object({
     instruction_note: z.string().min(10).max(2000),
     keywords_to_include: z.array(z.string()).max(20).default([]),
+    intent_ids: z.array(z.string()).max(20).default([]),
+    capability_fact_ids: z.array(z.string()).max(8).default([]),
+    research_evidence_ids: z.array(z.string()).max(8).default([]),
   }),
   sections: z
     .array(
@@ -46,6 +49,10 @@ export const ArticleOutlineSchema = z.object({
         /** Exact immutable facts this section may use. New program path only. */
         capability_fact_ids: z.array(z.string()).max(8).optional().default([]),
         research_fact_ids: z.array(z.string()).max(8).optional().default([]),
+        intent_ids: z.array(z.string()).max(20).optional().default([]),
+        research_evidence_ids: z.array(z.string()).max(8).optional().default([]),
+        word_budget: z.number().int().min(80).max(1200).optional(),
+        evidence_summary: z.string().max(1200).optional(),
         section_purpose: z
           .enum(["answer", "workflow", "comparison", "limitation", "cta"])
           .optional()

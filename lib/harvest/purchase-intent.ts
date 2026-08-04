@@ -11,6 +11,7 @@ import {
     type FrozenGraph,
     type GraphArticleInput,
 } from "./link-graph"
+import { HARVEST_POLICY } from "./policy"
 
 export type VelocityTier = "close" | "accelerate" | "dominate"
 
@@ -50,7 +51,7 @@ export async function createProgramPurchaseIntent(input: {
     const { data: audit, error: auditError } = await supabase
         .from("topical_audits")
         .select(
-            "id, user_id, brand_id, subject_url, site_page_snapshot, run_status, completed_at, requires_reaudit, scope_hash",
+            "id, user_id, brand_id, subject_url, site_page_snapshot, run_status, completed_at, requires_reaudit, scope_hash, harvest_policy_version",
         )
         .eq("id", input.auditId)
         .eq("user_id", input.userId)
@@ -156,6 +157,12 @@ export async function createProgramPurchaseIntent(input: {
         throw new PurchaseIntentError(
             "This audit predates verified capability contracts. Run a fresh audit before checkout.",
             "audit_contract_missing",
+        )
+    }
+    if (audit.harvest_policy_version !== HARVEST_POLICY.version) {
+        throw new PurchaseIntentError(
+            "The writer policy changed after this audit. Run a fresh audit before checkout.",
+            "audit_policy_stale",
         )
     }
     const scopePriority = new Map(

@@ -3,7 +3,7 @@ import { tavily } from "@tavily/core"
 import { buildTavilySearchOptions, extractSearchPrefs, TavilySearchPrefs } from "@/lib/tavily-search"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
-import { CompetitorDataSchema, CompetitorData } from "@/lib/schemas/research"
+import { CompetitorDataSchema, CompetitorData, type ResearchEvidence } from "@/lib/schemas/research"
 import { AngleInsightsSchema, AngleInsights } from "@/lib/schemas/angle-insights"
 import { ArticleOutlineSchema } from "@/lib/schemas/outline"
 import { selectIntroPattern, requiredLinksMissingFrom } from "@/lib/writer/composition"
@@ -33,6 +33,8 @@ import type {
   ArticleContract,
   CapabilityFact,
 } from "@/lib/writer/article-contract"
+import { normalizeContractOutline } from "@/lib/writer/section-packet"
+import { isEvidenceQuoteSupported, isKnownCompetitorUrl } from "@/lib/writer/research-evidence"
 
 /**
  * Tactical Deduplication Layer: Enriches outline sections with link instructions
@@ -471,7 +473,7 @@ Bottom Footer
 
 // Generate section image prompt with integrated text safety
 const generateSectionImagePrompt = async (
-  section: { heading: string; instruction_note: string; image_type?: string },
+  section: { heading: string; evidence_summary: string; image_type?: string },
   articleTitle: string,
   genAI: any
 ): Promise<string> => {
@@ -502,13 +504,14 @@ ${examplesText}
 ### DATA WE AHVE FOR A CONTEXTUAL IMAGE PROMPT:
 - **Article Title:** "${articleTitle}"
 - **Section Heading:** "${section.heading}"
-- **What is being wirtten in this section:** "${section.instruction_note || 'Visualize the core concept of this section.'}"
+- **Verified section evidence:** "${section.evidence_summary || 'No concrete visual evidence supplied; use a simple conceptual illustration.'}"
 - **Desired Style:** ${requestedType.toUpperCase().replace('_', ' ')}
 
 **YOUR TASK:**
 Create a descriptive, visually rich, scene-based prompt that adheres 100% to the FIREWALL rules above.
 - If the concept is abstract, use a metaphor or icon-based visualization.
 - If the concept implies a process, use a simple linear flow or cards.
+- Never invent a product interface, dataset, measurement, or before/after result.
 - **CRITICAL:** Do NOT violate any "Forbidden Structures" or "Forbidden Text Patterns".
 
 OUTPUT: Return ONLY the image prompt string. No explanations.
@@ -630,7 +633,9 @@ JSON SCHEMA:
 `
 }
 
-// --- PHASE 2 HELPER: Deep Research Lite (2-Phase Tavily + Critic) ---
+type ResearchSource = { url: string; title: string; content: string; sourceKind: "independent" | "known_competitor" }
+
+// --- Contract-bound research: one broad search + exact required-intent searches. ---
 const performDeepResearch = async (
   tvly: any,
   genAI: any,
@@ -638,151 +643,96 @@ const performDeepResearch = async (
   articleType: ArticleType,
   supportingKeywords: string[] = [],
   searchPrefs?: TavilySearchPrefs,
-  instructions?: string
+  instructions?: string,
+  knownCompetitorUrls: string[] = [],
 ) => {
-  const keyword = articleContract.primaryIntent.query
-  console.log(`[Deep Research] Phase 1: Contract-bound search for "${keyword}"`)
+  void supportingKeywords
+  void instructions
+  const intentIds = new Set([
+    articleContract.primaryIntent.queryId,
+    ...articleContract.requiredIntents.map((intent) => intent.queryId),
+  ])
+  const requiredQueries = Array.from(new Set(articleContract.requiredIntents
+    .map((intent) => intent.query.trim())
+    .filter((query) => query && query.toLowerCase() !== articleContract.primaryIntent.query.toLowerCase())))
+    .slice(0, 2)
 
-  // Content length limits to prevent overwhelming the AI
-  const MAX_CONTENT_PER_SOURCE = 3000 // chars per source
-  const MAX_TOTAL_CONTEXT = 15000 // total chars for critic phase
-
-  // === STEP 1: BROAD LANDSCAPE SEARCH ===
-  const broadQuery = articleContract.researchQuery
-  const { modifiedQuery: broadModifiedQuery, options: broadOptions } = buildTavilySearchOptions(broadQuery, searchPrefs, {
+  const { modifiedQuery, options } = buildTavilySearchOptions(articleContract.researchQuery, searchPrefs, {
     searchDepth: "advanced",
     includeRawContent: "markdown",
-    maxResults: 5,
+    maxResults: 6,
   })
-  const broadSearch = await tvly.search(broadModifiedQuery, broadOptions)
-
-  // Extract and CAP content from Tavily results
-  const rawBroadContext = broadSearch.results.map((r: any) => {
-    const content = r.rawContent || r.content || 'No content available'
-    const cappedContent = content.slice(0, MAX_CONTENT_PER_SOURCE)
-    return `Source: ${r.title} (${r.url}) \nContent: ${cappedContent}${content.length > MAX_CONTENT_PER_SOURCE ? '... [truncated]' : ''} `
-  }).join("\n\n---\n\n")
-
-  // Cap total context for Critic phase
-  const broadContext = rawBroadContext.slice(0, MAX_TOTAL_CONTEXT)
-  if (rawBroadContext.length > MAX_TOTAL_CONTEXT) {
-    console.log(`[Deep Research] Context capped from ${rawBroadContext.length} to ${MAX_TOTAL_CONTEXT} characters`)
-  }
-
-  console.log(`[Deep Research] Phase 1 Complete: ${broadSearch.results.length} sources extracted`)
-  console.log(`[Deep Research] Context length: ${broadContext.length} characters(capped at ${MAX_TOTAL_CONTEXT})`)
-
-  // === STEP 2: THE CRITIC (Gap Analysis) ===
-  console.log(`[Deep Research] Phase 2: The Critic - Analyzing gaps...`)
-
-  const criticPrompt = getCriticGapPrompt(articleContract, articleType, broadContext, instructions)
-  const criticResp = await genAI.models.generateContent({
-    model: "gemini-3.1-flash-lite",
-    config: { responseMimeType: "application/json" },
-    contents: [{ role: "user", parts: [{ text: criticPrompt }] }]
-  })
-
-  let criticAnalysis: { gap_analysis?: string; targeted_queries?: string[]; competitor_names?: string[] } = {
-    gap_analysis: "",
-    targeted_queries: [],
-    competitor_names: []
-  }
-  try {
-    const parsed = cleanAndParse(criticResp.text || '{}')
-    criticAnalysis = {
-      gap_analysis: parsed.gap_analysis || "No additional evidence gap identified.",
-      targeted_queries: Array.isArray(parsed.targeted_queries)
-        ? parsed.targeted_queries.slice(0, 2)
-        : [],
-      competitor_names: Array.isArray(parsed.competitor_names) ? parsed.competitor_names : []
-    }
-  } catch (parseError) {
-    console.warn(`[Deep Research] Failed to parse critic response; no targeted searches will run: `, parseError)
-    criticAnalysis = {
-      gap_analysis: "Critic response could not be parsed; no scope-expanding fallback search was run.",
-      targeted_queries: [],
-      competitor_names: []
-    }
-  }
-  const targetedQueries: string[] = criticAnalysis.targeted_queries || []
-
-  console.log(`[Deep Research] Critic identified gaps: `, criticAnalysis.gap_analysis)
-  console.log(`[Deep Research] Competitor names found: `, (criticAnalysis.competitor_names?.length ?? 0) > 0 ? criticAnalysis.competitor_names : "None")
-  console.log(`[Deep Research] Targeted queries: `, targetedQueries)
-
-  // === STEP 3: SNIPER SEARCH (Fill the Gaps) ===
-  let deepContext = ""
-  if (targetedQueries.length > 0) {
-    console.log(`[Deep Research] Phase 3: Sniper Search - Hunting ${targetedQueries.length} specific queries...`)
-
-    // Execute targeted searches in parallel for speed
-    const deepResults = await Promise.all(
-      targetedQueries.slice(0, 2).map((q: string) => {
-        const { modifiedQuery: sniperQuery, options: sniperOptions } = buildTavilySearchOptions(q, searchPrefs, {
+  const broad = await tvly.search(modifiedQuery, options)
+  const targeted = await Promise.all(requiredQueries.map((query) => {
+        const { modifiedQuery: sniperQuery, options: sniperOptions } = buildTavilySearchOptions(query, searchPrefs, {
           searchDepth: "basic",
           includeRawContent: "markdown",
-          maxResults: 2
+          maxResults: 3,
         })
         return tvly.search(sniperQuery, sniperOptions).catch((err: any) => {
-          console.log(`[Deep Research] Sniper query failed: ${q} `, err.message)
+          console.warn(`[Deep Research] Required-intent search failed: ${query}`, err.message)
           return { results: [] }
         })
-      })
-    )
-
-    const allDeepResults = deepResults.flatMap(r => r.results)
-    // Cap each gap-fill result too
-    deepContext = allDeepResults.map((r: any) => {
-      const content = r.rawContent || r.content || 'No content available'
-      const cappedContent = content.slice(0, MAX_CONTENT_PER_SOURCE)
-      return `Source(Gap Fill): ${r.title} (${r.url}) \nContent: ${cappedContent} `
-    }).join("\n\n---\n\n")
-
-    console.log(`[Deep Research] Phase 3 Complete: ${allDeepResults.length} gap - filling sources extracted`)
-  }
-
-  // === STEP 4: FINAL SYNTHESIS ===
-  console.log(`[Deep Research] Phase 4: Final Synthesis...`)
-
-  const synthesisPrompt = getSynthesisPrompt(articleType, articleContract)
-  const combinedData = `
-  === BROAD LANDSCAPE DATA(Initial Search) ===
-    ${broadContext}
-
-=== DEEP DIVE DATA(Gap - Filling Search) ===
-  ${deepContext || "No additional gap-filling data was needed."}
-
-=== CRITIC'S GAP ANALYSIS ===
-${criticAnalysis.gap_analysis || "No major gaps identified."}
-`
-
-  const synthesisStream = await genAI.models.generateContentStream({
+  }))
+  const rows = [...(broad.results || []), ...targeted.flatMap((result: any) => result.results || [])]
+  const sources = Array.from(new Map(rows.map((row: any) => [row.url, row])).values()).slice(0, 12).map((row: any): ResearchSource => {
+    return {
+      url: String(row.url),
+      title: String(row.title || row.url),
+      content: String(row.rawContent || row.content || "").slice(0, 5000),
+      sourceKind: isKnownCompetitorUrl(String(row.url), knownCompetitorUrls)
+        ? "known_competitor"
+        : "independent",
+    }
+  }).filter((source) => source.content.trim())
+  const sourceContext = sources.map((source, index) =>
+    `SOURCE ${index + 1}\nURL: ${source.url}\nTITLE: ${source.title}\nSOURCE_KIND: ${source.sourceKind}\nCONTENT:\n${source.content}`,
+  ).join("\n\n---\n\n").slice(0, 40_000)
+  const intentContext = [articleContract.primaryIntent, ...articleContract.requiredIntents]
+    .map((intent) => `${intent.queryId}: ${intent.query} — ${intent.sourceContext || ""}`)
+    .join("\n")
+  const response = await genAI.models.generateContent({
     model: "gemini-3.1-flash-lite",
-    config: {},
-    contents: [{ role: "user", parts: [{ text: synthesisPrompt + "\n\n" + combinedData }] }]
+    config: { responseMimeType: "application/json" },
+    contents: [{ role: "user", parts: [{ text: `Select a compact evidence brief for this frozen article contract.
+ENTITY DELIVERY MODE: ${articleContract.entity.deliveryMode}
+ARTICLE TYPE: ${articleType}
+INTENTS:\n${intentContext}
+
+Return JSON with an "evidence" array of at most 12 items and a "limitations" array of at most 3 strings. Each evidence item must contain id, quote, url, sourceTitle, supportsIntentIds, kind, sourceKind.
+- quote MUST be copied character-for-character from one supplied source. Never paraphrase.
+- url, sourceTitle and sourceKind MUST match that same supplied source.
+- supportsIntentIds may contain only IDs listed above.
+- kind is definition, fact, step, comparison, or limitation.
+- Preserve modality. Category research never proves the customer's product capabilities.
+- Claims from sourceKind known_competitor remain explicitly attributable to that source.
+- Do not expand beyond the frozen intents. Empty evidence is valid.
+
+SOURCES:\n${sourceContext}` }] }],
   })
-
-  let synthesisText = ""
-  for await (const c of synthesisStream) {
-    synthesisText += (c as any).text || ""
-  }
-
-  console.log(`[Deep Research]Complete! Synthesized comprehensive research brief.`)
-  // Use self-correcting parser for Zod validation with retry
-  const parsed = await cleanParseAndValidate(synthesisText, CompetitorDataSchema, genAI)
-  return {
-    ...parsed,
-    fact_sheet: parsed.fact_sheet.slice(0, 12),
-    content_gap: {
-      ...parsed.content_gap,
-      missing_topics: parsed.content_gap.missing_topics.slice(0, 3),
-      user_intent_gaps: parsed.content_gap.user_intent_gaps.slice(0, 3),
-    },
-    product_matrix: articleType === "commercial" ? parsed.product_matrix.slice(0, 8) : [],
-    step_sequence: articleType === "howto" ? parsed.step_sequence.slice(0, 12) : [],
-    prerequisites: articleType === "howto" ? parsed.prerequisites.slice(0, 8) : [],
-    authority_links: parsed.authority_links.slice(0, 3),
-  } satisfies CompetitorData
+  const raw = cleanAndParse(response.text || "{}")
+  const sourceByUrl = new Map(sources.map((source) => [source.url, source]))
+  const accepted: ResearchEvidence[] = (Array.isArray(raw.evidence) ? raw.evidence : []).slice(0, 12).flatMap((item: any, index: number) => {
+    const source = sourceByUrl.get(String(item.url || ""))
+    const quote = String(item.quote || "").trim()
+    const supported = Array.isArray(item.supportsIntentIds)
+      ? item.supportsIntentIds.map(String).filter((id: string) => intentIds.has(id))
+      : []
+    if (!source || !quote || supported.length === 0 ||
+        !isEvidenceQuoteSupported(source.content, quote)) return []
+    const kind = ["definition", "fact", "step", "comparison", "limitation"].includes(item.kind)
+      ? item.kind : "fact"
+    return [{ id: `research-${index + 1}`, quote, url: source.url, sourceTitle: source.title,
+      supportsIntentIds: supported, kind, sourceKind: source.sourceKind }]
+  })
+  return CompetitorDataSchema.parse({
+    evidence: accepted,
+    limitations: Array.isArray(raw.limitations) ? raw.limitations.slice(0, 3).map(String) : [],
+    sources_summary: sources.map(({ url, title }) => ({ url, title })),
+    fact_sheet: accepted.map((item) => ({ fact: item.quote, url: item.url })),
+    authority_links: accepted.filter((item) => item.sourceKind === "independent")
+      .map((item) => ({ url: item.url, title: item.sourceTitle, snippet: item.quote })),
+  }) satisfies CompetitorData
 }
 
 // --- PHASE 2.5 HELPER: Angle Architect (Non-Commodity Enrichment) ---
@@ -900,6 +850,52 @@ const brandList = (value: unknown): string => {
  * free instead of inferred from a paid run.
  */
 export const generateOutlineSystemPrompt = (keyword: string, styleDNA: any, competitorData: any, articleType: ArticleType, brandDetails: any = null, title?: string, internalLinks: any[] = [], supportingKeywords: string[] = [], articleLength: ArticleLength = 'long', instructions?: string, angleInsights: AngleInsights | null = null, auditEvidence: { clusterName?: string; sourceQueries?: string[]; competitorUrls?: string[]; subNodeIntents?: string[]; isPillar?: boolean } = {}, articleContract?: ArticleContract, capabilityFacts: CapabilityFact[] = []) => {
+  const contractPrompt = (() => {
+    if (!articleContract) return null
+    const length = getArticleLengthConfig(articleContract.articleLength)
+    const intents = [articleContract.primaryIntent, ...articleContract.requiredIntents]
+      .filter((intent, index, all) => all.findIndex((candidate) => candidate.queryId === intent.queryId) === index)
+    const evidence = Array.isArray(competitorData?.evidence) ? competitorData.evidence : []
+    return `You are planning one evidence-bound article for an automated multi-tenant publishing system.
+
+FROZEN ARTICLE CONTRACT:\n${JSON.stringify(articleContract)}
+VERIFIED PRODUCT FACTS:\n${JSON.stringify(capabilityFacts)}
+EXTERNAL RESEARCH EVIDENCE:\n${JSON.stringify(evidence)}
+FROZEN INTERNAL LINKS:\n${JSON.stringify(internalLinks)}
+STYLE DNA: ${styleDNA}
+
+Return JSON matching the outline schema. Use no more than ${length.sections.max} sections. Create only the sections required to answer the intents; there is no minimum section quota.
+
+Rules:
+- Preserve entity type and delivery mode. Do not turn software into a physical service, or a service into software.
+- Every one of these intent IDs must appear in exactly one section's intent_ids: ${intents.map((intent) => intent.queryId).join(", ")}.
+- A section may reference only supplied capability_fact_ids and research_evidence_ids.
+- Assign research evidence only where its supportsIntentIds overlap the section's intent_ids.
+- Product facts prove only the named product mechanics. Research evidence proves category facts only.
+- known_competitor evidence must remain explicitly attributed to sourceTitle.
+- Answer first. Use natural headings and only useful tables/lists. Do not manufacture history, tests, reviewers, statistics, UI paths, timings, or experience.
+- Internal links must retain their frozen URL and anchor. Do not invent additional internal URLs.
+- Use at most one CTA section. Educational articles must not pretend the product directly solves the query.
+- instruction_note is compatibility metadata only: keep it concise and factual. The contract-bound writer will not consume it.
+- Set needs_image only when a diagram materially helps: short=0, medium<=1, long<=2. Never request a fake screenshot, UI, dataset, or before/after.
+
+JSON SHAPE:
+{
+  "title": string,
+  "intro": { "instruction_note": string, "keywords_to_include": string[], "intent_ids": [], "capability_fact_ids": [], "research_evidence_ids": [] },
+  "sections": [{
+    "id": number, "heading": string, "level": 2,
+    "instruction_note": string, "keywords_to_include": string[],
+    "intent_ids": string[], "capability_fact_ids": string[], "research_evidence_ids": string[],
+    "research_fact_ids": [], "section_purpose": "answer"|"workflow"|"comparison"|"limitation"|"cta",
+    "external_link": {"url": string, "anchor_context": string}|null,
+    "internal_link": {"url": string, "title": string, "anchor_context": string}|null,
+    "needs_product_detail": false, "product_aspect": null, "is_comparison": boolean,
+    "needs_image": boolean, "image_type": "concept"|"how_to"|"comparison"|"process"|"insight"|null
+  }]
+}`
+  })()
+  if (contractPrompt) return contractPrompt
   const strategy = getArticleStrategy(articleType)
 
   // Extract authority links from competitor data for external linking
@@ -1208,7 +1204,7 @@ For EACH H2 section, decide if an image would ADD VALUE to the content:
 }
 
 
-const generateWritingSystemPrompt = (styleDNA: string, outline: any, currentSectionIndex: number, brandDetails: any = null, articleType: string = 'informational', instructions?: string, articleContract?: ArticleContract, capabilityFacts: CapabilityFact[] = [], researchFacts: Array<{ id: string; value: string }> = []) => {
+const generateWritingSystemPrompt = (styleDNA: string, outline: any, currentSectionIndex: number, brandDetails: any = null, articleType: string = 'informational', instructions?: string, articleContract?: ArticleContract, capabilityFacts: CapabilityFact[] = [], researchFacts: Array<{ id: string; value: string; url?: string; sourceTitle?: string; sourceKind?: string; supportsIntentIds?: string[] }> = []) => {
   // styleDNA is now a paragraph describing the writing style
 
   // --- SEMANTIC CONTEXT (Previous/Next Section Instructions) ---
@@ -1221,6 +1217,50 @@ const generateWritingSystemPrompt = (styleDNA: string, outline: any, currentSect
   // a large pointless token cost.
   const isIntro = currentSectionIndex < 0
   const currentSection = isIntro ? null : outline.sections[currentSectionIndex]
+
+  const contractWritingPrompt = (() => {
+    if (!articleContract) return null
+    const assignedIntentIds = isIntro
+      ? [articleContract.primaryIntent.queryId]
+      : (currentSection.intent_ids || [])
+    const intents = [articleContract.primaryIntent, ...articleContract.requiredIntents]
+      .filter((intent, index, all) => all.findIndex((candidate) => candidate.queryId === intent.queryId) === index)
+      .filter((intent) => assignedIntentIds.includes(intent.queryId))
+    const allowedCapabilityIds = new Set(isIntro ? [] : (currentSection.capability_fact_ids || []))
+    const allowedEvidenceIds = new Set(isIntro ? [] : (currentSection.research_evidence_ids || []))
+    const packet = {
+      heading: isIntro ? "Introduction" : currentSection.heading,
+      purpose: isIntro ? "answer" : currentSection.section_purpose,
+      intents: intents.map((intent) => ({ id: intent.queryId, query: intent.query, sourceContext: intent.sourceContext })),
+      capabilityFacts: capabilityFacts.filter((fact) => allowedCapabilityIds.has(fact.id)),
+      researchEvidence: researchFacts.filter((fact) => allowedEvidenceIds.has(fact.id)),
+      internalLink: isIntro ? null : currentSection.internal_link || null,
+      externalLink: isIntro ? null : currentSection.external_link || null,
+      wordBudget: isIntro ? (articleContract.articleLength === "short" ? 160 : 200) : currentSection.word_budget,
+    }
+    const previousHeadings = isIntro ? [] : outline.sections.slice(0, currentSectionIndex).map((section: any) => section.heading)
+    return `You are an informed brand editor writing one bounded part of an evidence-based article.
+
+ENTITY: ${articleContract.entity.name} (${articleContract.entity.entityType})
+DELIVERY MODE: ${articleContract.entity.deliveryMode}
+SOLUTION MODE: ${articleContract.solutionMode}
+STYLE DNA: ${styleDNA}
+ARTICLE TYPE: ${articleType}
+PREVIOUS HEADINGS: ${JSON.stringify(previousHeadings)}
+SECTION EVIDENCE PACKET:\n${JSON.stringify(packet)}
+
+Write only this section in Markdown. Answer the assigned intents directly, then stop near the word budget. Use short paragraphs, active voice, and natural lists or tables only when they improve understanding.
+
+Evidence rules:
+- Product-specific claims may use only capabilityFacts in the packet.
+- External specifics may use only researchEvidence in the packet and must cite its URL. If sourceKind is known_competitor, name/attribute sourceTitle; never generalize it into an industry fact.
+- Do not invent implementation details, UI paths, performance, timing, prices, customers, employees, tests, measurements, personal experience, or physical operations.
+- Preserve the entity's delivery mode and the reader's modality.
+- Include supplied links naturally and exactly. Never invent a URL.
+- Do not mention evidence IDs or the packet. Do not add a CTA unless purpose is cta.
+- Do not output the section heading; the system adds it. For the introduction, start with the direct answer.`
+  })()
+  if (contractWritingPrompt) return contractWritingPrompt
 
   // Get previous 2 sections with their instruction_notes
   const prevSections = isIntro
@@ -1454,28 +1494,27 @@ If you are unsure, default to British English spelling conventions.`
     })()}
 
 ### 3. STRATEGY & MINDSET
-- **Goal:** Rank #1 on Google and get cited by ai LLMs by being more specific, helpful, and "human" than the competition to answer the user's question.
+- **Goal:** Answer the reader's question accurately, specifically, and without unsupported claims.
 - **Method:** High information density, low word count. Every sentence must earn its place.
 
 ### 4. CITATION & ATTRIBUTION POLICY (WHO YOU MAY CITE)
 **How to handle data and citations to maximize OUR authority without risking plagiarism:**
 
-1. **NEVER CITE COMPETITORS:**
-   - Scan the source/fact. Is it a rival Agency, SaaS tool, or "SEO Guru"?
-   - **IF YES:** Do NOT cite them by name.
-   - *Technique:* Rephrase the finding as a general industry pattern.
+1. **ATTRIBUTE COMPETITOR EVIDENCE:**
+   - If the supplied source is a rival agency, SaaS tool, or publisher, cite it by name.
+   - Preserve the source's scope and wording; do not generalize one source into an industry-wide claim.
      - ❌ Bad: "According to [XYZ competitor], 68% of sites..."
-     - ✅ Good: "It is widely observed across the industry that **over 60% of sites**..." (Generalization).
-     - ✅ Best: "In our own client audits, we frequently see that **most new sites**..." (Qualitative First-Party).
+     - ❌ Bad: "It is widely observed across the industry..." when only one supplied source made the claim.
+     - ✅ Good: Attribute the exact supplied source and preserve what it actually claims.
 
 2. **ALWAYS CITE "SUPER-AUTHORITIES":**
    - Is the source a Neutral Giant? (e.g., Google, Microsoft, Statista, Gartner, W3C, Government bodies).
    - **IF YES:** Keep the citation. It builds E-E-A-T.
    - *Example:* "As confirmed by **Google's John Mueller**..." or "Data from **Statista** shows..."
 
-3. **THE "FIRST-PARTY" PRIORITY:**
-   - Whenever possible, prioritize insights derived from our own tool/platform over external reports.
-   - Use phrases like "Our platform handles this by..." or "We built [Brand Name] to solve this specific issue..."
+3. **THE FIRST-PARTY BOUNDARY:**
+   - Product claims require supplied first-party evidence.
+   - Never invent motives, implementation details, testing, customers, or results.
 
 ### 5. ARTICLE STRATEGY - supporting data (${articleType.toUpperCase()})
 ${isIntro ? introStrategy : ''}
@@ -1781,7 +1820,7 @@ export const generateBlogPost = task({
         throw new Error("Planned article has no frozen writer contract; refresh the audit before generation")
       }
       const brandDetails = BrandDetailsSchema.parse(
-        plannedArticleId && auditBrandSnapshot
+        articleContract && auditBrandSnapshot
           ? auditBrandSnapshot
           : brandRec.brand_data,
       )
@@ -1811,7 +1850,7 @@ export const generateBlogPost = task({
             ? articleLength
             : "long",
       }
-      const effectiveArticleLength = plannedArticleId
+      const effectiveArticleLength = articleContract
         ? effectiveContract.articleLength
         : articleLength || brandDetails.article_length || 'long'
 
@@ -1861,7 +1900,8 @@ export const generateBlogPost = task({
         articleType,
         supportingKeywords,
         searchPrefs,
-        instructions
+        instructions,
+        clusterCompetitorUrls,
       )
 
       // --- PHASE 2.5: ANGLE INSIGHTS (Non-blocking enrichment — invisible to UI) ---
@@ -1877,10 +1917,9 @@ export const generateBlogPost = task({
       // --- PHASE 3: OUTLINE (The "Architect") ---
       phase = "outline"
 
-      // Competitor hosts we must never offer as a citation target. Derived from
-      // the audit's real competitor list plus the subject's own domain, so this
-      // is evidence rather than a guess.
-      const forbiddenCitationHosts = new Set(
+      // Retained for legacy/manual authority-link diagnostics. Contract-bound
+      // evidence already carries sourceKind and is attributed by the writer.
+      const knownCompetitorHosts = new Set(
         clusterCompetitorUrls
           .map((url: string) => {
             try {
@@ -1902,31 +1941,31 @@ export const generateBlogPost = task({
        * "NEVER CITE COMPETITORS" (§4). Facing that contradiction it dropped the
        * link, which is why external links so rarely appeared.
        */
-      const filterAuthorityLinks = (links: Array<{ url: string, title: string, snippet?: string }>) => {
+      const selectLegacyAuthorityLinks = (links: Array<{ url: string, title: string, snippet?: string }>) => {
         const badDomains = [
           "youtube.com", "facebook.com", "twitter.com", "linkedin.com",
           "instagram.com", "tiktok.com", "pinterest.com", "reddit.com",
           "medium.com", "quora.com" // Also exclude user-generated content platforms
         ]
 
-        let competitorsDropped = 0
+        let competitorLinksObserved = 0
         const kept = links.filter(link => {
           try {
             const domain = new URL(link.url).hostname.toLowerCase()
             if (badDomains.some(d => domain.includes(d))) return false
             const bare = domain.replace(/^www\./, "")
-            if (forbiddenCitationHosts.has(bare)) {
-              competitorsDropped++
-              return false
-            }
+            // Known competitors remain valid evidence when attributed. The
+            // evidence object carries sourceKind so claims cannot be laundered
+            // into unattributed industry facts.
+            if (knownCompetitorHosts.has(bare)) competitorLinksObserved++
             return true
           } catch {
             return false // Invalid URL, filter it out
           }
         }).slice(0, 5) // Keep top 5 candidates
 
-        if (competitorsDropped > 0) {
-          console.log(`🔗 [DEBUG] Dropped ${competitorsDropped} competitor URL(s) from citation candidates`)
+        if (competitorLinksObserved > 0) {
+          console.log(`[Research] Kept ${competitorLinksObserved} attributable competitor source(s)`)
         }
         return kept
       }
@@ -1934,18 +1973,19 @@ export const generateBlogPost = task({
       // Clean authority links before passing to outline
       const cleanedCompetitorData = {
         ...competitorData,
-        authority_links: filterAuthorityLinks(competitorData.authority_links || [])
+        authority_links: articleContract
+          ? competitorData.authority_links
+          : selectLegacyAuthorityLinks(competitorData.authority_links || [])
       }
-      const researchFacts = (cleanedCompetitorData.fact_sheet || [])
-        .slice(0, 12)
-        .map((fact: { fact: string; url: string }, index: number) => ({
-          id: `research-${index + 1}`,
-          value: `${fact.fact} (Source: ${fact.url})`,
-        }))
-      const outlineResearchData = {
-        ...cleanedCompetitorData,
-        fact_sheet: researchFacts,
-      }
+      const researchFacts = competitorData.evidence.map((item) => ({
+        id: item.id,
+        value: item.quote,
+        url: item.url,
+        sourceTitle: item.sourceTitle,
+        sourceKind: item.sourceKind,
+        supportsIntentIds: item.supportsIntentIds,
+      }))
+      const outlineResearchData = cleanedCompetitorData
 
       console.log(`🔗 [DEBUG] External authority links BEFORE filter: ${competitorData.authority_links?.length || 0}`)
       console.log(`🔗 [DEBUG] External authority links AFTER filter: ${cleanedCompetitorData.authority_links?.length || 0}`)
@@ -2069,6 +2109,16 @@ ${JSON.stringify(outline)}`
         console.log(`[Length Control] ✅ Outline section count OK: ${outline.sections.length} sections (max: ${maxSections} for ${lengthConfig.label})`)
       }
 
+      if (articleContract) {
+        outline = normalizeContractOutline(
+          outline,
+          effectiveContract,
+          capabilityFacts,
+          competitorData.evidence,
+          frozenLinks,
+        )
+      }
+
       // DEBUG: Check if LLM assigned external links to sections
       const sectionsWithExternalLinks = outline.sections.filter((s: any) => s.external_link)
       console.log(`🔗 [DEBUG] Outline parsed - ${outline.sections.length} sections`)
@@ -2088,7 +2138,9 @@ ${JSON.stringify(outline)}`
 
       // --- TACTICAL DEDUPLICATION: Enrich outline with link injection ---
       // For each section, check if we've already covered this topic and inject link instruction
-      await enrichOutlineWithLinks(outline, brandId, supabase)
+      if (!articleContract) {
+        await enrichOutlineWithLinks(outline, brandId, supabase)
+      }
 
       // Initialize draft with Title
       const initialDraft = `# ${finalTitle} \n\n`
@@ -2126,13 +2178,13 @@ ${JSON.stringify(outline)}`
       // 4.1 Write Intro (The Hook) - Separately
       // Only write intro if not resuming (startIndex === 0)
       if (startIndex === 0 && outline.intro) {
-        const systemPrompt = generateWritingSystemPrompt(styleDNA, outline, -1, brandDetails, articleType, instructions, effectiveContract, capabilityFacts, researchFacts)
+        const systemPrompt = generateWritingSystemPrompt(styleDNA, outline, -1, brandDetails, articleType, instructions, articleContract ? effectiveContract : undefined, capabilityFacts, researchFacts)
         const introPattern = selectIntroPattern(articleType, clusterPosition, clusterId)
         console.log(
           `[Blog Gen] Intro pattern: ${introPattern.framing} + ${introPattern.secondMove} ` +
           `(cluster position ${clusterPosition})`,
         )
-        const userPrompt = generateWritingUserPrompt(currentDraft, {
+        const userPrompt = articleContract ? "Write the introduction from the section evidence packet." : generateWritingUserPrompt(currentDraft, {
           heading: "Introduction / Hook (COLD OPEN)",
           instruction_note: `
 *** INTRO STRUCTURE — FOLLOW THE ASSIGNED SHAPE ***
@@ -2146,7 +2198,7 @@ CRITICAL EXECUTION RULES:
           keywords_to_include: outline.intro.keywords_to_include
         }, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
 
-        const writeConfig = {}
+        const writeConfig = articleContract ? { maxOutputTokens: 700 } : {}
         const writeContents = [
           {
             role: "user",
@@ -2175,7 +2227,7 @@ CRITICAL EXECUTION RULES:
       }
 
       // Collect sections that need images for parallel generation later
-      const imageSectionsToGenerate: Array<{ heading: string; instruction_note: string; image_type?: string; sectionIndex: number }> = []
+      const imageSectionsToGenerate: Array<{ heading: string; evidence_summary: string; image_type?: string; sectionIndex: number }> = []
 
       // Start loop from saved index for checkpoint resumption
       for (let i = startIndex; i < outline.sections.length; i++) {
@@ -2187,14 +2239,18 @@ CRITICAL EXECUTION RULES:
           .update({ current_step_index: i + 1, status: "writing" })
           .eq("id", articleId)
 
-        const systemPrompt = generateWritingSystemPrompt(styleDNA, outline, i, brandDetails, articleType, instructions, effectiveContract, capabilityFacts, researchFacts)
+        const systemPrompt = generateWritingSystemPrompt(styleDNA, outline, i, brandDetails, articleType, instructions, articleContract ? effectiveContract : undefined, capabilityFacts, researchFacts)
         // THE BRIDGE: Pass last 500 chars for sentence-level flow (semantic context is now in system prompt)
         // FIX: Clean context to prevent LLM from hallucinating placeholders
         const cleanContext = currentDraft.slice(-500).replace(/<!--IMAGE_PLACEHOLDER_\d+-->/g, '')
-        const userPrompt = generateWritingUserPrompt(cleanContext, section, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
+        const userPrompt = articleContract
+          ? `Continue naturally from this final prose context only:\n${cleanContext}\n\nWrite the current section from the section evidence packet.`
+          : generateWritingUserPrompt(cleanContext, section, getArticleLengthConfig(effectiveArticleLength).wordsPerSection)
 
         // Using Gemini 2.5 Flash for Speed & Context
-        const writeConfig = {}
+        const writeConfig = articleContract
+          ? { maxOutputTokens: Math.min(5000, Math.max(500, Math.ceil((section.word_budget || 300) * 1.8))) }
+          : {}
         const writeContents = [
           {
             role: "user",
@@ -2264,14 +2320,21 @@ Rewrite the section at the same length and quality, weaving ${missingLinks.lengt
 
         // 2. Inject Image Placeholder IMMEDIATELY after heading
         // FIX: Enforce STRICT limit of MAX 3 images
-        const MAX_IMAGES = 3
+        const MAX_IMAGES = articleContract
+          ? (effectiveContract.articleLength === "short" ? 0 : effectiveContract.articleLength === "medium" ? 1 : 2)
+          : 3
         if (section.needs_image && section.image_type && imageSectionsToGenerate.length < MAX_IMAGES) {
           // Add placeholder marker to draft that we'll replace after parallel generation
           const placeholderMarker = `<!--IMAGE_PLACEHOLDER_${i}-->`
           currentDraft += `${placeholderMarker}\n\n`
           imageSectionsToGenerate.push({
             heading: section.heading,
-            instruction_note: section.instruction_note || '',
+            evidence_summary: articleContract
+              ? [
+                  ...capabilityFacts.filter((fact) => (section.capability_fact_ids || []).includes(fact.id)).map((fact) => fact.quote),
+                  ...researchFacts.filter((fact) => (section.research_evidence_ids || []).includes(fact.id)).map((fact) => fact.value),
+                ].join(" ").slice(0, 1200)
+              : section.instruction_note || '',
             image_type: section.image_type,
             sectionIndex: i
           })
@@ -2293,7 +2356,8 @@ Rewrite the section at the same length and quality, weaving ${missingLinks.lengt
 
       // --- LENGTH CONTROL: Post-write word count monitoring ---
       const finalWordCount = currentDraft.split(/\s+/).filter(w => w.length > 0).length
-      const maxTargetWords = parseInt(lengthConfig.wordRange.split('–')[1].replace(/,/g, ''))
+      const maxRangeMatch = lengthConfig.wordRange.match(/[\d,]+\s*[–-]\s*([\d,]+)/)
+      const maxTargetWords = Number((maxRangeMatch?.[1] || "3200").replace(/,/g, ""))
       console.log(`[Length Control] 📊 Final word count: ${finalWordCount} words (target: ${lengthConfig.wordRange}, sections written: ${outline.sections.length})`)
       if (finalWordCount > maxTargetWords * 1.25) {
         console.warn(`[Length Control] ⚠️ Article exceeded target by ${Math.round((finalWordCount / maxTargetWords - 1) * 100)}% — outline may need tighter section limits`)
@@ -2349,7 +2413,7 @@ Rewrite the section at the same length and quality, weaving ${missingLinks.lengt
           if (result) {
             const placeholderMarker = `<!--IMAGE_PLACEHOLDER_${result.sectionIndex}-->`
             // FIX: Global replace using split/join to catch any hallucinated duplicates
-            currentDraft = currentDraft.split(placeholderMarker).join(`![${result.heading}](${result.imageUrl})\n`)
+            currentDraft = currentDraft.split(placeholderMarker).join(`\n\n![${result.heading}](${result.imageUrl})\n\n`)
           }
         }
 
@@ -2367,10 +2431,14 @@ Rewrite the section at the same length and quality, weaving ${missingLinks.lengt
       // from Phase 4. Also prevents hallucination risk from large context edits.
 
       // Use currentDraft directly - it's already clean Markdown from Phase 4
-      const finalMarkdown =
+      const linkedMarkdown =
         frozenLinks.length > 0
           ? ensureFrozenLinksInMarkdown(currentDraft, frozenLinks)
           : currentDraft
+      const finalMarkdown = linkedMarkdown
+        .replace(/([^\n])\n(!\[[^\]]*\]\([^\n)]+\))/g, "$1\n\n$2")
+        .replace(/(!\[[^\]]*\]\([^\n)]+\))\n([^\n])/g, "$1\n\n$2")
+        .replace(/\n{4,}/g, "\n\n\n")
 
       // Convert Markdown to HTML for public blog view cache
       const finalHtml = await marked.parse(finalMarkdown)
@@ -2674,11 +2742,13 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
       }
 
       // Pass the admin client to saveTopicMemory for background job context
-      await saveTopicMemory(articleId, topicSignal, supabase)
+      if (!plannedArticleId) {
+        await saveTopicMemory(articleId, topicSignal, supabase)
+      }
 
       // --- PHASE 9: ANSWER COVERAGE INDEXING ---
       // Analyze the completed article outline to extract "Answer Units" for strategic planning
-      if (userId) {
+      if (userId && !plannedArticleId) {
         try {
           // Use cluster from payload or derive from keyword prefix
           const coverageCluster = cluster || keyword.split(" ").slice(0, 2).join(" ")

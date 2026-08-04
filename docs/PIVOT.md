@@ -10,12 +10,101 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-01
+Last implementation update: 2026-08-04
 
-Status: **domain-agnostic capability/article writer contracts implemented;
-source context + intent bindings persist atomically; research and section writing
-are evidence-bound; checkout remains disabled pending migration deployment and
-the staging/external release gate**
+Status: **domain-agnostic capability/article contracts and the evidence-bound
+writer repair are implemented; representative first-party page selection,
+exact-quote research, deterministic section packets, intent-sized output and
+bounded images are active; checkout remains disabled pending the staging and
+external release gate**
+
+## 0. 2026-08-04 writer repair handoff
+
+### Failure that triggered this work
+
+A short BringBack article about adding pets to a digital family portrait drifted
+into physical photography: cameras, shutter speeds, parks, permits and an
+invented photographer persona. A later article retained some improvement but
+still ran past the frozen short contract, mixed unsupported product details
+with category research, and used research-derived prose as if it were verified
+brand truth. BringBack was only the regression fixture; every change below is
+domain-agnostic and applies equally to developer tools, fintech, ecommerce
+infrastructure, agencies and consumer software.
+
+### Root causes and implemented repairs
+
+1. **The correct capability page was absent from brand DNA.** The eight-page
+   Tavily crawl could spend its budget on one arbitrary branch. Brand analysis
+   now discovers sitemap URLs, deterministically selects at most eight
+   representative first-party pages, and extracts them in one basic Tavily
+   batch. Homepage and pricing lead; founder seed overlap and direct
+   product/feature/tool/service/solution/docs/use-case pages outrank comparison
+   pages; blog/legal/auth noise is excluded; catalogue route families contribute
+   at most two pages. If fewer than three usable pages are extracted, one bounded
+   basic crawl is merged in. There is no recursive or advanced-depth loop. Both
+   persona and scope extraction read the same corpus, and onboarding review
+   remains the correction point.
+
+2. **Research could reopen the article's scope.** The old chain was broad search
+   -> LLM critic -> model-invented sniper queries -> synthesis. The active
+   contract path now performs one advanced search using the frozen
+   `researchQuery`, plus zero to two basic searches copied exactly from distinct
+   required intent queries. One synthesis call selects at most twelve exact
+   quotes. Each quote is normalized and verified as a substring of the fetched
+   source before it survives. Evidence retains URL, source title, supported
+   intent IDs, evidence kind and whether the source is a known competitor.
+   Competitor claims remain attributed; they are never rewritten as generic
+   industry truth. This removes one model call and bounds Tavily at 1-3 searches
+   per article.
+
+3. **Free-form outline notes controlled the section writer.** Program outlines
+   now carry `intent_ids`, `capability_fact_ids`,
+   `research_evidence_ids` and a deterministic word budget. After the outline
+   call, code makes every frozen intent belong to exactly one section and derives
+   that section's first-party and external evidence from the ownership itself.
+   Invalid references and invented URLs are removed without another model call.
+   The writer receives only this compact section packet, previous headings and
+   the last 500 characters of prose for continuity. It does not receive the
+   outline's `instruction_note`, the full research dump or free-form founder
+   instructions on the paid program path.
+
+4. **Prompts manufactured authority.** The active contract prompt no longer
+   asks for rankings/citations, fake testing, teams, customers, physical work,
+   measurements, UI paths, timing, history, mandatory tables, hierarchy quotas,
+   competitor laundering or forced brand mentions. It writes as an informed
+   brand editor: product claims require supplied capability facts; external
+   specifics require supplied quote evidence and citations; the frozen entity
+   and delivery mode may not change.
+
+5. **Length and images were advisory.** A supplied article contract now controls
+   length even in the founder single-article test, where `plannedArticleId` is
+   intentionally absent. Planning targets are 1,500 / 1,900 / 2,800 words for
+   the existing short / medium / long ranges. There is no minimum section quota;
+   maxima are 5 / 7 / 10. Each section gets a word budget and bounded output
+   tokens. In-content image caps are 0 / 1 / 2 respectively; prompts use only
+   the section evidence packet, and Markdown is normalized around injected
+   images. Featured-image behaviour is unchanged.
+
+6. **Program articles repeated legacy work.** Paid planned articles skip the
+   old embedding link enrichment, topic-memory save and post-write coverage
+   analysis. Their audit and frozen graph already own those decisions. Legacy
+   and manual articles retain those paths for compatibility. There is still
+   **no post-generation semantic judge and no per-article QA model call**.
+
+### Compatibility and release behaviour
+
+- `capability-v1` and `article-contract-v1` remain unchanged; no SQL migration
+  was needed for this repair. The evidence/outline shapes live in the existing
+  article JSON fields.
+- Harvest policy is now `evidence-bound-writer-v5.0.0`. Old completed audits
+  remain viewable, and active programs remain pinned and untouched, but a new
+  purchase intent requires the current policy version and therefore a fresh
+  audit.
+- The founder dry-run explains the new bounded research path and displays the
+  frozen word range. The real founder generation path now respects the contract
+  length without mutating program state.
+- Contract verification on 2026-08-04: 66/66 pivot tests pass and TypeScript is
+  clean. `npm build` was deliberately skipped per the founder's instruction.
 
 ## 1. Locked product contract
 
@@ -294,15 +383,16 @@ intent-sized minimum instead of manufacturing sections to satisfy a quota.
 
 Broad research uses the frozen query + delivery mode + operation. It no longer
 automatically appends pricing, Reddit, reviews or comparison modifiers. The
-existing critic may return **zero, one or two** targeted queries; zero is valid,
-parse failure runs no fallback search, and the forced 3â€“5-gap behavior is gone.
-Synthesis keeps at most 12 sourced facts, three genuine limitations/trade-offs,
-three non-competitor authority links, and only intent-appropriate steps or
-comparison data. The separate Angle Architect call is not run for program
-articles, so provider cost should be flat or lower.
+LLM critic and its model-invented sniper queries are retired from the active
+program path. Zero to two additional searches come directly from distinct
+frozen required intents. Synthesis keeps at most 12 exact source quotes and
+three limitations; every quote is verified against fetched source text. The
+separate Angle Architect call is not run for program articles, so provider cost
+is lower.
 
-Outline sections now declare `capability_fact_ids`, `research_fact_ids` and a
-section purpose. Each section writer receives only those referenced facts:
+Outline sections now declare `intent_ids`, `capability_fact_ids`,
+`research_evidence_ids`, a section purpose and a word budget. Each section
+writer receives only the deterministic evidence packet for its owned intents:
 
 - capability facts may support first-party product statements;
 - research facts may support category statements and retain attribution;
@@ -2300,7 +2390,7 @@ Collapse ratio is now:
   composition logged, because that band tracks source mix
 - reported by `/api/harvest/verify` with an explicit "check source mix" note
 
-Current policy version: `capability-bound-writer-v4.0.0`.
+Current policy version: `evidence-bound-writer-v5.0.0`.
 `collapseMin`/`collapseMax` remain removed; the contract suite pins their absence
 plus the direct duplicate invariant so the proxy gate cannot be reintroduced.
 

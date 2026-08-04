@@ -3,7 +3,7 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "capability-bound-writer-v4.0.0",
+    version: "evidence-bound-writer-v5.0.0",
     /** Working set scanned for gap ownership evidence. */
     maxCompetitors: 4,
     /**
