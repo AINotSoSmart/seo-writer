@@ -1,52 +1,32 @@
 import { z } from "zod"
 
-// Product info for commercial/comparison articles
-export const ProductMatrixItemSchema = z.object({
-  name: z.string(),
-  price: z.string().optional().default("Unknown"),
-  pros: z.array(z.string()).optional().default([]),
-  cons: z.array(z.string()).optional().default([]),
-  unique_selling_point: z.string().optional().default(""),
-  best_for: z.string().optional().default("")
-})
-
-// Step info for how-to/tutorial articles
-export const StepSequenceItemSchema = z.object({
-  step: z.number(),
-  title: z.string(),
-  details: z.string(),
-  pro_tip: z.string().optional()
-})
-
-// Authority link for external citations
-export const AuthorityLinkSchema = z.object({
-  url: z.string(),
-  title: z.string(),
-  snippet: z.string().optional().default("")
-})
-
-export const ResearchFactSchema = z.object({
-  fact: z.string().min(1),
+export const ResearchEvidenceSchema = z.object({
+  id: z.string().min(1),
+  quote: z.string().min(1),
   url: z.string().url(),
+  sourceTitle: z.string().min(1),
+  supportsIntentIds: z.array(z.string()).min(1),
+  kind: z.enum(["definition", "fact", "step", "comparison", "limitation"]),
+  sourceKind: z.enum(["independent", "known_competitor"]),
 })
 
 export const CompetitorDataSchema = z.object({
-  fact_sheet: z.array(ResearchFactSchema),
+  evidence: z.array(ResearchEvidenceSchema).max(12).default([]),
+  sources_summary: z.array(z.object({ url: z.string().url(), title: z.string() })).max(12).default([]),
+  limitations: z.array(z.string()).max(3).default([]),
+  fact_sheet: z.array(z.object({ fact: z.string(), url: z.string().url() })).default([]),
   content_gap: z.object({
-    missing_topics: z.array(z.string()),
-    outdated_info: z.string().optional().default(""),
-    user_intent_gaps: z.array(z.string()),
-  }),
-  sources_summary: z.array(z.object({ url: z.string().url(), title: z.string() })).optional().default([]),
-  // For commercial/comparison articles
-  product_matrix: z.array(ProductMatrixItemSchema).optional().default([]),
-  // For how-to/tutorial articles
-  step_sequence: z.array(StepSequenceItemSchema).optional().default([]),
-  prerequisites: z.array(z.string()).optional().default([]),
-  // Authority links for external citations (high-quality, non-competitor URLs)
-  authority_links: z.array(AuthorityLinkSchema).optional().default([]),
+    missing_topics: z.array(z.string()).default([]),
+    outdated_info: z.string().default(""),
+    user_intent_gaps: z.array(z.string()).default([]),
+  }).default({ missing_topics: [], outdated_info: "", user_intent_gaps: [] }),
+  product_matrix: z.array(z.any()).default([]),
+  step_sequence: z.array(z.any()).default([]),
+  prerequisites: z.array(z.string()).default([]),
+  authority_links: z.array(z.object({
+    url: z.string().url(), title: z.string(), snippet: z.string().default(""),
+  })).default([]),
 })
 
+export type ResearchEvidence = z.infer<typeof ResearchEvidenceSchema>
 export type CompetitorData = z.infer<typeof CompetitorDataSchema>
-export type ProductMatrixItem = z.infer<typeof ProductMatrixItemSchema>
-export type StepSequenceItem = z.infer<typeof StepSequenceItemSchema>

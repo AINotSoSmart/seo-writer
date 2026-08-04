@@ -22,10 +22,102 @@ import {
     capabilityFactIdsForOperation,
     selectIntentSizedLength,
 } from "../lib/writer/article-contract.ts"
+import { selectRepresentativeBrandUrls } from "../lib/brand/representative-pages.ts"
+import { normalizeContractOutline } from "../lib/writer/section-packet.ts"
+import { isEvidenceQuoteSupported, isKnownCompetitorUrl } from "../lib/writer/research-evidence.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const text = (relativePath) =>
     readFile(path.join(root, relativePath), "utf8")
+
+test("brand analysis selects a bounded, diverse product corpus", () => {
+    const bringBack = selectRepresentativeBrandUrls(
+        "https://bringback.pro",
+        [
+            "https://bringback.pro/pricing",
+            "https://bringback.pro/features/old-photo-restoration",
+            "https://bringback.pro/features/animate-old-photos",
+            "https://bringback.pro/add-person-to-photo",
+            "https://bringback.pro/features/family-portrait",
+            "https://bringback.pro/blog/photo-tips",
+            "https://bringback.pro/privacy",
+        ],
+        ["old photo restoration", "animate old photos", "add person to photo"],
+    )
+    assert.ok(bringBack.includes("https://bringback.pro/add-person-to-photo"))
+    assert.ok(bringBack.includes("https://bringback.pro/pricing"))
+    assert.ok(!bringBack.some((url) => url.includes("/blog/") || url.includes("privacy")))
+
+    const ecommerce = selectRepresentativeBrandUrls(
+        "https://shop.example",
+        [
+            ...Array.from({ length: 100 }, (_, index) => `https://shop.example/products/item-${index}`),
+            "https://shop.example/pricing",
+            "https://shop.example/solutions/wholesale",
+            "https://shop.example/docs/api",
+            "https://shop.example/features/inventory",
+        ],
+        ["ecommerce inventory api"],
+    )
+    assert.ok(ecommerce.length <= 8)
+    assert.ok(ecommerce.filter((url) => url.includes("/products/")).length <= 2)
+    assert.ok(ecommerce.some((url) => url.includes("/docs/api")))
+    assert.ok(ecommerce.some((url) => url.includes("/features/inventory")))
+})
+
+test("section packets own every intent once and bind only matching evidence", () => {
+    const intent = (queryId, factId) => ({
+        queryId, query: queryId, sourceUrl: "https://source.example", sourceContext: queryId,
+        operationKey: "op", capabilityFit: "explicit", capabilityFactIds: [factId],
+    })
+    const contract = {
+        version: "article-contract-v1",
+        entity: { name: "Example", entityType: "software", deliveryMode: "browser software" },
+        primaryIntent: intent("intent-a", "fact-a"),
+        requiredIntents: [intent("intent-b", "fact-b")],
+        scopeFamilyId: "family", solutionMode: "product_led",
+        capabilityFactIds: ["fact-a", "fact-b"], researchQuery: "example", articleLength: "medium",
+    }
+    const outline = {
+        intro: { instruction_note: "Direct answer", keywords_to_include: [] },
+        sections: [
+            { heading: "A", intent_ids: ["intent-a", "intent-b"], needs_image: true },
+            { heading: "B", intent_ids: ["intent-b"], needs_image: true },
+            { heading: "C", intent_ids: [], needs_image: true },
+        ],
+    }
+    const normalized = normalizeContractOutline(
+        outline,
+        contract,
+        [
+            { id: "fact-a", url: "https://brand.example/a", quote: "A" },
+            { id: "fact-b", url: "https://brand.example/b", quote: "B" },
+        ],
+        [
+            { id: "research-a", url: "https://research.example/a", supportsIntentIds: ["intent-a"] },
+            { id: "research-b", url: "https://research.example/b", supportsIntentIds: ["intent-b"] },
+        ],
+    )
+    assert.deepEqual(normalized.sections.flatMap((section) => section.intent_ids).sort(), ["intent-a", "intent-b"])
+    assert.deepEqual(normalized.sections[0].capability_fact_ids.sort(), ["fact-a", "fact-b"])
+    assert.deepEqual(normalized.sections[0].research_evidence_ids.sort(), ["research-a", "research-b"])
+    assert.equal(normalized.sections.filter((section) => section.needs_image).length, 1)
+    assert.equal(normalized.sections[0].word_budget, Math.floor((1900 - 200) / 3))
+})
+
+test("research evidence rejects fabricated quotes and identifies competitor subdomains", () => {
+    const source = "The API accepts a trace ID and returns a trace timeline."
+    assert.equal(isEvidenceQuoteSupported(source, "accepts a trace ID and returns a trace timeline"), true)
+    assert.equal(isEvidenceQuoteSupported(source, "returns results in under two seconds"), false)
+    assert.equal(
+        isKnownCompetitorUrl("https://docs.competitor.example/guide", ["https://competitor.example"]),
+        true,
+    )
+    assert.equal(
+        isKnownCompetitorUrl("https://independent.example/guide", ["https://competitor.example"]),
+        false,
+    )
+})
 
 function clusterArticles(clusterId, offset = 0) {
     return [
@@ -1260,7 +1352,7 @@ test("qualified clusters are 8-15 unique articles; thin clusters are never progr
     assert.match(productTruth, /minClusterArticles:\s*8/)
     assert.match(productTruth, /maxClusterArticles:\s*15/)
     assert.match(policy, /minQualifiedClusterArticles:\s*8/)
-    assert.match(policy, /version:\s*"capability-bound-writer-v4\.0\.0"/)
+    assert.match(policy, /version:\s*"evidence-bound-writer-v5\.0\.0"/)
     assert.match(pricing, /Between 8 and 15 per cluster/)
 
     // The undersized escape that forced one 1–7 article cluster is gone.
@@ -1404,20 +1496,19 @@ test("required links are retried in place, never appended as a callout", async (
     assert.match(writer, /LAST RESORT, not the normal path/)
 })
 
-test("competitor URLs can never be offered as citation targets", async () => {
+test("competitor evidence stays attributable instead of being laundered", async () => {
     const writer = await text("trigger/generate-blog.ts")
 
     // The research search uses the article's own keyword, so top results ARE
     // the ranking competitors. They reached `external_link`, where §4 forbids
     // citing them — the model resolved that contradiction by dropping the link.
-    assert.match(writer, /forbiddenCitationHosts/)
-    assert.match(writer, /clusterCompetitorUrls/)
-    assert.match(writer, /competitorsDropped/)
-    // Host comparison must be www-insensitive or the filter silently misses.
-    assert.match(writer, /replace\(\/\^www\\\.\/, ""\)/)
+    assert.match(writer, /isKnownCompetitorUrl/)
+    assert.match(writer, /If sourceKind is known_competitor, name\/attribute sourceTitle/)
+    assert.match(writer, /never generalize it into an industry fact/)
+    assert.doesNotMatch(writer, /Do NOT cite them by name/)
 })
 
-test("sections only receive the product knowledge they were flagged as needing", async () => {
+test("program sections receive only their referenced evidence packet", async () => {
     const [writer, outlineSchema] = await Promise.all([
         text("trigger/generate-blog.ts"),
         text("lib/schemas/outline.ts"),
@@ -1440,9 +1531,12 @@ test("sections only receive the product knowledge they were flagged as needing",
     assert.match(writer, /if \(!brandDetails \|\| !currentSection\?\.needs_product_detail\) return ""/)
     // New program articles receive only explicit fact IDs for the section.
     assert.match(outlineSchema, /capability_fact_ids/)
-    assert.match(outlineSchema, /research_fact_ids/)
-    assert.match(writer, /allowedIds\.has\(fact\.id\)/)
-    assert.match(writer, /Use only these facts for product-specific claims/)
+    assert.match(outlineSchema, /research_evidence_ids/)
+    assert.match(outlineSchema, /intent_ids/)
+    assert.match(writer, /SECTION EVIDENCE PACKET/)
+    assert.match(writer, /allowedCapabilityIds\.has\(fact\.id\)/)
+    assert.match(writer, /allowedEvidenceIds\.has\(fact\.id\)/)
+    assert.match(writer, /Product-specific claims may use only capabilityFacts/)
 })
 
 test("audit evidence reaches the writer and degrades safely without it", async () => {
@@ -2616,14 +2710,15 @@ test("the writer contract blocks the BringBack semantic-drift failure upstream",
     assert.match(assembly, /capabilityFactIdsForOperation/)
     assert.match(assembly, /sourceContext: query\.source_context/)
     assert.match(assembly, /articleContract/)
-    assert.match(writer, /FROZEN ENTITY AND INTENT BOUNDARY/)
-    assert.match(writer, /A digital product cannot become a physical service/)
-    assert.match(writer, /External research is not evidence of this product's behavior/)
-    assert.match(writer, /Never invent testing, customers, employees/)
+    assert.match(writer, /Preserve entity type and delivery mode/)
+    assert.match(writer, /Do not turn software into a physical service/)
+    assert.match(writer, /Research evidence proves category facts only/)
+    assert.match(writer, /Do not invent implementation details, UI paths, performance/)
     assert.doesNotMatch(writer, /Founder = "I\/My team"/)
     assert.doesNotMatch(writer, /I found this tool snappy/)
     assert.match(schema, /capability_fact_ids/)
-    assert.match(schema, /research_fact_ids/)
+    assert.match(schema, /research_evidence_ids/)
+    assert.match(schema, /intent_ids/)
     assert.match(migration, /source_context/)
     assert.match(migration, /intent_binding/)
     assert.match(migration, /article_contract/)
@@ -2655,11 +2750,36 @@ test("confirmed capability contracts cannot split between brand JSON and scope r
     assert.match(auditRoute, /missing their verified mechanics/i)
 })
 
-test("contract research can legitimately stop after broad search", async () => {
+test("contract research is bounded by frozen intents and exact source quotes", async () => {
     const writer = await text("trigger/generate-blog.ts")
-    assert.match(writer, /Return zero, one, or two targeted queries/)
-    assert.match(writer, /targeted_queries\.slice\(0, 2\)/)
-    assert.match(writer, /no targeted searches will run/)
-    assert.doesNotMatch(writer, /forced three-to-five-gap/i)
+    assert.match(writer, /requiredQueries[\s\S]*\.slice\(0, 2\)/)
+    assert.match(writer, /isEvidenceQuoteSupported\(source\.content, quote\)/)
+    assert.match(writer, /isKnownCompetitorUrl/)
+    assert.match(writer, /known_competitor evidence must remain explicitly attributed/)
+    assert.doesNotMatch(writer, /targeted_queries\.slice\(0, 2\)/)
     assert.match(writer, /const angleInsights: AngleInsights \| null = null/)
+})
+
+test("program writing uses bounded packets and skips legacy enrichment", async () => {
+    const [writer, purchaseIntent, founderTest] = await Promise.all([
+        text("trigger/generate-blog.ts"),
+        text("lib/harvest/purchase-intent.ts"),
+        text("app/api/founder/test-article/route.ts"),
+    ])
+    assert.match(writer, /const effectiveArticleLength = articleContract/)
+    assert.match(writer, /if \(!articleContract\) \{\s*await enrichOutlineWithLinks/)
+    assert.match(writer, /if \(!plannedArticleId\) \{\s*await saveTopicMemory/)
+    assert.match(writer, /if \(userId && !plannedArticleId\)/)
+    assert.match(writer, /short" \? 0 : effectiveContract\.articleLength === "medium" \? 1 : 2/)
+    assert.match(writer, /section\.word_budget/)
+    assert.match(writer, /Continue naturally from this final prose context only/)
+    assert.doesNotMatch(
+        writer.match(/const userPrompt = articleContract[\s\S]*?: generateWritingUserPrompt/)?.[0] || "",
+        /instruction_note/,
+    )
+    assert.match(purchaseIntent, /harvest_policy_version/)
+    assert.match(purchaseIntent, /audit_policy_stale/)
+    assert.doesNotMatch(founderTest, /plannedArticleId:\s*hydrated/)
+    assert.match(founderTest, /founderLengthOverride/)
+    assert.match(founderTest, /articleLength:\s*founderLengthOverride/)
 })

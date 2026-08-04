@@ -122,6 +122,10 @@ export async function POST(req: NextRequest) {
     const isPillar =
         typeof body.isPillar === "boolean" ? body.isPillar : hydrated?.isPillar ?? false
 
+    const founderLengthOverride = ["short", "medium", "long"].includes(body.articleLength)
+        ? body.articleLength
+        : null
+
     const frozenLinks =
         hydrated?.frozenLinks?.length && !Array.isArray(body.skipFrozenLinks)
             ? hydrated.frozenLinks
@@ -203,7 +207,9 @@ export async function POST(req: NextRequest) {
         isPillar,
         ...(hydrated?.articleContract
             ? {
-                  articleContract: hydrated.articleContract,
+                  articleContract: founderLengthOverride
+                      ? { ...hydrated.articleContract, articleLength: founderLengthOverride }
+                      : hydrated.articleContract,
                   capabilityFacts: hydrated.capabilityFacts,
                   auditBrandSnapshot: hydrated.auditBrandSnapshot,
               }

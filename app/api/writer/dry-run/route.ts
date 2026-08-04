@@ -5,6 +5,7 @@ import { selectIntroPattern } from "@/lib/writer/composition"
 import { loadPlannedWriterInputs } from "@/lib/writer/planned-article-payload"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 import { createAdminClient } from "@/utils/supabase/admin"
+import { getArticleLengthConfig } from "@/lib/prompts/article-length"
 
 export const maxDuration = 60
 
@@ -38,7 +39,8 @@ export const maxDuration = 60
 
 const RESEARCH_STUB = {
     __dry_run__:
-        "Live Tavily research is not executed here — it costs money. In a real run this slot holds the broad-search + critic + sniper synthesis.",
+        "Live Tavily research is not executed here because it costs money. A real run uses one broad search, up to two frozen-intent searches, and exact-quote synthesis.",
+    evidence: [] as Array<unknown>,
     authority_links: [] as Array<{ url: string; title: string }>,
 }
 
@@ -233,6 +235,9 @@ export async function GET(req: NextRequest) {
                   allowedProductFacts: hydrated.capabilityFacts,
                   researchQuery: hydrated.articleContract.researchQuery,
                   selectedLength: hydrated.articleContract.articleLength,
+                  selectedWordRange: getArticleLengthConfig(
+                      hydrated.articleContract.articleLength,
+                  ).wordRange,
               }
             : null,
 

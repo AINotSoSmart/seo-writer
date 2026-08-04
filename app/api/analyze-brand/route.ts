@@ -13,6 +13,8 @@ import {
   buildRankedBrandCorpus,
   extractScopeFamilies,
 } from "@/lib/scope-extraction"
+import { selectRepresentativeBrandUrls } from "@/lib/brand/representative-pages"
+import { fetchAllSitemapUrls } from "@/lib/audit/site-scanner"
 import {
   ANALYZE_PHASE_COPY,
   encodeAnalyzeEvent,
@@ -23,7 +25,7 @@ export const maxDuration = 300 // 5 minute timeout
 
 /** Enough for homepage + pricing + a few product surfaces; 20 burned ~80s. */
 const BRAND_CRAWL_LIMIT = 8
-/** Escalate to advanced extract only when basic crawl is too thin. */
+/** Use one crawler fallback only when direct representative extraction is thin. */
 const THIN_CORPUS_CHARS = 1_500
 
 const CRAWL_INSTRUCTIONS =
@@ -120,23 +122,44 @@ export async function POST(req: NextRequest) {
       message: ANALYZE_PHASE_COPY.crawl_started,
     })
 
-    // Prefer basic extract first — advanced was the main wall-clock and credit
-    // cost. Escalate once only when the first pass is too thin to ground scope.
-    let crawlResponse = await tvly.crawl(url, {
-      limit: BRAND_CRAWL_LIMIT,
-      extractDepth: "basic",
-      format: "markdown",
-      instructions: CRAWL_INSTRUCTIONS,
-    })
-    let crawledPages = pagesFromCrawl(crawlResponse)
-    if (totalContentChars(crawledPages) < THIN_CORPUS_CHARS) {
+    // Select before extracting so one sitemap branch cannot consume the page
+    // budget. The bounded crawl below is the only fallback.
+    const sitemapUrls = await fetchAllSitemapUrls(url)
+    const representativeUrls = selectRepresentativeBrandUrls(
+      url,
+      sitemapUrls,
+      targetSeeds,
+      BRAND_CRAWL_LIMIT,
+    )
+    let crawlResponse: unknown
+    let crawledPages: CrawledPage[] = []
+    if (representativeUrls.length > 0) {
+      crawlResponse = await tvly.extract(representativeUrls, {
+        extractDepth: "basic",
+        format: "markdown",
+      })
+      crawledPages = pagesFromCrawl(crawlResponse)
+      const failedResults = (crawlResponse as {
+        failedResults?: Array<{ url?: string; error?: string }>
+      }).failedResults || []
+      if (failedResults.length > 0) {
+        console.warn("[Brand Analysis] Representative extraction failures", failedResults)
+      }
+    }
+
+    // Sites without a usable sitemap get one bounded crawler fallback. There
+    // is no recursive or advanced-depth retry loop.
+    if (crawledPages.length < 3 || totalContentChars(crawledPages) < THIN_CORPUS_CHARS) {
       crawlResponse = await tvly.crawl(url, {
         limit: BRAND_CRAWL_LIMIT,
-        extractDepth: "advanced",
+        extractDepth: "basic",
         format: "markdown",
         instructions: CRAWL_INSTRUCTIONS,
       })
-      crawledPages = pagesFromCrawl(crawlResponse)
+      const fallbackPages = pagesFromCrawl(crawlResponse)
+      crawledPages = Array.from(
+        new Map([...crawledPages, ...fallbackPages].map((page) => [page.url, page])).values(),
+      ).slice(0, BRAND_CRAWL_LIMIT)
     }
 
     const combinedContent =
