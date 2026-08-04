@@ -13,24 +13,42 @@ export interface SEOConfig {
   yandexVerification?: string
 }
 
+/**
+ * Positioning is deliberately layered, not single-note. Three earlier passes
+ * each collapsed the whole site onto one idea and each was wrong for the same
+ * reason: a landing page has to answer four questions in order, and only the
+ * first one is the category.
+ *
+ *   1. What is this?      -> topical authority: complete, interlinked coverage
+ *                            of a subject. This is the deliverable and the
+ *                            reason the brand is called FlipAEO.
+ *   2. Does it work?      -> the first-party BringBack case study.
+ *   3. Versus what?       -> a $3,000-$15,000/month agency, or a $19 bulk
+ *                            writer. This closes the sale; it does not define
+ *                            the product.
+ *   4. Why believe you?   -> source-linked gaps and evidence-bound writing.
+ *
+ * Keywords follow the same order: the deliverable leads, the answer-engine
+ * terms carry the timing argument, the agency terms handle the comparison.
+ */
 export const defaultSEO: SEOConfig = {
-  title: "FlipAEO — Evidence-Backed Content Clusters for Founder-Led B2B SaaS",
+  title: "FlipAEO — Build Topical Authority Google and AI Both Trust",
   description:
-    "FlipAEO gives founder-led B2B SaaS teams a source-linked content audit and delivers every qualified cluster it measures across their confirmed business areas as one finite, interlinked program.",
+    "Search engines and AI assistants favour sites that cover a subject completely. FlipAEO finds every question your market asks that your site misses, then writes and delivers them as complete, interlinked clusters — the work an agency bills $3,000-$15,000 a month for, from $249.",
   keywords: [
     "topical authority",
     "how to build topical authority",
     "topical authority tool",
+    "topical map",
+    "topic clusters seo",
+    "answer engine optimization",
+    "generative engine optimization",
+    "aeo",
+    "saas seo",
+    "saas seo agency alternative",
+    "b2b saas content marketing agency",
+    "done for you seo content",
     "content gap analysis",
-    "content gap analysis tool",
-    "topical map generator",
-    "topic cluster tool",
-    "topic cluster generator",
-    "SEO content plan",
-    "what to write next SEO",
-    "content strategy tool",
-    "AI internal linking",
-    "semantic content map",
   ],
   author: "FlipAEO",
   siteUrl: process.env.NEXT_PUBLIC_APP_URL || "https://flipaeo.com",
@@ -66,8 +84,11 @@ export const organizationSchema = {
 }
 
 export const pageSEO = {
+  // The one page that must keep naming the buyer explicitly: positioning is
+  // founder-led B2B SaaS, and it must not drift between founders, agencies,
+  // marketers and bloggers page to page.
   home: {
-    title: "Content Clusters for Founder-Led B2B SaaS",
+    title: "Topical Authority for Founder-Led B2B SaaS",
     description: defaultSEO.description,
     keywords: defaultSEO.keywords,
   },
@@ -83,20 +104,25 @@ export const pageSEO = {
     robots: "noindex, nofollow",
   },
   pricing: {
-    title: "Six-cluster program delivery speeds",
+    title: "Pricing — One Agency Month, Your Whole Programme",
     description:
-      "Choose the delivery cadence for your measured scope. Checkout appears only after an eligible audit and confirmed publishing URL pattern.",
-    keywords: ["topic cluster pricing", "content program pricing"],
+      "From $249 a month, against the $3,000-$15,000 a B2B SaaS content agency charges. Your audit sets the size, the tier sets the speed, and billing ends when the work does.",
+    keywords: [
+      "saas seo agency pricing",
+      "b2b saas content marketing cost",
+      "seo agency alternative pricing",
+      "content program pricing",
+    ],
   },
   about: {
     title: "About FlipAEO",
-    description: "Why FlipAEO uses finite, source-linked scopes instead of endless article quotas.",
-    keywords: ["about FlipAEO"],
+    description: "Why we sell a content programme that ends instead of a retainer that never does.",
+    keywords: ["about FlipAEO", "saas seo agency alternative"],
   },
   blog: {
     title: "FlipAEO content strategy notes",
-    description: "Practical notes on search evidence, topic clusters, and internal linking.",
-    keywords: ["topic cluster guide", "content gap research"],
+    description: "Practical notes on SaaS SEO, search evidence, topic clusters, and internal linking.",
+    keywords: ["saas seo", "topic cluster guide", "content gap research"],
   },
   privacyPolicy: {
     title: "Privacy Policy",
@@ -127,7 +153,7 @@ export const openGraphImages = {
     url: `${defaultSEO.siteUrl}/og-image.png`,
     width: 1200,
     height: 630,
-    alt: "Content Clusters for Founder-Led B2B SaaS",
+    alt: "FlipAEO — the SaaS SEO agency alternative for founder-led B2B SaaS",
   },
   logo: {
     url: `${defaultSEO.siteUrl}/site-logo.png`,
@@ -184,12 +210,13 @@ export const schemaTemplates = {
     applicationSubCategory: "Content Marketing Software",
     operatingSystem: "Web Browser",
     featureList: [
-      "Source-linked topical audit",
-      "Competitor gap evidence",
-      "Finite measured-scope program",
-      "Frozen internal-link graph",
-      "Complete cluster delivery",
-      "WordPress draft and manual delivery",
+      "Content gap audit with a source link on every finding",
+      "Competitor coverage comparison",
+      "Done-for-you SEO article writing",
+      "Internal links written and verified before delivery",
+      "Complete batch delivery, never partial",
+      "WordPress publishing and export",
+      "Programme that cancels itself when the scope is delivered",
     ],
     publisher: organizationSchema,
   },

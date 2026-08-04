@@ -19,9 +19,13 @@ export function GET() {
         "",
         "## Product contract",
         "",
-        `- One program contains ${PRODUCT_TRUTH.programClusters} qualified priority clusters.`,
+        // `programClusters` is a legacy display default, never a gate. Scope is
+        // dynamic — a program contains however many qualified clusters the audit
+        // measured — so this file must not state a fixed count as fact.
+        "- One program contains every qualified priority cluster the audit measured.",
         `- Qualified clusters contain ${PRODUCT_TRUTH.minClusterArticles}-${PRODUCT_TRUTH.maxClusterArticles} unique planned articles.`,
-        `- The selected scope must contain at least ${PRODUCT_TRUTH.minProgramArticles} articles.`,
+        "- Measured demand too thin for its own article becomes a named section inside a related one; it is never padding.",
+        "- FlipAEO is the agency alternative for founder-led B2B SaaS: the same research, planning, writing and delivery an agency retainer covers, priced as software and scoped to end.",
         "- Every audit query retains its observed source URL.",
         "- Article URLs and the internal-link graph are frozen before purchase.",
         "- A cluster is withheld until every member is generated.",

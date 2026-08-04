@@ -9,10 +9,15 @@ import { generateMetadata as generateSeoMetadata } from "@/lib/seo"
 import { createAdminClient } from "@/utils/supabase/admin"
 
 export const metadata: Metadata = generateSeoMetadata({
-    title: "Six-cluster program delivery speeds",
+    title: "Pricing — One Agency Month, Your Whole Programme",
     description:
-        "Choose how quickly FlipAEO delivers your evidence-backed scope: one, two, or three complete clusters per billing period.",
-    keywords: ["FlipAEO pricing", "topic cluster program", "content delivery"],
+        "From $249 a month, against the $3,000-$15,000 a B2B SaaS content agency charges. Your audit sets the size, the tier sets the speed, and billing ends when the work does.",
+    keywords: [
+        "saas seo agency pricing",
+        "b2b saas content marketing cost",
+        "seo agency alternative pricing",
+        "content program pricing",
+    ],
     canonical: "/pricing",
 })
 
@@ -50,15 +55,21 @@ export default async function PricingPage() {
             <main className="mx-auto max-w-6xl px-6 pb-24 pt-36">
                 <header className="mx-auto max-w-3xl text-center">
                     <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-                        One fixed scope
+                        The agency alternative
                     </p>
                     <h1 className="mt-4 font-serif text-5xl md:text-7xl">
-                        Pay for delivery speed, not filler.
+                        One agency month. Your whole programme.
                     </h1>
                     <p className="mt-6 text-lg leading-8 text-stone-600">
-                        Every eligible program contains the qualified clusters your audit measured.
-                        Faster tiers change the schedule only. Checkout requires a fresh
-                        eligible audit and a confirmed permanent URL pattern.
+                        A B2B SaaS content agency runs $3,000 to $15,000 a month, indefinitely.
+                        This is the same work — research, planning, writing, internal linking,
+                        delivery — priced as software and scoped to end. Your free audit decides
+                        how big the job is. The plan below only decides how fast it arrives.
+                    </p>
+                    <p className="mt-4 text-sm leading-6 text-stone-500">
+                        A <strong className="font-medium text-stone-700">cluster</strong> is one
+                        pillar article plus the 8 to 15 supporting pieces around it, all linked
+                        to each other. Your audit decides how many you get.
                     </p>
                 </header>
 
@@ -85,10 +96,10 @@ export default async function PricingPage() {
                             </p>
                             <ul className="my-7 flex-1 space-y-3">
                                 {[
-                                    "The same measured scope",
-                                    "Frozen URLs and link graph",
-                                    "Whole-cluster delivery",
-                                    "End-of-scope cancellation request",
+                                    "The same scope, whichever plan",
+                                    "Internal links that work on arrival",
+                                    "Clusters arrive whole, never half-built",
+                                    "Cancels itself when the work is done",
                                 ].map((item) => (
                                     <li key={item} className="flex gap-2 text-sm text-stone-600">
                                         <Check className="mt-0.5 h-4 w-4 shrink-0" /> {item}
@@ -99,7 +110,7 @@ export default async function PricingPage() {
                                 href="/login?next=/onboarding"
                                 className="rounded-lg bg-stone-950 px-4 py-3 text-center text-sm font-semibold text-white"
                             >
-                                Run the eligibility audit
+                                Show me what I&rsquo;m missing
                             </Link>
                         </article>
                     ))}
@@ -111,13 +122,25 @@ export default async function PricingPage() {
                     </p>
                 )}
 
-                <section className="mx-auto mt-16 max-w-3xl rounded-2xl border border-stone-200 bg-white p-7">
-                    <h2 className="font-serif text-2xl">What happens when the scope is too small?</h2>
-                    <p className="mt-3 text-sm leading-6 text-stone-600">
-                        FlipAEO shows the measured evidence but hides all subscription
-                        prices and checkout controls for that audit. It does not invent
-                        filler or advertise a one-off product that does not exist.
-                    </p>
+                <section className="mx-auto mt-16 grid max-w-4xl gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-stone-200 bg-white p-7">
+                        <h2 className="font-serif text-2xl">How your total is worked out</h2>
+                        <p className="mt-3 text-sm leading-6 text-stone-600">
+                            Count the clusters your audit found, divide by how many arrive each
+                            month, round up. That is how many monthly payments you make, and then
+                            it stops. Nine clusters on Accelerate is five months. Four clusters on
+                            Close is four months. You see the exact figure before you pay anything.
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-stone-200 bg-white p-7">
+                        <h2 className="font-serif text-2xl">If nothing qualifies, we say so</h2>
+                        <p className="mt-3 text-sm leading-6 text-stone-600">
+                            A smaller site is simply a smaller programme — there is no minimum you
+                            have to clear. But if your audit turns up nothing worth building, you
+                            get the evidence and no checkout. We would rather lose the sale than
+                            invent filler to reach a price.
+                        </p>
+                    </div>
                 </section>
             </main>
             <Footer />

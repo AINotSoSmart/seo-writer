@@ -50,14 +50,15 @@ export default function Hero() {
 
       {/* Main Headline */}
       <h1 className="font-serif text-4xl md:text-7xl lg:text-8xl text-stone-900 leading-[1.1] mb-6 tracking-tight">
-        Agencies charge $5,000 <br />
-        <span className="italic font-light">a month. We charge $249.</span>
+        Own the whole topic, <br />
+        <span className="italic font-light">not just one keyword </span>
       </h1>
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-        You have a product, a website, and nobody whose actual job is content.
-        <strong className="text-black font-normal">{" "}We find every question your market is searching that your site does not answer — and show you where we found each one. Then we write the missing articles and deliver them in complete, interlinked sets, until the work is done.</strong>
+        Google and AI assistants both lean on sites that cover a subject completely, not sites that publish near it.
+        <strong className="text-black font-normal">{" "}We find every question your market asks that your site does not answer — each traced to where we found it — then write and deliver them as complete, interlinked clusters.</strong>{" "}
+        The work an agency bills $3,000&ndash;$15,000 a month for, from $249, finished and finite.
       </p>
 
       {/* CTA Button Container */}

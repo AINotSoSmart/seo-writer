@@ -8,75 +8,131 @@ export type FeatureTruth = {
     safeguards: string[]
 }
 
+/**
+ * Public-facing copy. Written for a founder who does not employ an SEO.
+ *
+ * Every internal term has a plain-English equivalent and the plain one wins
+ * here: "batch" not "cluster snapshot", "we check it still works" not "graph
+ * validation", "cannot be edited afterwards" not "immutable run hash". The
+ * engineering vocabulary is correct and stays in docs/PIVOT.md — it just does
+ * not belong on a page whose whole job is to be understood in ten seconds.
+ *
+ * Counts stay dynamic: the audit decides how many batches there are, so no
+ * string here may promise a fixed number.
+ */
 export const features: Record<string, FeatureTruth> = {
     "evidence-backed-topical-audit": {
         slug: "evidence-backed-topical-audit",
-        name: "Evidence-backed topical audit",
+        name: "A gap audit you can fact-check",
         summary:
-            "Build an immutable search-gap snapshot in which every observed query retains its source URL.",
+            "We find the questions your market is searching that your site does not answer — and every single one carries a link to the page or search where we saw it.",
         promise:
-            "A completed run never mutates. A later audit creates a new run and cannot rewrite a purchased program.",
-        inputs: ["Your public website", "Seed topics", "Up to four competitors"],
-        outputs: ["Observed query evidence", "Current coverage matches", "Immutable run hash"],
+            "You can open any gap we show you and check it yourself. If we cannot trace a question back to somewhere real, it does not go in your report.",
+        inputs: ["Your public website", "The product areas you confirm", "Up to four competitors"],
+        outputs: [
+            "Every missing question, with its source link",
+            "What your existing pages already cover",
+            "A snapshot that cannot be quietly edited later",
+        ],
         safeguards: [
-            "No Google Search Console access",
-            "Bounded source requests",
-            "Hard failure for missing provenance",
+            "No access to your Google account or analytics",
+            "A question with no traceable source is dropped, not guessed",
+            "Re-running an audit never rewrites work you already bought",
         ],
     },
     "competitor-gap-evidence": {
         slug: "competitor-gap-evidence",
-        name: "Competitor gap evidence",
+        name: "See who is already answering it",
         summary:
-            "See the pages that currently answer a query while your website is missing or only partially covers it.",
+            "For each question you are missing, see the competitor pages that answer it today and the closest thing you have published.",
         promise:
-            "The report shows observations and similarity matches, not traffic forecasts or ranking guarantees.",
-        inputs: ["Observed search evidence", "Public competitor pages", "Your public site pages"],
-        outputs: ["Gap and partial-gap rows", "Matched competitor URLs", "Your closest existing URL"],
-        safeguards: ["Maximum four competitors", "Coverage page caps", "Source-linked claims"],
+            "We show you what we observed, not a forecast. No traffic estimates, no ranking predictions, no invented numbers.",
+        inputs: ["The questions we observed", "Public competitor pages", "Your own published pages"],
+        outputs: [
+            "Questions you miss entirely, and ones you half-answer",
+            "The competitor pages currently answering them",
+            "Your nearest existing page, so you can judge overlap",
+        ],
+        safeguards: [
+            "Four competitors maximum — a focused read, not a scrape",
+            "Every claim links to the page it came from",
+            "We never mark a topic covered just because your site is vaguely about it",
+        ],
     },
     "topic-cluster-delivery": {
         slug: "topic-cluster-delivery",
-        name: "Complete topic-cluster delivery",
+        name: "Complete batches, never half-built",
         summary:
-            "A program contains every qualified priority cluster the audit measured, each with one pillar and 7–14 supporting articles.",
+            "Articles arrive in themed batches of 8 to 15, each one a pillar article plus the supporting pieces around it, already linked to each other.",
         promise:
-            "A cluster is delivered as one batch only after every member has generated successfully.",
-        inputs: ["Six unsold qualified clusters", "At least 25 total articles", "A paid velocity tier"],
-        outputs: ["Complete cluster batches", "Research-backed articles", "Delivery burn-down"],
-        safeguards: ["No partial cluster release", "Failed-member-only retry", "Finite program scope"],
+            "A batch only reaches you once every article in it is finished. If one fails, the batch waits rather than shipping you something to repair.",
+        inputs: [
+            "The batches your audit qualified",
+            "The delivery speed you chose",
+            "Your confirmed product areas",
+        ],
+        outputs: [
+            "Whole batches, ready to review",
+            "Articles written against the evidence we showed you",
+            "A running count of what is done and what is left",
+        ],
+        safeguards: [
+            "No partial batches, ever",
+            "Only the failed article is retried, not the whole batch",
+            "The scope is fixed before you pay and cannot grow afterwards",
+        ],
     },
     "frozen-internal-link-graph": {
         slug: "frozen-internal-link-graph",
-        name: "Frozen internal-link graph",
+        name: "Internal links that work on arrival",
         summary:
-            "Confirm one permanent URL pattern before checkout so every planned target is known before writing begins.",
+            "You confirm where articles will live before writing starts, so every internal link points at a real address from day one.",
         promise:
-            "Pillars link to leaves, leaves link to pillars and relevant siblings, and unresolved edges block delivery.",
-        inputs: ["HTTPS URL pattern", "Deterministic article slugs", "Audit site snapshot"],
-        outputs: ["Absolute target URLs", "Frozen anchor text", "Validated directed link graph"],
-        safeguards: ["Same audited host only", "No self-links or duplicate edges", "HTML checked before release"],
+            "Articles in a batch link to each other and back to their pillar. We check every link resolves before the batch is released to you.",
+        inputs: ["Your permanent blog URL pattern", "The planned article list", "Your current site structure"],
+        outputs: [
+            "A final web address for every planned article",
+            "Links already written into the articles",
+            "A check that the whole set connects properly",
+        ],
+        safeguards: [
+            "Links only ever point at your own domain",
+            "No self-links and no duplicates",
+            "A batch with a broken link is held back, not delivered",
+        ],
     },
     "wordpress-manual-delivery": {
         slug: "wordpress-manual-delivery",
-        name: "WordPress-ready and manual delivery",
+        name: "Publish to WordPress, or take it anywhere",
         summary:
-            "Receive the complete cluster in the dashboard, create a WordPress draft, or publish manually at the frozen URL.",
+            "Review the batch in your dashboard, push it straight to WordPress as drafts, or export it and publish however you like.",
         promise:
-            "Delivery and publication are independent states. WordPress permalink mismatches remain drafts.",
-        inputs: ["Delivered article", "Optional WordPress application password", "Frozen target URL"],
-        outputs: ["Dashboard delivery", "WordPress draft", "Confirmed public URL"],
-        safeguards: ["WordPress and manual only", "Permalink validation", "No silent publish-state guessing"],
+            "Delivered is not published. Nothing goes live on your site until you choose to publish it.",
+        inputs: ["Your delivered articles", "An optional WordPress connection", "The agreed web address"],
+        outputs: ["Articles in your dashboard", "WordPress drafts", "A confirmed live URL once you publish"],
+        safeguards: [
+            "Nothing installed on your server",
+            "If WordPress changes the address, it stays a draft and tells you",
+            "We never guess whether something went live",
+        ],
     },
     "program-burn-down": {
         slug: "program-burn-down",
-        name: "Program burn-down",
+        name: "A programme that ends",
         summary:
-            "Track generated, delivered, and published counts separately across the whole measured scope.",
+            "Watch what is written, what has been delivered and what you have published, tracked separately — and see exactly how much is left.",
         promise:
-            "Once every cluster is delivered, FlipAEO requests cancellation at the end of the paid billing period.",
-        inputs: ["Frozen program schedule", "Cluster state", "Billing-period events"],
-        outputs: ["Separate progress counts", "Pause-aware dates", "Cancellation status"],
-        safeguards: ["Idempotent billing grants", "No rescheduling on generic updates", "No work after scope delivery"],
+            "Once your last batch is delivered, we ask for the subscription to be cancelled at the end of that billing period. There is nothing for you to remember to switch off.",
+        inputs: ["Your agreed schedule", "Batch progress", "Your billing dates"],
+        outputs: [
+            "Written, delivered and published counts, kept apart",
+            "Dates that shift correctly if you pause",
+            "Confirmation that cancellation was requested",
+        ],
+        safeguards: [
+            "A retry never charges you twice",
+            "Pausing shifts the schedule without changing the price",
+            "No work is generated after your scope is delivered",
+        ],
     },
 }

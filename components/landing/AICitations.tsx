@@ -4,40 +4,51 @@ import React from 'react';
 import Image from 'next/image';
 import { CornerSquare } from './CornerSquare';
 
+/**
+ * First-party evidence, framed as one documented case — never as typical results.
+ *
+ * This is the only place the site makes an outcome claim at all, and it survives
+ * the no-guarantees rule in docs/PIVOT.md §1 for one reason: every line below
+ * describes something that already happened on a property we own and can
+ * screenshot. Nothing here promises a customer the same result. Keep it that
+ * way: reporting what our own site did is a record, while predicting the same
+ * outcome for a reader is a claim we cannot support. The contract test pins
+ * both the disclaimer and the second-person phrasings that must never appear.
+ */
 const PROOF_POINTS = [
     {
-        title: "1,300% Organic Growth",
-        description: "We started from zero. In 90-100 days, we reached 1.3k+ consistent monthly clicks without spending a dollar on ads.",
+        title: "1,300% organic growth",
+        description: "From zero to 1.3k+ consistent monthly clicks in 90-100 days, with no ad spend and no bought links.",
         image: "/case-study/proof-1.webp",
         alt: "Google Search Console performance graph showing 1,300% growth in organic clicks for BringBack.pro over 90 days",
         span: "md:col-span-2"
     },
     {
-        title: "Ranking on Google page #1",
-        description: "We don't just write; we rank. FlipAEO content is outranking major competitors for high-volume, high-intent keywords.",
+        title: "Page one on Google",
+        description: "The clusters we published landed on page one for high-intent commercial queries, against much larger competitors.",
         image: "/case-study/proof-2.webp",
         alt: "Google Rankings showing BringBack.pro claiming the #1 spot for high-intent keywords like 'combine photos', outranking major competitors",
         align: "object-top",
         span: "md:col-span-2"
     },
     {
-        title: "Real AI Traffic",
-        description: "The proof is in the data. See ChatGPT referral traffic driving real, high-intent users directly to our site.",
+        title: "Traffic arriving from ChatGPT",
+        description: "Analytics showing referral sessions coming directly out of ChatGPT answers — the visits nobody bids on.",
         image: "/case-study/proof-3.webp",
         alt: "Google Analytics data proving significant referral traffic coming directly from ChatGPT to BringBack.pro",
         span: "md:col-span-2"
     },
     {
-        title: "Cited by Gemini",
-        description: "Not just ChatGPT. Google's own AI model, Gemini, puts BringBack in the Top recommendation when we asked a natural user query.",
+        title: "Gemini recommends it",
+        description: "Asked a natural buying question, Google's own model returns BringBack in its top recommendation.",
         image: "/case-study/proof-4.webp",
         alt: "Google Gemini AI response recommending BringBack.pro as the 'Best All-Around AI Tool' for photo restoration in response to a user query",
         align: "object-top",
         span: "md:col-span-3"
     },
     {
-        title: "Cited by ChatGPT ",
-        description: "The ultimate proof of quality: ChatGPT mentions bringback ai in their answers to user.",
+        title: "ChatGPT names it as a source",
+        description: "The same question in ChatGPT surfaces BringBack in the answer itself, not in a list of links below it.",
         image: "/case-study/proof-5.webp",
         alt: "ChatGPT conversation citing BringBack.pro as a verified source in its answer to a user query about photo tools",
         align: "object-top",
@@ -63,14 +74,17 @@ export const AICitations: React.FC = () => {
                             Live Case Study
                         </span>
                         <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-                            We Drink Our<br /><span className='italic text-stone-500'>Own Champagne</span>
+                            We ran it on <br /><span className='italic text-stone-500'>our own site first</span>
                         </h2>
                     </div>
 
                     {/* Right: Description */}
                     <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
                         <p className="font-sans text-stone-500 text-lg leading-relaxed">
-                            We didn’t just build a tool - we proved it. We used FlipAEO to <span className="text-stone-900 font-medium">scale</span> our own SaaS, <a href="https://bringback.pro" target="_blank" className="text-stone-900 font-medium underline decoration-stone-300 hover:decoration-stone-900 transition-all">BringBack.pro</a>, from zero to market leader. No ads, no backlinks - just pure, high-intent authority.
+                            Before selling this, we pointed it at our own SaaS, <a href="https://bringback.pro" target="_blank" className="text-stone-900 font-medium underline decoration-stone-300 hover:decoration-stone-900 transition-all">BringBack.pro</a>, and published the clusters it planned. No ads, no bought links. Here is what happened, screenshots and all.
+                        </p>
+                        <p className="font-sans text-stone-400 text-sm leading-relaxed mt-4">
+                            One site, one market, over 90&ndash;100 days. We show it because we can prove it — not because we can promise you the same. Nobody can honestly guarantee rankings or AI citations, and we do not.
                         </p>
                     </div>
                 </div>
