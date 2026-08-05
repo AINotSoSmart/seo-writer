@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
 import { saveBrandAction, updateBrandAction } from "@/actions/brand"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { Loader2, ArrowLeft, RotateCcw } from "lucide-react"
@@ -8,7 +8,12 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
 import { PillInput } from "@/components/ui/pill-input"
-import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
+import {
+    ScopeFamilyReview,
+    ScopeFamilySkeleton,
+    findScopeBlockers,
+    focusScopeField,
+} from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
 import {
     ANALYZE_PHASE_COPY,
@@ -34,11 +39,28 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
     const [brandData, setBrandData] = useState<BrandDetails | null>(initialData || null)
     const [brandProfileReady, setBrandProfileReady] = useState(Boolean(initialData?.product_name?.trim()))
     const [brandFieldsReady, setBrandFieldsReady] = useState(Boolean(initialData?.product_name?.trim()))
+    /** See page.tsx — `brand_ready` lands before `scope_ready`, so this is the
+     *  only honest signal for "is the category list ready yet". */
+    const [scopeReady, setScopeReady] = useState(
+        Boolean(initialData?.scope_families?.length),
+    )
     const [targetSeeds, setTargetSeeds] = useState<string[]>(
         initialData?.target_seed_keywords || [],
     )
     const [seedsWithoutDemand, setSeedsWithoutDemand] = useState<string[]>([])
     const [error, setError] = useState("")
+
+    /** Same live pre-flight as onboarding — see findScopeBlockers. */
+    const scopeBlockers = useMemo(
+        () =>
+            brandData
+                ? findScopeBlockers(
+                      brandData.scope_families || [],
+                      brandData.target_seed_keywords || targetSeeds,
+                  )
+                : [],
+        [brandData, targetSeeds],
+    )
 
     useEffect(() => {
         if (typeof window === "undefined") return
@@ -61,6 +83,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
         setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
         setBrandProfileReady(false)
         setBrandFieldsReady(false)
+        setScopeReady(false)
         setBrandData(null)
         setSeedsWithoutDemand([])
         setError("")
@@ -81,6 +104,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                 if (event.message) setAnalyzePhase(event.message)
 
                 if (event.phase === "scope_ready" && event.scope_families) {
+                    setScopeReady(true)
                     const families = trimFamiliesToSearchCap(event.scope_families)
                     setBrandData((current) => {
                         if (current) return { ...current, scope_families: families }
@@ -100,11 +124,26 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                 }
 
                 if (event.phase === "complete" && event.data) {
-                    setBrandData({
-                        ...event.data,
-                        scope_families: trimFamiliesToSearchCap(
-                            event.data.scope_families || [],
-                        ),
+                    setScopeReady(true)
+                    // MERGE, never replace — see the same handler in
+                    // app/(onboarding)/onboarding/page.tsx for why. Replacing
+                    // discarded every edit made during the wait.
+                    const { scope_families: serverFamilies, ...persona } = event.data
+                    setBrandData((current) => {
+                        const families = current?.scope_families?.length
+                            ? current.scope_families
+                            : trimFamiliesToSearchCap(serverFamilies || [])
+                        return {
+                            ...(current ?? emptyBrandShell(families, targetSeeds)),
+                            ...persona,
+                            scope_families: families,
+                            target_seed_keywords:
+                                current?.target_seed_keywords ??
+                                persona.target_seed_keywords ??
+                                targetSeeds,
+                            search_country: current?.search_country || persona.search_country || "",
+                            search_topic: current?.search_topic || persona.search_topic || "general",
+                        }
                     })
                     setBrandFieldsReady(true)
                     setBrandProfileReady(true)
@@ -350,13 +389,18 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             </div>
 
             <div className="grid gap-6 p-4 sm:p-6 bg-white rounded-xl border border-stone-200">
+                {/* Keyed on scopeReady, not brandFieldsReady — the old branch was
+                    true exactly when its message was wrong. */}
                 {analyzing && !brandProfileReady && (
-                    <p className="text-[11px] text-stone-400">
-                        {brandFieldsReady
-                            ? analyzePhase
-                            : "Brand voice still loading… You can confirm product areas now."}
+                    <p className="text-xs text-stone-500">
+                        {scopeReady
+                            ? "Brand voice still loading… You can confirm product areas now."
+                            : "Finding product areas… this is the slow part."}
                     </p>
                 )}
+                {analyzing && (brandData.scope_families?.length ?? 0) === 0 ? (
+                    <ScopeFamilySkeleton />
+                ) : (
                 <ScopeFamilyReview
                     families={brandData.scope_families || []}
                     targetSeeds={brandData.target_seed_keywords || targetSeeds}
@@ -366,7 +410,38 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                             current ? { ...current, scope_families } : current,
                         )
                     }
+                    onChangeTargetSeeds={(seeds) => {
+                        setTargetSeeds(seeds)
+                        setBrandData((current) =>
+                            current ? { ...current, target_seed_keywords: seeds } : current,
+                        )
+                    }}
                 />
+                )}
+
+                {!analyzing && scopeBlockers.length > 0 && (
+                    <div className="rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200">
+                        <p className="text-[11px] font-medium text-amber-900">
+                            {scopeBlockers.length === 1
+                                ? "One thing left before this can be saved"
+                                : `${scopeBlockers.length} things left before this can be saved`}
+                        </p>
+                        <ul className="mt-1 space-y-0.5">
+                            {scopeBlockers.map((blocker, index) => (
+                                <li key={`${blocker.familyId}-${blocker.field}-${index}`}>
+                                    <button
+                                        type="button"
+                                        onClick={() => focusScopeField(blocker)}
+                                        className="text-left text-[11px] leading-snug text-amber-800 underline-offset-2 hover:underline"
+                                    >
+                                        {blocker.familyName ? `${blocker.familyName}: ` : ""}
+                                        {blocker.message}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
 
                 {brandFieldsReady ? (
                 <>

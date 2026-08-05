@@ -9,15 +9,19 @@ import {
 // Relative, not "@/lib/...": this module is imported directly by the contract
 // suite, which runs under plain node and cannot resolve the tsconfig alias.
 } from "./schemas/brand.ts"
+import { MECHANICS_GAP_COPY, mechanicsGaps } from "./scope-mechanics.ts"
 import {
+    MAX_SCOPE_FAMILY_COUNT,
     MAX_SEARCH_DIRECTIONS,
+    MAX_SEEDS_PER_FAMILY,
     trimFamiliesToSearchCap,
 } from "./scope-search-cap.ts"
 import { fallbackCapabilityContract } from "./writer/article-contract.ts"
 
 export const SCOPE_CONTRACT_VERSION = "confirmed-business-scope-v2"
-export const MAX_SCOPE_FAMILIES = 12
+export const MAX_SCOPE_FAMILIES = MAX_SCOPE_FAMILY_COUNT
 export const MAX_TOTAL_SCOPE_SEEDS = MAX_SEARCH_DIRECTIONS
+export { MAX_SEEDS_PER_FAMILY }
 export { trimFamiliesToSearchCap }
 
 type CrawledPage = {
@@ -190,7 +194,7 @@ export function validateGroundedScope(
 
         const seeds = Array.from(
             new Set(family.seed_keywords.map(normalizeSeed).filter(Boolean)),
-        ).slice(0, 8)
+        ).slice(0, MAX_SEEDS_PER_FAMILY)
         if (seeds.length === 0) {
             issues.push({
                 family: family.name,
@@ -277,9 +281,39 @@ export function validateGroundedScope(
     ).filter((seed) => !claimed.has(seed))
 
     for (const seed of orphanSeeds) {
-        if (families.length >= MAX_SCOPE_FAMILIES) break
+        // Both of these used to drop the seed in silence, leaving the founder
+        // with an "Assign every target search…" error naming a search that had
+        // no category to be assigned to and no explanation of why.
+        if (families.length >= MAX_SCOPE_FAMILIES) {
+            issues.push({
+                message: `Could not create a product area for your target search "${seed}" — the scope is already at the ${MAX_SCOPE_FAMILIES}-area limit. Add it as a keyword on an existing area, or remove an area first.`,
+            })
+            continue
+        }
         const name = titleCase(seed).slice(0, 100)
-        if (seenNames.has(normalizeText(name))) continue
+        const existing = families.find(
+            (family) => normalizeText(family.name) === normalizeText(name),
+        )
+        if (existing) {
+            // A family already carries this name, which is what the founder
+            // meant by typing the search. Attach the seed rather than discarding
+            // it — dropping it produced an error the UI could never clear.
+            if (existing.seed_keywords.length >= MAX_SEEDS_PER_FAMILY) {
+                issues.push({
+                    family: existing.name,
+                    message: `Could not add your target search "${seed}" to "${existing.name}" — it already has ${MAX_SEEDS_PER_FAMILY} searches. Move one, or put this search in another area.`,
+                })
+                continue
+            }
+            existing.seed_keywords = Array.from(
+                new Set([...existing.seed_keywords, seed]),
+            ).slice(0, MAX_SEEDS_PER_FAMILY)
+            issues.push({
+                family: existing.name,
+                message: `Added your target search "${seed}" to "${existing.name}", which already covers it.`,
+            })
+            continue
+        }
         seenNames.add(normalizeText(name))
         families.push({
             id: randomUUID(),
@@ -356,7 +390,7 @@ export function validateConfirmedScope(brandData: BrandDetails): {
             priority: index,
             seed_keywords: Array.from(
                 new Set(family.seed_keywords.map(normalizeSeed).filter(Boolean)),
-            ).slice(0, 8),
+            ).slice(0, MAX_SEEDS_PER_FAMILY),
         }))
 
     const errors: string[] = []
@@ -385,21 +419,14 @@ export function validateConfirmedScope(brandData: BrandDetails): {
         }
         familyNames.add(normalizedName)
 
-        const capability = family.capability_contract
-        if (
-            !capability ||
-            !capability.deliveryMode.trim() ||
-            capability.facts.length === 0 ||
-            capability.operations.length === 0 ||
-            capability.operations.some(
-                (operation) =>
-                    !operation.action.trim() ||
-                    /^describe\b/i.test(operation.action.trim()) ||
-                    operation.evidenceRefs.length === 0,
-            )
-        ) {
+        // One definition, shared with the onboarding UI — see lib/scope-mechanics.ts
+        // for why this must not live here alone. The message keeps its original
+        // wording and gains the specific reason, because "needs confirmed
+        // mechanics" alone left founders with nothing to act on.
+        const gaps = mechanicsGaps(family.capability_contract)
+        if (gaps.length > 0) {
             errors.push(
-                `${family.name} needs confirmed mechanics in “How we understand this works.”`,
+                `${family.name} needs confirmed mechanics in “How we understand this works.” ${MECHANICS_GAP_COPY[gaps[0]]}`,
             )
         }
 

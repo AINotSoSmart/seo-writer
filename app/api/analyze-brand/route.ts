@@ -125,6 +125,14 @@ export async function POST(req: NextRequest) {
     // Select before extracting so one sitemap branch cannot consume the page
     // budget. The bounded crawl below is the only fallback.
     const sitemapUrls = await fetchAllSitemapUrls(url)
+    // The sitemap walk is the longest silent stretch of the whole run. Say what
+    // it found before spending another 20-40s on extraction.
+    emit({
+      phase: "crawl_started",
+      message: sitemapUrls.length > 0
+        ? `Found ${sitemapUrls.length} page${sitemapUrls.length === 1 ? "" : "s"} in your sitemap…`
+        : "No sitemap found — reading your site directly…",
+    })
     const representativeUrls = selectRepresentativeBrandUrls(
       url,
       sitemapUrls,
@@ -150,6 +158,11 @@ export async function POST(req: NextRequest) {
     // Sites without a usable sitemap get one bounded crawler fallback. There
     // is no recursive or advanced-depth retry loop.
     if (crawledPages.length < 3 || totalContentChars(crawledPages) < THIN_CORPUS_CHARS) {
+      // Another silent 20-40s. Name it rather than appear frozen.
+      emit({
+        phase: "crawl_started",
+        message: "Your sitemap was thin — reading the site directly…",
+      })
       crawlResponse = await tvly.crawl(url, {
         limit: BRAND_CRAWL_LIMIT,
         extractDepth: "basic",
@@ -244,9 +257,17 @@ export async function POST(req: NextRequest) {
           targetSeeds,
         )
         if (grounded.families.length === 0) {
+          // Name the measurable reason. A site that renders entirely in
+          // JavaScript yields almost no readable text, and the generic "please
+          // retry" told the founder to repeat something that cannot succeed.
+          const readableChars = totalContentChars(crawledPages)
           throw new Error(
             grounded.issues[0]?.message ||
-              "We could not identify what this website sells. Please retry, or add your main customer searches so we can start from those.",
+              (readableChars < THIN_CORPUS_CHARS
+                ? `We reached your site but could only read ${readableChars} characters across ${crawledPages.length} page${
+                    crawledPages.length === 1 ? "" : "s"
+                  } — it may render entirely in JavaScript, which we cannot see. Add your main customer searches and we will build from those instead.`
+                : "We could not identify what this website sells. Please retry, or add your main customer searches so we can start from those."),
           )
         }
         const scopedFamilies = trimFamiliesToSearchCap(grounded.families)

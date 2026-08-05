@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
     ArrowDown,
     ArrowUp,
@@ -9,11 +10,24 @@ import {
 } from "lucide-react"
 
 import type { CapabilityContract, ScopeFamily } from "@/lib/schemas/brand"
-import { CAPABILITY_CONTRACT_VERSION } from "@/lib/writer/article-contract"
-import { MAX_SEARCH_DIRECTIONS } from "@/lib/scope-search-cap"
+import {
+    CAPABILITY_CONTRACT_VERSION,
+    fallbackCapabilityContract,
+} from "@/lib/writer/article-contract"
+import {
+    MECHANICS_GAP_COPY,
+    isPlaceholderAction,
+    mechanicsGaps,
+} from "@/lib/scope-mechanics"
+import {
+    MAX_SCOPE_FAMILY_COUNT,
+    MAX_SEARCH_DIRECTIONS,
+    MAX_SEEDS_PER_FAMILY,
+} from "@/lib/scope-search-cap"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PillInput } from "@/components/ui/pill-input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
 function normalizeSeed(value: string): string {
@@ -28,8 +42,165 @@ export function countScopeSearches(families: ScopeFamily[]): number {
         .reduce((total, family) => total + family.seed_keywords.length, 0)
 }
 
+function titleCaseSeed(seed: string): string {
+    return seed.replace(/\b\w/g, (character) => character.toUpperCase()).slice(0, 100)
+}
+
+/** Stable per-row key. Families created client-side may not have an id yet. */
+function familyKeyOf(family: ScopeFamily, index: number): string {
+    return family.id || `scope-${index}`
+}
+
+/**
+ * Placeholder rows for the window where scope is still being computed.
+ *
+ * Rendering the real component with an empty array produced a bordered box, a
+ * counter reading 0/12 and an enabled "Add category" — indistinguishable from
+ * "we found nothing on your site", while the model was still working.
+ */
+export function ScopeFamilySkeleton() {
+    return (
+        <section className="space-y-2" aria-busy="true" aria-live="polite">
+            <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-stone-500">
+                    Most important category first · keywords belong to that category
+                </p>
+            </div>
+            <div className="divide-y divide-stone-100 rounded-lg border border-stone-200">
+                {[0, 1, 2].map((row) => (
+                    <div key={row} className="space-y-2 px-2.5 py-3 sm:px-3">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-7 w-full" />
+                        <div className="flex gap-1.5">
+                            <Skeleton className="h-5 w-24 rounded-full" />
+                            <Skeleton className="h-5 w-32 rounded-full" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <p className="text-[11px] text-stone-400">Reading your site for product areas…</p>
+        </section>
+    )
+}
+
+/** Scrolls a blocker's field into view and focuses it. */
+export function focusScopeField(blocker: ScopeBlocker) {
+    if (typeof document === "undefined") return
+    const target =
+        blocker.field === "unassigned" || !blocker.familyId
+            ? document.getElementById("scope-unassigned")
+            : document.getElementById(`scope-field-${blocker.familyId}-${blocker.field}`) ||
+              document.getElementById(`scope-family-${blocker.familyId}`)
+    if (!target) return
+    target.scrollIntoView({ behavior: "smooth", block: "center" })
+    if (target instanceof HTMLInputElement) target.focus({ preventScroll: true })
+}
+
+export type ScopeBlockerField =
+    | "name"
+    | "keywords"
+    | "description"
+    | "deliveryMode"
+    | "action"
+    | "unassigned"
+
+export type ScopeBlocker = {
+    familyId: string
+    familyName: string
+    field: ScopeBlockerField
+    message: string
+}
+
+/**
+ * Everything that will stop Continue, computed on the client, per field.
+ *
+ * The server's `validateConfirmedScope` remains the authority — this exists so
+ * the founder never again sees its worst output. A freshly added category fails
+ * `BrandDetailsSchema` before the mechanics check runs, so the entire screen
+ * used to collapse to the single string "Brand details are invalid." with no
+ * field named and nothing to click.
+ *
+ * Mirrors the server rules deliberately; `mechanicsGaps` is literally the same
+ * function the server calls, so the two cannot drift on the hard part.
+ */
+export function findScopeBlockers(
+    families: ScopeFamily[],
+    targetSeeds: string[],
+): ScopeBlocker[] {
+    const enabled = families
+        .filter((family) => family.enabled)
+        .sort((a, b) => a.priority - b.priority)
+    const blockers: ScopeBlocker[] = []
+    const seenNames = new Set<string>()
+
+    enabled.forEach((family, index) => {
+        const familyId = family.id || `scope-${index}`
+        const familyName = family.name.trim() || `Category ${index + 1}`
+
+        if (family.name.trim().length < 2) {
+            blockers.push({ familyId, familyName, field: "name", message: "Give this category a name." })
+        } else if (seenNames.has(family.name.trim().toLowerCase())) {
+            blockers.push({ familyId, familyName, field: "name", message: `Two categories are both called "${family.name.trim()}" — rename one.` })
+        }
+        seenNames.add(family.name.trim().toLowerCase())
+
+        if (family.seed_keywords.length === 0) {
+            blockers.push({ familyId, familyName, field: "keywords", message: "Add at least one keyword people would search." })
+        }
+        if (family.description.trim().length < 8) {
+            blockers.push({ familyId, familyName, field: "description", message: "Say in one line what this helps with." })
+        }
+
+        const gaps = mechanicsGaps(family.capability_contract)
+        if (gaps.length > 0) {
+            blockers.push({
+                familyId,
+                familyName,
+                field: gaps[0] === "missing_delivery_mode" ? "deliveryMode" : "action",
+                message: MECHANICS_GAP_COPY[gaps[0]],
+            })
+        }
+    })
+
+    const assigned = new Set(
+        enabled.flatMap((family) => family.seed_keywords.map(normalizeSeed)),
+    )
+    const unassigned = Array.from(
+        new Set(targetSeeds.map(normalizeSeed).filter(Boolean)),
+    ).filter((seed) => !assigned.has(seed))
+    for (const seed of unassigned) {
+        blockers.push({
+            familyId: "",
+            familyName: "",
+            field: "unassigned",
+            message: `"${seed}" is not in any category yet — put it in one, or drop it.`,
+        })
+    }
+
+    return blockers
+}
+
 const fieldLabelClass = "text-[10px] font-medium uppercase tracking-wide text-stone-400"
 
+/**
+ * Records what the founder typed as a first-party capability fact.
+ *
+ * A founder describing their own product IS the sanctioned evidence source —
+ * `CapabilityFactSchema` whitelists the `founder-confirmed:` URL scheme for
+ * exactly this. It is the only way a manually added or auto-rescued product area
+ * can ever satisfy the confirm gate.
+ *
+ * Two invariants, both load-bearing:
+ *
+ * 1. **A fact is only minted from a meaningful action.** With an empty action
+ *    the old quote was `"Action: ."` — nine characters, which slips past the
+ *    schema's `min(8)` and would satisfy the facts check while saying nothing.
+ *    When the action is empty or still placeholder text, the fact and its
+ *    reference are withdrawn instead, so the gate keeps failing honestly.
+ * 2. **It only ever touches its own id.** `${familyId}:founder-${key}` is
+ *    namespaced so this can never overwrite or delete a fact the extractor
+ *    read off the customer's site.
+ */
 function withFounderConfirmedOperation(
     contract: CapabilityContract,
     familyId: string,
@@ -38,13 +209,26 @@ function withFounderConfirmedOperation(
 ): CapabilityContract {
     const operation = { ...contract.operations[operationIndex], ...patch }
     const factId = `${familyId}:founder-${operation.key}`.slice(0, 80)
+    const operations = [...contract.operations]
+    const otherFacts = contract.facts.filter((fact) => fact.id !== factId)
+
+    if (isPlaceholderAction(operation.action)) {
+        // Withdraw both halves. Leaving the ref behind would point at nothing.
+        operations[operationIndex] = {
+            ...operation,
+            evidenceRefs: operation.evidenceRefs.filter((ref) => ref !== factId),
+        }
+        return { ...contract, operations, facts: otherFacts }
+    }
+
     const quote = [
+        operation.customerJob.trim() ? `Job: ${operation.customerJob.trim()}.` : "",
         operation.inputs.length ? `Inputs: ${operation.inputs.join(", ")}.` : "",
-        `Action: ${operation.action}.`,
+        `Action: ${operation.action.trim()}.`,
         operation.outputs.length ? `Outputs: ${operation.outputs.join(", ")}.` : "",
         operation.limits.length ? `Limits: ${operation.limits.join(", ")}.` : "",
     ].filter(Boolean).join(" ")
-    const operations = [...contract.operations]
+
     operations[operationIndex] = {
         ...operation,
         evidenceRefs: Array.from(new Set([...operation.evidenceRefs, factId])).slice(0, 8),
@@ -53,12 +237,8 @@ function withFounderConfirmedOperation(
         ...contract,
         operations,
         facts: [
-            ...contract.facts.filter((fact) => fact.id !== factId),
-            {
-                id: factId,
-                url: "founder-confirmed:onboarding",
-                quote,
-            },
+            ...otherFacts,
+            { id: factId, url: "founder-confirmed:onboarding", quote },
         ].slice(-12),
     }
 }
@@ -68,13 +248,30 @@ export function ScopeFamilyReview({
     targetSeeds,
     seedsWithoutDemand = [],
     onChange,
+    onChangeTargetSeeds,
+    onRestart,
 }: {
     families: ScopeFamily[]
     targetSeeds: string[]
     /** Advisory: phrases Google Autocomplete does not suggest. */
     seedsWithoutDemand?: string[]
     onChange: (families: ScopeFamily[]) => void
+    /**
+     * Lets the founder drop a target search they decided they do not sell.
+     *
+     * Without this the "Assign every target search" error can only ever be
+     * cleared by inventing a category for it — there was no way to withdraw the
+     * demand. Hosts MUST also mirror the change into
+     * `brandData.target_seed_keywords`, which is what the server validator reads.
+     */
+    onChangeTargetSeeds?: (seeds: string[]) => void
+    /** Offered only when the founder has deleted every category. */
+    onRestart?: () => void
 }) {
+    // Auto-opens the mechanics editor for any incomplete family, then respects a
+    // manual collapse. The cure for the confirm gate used to be hidden behind a
+    // closed 10px disclosure with no error styling and no link from the banner.
+    const [openMechanics, setOpenMechanics] = useState<Record<string, boolean>>({})
     const noDemand = new Set(seedsWithoutDemand.map(normalizeSeed))
     const ordered = [...families]
         .filter((family) => family.enabled)
@@ -122,24 +319,50 @@ export function ScopeFamilyReview({
                 .map((family, priority) => ({ ...family, priority })),
         )
     }
-    const add = () => {
+    /** Attach an unplaced target search to an existing category. */
+    const assignSeed = (seed: string, familyIndex: number) => {
+        const family = ordered[familyIndex]
+        if (!family || family.seed_keywords.length >= MAX_SEEDS_PER_FAMILY) return
+        replaceSeeds(familyIndex, [...family.seed_keywords, seed])
+    }
+    /** Drop a target search the founder has decided they do not sell. */
+    const dropSeed = (seed: string) => {
+        onChangeTargetSeeds?.(
+            targetSeeds.filter((candidate) => normalizeSeed(candidate) !== seed),
+        )
+    }
+    /**
+     * Every field starts EMPTY, with its guidance in the placeholder attribute.
+     *
+     * These used to ship prefilled prose beginning with the word "Describe",
+     * which the confirm gate rejects by design — `lib/harvest/scope-classifier.ts`
+     * inlines the action verbatim as the definition of the business, so
+     * placeholder wording would become the yardstick for the whole audit. The
+     * placeholder WAS the failure condition, so a founder who added a category
+     * and filled in everything the screen showed them still could not continue,
+     * and nothing said why.
+     *
+     * `seed` pre-fills the name and keyword when the category is being created
+     * from an unplaced target search.
+     */
+    const add = (seed?: string) => {
         if (atCap) return
         onChange([
             ...ordered,
             {
                 id: crypto.randomUUID(),
-                name: "New category",
+                name: seed ? titleCaseSeed(seed) : "",
                 description: "",
-                seed_keywords: [],
+                seed_keywords: seed ? [seed] : [],
                 evidence: [],
                 capability_contract: {
                     version: CAPABILITY_CONTRACT_VERSION,
-                    deliveryMode: "Browser software, API, installed product, or human-delivered service",
+                    deliveryMode: "",
                     operations: [{
                         key: "op1",
-                        customerJob: "Describe the customer job",
+                        customerJob: "",
                         inputs: [],
-                        action: "Describe what your product or service does",
+                        action: "",
                         outputs: [],
                         limits: [],
                         evidenceRefs: [],
@@ -170,20 +393,101 @@ export function ScopeFamilyReview({
                 </p>
             </div>
 
+            {/* One row per unplaced search, each with a way OUT. The flat list this
+                replaced named the problem and offered no action: the only cure was
+                to retype the search as a keyword, and there has never been a way to
+                drop a search you decided you do not sell. */}
             {unassigned.length > 0 && (
-                <p className="text-xs text-amber-800">
-                    Put these into a category: {unassigned.join(", ")}
-                </p>
+                <div id="scope-unassigned" className="space-y-1 rounded-md bg-amber-50/70 px-2 py-1.5 ring-1 ring-amber-200">
+                    <p className="text-[11px] font-medium text-amber-900">
+                        {unassigned.length === 1
+                            ? "One search you gave us is not in a category yet"
+                            : `${unassigned.length} searches you gave us are not in a category yet`}
+                    </p>
+                    {unassigned.map((seed) => {
+                        const suggestion = ordered.findIndex(
+                            (family) => normalizeSeed(family.name) === seed,
+                        )
+                        return (
+                            <div key={seed} className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-mono text-[11px] text-amber-900">{seed}</span>
+                                {suggestion >= 0 ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => assignSeed(seed, suggestion)}
+                                        className="rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-amber-900 ring-1 ring-amber-300 hover:bg-amber-100"
+                                    >
+                                        Add to “{ordered[suggestion].name}”
+                                    </button>
+                                ) : null}
+                                <select
+                                    aria-label={`Put "${seed}" in a category`}
+                                    value=""
+                                    onChange={(event) => {
+                                        const choice = event.target.value
+                                        if (choice === "") return
+                                        if (choice === "__new__") add(seed)
+                                        else assignSeed(seed, Number(choice))
+                                    }}
+                                    className="h-6 rounded border border-amber-300 bg-white px-1 text-[10px] text-amber-900"
+                                >
+                                    <option value="">Put in…</option>
+                                    {ordered.map((family, familyIndex) => (
+                                        <option key={familyKeyOf(family, familyIndex)} value={familyIndex}>
+                                            {family.name.trim() || `Category ${familyIndex + 1}`}
+                                        </option>
+                                    ))}
+                                    {!atCap && ordered.length < MAX_SCOPE_FAMILY_COUNT ? (
+                                        <option value="__new__">New category from this</option>
+                                    ) : null}
+                                </select>
+                                {onChangeTargetSeeds ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => dropSeed(seed)}
+                                        className="text-[10px] text-amber-700 underline underline-offset-2 hover:text-amber-900"
+                                    >
+                                        Not something we sell
+                                    </button>
+                                ) : null}
+                            </div>
+                        )
+                    })}
+                </div>
             )}
 
             <div className="divide-y divide-stone-100 rounded-lg border border-stone-200">
+                {/* An empty box with a counter reading 0/12 used to render here and
+                    read as "we found nothing" — including while scope was still
+                    loading. Hosts now show a skeleton during analysis, so reaching
+                    this means the founder deleted everything. Say so. */}
+                {ordered.length === 0 ? (
+                    <p className="px-3 py-4 text-xs leading-relaxed text-stone-500">
+                        No product areas yet. Nothing gets researched until there is at
+                        least one — add a category below and say what it does for
+                        customers.
+                    </p>
+                ) : null}
                 {ordered.map((family, index) => {
                     const rare = family.seed_keywords.some((seed) =>
                         noDemand.has(normalizeSeed(seed)),
                     )
+                    const familyKey = family.id || `scope-${index}`
+                    // Never null. A missing contract falls back to an editable
+                    // shape so the family can be repaired instead of only deleted.
+                    const contract =
+                        family.capability_contract ??
+                        fallbackCapabilityContract({
+                            name: family.name,
+                            description: family.description,
+                        })
+                    // Computed from the STORED contract, not the fallback — a
+                    // family with no contract must still read as incomplete.
+                    const gaps = mechanicsGaps(family.capability_contract)
                     return (
                         <article
-                            key={family.id || `scope-family-${index}`}
+                            key={familyKey}
+                            id={`scope-family-${familyKey}`}
                             className="space-y-1.5 px-2.5 py-2 sm:px-3"
                         >
                             <div>
@@ -193,6 +497,7 @@ export function ScopeFamilyReview({
                                         {index + 1}
                                     </span>
                                     <Input
+                                        id={`scope-field-${familyKey}-name`}
                                         value={family.name}
                                         onChange={(event) =>
                                             replace(index, {
@@ -264,7 +569,7 @@ export function ScopeFamilyReview({
                                 </div>
                             </div>
 
-                            <div>
+                            <div id={`scope-field-${familyKey}-keywords`}>
                                 <p className={fieldLabelClass}>Keywords</p>
                                 <PillInput
                                     value={family.seed_keywords}
@@ -280,22 +585,22 @@ export function ScopeFamilyReview({
                             <div>
                                 <p className={fieldLabelClass}>What this helps with</p>
                                 <Input
+                                    id={`scope-field-${familyKey}-description`}
                                     value={family.description}
                                     onChange={(event) =>
                                         replace(index, {
                                             ...family,
                                             description: event.target.value,
-                                            capability_contract: family.capability_contract
-                                                ? {
-                                                      ...family.capability_contract,
-                                                      operations: family.capability_contract.operations.map(
-                                                          (operation) => ({
-                                                              ...operation,
-                                                              customerJob: event.target.value,
-                                                          }),
-                                                      ),
-                                                  }
-                                                : family.capability_contract,
+                                            // Routed through the founder-confirmed helper, not a
+                                            // plain copy. Editing this field used to update
+                                            // customerJob but mint no fact, so the most visible
+                                            // field on the row did nothing for the confirm gate.
+                                            capability_contract: withFounderConfirmedOperation(
+                                                contract,
+                                                familyKey,
+                                                0,
+                                                { customerJob: event.target.value },
+                                            ),
                                             priority: index,
                                         })
                                     }
@@ -304,21 +609,48 @@ export function ScopeFamilyReview({
                                 />
                             </div>
 
-                            {family.capability_contract ? (
-                                <details className="rounded-md bg-stone-50/80 px-2 py-1.5">
-                                    <summary className="cursor-pointer text-[10px] font-medium text-stone-500 hover:text-stone-700">
-                                        How we understand this works
-                                    </summary>
-                                    <div className="mt-2 space-y-2">
+                            {/* Always rendered. A family whose contract was null used to render
+                                no editor at all, which made it unfixable except by deleting it. */}
+                            <details
+                                className={cn(
+                                    "rounded-md px-2 py-1.5",
+                                    gaps.length > 0
+                                        ? "bg-amber-50/70 ring-1 ring-amber-200"
+                                        : "bg-stone-50/80",
+                                )}
+                                open={openMechanics[familyKey] ?? gaps.length > 0}
+                                onToggle={(event) =>
+                                    setOpenMechanics((current) => ({
+                                        ...current,
+                                        [familyKey]: event.currentTarget.open,
+                                    }))
+                                }
+                            >
+                                <summary
+                                    className={cn(
+                                        "cursor-pointer text-[10px] font-medium hover:text-stone-700",
+                                        gaps.length > 0 ? "text-amber-800" : "text-stone-500",
+                                    )}
+                                >
+                                    How we understand this works
+                                    {gaps.length > 0 ? " · needs a moment" : null}
+                                </summary>
+                                {gaps.length > 0 ? (
+                                    <p className="mt-1.5 text-[11px] leading-snug text-amber-800">
+                                        {MECHANICS_GAP_COPY[gaps[0]]}
+                                    </p>
+                                ) : null}
+                                <div className="mt-2 space-y-2">
                                         <div>
                                             <p className={fieldLabelClass}>Delivered as</p>
                                             <Input
-                                                value={family.capability_contract.deliveryMode}
+                                                id={`scope-field-${familyKey}-deliveryMode`}
+                                                value={contract.deliveryMode}
                                                 onChange={(event) =>
                                                     replace(index, {
                                                         ...family,
                                                         capability_contract: {
-                                                            ...family.capability_contract!,
+                                                            ...contract,
                                                             deliveryMode: event.target.value,
                                                         },
                                                     })
@@ -327,16 +659,17 @@ export function ScopeFamilyReview({
                                                 className="mt-0.5 h-7 border-stone-200 bg-white px-2 text-xs shadow-none"
                                             />
                                         </div>
-                                        {family.capability_contract.operations.map((operation, operationIndex) => (
+                                        {contract.operations.map((operation, operationIndex) => (
                                             <div key={operation.key} className="space-y-1.5 border-t border-stone-200 pt-2 first:border-0 first:pt-0">
                                                 <Input
+                                                    id={operationIndex === 0 ? `scope-field-${familyKey}-action` : undefined}
                                                     value={operation.action}
                                                     onChange={(event) => {
                                                         replace(index, {
                                                             ...family,
                                                             capability_contract: withFounderConfirmedOperation(
-                                                                family.capability_contract!,
-                                                                family.id || `scope-${index}`,
+                                                                contract,
+                                                                familyKey,
                                                                 operationIndex,
                                                                 {
                                                                     action: event.target.value,
@@ -345,7 +678,7 @@ export function ScopeFamilyReview({
                                                             ),
                                                         })
                                                     }}
-                                                    aria-label={`How ${family.name} works`}
+                                                    aria-label={`How ${family.name || "this category"} works`}
                                                     placeholder="What the product does to the input"
                                                     className="h-7 border-stone-200 bg-white px-2 text-xs shadow-none"
                                                 />
@@ -363,8 +696,8 @@ export function ScopeFamilyReview({
                                                                 replace(index, {
                                                                     ...family,
                                                                     capability_contract: withFounderConfirmedOperation(
-                                                                        family.capability_contract!,
-                                                                        family.id || `scope-${index}`,
+                                                                        contract,
+                                                                        familyKey,
                                                                         operationIndex,
                                                                         { [field]: values },
                                                                     ),
@@ -384,8 +717,7 @@ export function ScopeFamilyReview({
                                             </div>
                                         ))}
                                     </div>
-                                </details>
-                            ) : null}
+                            </details>
 
                             {family.evidence.length > 0 ? (
                                 <details>
@@ -422,15 +754,26 @@ export function ScopeFamilyReview({
                 })}
             </div>
 
-            <button
-                type="button"
-                onClick={add}
-                disabled={atCap || ordered.length >= 12}
-                className="inline-flex h-8 items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 disabled:opacity-40"
-            >
-                <Plus className="h-3.5 w-3.5" />
-                Add category
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+                <button
+                    type="button"
+                    onClick={() => add()}
+                    disabled={atCap || ordered.length >= MAX_SCOPE_FAMILY_COUNT}
+                    className="inline-flex h-8 items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 disabled:opacity-40"
+                >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add category
+                </button>
+                {ordered.length === 0 && onRestart ? (
+                    <button
+                        type="button"
+                        onClick={onRestart}
+                        className="text-xs text-stone-500 underline underline-offset-2 hover:text-stone-800"
+                    >
+                        Start over and re-run the analysis
+                    </button>
+                ) : null}
+            </div>
         </section>
     )
 }

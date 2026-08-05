@@ -6,6 +6,18 @@
 export const MAX_SEARCH_DIRECTIONS = 12
 
 /**
+ * Structural caps on confirmed scope, shared by the server validator and the
+ * onboarding UI.
+ *
+ * They live here rather than in `lib/brand-scope.ts` because that module imports
+ * `crypto` and so cannot be pulled into a client component. `brand-scope.ts`
+ * re-exports them, and both must keep matching `confirm_brand_scope` in SQL and
+ * `HARVEST_POLICY.maxSeedsPerFamily`.
+ */
+export const MAX_SCOPE_FAMILY_COUNT = 12
+export const MAX_SEEDS_PER_FAMILY = 8
+
+/**
  * Keeps at most `cap` search directions. Every family keeps one seed while
  * budget remains, then extras round-robin by priority.
  */
