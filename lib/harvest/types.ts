@@ -162,6 +162,33 @@ export function findThirdPartyBrand(
 }
 
 /**
+ * Same registrable host, ignoring `www.` and subdomain depth.
+ *
+ * Lives here rather than beside its caller because this module is import-free
+ * and therefore unit-testable; `serp-questions.ts` is alias-bound and can only
+ * be asserted as text.
+ *
+ * Unparseable or absent input returns false. An unknown host must never be
+ * treated as a match, or one bad URL would silently empty a harvest instead of
+ * failing loudly.
+ */
+export function isSameHost(candidate: string, subject?: string): boolean {
+    if (!subject) return false
+    const host = (value: string): string | null => {
+        try {
+            return new URL(value.startsWith("http") ? value : `https://${value}`)
+                .hostname.toLowerCase().replace(/^www\./, "")
+        } catch {
+            return null
+        }
+    }
+    const a = host(candidate)
+    const b = host(subject)
+    if (!a || !b) return false
+    return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`)
+}
+
+/**
  * Derives brand tokens from URLs: "https://www.pixreunion.com/" -> "pixreunion".
  */
 export function brandTokensFromUrls(urls: string[]): string[] {

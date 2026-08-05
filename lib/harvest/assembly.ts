@@ -385,6 +385,10 @@ export async function assembleHarvest(
             undefined,
             serpSeeds.length,
             excludeBrands,
+            // The audited site is skipped as a question SOURCE. It is still read
+            // in full by the coverage stage — that is a different job, and the
+            // two must not be conflated.
+            input.subjectUrl,
         ),
         harvestCompetitorCorpus(input.competitors, excludeBrands),
     ])

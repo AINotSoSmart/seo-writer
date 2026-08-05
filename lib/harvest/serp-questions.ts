@@ -24,6 +24,7 @@ import {
     buildSourceReport,
     containsExcludedBrand,
     brandTokensFromUrls,
+    isSameHost,
     mapWithConcurrency,
     sanitizeSourceContext,
 } from "./types"
@@ -166,12 +167,14 @@ type SeedHarvestResult = {
  * @param seeds        short category phrases to search
  * @param searchPrefs  country/topic preferences from the brand
  * @param maxSeeds     cap on seeds processed, to bound Tavily spend
+ * @param subjectUrl   the audited site; its own pages are never a gap source
  */
 export async function harvestSerpQuestions(
     seeds: string[],
     searchPrefs?: TavilySearchPrefs,
     maxSeeds: number = 6,
-    excludeBrands: string[] = []
+    excludeBrands: string[] = [],
+    subjectUrl?: string,
 ): Promise<HarvestOutput> {
     const apiKey = process.env.TAVILY_API_KEY
     if (!apiKey) {
@@ -205,6 +208,22 @@ export async function harvestSerpQuestions(
                 const collected: HarvestedQuery[] = []
 
                 for (const result of results) {
+                    // The audited site cannot be evidence of a gap in itself.
+                    //
+                    // `excludeBrands` already carries the subject, but it only
+                    // ever tested the QUESTION TEXT for a brand token — so a
+                    // generic FAQ line lifted off the customer's own page
+                    // ("Can I include my dog, cat, or another pet in the family
+                    // portrait?") contains no brand word, passes, and is sold
+                    // back to them as a gap they should pay to fill. Four items
+                    // in a real BringBack plan were their own product-page FAQ.
+                    //
+                    // Nothing is lost by skipping the host: the subject's pages
+                    // were never a demand signal. Autocomplete is. A question
+                    // that is genuinely searched still arrives from there — and
+                    // arrives corroborated.
+                    if (isSameHost(result.url, subjectUrl)) continue
+
                     const markdown: string = result.rawContent || result.content || ""
                     const questions = extractQuestions(markdown)
 

@@ -923,8 +923,87 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     more sections than intents. A section with no intent, no facts, no evidence
     and no brief has only the previous paragraph to continue — and it will
     continue it, straight across the heading.
+23. **The audited site is never a gap source.** Filtering brand *tokens* out of
+    question text does not stop a generic FAQ line being lifted off the
+    customer's own page and sold back to them as a gap. Check the source host.
+    The subject's pages belong to the coverage stage, not the harvest stage.
+24. **Tightening a demand gate has failed three times; measure first.** The
+    8-article floor destroyed 33% of real demand once and returned 0 clusters
+    from 123 real gaps another time. Before adding any threshold that can
+    shrink scope, re-run a real audit and diff the plan. A fix that is correct
+    in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-05 - the audit harvested the customer's own FAQ and sold it back
+
+**Founder evidence.** A completed BringBack plan of 73 articles across 8
+clusters. Four planned articles were verified, against the live page, as
+paraphrases of BringBack's own product-page FAQ:
+
+| Planned article's "primary search" | bringback.pro/ai-family-portrait FAQ |
+|---|---|
+| Can I include pets in my family portrait? | Can I include my dog, cat, or another pet in the family portrait? |
+| How many people can I include? | How many people can I combine into one group photo? |
+| What photo quality do I need for uploads? | What are the best photos to upload? |
+| Can I use old photos? | Can I combine black-and-white photos with color photos? / generational portrait |
+
+The article the writer produced earlier the same day — "How to Add Your Pets to
+an AI Family Portrait" — was generated from the first of these. **The writer
+executed a plan item that should never have existed.** A correct writer running
+this plan still produces articles nobody searched for.
+
+**Cause.** `serp-questions.ts` filtered `excludeBrands` against the **question
+text** only:
+
+```ts
+if (containsExcludedBrand(question, excludeBrands)) continue
+if (containsExcludedBrand(question, sourceBrand)) continue
+```
+
+`assembly.ts` already builds `excludeBrands` from `[subjectUrl, ...competitors]`,
+so the intent to exclude the subject was there. But a generic FAQ line off the
+customer's own page contains no brand token, so it passed, and entered the pool
+as a gap with `source_url` pointing at the customer's own site. Provenance was
+satisfied — the string genuinely is on that page — while the thing that matters
+was never tested. **The source host was never checked.**
+
+**Fixed.** `isSameHost` in `lib/harvest/types.ts` (placed there because that
+module is import-free and therefore unit-testable; `serp-questions.ts` is
+alias-bound and can only be asserted as text). `harvestSerpQuestions` takes the
+subject URL and skips any result served from that host before extracting
+questions. Nothing is lost: the subject's pages were never a demand signal —
+autocomplete is — and a question that is genuinely searched still arrives from
+there, corroborated. The subject's site is still read in full by the coverage
+stage, which is a different job and must not be conflated with this one.
+
+68/68 contract groups pass; `tsc` clean.
+
+**Two adjacent fixes were deliberately NOT made.** Both were diagnosed, both
+looked correct, and both would have repeated history:
+
+1. **Corroboration on the main clusterer path.** `STANDALONE_MIN_BACKING_QUERIES
+   = 2` is applied only inside `absorbOrphanedUnits`, which receives units only
+   from groups *below* the 8-article floor. Groups at 8+ become clusters with no
+   corroboration test, which is why **58 of 73 articles (79%) rest on a single
+   observed phrasing**. Enforcing it on the main path would cut those 58 and
+   collapse most clusters below the floor — re-creating exactly the failure the
+   2026-08-02 entries fixed twice ("0 clusters" from 123 real gaps; 33% of gap
+   demand destroyed; a paying-ready customer told they were ineligible).
+   It is also coupled: most single-observation units are the own-FAQ scrapes
+   this change removes, so the symptom may largely disappear on its own.
+   **Re-run the audit and measure the single-observation rate before deciding.**
+2. **Pattern-rejecting FAQ-shaped strings** (`Q5:`, leading digits, "your
+   tool"). This is rule 14 and the CLAUDE.md blocklist prohibition, third
+   attempt. Structural sanitation of malformed strings is still allowed;
+   rejecting on content shape is not.
+
+**Still open after this change** (needs the re-run before anything is proposed):
+the 13-article "Digital Family History Books" cluster is out of product domain
+(the Memory Book is private storage, not a genealogy-project product); four
+articles target a professional/corporate audience the brand DNA does not serve;
+and `restore old photos [android|free|near me|prompt]` is four articles chasing
+one intent.
 
 ### 2026-08-04 - the writer shipped a 176-word article as completed
 

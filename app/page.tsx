@@ -13,6 +13,7 @@ import CTASection from '@/components/landing/CTASection';
 import { Footer } from '@/components/landing/Footer';
 import { GridBackground } from "@/components/landing/GridBackground"
 import FounderNote from '@/components/landing/FounderNote';
+import { AICitations } from '@/components/landing/AICitations';
 
 
 export const metadata: Metadata = commonPageMetadata.home()
@@ -30,6 +31,10 @@ export default function Home() {
 
         {/* Hero Section */}
         <Hero />
+        {/* Proof before argument. This is the only outcome evidence on the site
+            and it is first-party and screenshotted, so it earns the slot directly
+            under the hero — everything below explains how it was produced. */}
+        <AICitations />
         <ProblemSection />
         <HowItWorksSection />
         <FeaturesSection />

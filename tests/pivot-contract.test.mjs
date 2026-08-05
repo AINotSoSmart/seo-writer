@@ -1875,6 +1875,25 @@ test("scope classification rejects undeliverable topics, not just irrelevant one
     // A deliverability rejection must not suggest a family to reinstate into.
     assert.match(classifier, /assignment\.decision === "adjacent" \? familyId : null/)
 
+    // The audited site is not a gap source. `excludeBrands` already carried the
+    // subject, but it only ever tested the QUESTION TEXT for a brand token — so
+    // a generic FAQ line off the customer's own page passed and was sold back
+    // to them as a gap. A real BringBack plan contained four of their own
+    // product-page FAQs as planned articles. The host must be checked too.
+    const { isSameHost } = await import("../lib/harvest/types.ts")
+    assert.equal(isSameHost("https://bringback.pro/ai-family-portrait", "https://bringback.pro"), true)
+    assert.equal(isSameHost("https://www.bringback.pro/compare", "https://bringback.pro"), true)
+    assert.equal(isSameHost("https://blog.bringback.pro/post", "https://bringback.pro"), true)
+    assert.equal(isSameHost("https://competitor.example/faq", "https://bringback.pro"), false)
+    // An unparseable or absent subject must never match, or one bad URL would
+    // silently empty the entire harvest instead of failing loudly.
+    assert.equal(isSameHost("https://bringback.pro", undefined), false)
+    assert.equal(isSameHost("not a url", "https://bringback.pro"), false)
+
+    const serpQuestions = await text("lib/harvest/serp-questions.ts")
+    assert.match(serpQuestions, /if \(isSameHost\(result\.url, subjectUrl\)\) continue/)
+    assert.match(assembly, /harvestSerpQuestions\([\s\S]{0,600}input\.subjectUrl/)
+
     // Production audits failed closed when Gemini mangled UUID family_ids or
     // returned a non-direct row with an invented id. Short aliases (f1, f2)
     // are what the model sees; UUIDs are resolved after. Non-direct unknown
