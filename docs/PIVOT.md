@@ -927,13 +927,122 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     question text does not stop a generic FAQ line being lifted off the
     customer's own page and sold back to them as a gap. Check the source host.
     The subject's pages belong to the coverage stage, not the harvest stage.
-24. **Tightening a demand gate has failed three times; measure first.** The
+24. **A rescue path must be asserted against the gate it feeds.** A test that
+    proves `validateGroundedScope` creates families, without proving
+    `validateConfirmedScope` accepts them, proves nothing — that exact gap put a
+    founder in an unescapable onboarding screen. Whenever one function exists to
+    stop data being lost and another decides whether it is acceptable, one test
+    must span both.
+25. **Never ship placeholder prose as a field's VALUE.** Guidance belongs in the
+    `placeholder` attribute. `action: "Describe what…"` was simultaneously the
+    default and the rejection condition, and `scope-classifier.ts` inlines that
+    string as the definition of the business.
+26. **Tightening a demand gate has failed three times; measure first.** The
     8-article floor destroyed 33% of real demand once and returned 0 clusters
     from 123 real gaps another time. Before adding any threshold that can
     shrink scope, re-run a real audit and diff the plan. A fix that is correct
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-05 - onboarding's two validators contradicted each other
+
+**Founder evidence.** A new brand (an AI mobile-app-UI-design SaaS) produced
+**zero** scope categories. The founder added one by hand and Continue refused:
+
+> `ai mobile app ui designer needs confirmed mechanics in "How we understand this works."`
+> `Assign every target search to a product area: ai mobile app ui designer, text to mobile ui design.`
+
+There was no way forward from that screen. Not a scatter of bugs — one
+structural fault and its UI consequences.
+
+**Root cause.** `validateGroundedScope` (`lib/brand-scope.ts:284-298`) rescues
+every unassigned target search into a family built from
+`fallbackCapabilityContract`, whose `facts` and `evidenceRefs` are empty.
+`validateConfirmedScope` (`:388-404`) rejects exactly that shape. One validator
+created families so demand would not be lost; the other refused every one of
+them. `:353-355` made it circular — substituting the fallback, then rejecting
+what it had just produced.
+
+`tests/pivot-contract.test.mjs` asserted the rescue *created* families and never
+that they *passed the gate they feed*. That is why it shipped.
+
+**Second-order faults, all verified in code:**
+
+- **The placeholder was the failure condition.** `add()` seeded
+  `action: "Describe what…"`, and the gate rejects `/^describe\b/i` — because
+  `scope-classifier.ts:350-353` inlines that action verbatim as the definition of
+  the business for every query classification.
+- **The only cure was hidden.** `withFounderConfirmedOperation` mints the
+  required `founder-confirmed:onboarding` fact but fired only from the `action`
+  and `inputs/outputs/limits` fields, inside a collapsed 10px disclosure with no
+  error styling. Editing the visible "What this helps with" minted nothing.
+- **A `capability_contract: null` family rendered no editor** — unfixable except
+  by deletion.
+- **`"Brand details are invalid."`** — a freshly added category fails
+  `BrandDetailsSchema` before the mechanics check, collapsing the whole screen to
+  one string with no field named.
+- **Zero categories + stale notes** came from localStorage: `brandProfileReady`
+  was set from `product_name` alone while issues restored from a *separate* key,
+  so notes outlived the families they described. Exactly the reported screenshot.
+- **Dead air.** `brand_ready` (flash-lite) reliably beats `scope_ready`
+  (flash-preview + grounding), so the confirm screen rendered an empty `0/12`
+  box with an enabled "Add category" — indistinguishable from "we found nothing"
+  — under a status line reading *"Building brand profile…"*, the thing that had
+  just finished. The correct copy was unreachable in that branch.
+- **Edits were discarded.** The `complete` handler wholesale-replaced
+  `scope_families` one persona call after the UI invited editing.
+
+**Fixed.**
+
+- `lib/scope-mechanics.ts` (new) — one definition of "has confirmed mechanics",
+  free of node builtins so the client computes the identical answer.
+  `validateConfirmedScope` delegates to it and now names the fixable field.
+- `scope-family-review.tsx` — empty-not-placeholder `add()`; mechanics editor
+  always rendered and auto-opened when incomplete; "What this helps with" mints a
+  founder fact; `withFounderConfirmedOperation` hardened so it only mints from a
+  meaningful action (the old empty-action quote `"Action: ."` was 9 chars and
+  slipped past `min(8)`) and only ever touches its own namespaced id.
+- `findScopeBlockers` + `focusScopeField` — per-field, clickable pre-flight in
+  both hosts. "Brand details are invalid." is now unreachable.
+- Unassigned searches get chips: assign to a category, name-match suggestion,
+  create a category from the search, or **drop it** — the first time withdrawing
+  demand has been possible at all.
+- Orphan loop no longer drops silently: the cap pushes an issue, and a
+  duplicate-named rescue **appends the seed to the existing family**.
+- Dead air: `scopeReady` state, a skeleton instead of an empty list, the status
+  branch corrected, both selects gated, `AnalyzePhaseList` (modelled on
+  `audit-console.tsx:448-502`) marking phases complete **independently**, page
+  count from the `pages[]` payload the client used to discard, and two progress
+  emissions across the previously silent sitemap and crawl-fallback stretches.
+- `complete` merges instead of replacing, in both hosts.
+- localStorage: `brandProfileReady` requires ≥1 family; notes are cleared
+  whenever the families are.
+- Zero-family throw now names the measurable reason (readable characters, page
+  count) so a JS-rendered site is told why retrying cannot help.
+- Step indicator: `1 Website · 2 Confirm what you sell · 3 Audit`.
+
+**Two test edits, both deliberate.** The `setBrandData({` literal at
+`:1970-1978` was widened to `setBrandData(` — it pinned a call shape while its
+own comment was about ordering, and it blocked the updater form required to stop
+discarding edits. And the new `"the confirm gate is one rule"` test pins client
+and server agreement directionally: anything the client flags, the server must
+refuse. Message-equality fails legitimately, because an empty `deliveryMode`
+trips `CapabilityContractSchema.min(2)` before the mechanics check runs — which
+is itself why the client pre-flight has to exist.
+
+69/69 contract groups pass; `tsc` clean on every touched path.
+
+**Not done, deliberately.** The shared `use-analyze-brand` hook and the
+sync-test rewrite (`:1032-1075`). The fixes above were applied to both hosts by
+hand and verified, but the test that *mandates* that duplication is still there.
+Extracting the hook is a ~150-line move in each host plus a test rewrite, and
+`/onboarding` is auth-gated so none of it can be exercised in a browser from a
+dev session — a large blind refactor of newly working code. It is the next
+commit, not this one.
+
+**Not verified.** No logged-in click-through. Everything is proven by 69 contract
+groups and `tsc`; the flow itself needs a human with credentials.
 
 ### 2026-08-05 - the audit harvested the customer's own FAQ and sold it back
 

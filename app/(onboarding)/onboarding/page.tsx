@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
 import { Loader2, ChevronUp, ArrowRight, Sparkles, Eye, Globe, Globe2, Plus } from "lucide-react"
@@ -24,13 +24,20 @@ import { CustomSpinner } from "@/components/CustomSpinner"
 import { PillInput } from "@/components/ui/pill-input"
 import { AuditConsole } from "@/components/audit/audit-console"
 import { ScopeResults } from "@/components/audit/scope-results"
-import { ScopeFamilyReview } from "@/components/onboarding/scope-family-review"
+import {
+    ScopeFamilyReview,
+    ScopeFamilySkeleton,
+    findScopeBlockers,
+    focusScopeField,
+} from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
 import {
     ANALYZE_PHASE_COPY,
     consumeAnalyzeBrandStream,
     emptyBrandShell,
+    type AnalyzeBrandPhase,
 } from "@/lib/analyze-brand/stream"
+import { AnalyzePhaseList } from "@/components/onboarding/analyze-phase-list"
 
 const STORAGE_KEYS = {
     STEP: 'onboarding_step',
@@ -77,6 +84,18 @@ export default function OnboardingPage() {
     const [brandProfileReady, setBrandProfileReady] = useState(false)
     /** Persona fields arrived; unlock the brand-details panel before complete. */
     const [brandFieldsReady, setBrandFieldsReady] = useState(false)
+    /**
+     * Category list arrived. Tracked separately because `brand_ready` reliably
+     * lands FIRST — persona runs on flash-lite, scope on flash-preview plus
+     * grounding — so `brandFieldsReady` is exactly the wrong signal for "is the
+     * thing the user is looking at ready yet".
+     */
+    const [scopeReady, setScopeReady] = useState(false)
+    /** Every phase whose event has arrived, so the list can tick them off out of
+     *  order — `brand_ready` genuinely completes before `scope_ready`. */
+    const [phasesSeen, setPhasesSeen] = useState<Set<AnalyzeBrandPhase>>(new Set())
+    /** Pages read, from the `crawl_done` payload the client used to throw away. */
+    const [pageCount, setPageCount] = useState(0)
     const [scopeAnalysisIssues, setScopeAnalysisIssues] = useState<
         Array<{ family?: string; message: string }>
     >([])
@@ -91,6 +110,18 @@ export default function OnboardingPage() {
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
 
     const [error, setError] = useState("")
+
+    /** Recomputed live so Continue explains itself instead of failing server-side. */
+    const scopeBlockers = useMemo(
+        () =>
+            brandData
+                ? findScopeBlockers(
+                      brandData.scope_families || [],
+                      brandData.target_seed_keywords || targetSeeds,
+                  )
+                : [],
+        [brandData, targetSeeds],
+    )
 
     const clearOnboardingStorage = useCallback(() => {
         Object.values(STORAGE_KEYS).forEach(key => {
@@ -171,15 +202,31 @@ export default function OnboardingPage() {
         if (savedBrandData) {
             try {
                 const parsed = JSON.parse(savedBrandData)
-                setBrandData({
-                    ...parsed,
-                    scope_families: trimFamiliesToSearchCap(
-                        parsed.scope_families || [],
-                    ),
-                })
-                const restoredReady = Boolean(parsed?.product_name?.trim())
+                const restoredFamilies = trimFamiliesToSearchCap(
+                    parsed.scope_families || [],
+                )
+                setBrandData({ ...parsed, scope_families: restoredFamilies })
+                /**
+                 * Continue requires categories, not just a product name.
+                 *
+                 * This used to key on `product_name` alone, so a session
+                 * restored mid-analysis — persona saved, scope not yet —
+                 * re-opened with Continue ENABLED and zero categories. Combined
+                 * with extraction notes restored from a SEPARATE key, that is
+                 * exactly the reported screenshot: "Extraction notes (1)" sitting
+                 * above an empty category list, with no way forward.
+                 */
+                const restoredReady =
+                    Boolean(parsed?.product_name?.trim()) && restoredFamilies.length > 0
                 setBrandProfileReady(restoredReady)
-                setBrandFieldsReady(restoredReady)
+                setBrandFieldsReady(Boolean(parsed?.product_name?.trim()))
+                setScopeReady(restoredFamilies.length > 0)
+                // Notes describe families. If the families did not survive the
+                // reload, the notes must not either.
+                if (restoredFamilies.length === 0) {
+                    setScopeAnalysisIssues([])
+                    localStorage.removeItem(STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES)
+                }
             } catch { }
         }
         if (savedTargetSeeds) {
@@ -333,6 +380,9 @@ export default function OnboardingPage() {
         setAnalysisInterrupted(false)
         setBrandProfileReady(false)
         setBrandFieldsReady(false)
+        setScopeReady(false)
+        setPhasesSeen(new Set())
+        setPageCount(0)
         setBrandData(null)
         setScopeAnalysisIssues([])
         setSeedsWithoutDemand([])
@@ -358,8 +408,13 @@ export default function OnboardingPage() {
 
             const complete = await consumeAnalyzeBrandStream(res, (event) => {
                 if (event.message) setAnalyzePhase(event.message)
+                setPhasesSeen((current) => new Set(current).add(event.phase))
+                if (event.phase === "crawl_done" && Array.isArray(event.pages)) {
+                    setPageCount(event.pages.length)
+                }
 
                 if (event.phase === "scope_ready" && event.scope_families) {
+                    setScopeReady(true)
                     const families = trimFamiliesToSearchCap(event.scope_families)
                     setScopeAnalysisIssues(
                         Array.isArray(event.scope_analysis_issues)
@@ -389,16 +444,37 @@ export default function OnboardingPage() {
                 }
 
                 if (event.phase === "complete" && event.data) {
+                    setScopeReady(true)
                     setScopeAnalysisIssues(
                         Array.isArray(event.data.scope_analysis_issues)
                             ? event.data.scope_analysis_issues
                             : [],
                     )
-                    setBrandData({
-                        ...event.data,
-                        scope_families: trimFamiliesToSearchCap(
-                            event.data.scope_families || [],
-                        ),
+                    // MERGE, never replace. The screen invites edits from
+                    // `scope_ready` onward ("You can confirm product areas now"),
+                    // and this handler used to overwrite the whole object one
+                    // full persona call later — silently discarding every rename,
+                    // reorder, keyword and added category made during the wait.
+                    //
+                    // A three-way merge is unnecessary: `complete.data.scope_families`
+                    // is the same array `scope_ready` already sent, so keeping the
+                    // current families whenever we have any loses nothing.
+                    const { scope_families: serverFamilies, ...persona } = event.data
+                    setBrandData((current) => {
+                        const families = current?.scope_families?.length
+                            ? current.scope_families
+                            : trimFamiliesToSearchCap(serverFamilies || [])
+                        return {
+                            ...(current ?? emptyBrandShell(families, targetSeeds)),
+                            ...persona,
+                            scope_families: families,
+                            target_seed_keywords:
+                                current?.target_seed_keywords ??
+                                persona.target_seed_keywords ??
+                                targetSeeds,
+                            search_country: current?.search_country || persona.search_country || "",
+                            search_topic: current?.search_topic || persona.search_topic || "general",
+                        }
                     })
                     setBrandFieldsReady(true)
                     setBrandProfileReady(true)
@@ -438,6 +514,11 @@ export default function OnboardingPage() {
                 setBrandData(null)
                 setBrandFieldsReady(false)
                 setBrandProfileReady(false)
+                setScopeReady(false)
+                // The families are gone; notes about them must go too, or they
+                // reappear next to an empty list after a reload.
+                setScopeAnalysisIssues([])
+                localStorage.removeItem(STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES)
             }
         } finally {
             localStorage.removeItem(STORAGE_KEYS.ANALYZING_STARTED_AT)
@@ -633,6 +714,38 @@ export default function OnboardingPage() {
           relative border overflow-hidden transition-all rounded-[16px]
           bg-white border-stone-200
         `}>
+                            {/* Where am I, and what is left.
+                                Steps 1 and 2 are the same route and swap on a
+                                ternary, so without this the screen simply changed
+                                underneath the founder — and the island resizes at
+                                the same moment, which read as a jump to nowhere. */}
+                            {step !== "audit-results" && (
+                                <ol className="flex items-center gap-1 border-b border-stone-100 px-4 py-2 text-[10px] sm:px-6">
+                                    {[
+                                        { key: "site", label: "Website", done: Boolean(brandData), active: step === "brand" && !brandData },
+                                        { key: "confirm", label: "Confirm what you sell", done: step !== "brand", active: step === "brand" && Boolean(brandData) },
+                                        { key: "audit", label: "Audit", done: false, active: step === "audit" },
+                                    ].map((entry, entryIndex) => (
+                                        <li key={entry.key} className="flex items-center gap-1">
+                                            {entryIndex > 0 ? <span className="text-stone-300">·</span> : null}
+                                            <span
+                                                className={
+                                                    entry.active
+                                                        ? "font-medium text-stone-900"
+                                                        : entry.done
+                                                          ? "text-stone-400"
+                                                          : "text-stone-300"
+                                                }
+                                            >
+                                                <span className="font-mono tabular-nums">
+                                                    {entry.done ? "✓" : entryIndex + 1}
+                                                </span>{" "}
+                                                {entry.label}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
                             <AnimatePresence mode="wait">
                                 {step === "brand" && (
                                     <motion.div
@@ -743,10 +856,13 @@ export default function OnboardingPage() {
                                                           : "Find my business areas"}
                                                 </Button>
                                                 {analyzing && (
-                                                    <p className="text-center text-[11px] text-stone-400">
-                                                        Usually 1–3 minutes. Keep this tab open —
-                                                        refreshing cannot resume the in-flight read.
-                                                    </p>
+                                                    <div className="space-y-2 rounded-lg bg-stone-50 px-3 py-2.5">
+                                                        <AnalyzePhaseList seen={phasesSeen} pageCount={pageCount} />
+                                                        <p className="text-[11px] text-stone-400">
+                                                            Usually 1–3 minutes. Keep this tab open —
+                                                            refreshing cannot resume the in-flight read.
+                                                        </p>
+                                                    </div>
                                                 )}
                                             </div>
                                         ) : (
@@ -757,14 +873,21 @@ export default function OnboardingPage() {
                                                         Confirm what you sell
                                                     </h2>
                                                 </div>
+                                                {/* The branch used to key on brandFieldsReady, which is
+                                                    TRUE exactly when the message was wrong — it printed
+                                                    "Building brand profile…" (already finished) while the
+                                                    category list was the thing still running. */}
                                                 {analyzing && !brandProfileReady && (
-                                                    <p className="text-[11px] text-stone-400">
-                                                        {brandFieldsReady
-                                                            ? analyzePhase
-                                                            : "Brand voice still loading… You can confirm product areas now."}
+                                                    <p className="text-xs text-stone-500">
+                                                        {scopeReady
+                                                            ? "Brand voice still loading… You can confirm product areas now."
+                                                            : "Finding product areas… this is the slow part."}
                                                     </p>
                                                 )}
 
+                                                {analyzing && (brandData.scope_families?.length ?? 0) === 0 ? (
+                                                    <ScopeFamilySkeleton />
+                                                ) : (
                                                 <ScopeFamilyReview
                                                     families={brandData.scope_families || []}
                                                     targetSeeds={brandData.target_seed_keywords || targetSeeds}
@@ -776,7 +899,19 @@ export default function OnboardingPage() {
                                                                 : current,
                                                         )
                                                     }
+                                                    onChangeTargetSeeds={(seeds) => {
+                                                        // Both, deliberately: the component reads the prop,
+                                                        // the server validator reads brandData.
+                                                        setTargetSeeds(seeds)
+                                                        setBrandData((current) =>
+                                                            current
+                                                                ? { ...current, target_seed_keywords: seeds }
+                                                                : current,
+                                                        )
+                                                    }}
+                                                    onRestart={() => resetToBrandStep("")}
                                                 />
+                                                )}
 
                                                 {scopeAnalysisIssues.length > 0 && (
                                                     <details className="text-xs text-stone-500">
@@ -1022,9 +1157,12 @@ export default function OnboardingPage() {
                                                             <label className="mb-1 block text-[10px] font-medium text-stone-400">
                                                                 Topic
                                                             </label>
+                                                            {/* Gated like Country. Left ungated it accepted a
+                                                                choice that the `complete` event then overwrote. */}
                                                             <select
-                                                                className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs text-stone-900"
+                                                                className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs text-stone-900 disabled:opacity-50"
                                                                 value={brandData.search_topic || "general"}
+                                                                disabled={!brandProfileReady}
                                                                 onChange={e => updateField('search_topic', e.target.value)}
                                                             >
                                                                 <option value="general">General</option>
@@ -1035,9 +1173,36 @@ export default function OnboardingPage() {
                                                         </div>
                                                     </div>
 
+                                                    {/* Named, clickable blockers. Without these the server
+                                                        collapses a half-filled category to the single
+                                                        string "Brand details are invalid." */}
+                                                    {!analyzing && scopeBlockers.length > 0 && (
+                                                        <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200">
+                                                            <p className="text-[11px] font-medium text-amber-900">
+                                                                {scopeBlockers.length === 1
+                                                                    ? "One thing left before we can start"
+                                                                    : `${scopeBlockers.length} things left before we can start`}
+                                                            </p>
+                                                            <ul className="mt-1 space-y-0.5">
+                                                                {scopeBlockers.map((blocker, index) => (
+                                                                    <li key={`${blocker.familyId}-${blocker.field}-${index}`}>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => focusScopeField(blocker)}
+                                                                            className="text-left text-[11px] leading-snug text-amber-800 underline-offset-2 hover:underline"
+                                                                        >
+                                                                            {blocker.familyName ? `${blocker.familyName}: ` : ""}
+                                                                            {blocker.message}
+                                                                        </button>
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+
                                                     <Button
                                                         onClick={handleSaveBrand}
-                                                        disabled={savingBrand || analyzing || !brandProfileReady}
+                                                        disabled={savingBrand || analyzing || !brandProfileReady || scopeBlockers.length > 0}
                                                         className={`
                           w-full h-10 font-semibold
                           bg-gradient-to-b from-stone-800 to-stone-950

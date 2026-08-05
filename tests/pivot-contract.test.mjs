@@ -912,6 +912,106 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
     assert.doesNotMatch(console_, /onError/)
 })
 
+test("the confirm gate is one rule, and the UI can always satisfy it", async () => {
+    const { mechanicsGaps, isPlaceholderAction, MECHANICS_GAP_COPY } = await import(
+        "../lib/scope-mechanics.ts"
+    )
+    const { validateConfirmedScope } = await import("../lib/brand-scope.ts")
+
+    // The server must delegate, not keep a second copy. Two implementations of
+    // this rule is how the UI ended up unable to tell the founder what was wrong.
+    const brandScope = await text("lib/brand-scope.ts")
+    assert.match(brandScope, /mechanicsGaps\(family\.capability_contract\)/)
+    assert.doesNotMatch(brandScope, /\/\^describe\\b\/i\.test/)
+
+    // scope-mechanics must stay importable by a client component: brand-scope.ts
+    // pulls in `crypto`, which is why the rule could not live there.
+    const mechanics = await text("lib/scope-mechanics.ts")
+    assert.doesNotMatch(mechanics, /from "(node:)?(crypto|fs|path)"/)
+
+    assert.equal(isPlaceholderAction("Describe what your product or service does"), true)
+    assert.equal(isPlaceholderAction(""), true)
+    assert.equal(isPlaceholderAction("abc"), true)
+    assert.equal(isPlaceholderAction("Generate mobile screens from a prompt"), false)
+
+    const contract = (patch) => ({
+        version: "capability-v1",
+        deliveryMode: "browser software",
+        operations: [{
+            key: "op1", customerJob: "Repair a damaged photo", inputs: [], action: "Restore an old photo",
+            outputs: [], limits: [], evidenceRefs: ["f1"],
+        }],
+        facts: [{ id: "f1", url: "founder-confirmed:onboarding", quote: "Action: Restore an old photo." }],
+        ...patch,
+    })
+    assert.deepEqual(mechanicsGaps(contract()), [])
+    assert.deepEqual(mechanicsGaps(null), ["missing_contract"])
+    assert.deepEqual(mechanicsGaps(contract({ deliveryMode: "" })), ["missing_delivery_mode"])
+    assert.deepEqual(mechanicsGaps(contract({ facts: [] })), ["no_confirmed_facts"])
+    for (const gap of Object.keys(MECHANICS_GAP_COPY)) {
+        assert.ok(MECHANICS_GAP_COPY[gap].length > 20, `${gap} needs actionable copy`)
+    }
+
+    // Client and server must agree for every state, or Continue lies again.
+    const brand = (families) => ({
+        product_name: "X",
+        product_identity: { literally: "a", emotionally: "b", not: "c" },
+        mission: "m",
+        audience: { primary: "p", psychology: "q" },
+        scope_families: families,
+        target_seed_keywords: [],
+    })
+    for (const patch of [{}, { deliveryMode: "" }, { facts: [] }]) {
+        const family = {
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Photo restoration",
+            description: "Repairing damaged family photos.",
+            seed_keywords: ["restore old photos"],
+            evidence: [],
+            capability_contract: contract(patch),
+            source: "user", verified: true, priority: 0, enabled: true,
+        }
+        // The invariant is directional: anything the client flags, the server
+        // must refuse. Not message-equality — an empty deliveryMode fails
+        // `CapabilityContractSchema.min(2)` before the mechanics check runs, so
+        // the server answers "Brand details are invalid." That masking is
+        // precisely why `findScopeBlockers` exists on the client.
+        const serverErrors = validateConfirmedScope(brand([family])).errors
+        const clientGaps = mechanicsGaps(family.capability_contract)
+        if (clientGaps.length > 0) {
+            assert.ok(
+                serverErrors.length > 0,
+                `client flags ${JSON.stringify(clientGaps)} but server accepts ${JSON.stringify(patch)}`,
+            )
+        } else {
+            assert.deepEqual(
+                serverErrors,
+                [],
+                `client sees no gap but server rejects ${JSON.stringify(patch)}`,
+            )
+        }
+    }
+
+    // The UI must not ship the rejection condition as a default, and the only
+    // cure must be reachable: the founder-fact helper has to fire from the
+    // visible description field, not just from inside a collapsed disclosure.
+    const review = await text("components/onboarding/scope-family-review.tsx")
+    assert.doesNotMatch(review, /action: "Describe what your product/)
+    assert.doesNotMatch(review, /customerJob: "Describe the customer job"/)
+    assert.match(review, /open=\{openMechanics\[familyKey\] \?\? gaps\.length > 0\}/)
+    assert.match(review, /customerJob: event\.target\.value/)
+    assert.match(review, /isPlaceholderAction\(operation\.action\)/)
+    // A null contract must still render an editor, or the family is unfixable.
+    assert.doesNotMatch(review, /\{family\.capability_contract \? \(/)
+    // Continue must be able to explain itself before the server ever answers.
+    for (const host of [
+        "app/(onboarding)/onboarding/page.tsx",
+        "components/brand-onboarding.tsx",
+    ]) {
+        assert.match(await text(host), /findScopeBlockers\(/, `${host}: must pre-flight`)
+    }
+})
+
 test("a founder target search can never be silently dropped from scope", async () => {
     const { validateGroundedScope, verifyQuote } = await import("../lib/brand-scope.ts")
 
@@ -940,6 +1040,61 @@ test("a founder target search can never be silently dropped from scope", async (
         const owner = result.families.find((family) => family.seed_keywords.includes(seed))
         assert.ok(owner, `no family claimed "${seed}"`)
         assert.equal(owner.source, "founder")
+    }
+
+    // THE ASSERTION WHOSE ABSENCE LET THE DEAD END SHIP.
+    //
+    // Claiming the seed was never enough: `validateGroundedScope` built these
+    // rescue families from `fallbackCapabilityContract` (empty facts, empty
+    // evidenceRefs) and `validateConfirmedScope` rejects exactly that shape. One
+    // validator created families so demand would not be lost; the other refused
+    // every one of them, and a real founder was stuck on that screen with no way
+    // forward. A rescue path must always be asserted against the gate it feeds.
+    const { validateConfirmedScope } = await import("../lib/brand-scope.ts")
+    const { mechanicsGaps } = await import("../lib/scope-mechanics.ts")
+    const brand = {
+        product_name: "Drawgle",
+        product_identity: { literally: "a", emotionally: "b", not: "c" },
+        mission: "m",
+        audience: { primary: "p", psychology: "q" },
+        scope_families: result.families,
+        target_seed_keywords: ["ai mobile app ui designer", "text to mobile ui design"],
+    }
+
+    // Before mechanics: blocked, and the message must name the fixable field
+    // rather than the bare "needs confirmed mechanics" it used to stop at.
+    const blocked = validateConfirmedScope(brand).errors
+    assert.ok(blocked.length > 0, "a factless rescue family must not pass the gate")
+    assert.ok(
+        blocked.some((message) => /Type what this does in your own words/.test(message)),
+        `error must name the field to fix, got: ${JSON.stringify(blocked)}`,
+    )
+
+    // After the founder fills them in, it MUST pass. This is the escape hatch.
+    const filled = result.families.map((family) => ({
+        ...family,
+        capability_contract: {
+            ...family.capability_contract,
+            deliveryMode: "browser software",
+            operations: family.capability_contract.operations.map((operation) => ({
+                ...operation,
+                action: "Generate mobile app screens from a text prompt",
+                evidenceRefs: [`${family.id}:founder-${operation.key}`],
+            })),
+            facts: [{
+                id: `${family.id}:founder-op1`,
+                url: "founder-confirmed:onboarding",
+                quote: "Action: Generate mobile app screens from a text prompt.",
+            }],
+        },
+    }))
+    assert.deepEqual(
+        validateConfirmedScope({ ...brand, scope_families: filled }).errors,
+        [],
+        "a rescue family must be completable by the founder",
+    )
+    for (const family of filled) {
+        assert.deepEqual(mechanicsGaps(family.capability_contract), [])
     }
 
     // An extracted family whose quote cannot be verified is kept for the
@@ -1965,12 +2120,15 @@ test("the demand check never blocks the brand-analysis response", async () => {
         // setBrandData must not be waiting on the demand-check fetch — the
         // fetch call must appear strictly after setBrandData is invoked for
         // the analyze result, not be awaited before it.
+        //
+        // Matches any call shape. It used to pin the literals `setBrandData({`
+        // and `setBrandData(data)`, which made the `complete` handler
+        // un-refactorable: switching to the updater form `setBrandData((current)
+        // => …)` — required to stop that handler discarding the founder's edits
+        // — failed a test whose own comment is about ORDERING, not call shape.
         const demandFetchIdx = client.indexOf("/api/analyze-brand/demand-check")
         const beforeDemand = client.slice(0, demandFetchIdx)
-        const setBrandDataIdx = Math.max(
-            beforeDemand.lastIndexOf("setBrandData({"),
-            beforeDemand.lastIndexOf("setBrandData(data)"),
-        )
+        const setBrandDataIdx = beforeDemand.lastIndexOf("setBrandData(")
         assert.ok(setBrandDataIdx !== -1 && demandFetchIdx !== -1)
         assert.ok(
             setBrandDataIdx < demandFetchIdx,
