@@ -1251,6 +1251,208 @@ test("a founder target search can never be silently dropped from scope", async (
     assert.equal(verifyQuote("we manufacture industrial beehives for commercial apiaries", page), false)
 })
 
+test("scope role refinement folds delivery mechanics out of harvest seeds", async () => {
+    const { applyScopeRoleRefinement } = await import("../lib/scope-role-refine.ts")
+    const { CAPABILITY_CONTRACT_VERSION } = await import(
+        "../lib/writer/article-contract.ts"
+    )
+
+    const contract = (action) => ({
+        version: CAPABILITY_CONTRACT_VERSION,
+        deliveryMode: "browser software",
+        operations: [{
+            key: "op1",
+            customerJob: action,
+            inputs: ["prompt"],
+            action,
+            outputs: ["screen"],
+            limits: [],
+            evidenceRefs: ["f1"],
+        }],
+        facts: [{
+            id: "f1",
+            url: "https://drawgle.com/",
+            quote: "Generate editable mobile screens from a prompt.",
+        }],
+    })
+
+    const family = (patch) => ({
+        id: patch.id,
+        name: patch.name,
+        description: patch.description,
+        seed_keywords: patch.seed_keywords,
+        evidence: [{ url: "https://drawgle.com/", quote: "Generate editable mobile screens from a prompt." }],
+        capability_contract: contract(patch.description),
+        parent_hint: patch.parent_hint ?? null,
+        source: "extracted",
+        verified: true,
+        priority: patch.priority ?? 0,
+        enabled: true,
+    })
+
+    // Drawgle-shaped: handoff/export is how the product delivers, not a market.
+    const drawgle = applyScopeRoleRefinement(
+        [
+            family({
+                id: "11111111-1111-4111-8111-111111111111",
+                name: "AI Mobile UI Design",
+                description: "Generate high-fidelity mobile app screens from prompts.",
+                seed_keywords: [
+                    "ai mobile ui generator",
+                    "prompt to mobile app design",
+                    "tailwind html export",
+                ],
+                priority: 0,
+            }),
+            family({
+                id: "22222222-2222-4222-8222-222222222222",
+                name: "AI Design to Code Handoff",
+                description: "Export designs as agent-ready Tailwind packages.",
+                seed_keywords: [
+                    "design to code ai",
+                    "tailwind html export",
+                    "cursor ai design context",
+                    "ai mobile app ui designer",
+                ],
+                parent_hint: "AI Mobile UI Design",
+                priority: 1,
+            }),
+        ],
+        {
+            families: [
+                {
+                    name: "AI Mobile UI Design",
+                    role: "acquisition_job",
+                    fold_into: null,
+                    seeds: [
+                        { seed: "ai mobile ui generator", role: "acquisition_job" },
+                        { seed: "prompt to mobile app design", role: "acquisition_job" },
+                        { seed: "tailwind html export", role: "delivery_artifact" },
+                    ],
+                },
+                {
+                    name: "AI Design to Code Handoff",
+                    role: "delivery_artifact",
+                    fold_into: "AI Mobile UI Design",
+                    seeds: [
+                        { seed: "design to code ai", role: "delivery_artifact" },
+                        { seed: "tailwind html export", role: "delivery_artifact" },
+                        { seed: "cursor ai design context", role: "workflow_step" },
+                        { seed: "ai mobile app ui designer", role: "delivery_artifact" },
+                    ],
+                },
+            ],
+        },
+        ["ai mobile app ui designer"],
+    )
+
+    assert.equal(drawgle.families.length, 1)
+    assert.equal(drawgle.families[0].name, "AI Mobile UI Design")
+    assert.deepEqual(
+        drawgle.families[0].seed_keywords.sort(),
+        ["ai mobile app ui designer", "ai mobile ui generator", "prompt to mobile app design"].sort(),
+    )
+    assert.ok(
+        drawgle.issues.some((issue) => /Folded "AI Design to Code Handoff"/i.test(issue.message)),
+    )
+    assert.ok(
+        drawgle.families[0].capability_contract.operations.length >= 1,
+        "parent must keep capability mechanics from the fold",
+    )
+
+    // Genuine sibling jobs stay peers.
+    const siblings = applyScopeRoleRefinement(
+        [
+            family({
+                id: "33333333-3333-4333-8333-333333333333",
+                name: "Photo restoration",
+                description: "Repair damaged family photos.",
+                seed_keywords: ["restore old photos"],
+                priority: 0,
+            }),
+            family({
+                id: "44444444-4444-4444-8444-444444444444",
+                name: "Photo animation",
+                description: "Animate still family portraits.",
+                seed_keywords: ["animate old photos"],
+                priority: 1,
+            }),
+        ],
+        {
+            families: [
+                {
+                    name: "Photo restoration",
+                    role: "acquisition_job",
+                    fold_into: null,
+                    seeds: [{ seed: "restore old photos", role: "acquisition_job" }],
+                },
+                {
+                    name: "Photo animation",
+                    role: "acquisition_job",
+                    fold_into: null,
+                    seeds: [{ seed: "animate old photos", role: "acquisition_job" }],
+                },
+            ],
+        },
+        [],
+    )
+    assert.equal(siblings.families.length, 2)
+
+    // Mechanism seed on a valid job is stripped; family remains.
+    const scrubbed = applyScopeRoleRefinement(
+        [
+            family({
+                id: "55555555-5555-4555-8555-555555555555",
+                name: "AI Mobile UI Design",
+                description: "Generate mobile screens from prompts.",
+                seed_keywords: ["ai mobile ui generator", "zip handoff pack"],
+            }),
+        ],
+        {
+            families: [{
+                name: "AI Mobile UI Design",
+                role: "acquisition_job",
+                fold_into: null,
+                seeds: [
+                    { seed: "ai mobile ui generator", role: "acquisition_job" },
+                    { seed: "zip handoff pack", role: "delivery_artifact" },
+                ],
+            }],
+        },
+        [],
+    )
+    assert.equal(scrubbed.families.length, 1)
+    assert.deepEqual(scrubbed.families[0].seed_keywords, ["ai mobile ui generator"])
+
+    // Founder seed marked mechanism by a bad decision is still kept.
+    const founder = applyScopeRoleRefinement(
+        [
+            family({
+                id: "66666666-6666-4666-8666-666666666666",
+                name: "AI Mobile UI Design",
+                description: "Generate mobile screens from prompts.",
+                seed_keywords: ["ai mobile ui generator", "text to mobile ui design"],
+            }),
+        ],
+        {
+            families: [{
+                name: "AI Mobile UI Design",
+                role: "acquisition_job",
+                fold_into: null,
+                seeds: [
+                    { seed: "ai mobile ui generator", role: "acquisition_job" },
+                    { seed: "text to mobile ui design", role: "delivery_artifact" },
+                ],
+            }],
+        },
+        ["text to mobile ui design"],
+    )
+    assert.ok(
+        founder.families[0].seed_keywords.includes("text to mobile ui design"),
+        "founder target seeds must survive role refinement",
+    )
+})
+
 test("scope extraction is its own call, not a field on the persona prompt", async () => {
     const [route, scopeRoute, extraction] = await Promise.all([
         text("app/api/analyze-brand/route.ts"),
@@ -1272,6 +1474,21 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     assert.match(scopeRoute, /extractScopeFamilies\(/)
     assert.doesNotMatch(route, /extractScopeFamilies\(/)
     assert.doesNotMatch(route, /const scopePromise/)
+
+    // After grounding, role refinement uses the confirmed brand profile so
+    // delivery/handoff families cannot become harvest seeds. Prompt rules alone
+    // already failed once on this exact failure mode.
+    assert.match(scopeRoute, /refineScopeRoles\(/)
+    assert.match(scopeRoute, /brandProfile/)
+    assert.match(await text("app/(onboarding)/onboarding/page.tsx"), /brandProfile:/)
+    assert.match(await text("components/brand-onboarding.tsx"), /brandProfile:/)
+    assert.match(await text("lib/scope-role-refine.ts"), /applyScopeRoleRefinement/)
+    // The gate is role classification + fold — not a token denylist of
+    // "handoff"/"export"/"tailwind" that would break the next SaaS noun.
+    assert.doesNotMatch(
+        await text("lib/scope-role-refine.ts"),
+        /BLOCKLIST|DENYLIST|bannedSeeds|forbiddenSeeds/,
+    )
 
     // The second call must not re-crawl. The first hands over its corpus.
     assert.match(route, /pages: crawledPages/)

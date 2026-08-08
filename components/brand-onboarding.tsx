@@ -154,7 +154,23 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             const scopeRes = await fetch("/api/analyze-brand/scope", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url, pages: crawled, targetSeeds }),
+                body: JSON.stringify({
+                    url,
+                    pages: crawled,
+                    targetSeeds,
+                    brandProfile: data
+                        ? {
+                              product_name: data.product_name,
+                              product_identity: {
+                                  literally: data.product_identity?.literally || "",
+                              },
+                              category: data.category || "",
+                              core_features: data.core_features || [],
+                              how_it_works: data.how_it_works || [],
+                              uvp: data.uvp || [],
+                          }
+                        : null,
+                }),
             })
             await consumeAnalyzeBrandStream(scopeRes, (event) => {
                 if (event.message) setAnalyzePhase(event.message)

@@ -503,6 +503,18 @@ export default function OnboardingPage() {
                     url: `https://${url}`,
                     pages: crawledPages,
                     targetSeeds: seeds,
+                    brandProfile: brandData
+                        ? {
+                              product_name: brandData.product_name,
+                              product_identity: {
+                                  literally: brandData.product_identity.literally,
+                              },
+                              category: brandData.category || "",
+                              core_features: brandData.core_features || [],
+                              how_it_works: brandData.how_it_works || [],
+                              uvp: brandData.uvp || [],
+                          }
+                        : null,
                 }),
             })
             if (!res.ok && !res.body) {

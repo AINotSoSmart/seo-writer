@@ -8,6 +8,10 @@ import {
   validateGroundedScope,
 } from "@/lib/brand-scope"
 import { extractScopeFamilies } from "@/lib/scope-extraction"
+import {
+  refineScopeRoles,
+  type ScopeBrandProfile,
+} from "@/lib/scope-role-refine"
 import { batchExtractTitles, fetchAllSitemapUrls } from "@/lib/audit/site-scanner"
 import { selectRepresentativeBrandUrls } from "@/lib/brand/representative-pages"
 import {
@@ -159,6 +163,30 @@ export async function POST(req: NextRequest) {
       return
     }
 
+    const rawProfile = body?.brandProfile
+    const brandProfile: ScopeBrandProfile | null =
+      rawProfile &&
+      typeof rawProfile === "object" &&
+      String(rawProfile.product_name || "").trim() &&
+      String(rawProfile.product_identity?.literally || "").trim()
+        ? {
+            product_name: String(rawProfile.product_name).trim(),
+            product_identity: {
+              literally: String(rawProfile.product_identity.literally).trim(),
+            },
+            category: rawProfile.category
+              ? String(rawProfile.category).trim()
+              : "",
+            core_features: Array.isArray(rawProfile.core_features)
+              ? rawProfile.core_features.map(String)
+              : [],
+            how_it_works: Array.isArray(rawProfile.how_it_works)
+              ? rawProfile.how_it_works.map(String)
+              : [],
+            uvp: Array.isArray(rawProfile.uvp) ? rawProfile.uvp.map(String) : [],
+          }
+        : null
+
     const supplied: AnalyzedPage[] = Array.isArray(body?.pages)
       ? body.pages
           .filter((page: AnalyzedPage) => page?.url)
@@ -209,6 +237,13 @@ export async function POST(req: NextRequest) {
       url,
       pages.map((page) => ({ url: page.url, content: page.content || "" })),
       targetSeeds,
+      brandProfile
+        ? {
+            product_name: brandProfile.product_name,
+            product_identity: brandProfile.product_identity,
+            category: brandProfile.category,
+          }
+        : null,
     )
 
     emit({ phase: "scope_grounding", message: "Checking each area against your site…" })
@@ -230,14 +265,34 @@ export async function POST(req: NextRequest) {
       return
     }
 
-    const scopedFamilies = trimFamiliesToSearchCap(grounded.families)
+    emit({
+      phase: "scope_grounding",
+      message: "Separating what buyers search for from how you deliver…",
+    })
+    const refined = await refineScopeRoles(
+      grounded.families,
+      brandProfile,
+      targetSeeds,
+    )
+    const issues = [...grounded.issues, ...refined.issues]
+
+    if (refined.families.length === 0) {
+      emit({
+        phase: "error",
+        error:
+          "We could not work out what you sell from your website, your page titles, or search results. Tell us in one line and we will build from that.",
+      })
+      return
+    }
+
+    const scopedFamilies = trimFamiliesToSearchCap(refined.families)
     emit({
       phase: "scope_ready",
       message: `Mapped ${scopedFamilies.length} product area${
         scopedFamilies.length === 1 ? "" : "s"
       }…`,
       scope_families: scopedFamilies,
-      scope_analysis_issues: grounded.issues,
+      scope_analysis_issues: issues,
       unassigned_target_seeds: grounded.unassignedTargetSeeds,
     })
 
@@ -245,7 +300,7 @@ export async function POST(req: NextRequest) {
       phase: "complete",
       message: "Ready",
       scope_families: scopedFamilies,
-      scope_analysis_issues: grounded.issues,
+      scope_analysis_issues: issues,
       unassigned_target_seeds: grounded.unassignedTargetSeeds,
     })
   })

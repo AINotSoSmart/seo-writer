@@ -18,7 +18,9 @@ exact-quote research, deterministic section packets, intent-sized output and
 bounded images are active. The writer now proves each section finished before an
 article may be marked complete — a truncated, under-length or uncited article
 fails instead of publishing. Onboarding profile step keeps a compact confirm
-card and exposes full brand-DNA editing before the audit. Checkout remains
+card and exposes full brand-DNA editing before the audit. Scope refinement
+folds delivery/handoff families into acquisition jobs using the confirmed
+brand profile before harvest. Checkout remains
 disabled pending the staging and external release gate**
 
 ## 0. 2026-08-04 (second pass) writer completion gate
@@ -743,7 +745,10 @@ Public/product cleanup completed:
   authenticated, distraction-free shell while preserving the existing flow.
   The profile step confirms name / what-it-is / category, then optionally
   expands the full brand-DNA editor before scope and audit — Settings is not
-  the first place to correct extracted voice, audience, or features.
+  the first place to correct extracted voice, audience, or features. After
+  grounding, scope role refinement classifies each area/seed as an acquisition
+  job vs delivery/workflow mechanism and folds mechanisms into their parent
+  job so harvest never searches packaging/export/handoff markets.
 - Active integrations are WordPress and manual delivery only.
 - Action Board, SEO Health, GSC, Shopify, Webflow, credit APIs, ad-hoc
   generation, pillar generation, and link-sync runtime paths are removed or
@@ -963,6 +968,31 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-08 - scope role refinement keeps delivery out of harvest
+
+**Founder evidence.** Drawgle onboarding emitted a peer family "AI Design to
+Code Handoff" with seeds like `tailwind html export` and `cursor ai design
+context`. Those are how the product packages output, not what strangers Google
+to find an AI mobile UI generator. Searching them would pull generic
+design-to-code / Tailwind / Cursor SERPs and waste the audit.
+
+**Root cause.** `parent_hint` already marked the area as a sub-area, but child
+families still carried independent `seed_keywords` into harvest. Prompt rules
+in `extractScopeFamilies` already banned "Design Handoff" as a peer family and
+still failed. Autocomplete demand-check cannot help: popular wrong phrases look
+"real."
+
+**Fix.** After `validateGroundedScope`, `refineScopeRoles` classifies each
+family and seed against the founder-confirmed brand profile
+(`acquisition_job` | `delivery_artifact` | `workflow_step`), then
+`applyScopeRoleRefinement` folds mechanisms into their parent job, strips
+mechanism seeds from harvest directions, and preserves founder target seeds.
+The scope API now accepts `brandProfile` from onboarding/Settings. Extraction
+gets an optional brand-job preamble; the refine stage is the invariant.
+
+**Contract.** Pure apply fixtures cover Drawgle-shaped fold, real sibling jobs,
+seed scrub, and founder-seed exemption. No token denylist.
 
 ### 2026-08-08 - pre-audit brand DNA editing restored on profile step
 
