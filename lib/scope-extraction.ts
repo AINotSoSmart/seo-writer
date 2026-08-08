@@ -134,19 +134,40 @@ function buildCorpus(pages: CrawledPage[]): string {
     return corpus
 }
 
+export type ScopeExtractionBrandProfile = {
+    product_name: string
+    product_identity: { literally: string }
+    category?: string
+}
+
 export async function extractScopeFamilies(
     subjectUrl: string,
     pages: CrawledPage[],
     targetSeeds: string[],
+    brandProfile?: ScopeExtractionBrandProfile | null,
 ): Promise<ExtractedScopeFamily[]> {
     const corpus = buildCorpus(pages)
     if (!corpus.trim()) return []
+
+    const brandPreamble =
+        brandProfile?.product_name?.trim() &&
+        brandProfile.product_identity?.literally?.trim()
+            ? `FOUNDER-CONFIRMED BRAND JOB (context only — still read the PAGES):
+- Product: ${brandProfile.product_name}
+- What it is: ${brandProfile.product_identity.literally}
+- Category: ${brandProfile.category || "(none)"}
+Emit families for customer acquisition jobs that fit this brand. Delivery
+formats, export/handoff packaging, and post-purchase workflow steps are NOT
+peer families — put those mechanics inside capability_contract of the job they
+serve.
+`
+            : ""
 
     const prompt = `Identify every distinct thing this business sells.
 
 Website: ${subjectUrl}
 
-${
+${brandPreamble}${
     targetSeeds.length
         ? `The founder says their customers search for these. Treat each as ground
 truth that MUST appear verbatim in exactly one family's seed_keywords. If none
