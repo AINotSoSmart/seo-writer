@@ -40,14 +40,6 @@ const PHASE_LABEL: Record<ListedPhase, string> = {
     scope_ready: "Product areas ready",
 }
 
-const PHASE_DETAIL: Record<ListedPhase, string> = {
-    crawl_started: "Fetching your sitemap and the pages that describe what you sell.",
-    crawl_done: "Picking the pages that actually explain the product.",
-    brand_ready: "Reading your tone of voice so the articles sound like you.",
-    scope_started: "Working out every distinct thing your business sells.",
-    scope_grounding: "Making sure each one is backed by something real on your site.",
-    scope_ready: "Almost there.",
-}
 
 /**
  * The one waiting treatment in onboarding.
@@ -105,11 +97,7 @@ export function AnalyzePhaseList({
                             >
                                 {label}
                             </motion.span>
-                            {active ? (
-                                <span className="mt-0.5 block text-[11px] leading-snug text-stone-400">
-                                    {PHASE_DETAIL[phase]}
-                                </span>
-                            ) : null}
+                          
                         </span>
                     </motion.li>
                 )
