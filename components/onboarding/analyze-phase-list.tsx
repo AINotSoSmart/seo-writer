@@ -6,62 +6,74 @@ import type { AnalyzeBrandPhase } from "@/lib/analyze-brand/stream"
 import { cn } from "@/lib/utils"
 
 /**
- * What the analyze run is doing, phase by phase.
+ * What is happening, line by line. The only waiting treatment in onboarding.
  *
- * Replaces a single frozen line of 11px grey text. Two things made that line
- * actively misleading rather than merely thin:
+ * Replaces a single frozen line of 11px grey text and the spinners around it.
+ * Two things made that line actively misleading rather than merely thin:
  *
  * 1. `ANALYZE_PHASE_COPY.crawl_started` and `.crawl_done` are the same string,
  *    so the label did not move at all through the longest segment of the run.
- * 2. The label was whatever event arrived LAST, and `brand_ready` reliably beats
- *    `scope_ready` — so it read "Building brand profile…" while the category
- *    list, the thing the founder was staring at, was still being computed.
+ * 2. The label was whatever event arrived LAST, so it could read "Building brand
+ *    profile…" — already finished — while the thing the founder was staring at
+ *    was still being computed.
  *
- * Phases are therefore marked complete INDEPENDENTLY rather than by position:
- * "Building brand profile ✓" ticked while "Finding product areas" is still
- * breathing is the truth, and it is precisely the information that was missing.
+ * Phases are therefore marked complete INDEPENDENTLY rather than by position.
+ * That still matters with a sequential flow, because a run resumed from cache
+ * can land several phases at once.
  *
- * Visual language is lifted from components/audit/audit-console.tsx so the two
- * waiting screens in this product behave the same way.
+ * Every line must correspond to a real NDJSON event. If a stretch of work is
+ * silent, emit a phase for it — never pad the list with a timed fake. A loader
+ * that lies is worse than a spinner.
+ *
+ * Visual language is lifted from components/audit/audit-console.tsx:448-502 so
+ * all three waiting screens in this product speak the same way.
  */
 
-const PHASE_ORDER = [
-    "crawl_started",
-    "crawl_done",
-    "scope_ready",
-    "brand_ready",
-] as const satisfies readonly AnalyzeBrandPhase[]
-
-type ListedPhase = (typeof PHASE_ORDER)[number]
+type ListedPhase = Exclude<AnalyzeBrandPhase, "complete" | "error">
 
 const PHASE_LABEL: Record<ListedPhase, string> = {
     crawl_started: "Reading your site",
     crawl_done: "Understanding your pages",
-    scope_ready: "Finding product areas",
-    brand_ready: "Building brand profile",
+    brand_ready: "Building your brand profile",
+    scope_started: "Grouping what you sell",
+    scope_grounding: "Checking each area against your site",
+    scope_ready: "Product areas ready",
 }
 
 const PHASE_DETAIL: Record<ListedPhase, string> = {
     crawl_started: "Fetching your sitemap and the pages that describe what you sell.",
     crawl_done: "Picking the pages that actually explain the product.",
-    scope_ready: "Grouping what you sell into areas we can research. This is the slow part.",
     brand_ready: "Reading your tone of voice so the articles sound like you.",
+    scope_started: "Working out every distinct thing your business sells.",
+    scope_grounding: "Making sure each one is backed by something real on your site.",
+    scope_ready: "Almost there.",
 }
 
+/**
+ * The one waiting treatment in onboarding.
+ *
+ * Both waits use this component — only `phases` differs. Deliberately not two
+ * variants and never a spinner: a spinner says "something is happening", this
+ * says WHAT is happening, which is the difference between a 60-second wait that
+ * feels considered and one that feels broken.
+ */
 export function AnalyzePhaseList({
+    phases,
     seen,
     pageCount,
 }: {
+    /** Ordered phases for this wait — BRAND_ANALYZE_PHASES or SCOPE_ANALYZE_PHASES. */
+    phases: readonly ListedPhase[]
     /** Every phase whose event has arrived. Order-independent by design. */
     seen: Set<AnalyzeBrandPhase>
     /** Pages read, from the `crawl_done` payload the client used to discard. */
     pageCount?: number
 }) {
-    const activeIndex = PHASE_ORDER.findIndex((phase) => !seen.has(phase))
+    const activeIndex = phases.findIndex((phase) => !seen.has(phase))
 
     return (
         <ol className="space-y-1.5" aria-live="polite">
-            {PHASE_ORDER.map((phase, index) => {
+            {phases.map((phase, index) => {
                 const complete = seen.has(phase)
                 const active = index === activeIndex
                 const label =

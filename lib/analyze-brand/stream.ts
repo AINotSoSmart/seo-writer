@@ -10,15 +10,31 @@ import type { BrandDetails, ScopeFamily } from "@/lib/schemas/brand"
 export type AnalyzeBrandPhase =
     | "crawl_started"
     | "crawl_done"
+    | "scope_started"
+    | "scope_grounding"
     | "scope_ready"
     | "brand_ready"
     | "complete"
     | "error"
 
+/**
+ * A crawled page, carried between the two calls.
+ *
+ * `title` used to be dropped twice — once in `pagesFromCrawl`, again when the
+ * `crawl_done` event mapped to `{ url }` only. It is the highest-value signal a
+ * JS-rendered site still exposes, so it is now kept and used as a scope corpus
+ * when the markdown extraction comes back empty.
+ */
+export interface AnalyzedPage {
+    url: string
+    title?: string
+    content?: string
+}
+
 export interface AnalyzeBrandStreamEvent {
     phase: AnalyzeBrandPhase
     message?: string
-    pages?: Array<{ url: string }>
+    pages?: AnalyzedPage[]
     scope_families?: ScopeFamily[]
     scope_analysis_issues?: Array<{ family?: string; message: string }>
     unassigned_target_seeds?: string[]
@@ -33,10 +49,32 @@ export interface AnalyzeBrandStreamEvent {
 export const ANALYZE_PHASE_COPY = {
     crawl_started: "Reading your site…",
     crawl_done: "Reading your site…",
+    scope_started: "Finding product areas…",
+    scope_grounding: "Finding product areas…",
     scope_ready: "Finding product areas…",
     brand_ready: "Building brand profile…",
     complete: "Ready",
 } as const
+
+/**
+ * The two waits, as ordered phase lists.
+ *
+ * Onboarding runs sequentially — brand details are confirmed before scope is
+ * fetched — so each screen waits only on its own events. Both waits render with
+ * the SAME component (`AnalyzePhaseList`); only the list differs. There is no
+ * second loader style and no spinner.
+ */
+export const BRAND_ANALYZE_PHASES = [
+    "crawl_started",
+    "crawl_done",
+    "brand_ready",
+] as const satisfies readonly AnalyzeBrandPhase[]
+
+export const SCOPE_ANALYZE_PHASES = [
+    "scope_started",
+    "scope_grounding",
+    "scope_ready",
+] as const satisfies readonly AnalyzeBrandPhase[]
 
 export function encodeAnalyzeEvent(event: AnalyzeBrandStreamEvent): string {
     return `${JSON.stringify(event)}\n`

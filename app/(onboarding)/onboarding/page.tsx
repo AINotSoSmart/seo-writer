@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
-import { Loader2, ChevronUp, ArrowRight, Sparkles, Eye, Globe, Globe2, Plus } from "lucide-react"
+// No Loader2: onboarding has exactly one waiting treatment, the step list.
+import { ChevronUp, ArrowRight } from "lucide-react"
 import { getUserBrands, saveBrandAction } from "@/actions/brand"
 import { canAccessOnboarding } from "@/actions/onboarding"
 import {
@@ -17,27 +18,28 @@ import {
     type ProgramProgress,
 } from "@/actions/harvest"
 import { BrandDetails } from "@/lib/schemas/brand"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { CustomSpinner } from "@/components/CustomSpinner"
-import { PillInput } from "@/components/ui/pill-input"
 import { AuditConsole } from "@/components/audit/audit-console"
 import { ScopeResults } from "@/components/audit/scope-results"
-import {
-    ScopeFamilyReview,
-    ScopeFamilySkeleton,
-    findScopeBlockers,
-    focusScopeField,
-} from "@/components/onboarding/scope-family-review"
+import { findScopeBlockers } from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
 import {
     ANALYZE_PHASE_COPY,
     consumeAnalyzeBrandStream,
     emptyBrandShell,
     type AnalyzeBrandPhase,
+    type AnalyzedPage,
 } from "@/lib/analyze-brand/stream"
-import { AnalyzePhaseList } from "@/components/onboarding/analyze-phase-list"
+// One screen per file. The route owns the state machine, the data calls and the
+// recovery effects; each screen owns its own markup. See the onboardingSurface()
+// helper in the contract suite for why copy assertions read this directory
+// rather than the route alone — greping one file would turn every future
+// extraction into a silently lost assertion.
+import { SiteStep } from "@/components/onboarding/steps/site-step"
+import { ProfileStep } from "@/components/onboarding/steps/profile-step"
+import { ScopeStep } from "@/components/onboarding/steps/scope-step"
+import { ExtrasStep } from "@/components/onboarding/steps/extras-step"
 
 const STORAGE_KEYS = {
     STEP: 'onboarding_step',
@@ -50,7 +52,25 @@ const STORAGE_KEYS = {
     ANALYZING_STARTED_AT: 'onboarding_analyzing_started_at',
 } as const
 
-type Step = "brand" | "audit" | "audit-results"
+/**
+ * One screen, one question, in order.
+ *
+ * `brand` (the URL form), `profile` and `scope` were previously all the single
+ * value `"brand"`, swapped by a `!brandData` ternary — which is why persona and
+ * scope, produced by two model calls that finish at different times, landed on
+ * one screen half-filled. Each value below now waits only on its own data.
+ *
+ * `brand` keeps its name: `resetToBrandStep` must still land on the first
+ * screen, and that string is pinned by the deleted-brand recovery test.
+ */
+type Step = "brand" | "profile" | "scope" | "extras" | "audit" | "audit-results"
+
+/** Legacy sessions persisted `step: "brand"` for what is now three screens. */
+function migrateLegacyStep(step: string | null, hasBrandData: boolean): Step | null {
+    if (!step) return null
+    if (step === "brand") return hasBrandData ? "profile" : "brand"
+    return step as Step
+}
 
 export default function OnboardingPage() {
     const router = useRouter()
@@ -80,22 +100,18 @@ export default function OnboardingPage() {
     const [analyzePhase, setAnalyzePhase] = useState<string>(ANALYZE_PHASE_COPY.crawl_started)
     const [analysisInterrupted, setAnalysisInterrupted] = useState(false)
     const [brandData, setBrandData] = useState<BrandDetails | null>(null)
-    /** Full validated persona+scope — Continue stays off until this is true. */
+    /** The persona call returned a validated profile — step 2 can render. */
     const [brandProfileReady, setBrandProfileReady] = useState(false)
-    /** Persona fields arrived; unlock the brand-details panel before complete. */
-    const [brandFieldsReady, setBrandFieldsReady] = useState(false)
-    /**
-     * Category list arrived. Tracked separately because `brand_ready` reliably
-     * lands FIRST — persona runs on flash-lite, scope on flash-preview plus
-     * grounding — so `brandFieldsReady` is exactly the wrong signal for "is the
-     * thing the user is looking at ready yet".
-     */
+    /** The scope call returned product areas — step 3 can render. */
     const [scopeReady, setScopeReady] = useState(false)
-    /** Every phase whose event has arrived, so the list can tick them off out of
-     *  order — `brand_ready` genuinely completes before `scope_ready`. */
+    /** Every phase whose event has arrived, so the list can tick them off even
+     *  when several land at once. */
     const [phasesSeen, setPhasesSeen] = useState<Set<AnalyzeBrandPhase>>(new Set())
     /** Pages read, from the `crawl_done` payload the client used to throw away. */
     const [pageCount, setPageCount] = useState(0)
+    /** The step-1 crawl, handed to the scope call so it does not repeat it. */
+    const [crawledPages, setCrawledPages] = useState<AnalyzedPage[]>([])
+    const [scopeLoading, setScopeLoading] = useState(false)
     const [scopeAnalysisIssues, setScopeAnalysisIssues] = useState<
         Array<{ family?: string; message: string }>
     >([])
@@ -146,7 +162,6 @@ export default function OnboardingPage() {
             setUrl("")
             setBrandData(null)
             setBrandProfileReady(false)
-            setBrandFieldsReady(false)
             setScopeAnalysisIssues([])
             setSeedsWithoutDemand([])
             setCompetitors([])
@@ -219,7 +234,6 @@ export default function OnboardingPage() {
                 const restoredReady =
                     Boolean(parsed?.product_name?.trim()) && restoredFamilies.length > 0
                 setBrandProfileReady(restoredReady)
-                setBrandFieldsReady(Boolean(parsed?.product_name?.trim()))
                 setScopeReady(restoredFamilies.length > 0)
                 // Notes describe families. If the families did not survive the
                 // reload, the notes must not either.
@@ -266,13 +280,14 @@ export default function OnboardingPage() {
             )
         }
 
-        // Restore step from URL or fallback to saved step, or default to brand
-        const savedStep = localStorage.getItem(STORAGE_KEYS.STEP) as Step
-        if (urlStep) {
-            setStep(urlStep as Step)
-        } else if (savedStep) {
-            setStep(savedStep)
-        }
+        // Restore step from URL or fallback to saved step, or default to brand.
+        // Legacy sessions stored "brand" for what is now three screens, so a
+        // restore with brand data in hand resumes at the profile screen.
+        const hasBrandData = Boolean(savedBrandData)
+        const restoredStep =
+            migrateLegacyStep(urlStep, hasBrandData) ??
+            migrateLegacyStep(localStorage.getItem(STORAGE_KEYS.STEP), hasBrandData)
+        if (restoredStep) setStep(restoredStep)
 
         setIsHydrated(true)
     }, [searchParams])
@@ -379,7 +394,6 @@ export default function OnboardingPage() {
         setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
         setAnalysisInterrupted(false)
         setBrandProfileReady(false)
-        setBrandFieldsReady(false)
         setScopeReady(false)
         setPhasesSeen(new Set())
         setPageCount(0)
@@ -413,24 +427,7 @@ export default function OnboardingPage() {
                     setPageCount(event.pages.length)
                 }
 
-                if (event.phase === "scope_ready" && event.scope_families) {
-                    setScopeReady(true)
-                    const families = trimFamiliesToSearchCap(event.scope_families)
-                    setScopeAnalysisIssues(
-                        Array.isArray(event.scope_analysis_issues)
-                            ? event.scope_analysis_issues
-                            : [],
-                    )
-                    setBrandData((current) => {
-                        if (current) {
-                            return { ...current, scope_families: families }
-                        }
-                        return emptyBrandShell(families, targetSeeds)
-                    })
-                }
-
                 if (event.phase === "brand_ready" && event.brand) {
-                    setBrandFieldsReady(true)
                     setBrandData((current) => ({
                         ...emptyBrandShell(
                             current?.scope_families || [],
@@ -444,39 +441,21 @@ export default function OnboardingPage() {
                 }
 
                 if (event.phase === "complete" && event.data) {
-                    setScopeReady(true)
-                    setScopeAnalysisIssues(
-                        Array.isArray(event.data.scope_analysis_issues)
-                            ? event.data.scope_analysis_issues
-                            : [],
-                    )
-                    // MERGE, never replace. The screen invites edits from
-                    // `scope_ready` onward ("You can confirm product areas now"),
-                    // and this handler used to overwrite the whole object one
-                    // full persona call later — silently discarding every rename,
-                    // reorder, keyword and added category made during the wait.
-                    //
-                    // A three-way merge is unnecessary: `complete.data.scope_families`
-                    // is the same array `scope_ready` already sent, so keeping the
-                    // current families whenever we have any loses nothing.
-                    const { scope_families: serverFamilies, ...persona } = event.data
-                    setBrandData((current) => {
-                        const families = current?.scope_families?.length
-                            ? current.scope_families
-                            : trimFamiliesToSearchCap(serverFamilies || [])
-                        return {
-                            ...(current ?? emptyBrandShell(families, targetSeeds)),
-                            ...persona,
-                            scope_families: families,
-                            target_seed_keywords:
-                                current?.target_seed_keywords ??
-                                persona.target_seed_keywords ??
-                                targetSeeds,
-                            search_country: current?.search_country || persona.search_country || "",
-                            search_topic: current?.search_topic || persona.search_topic || "general",
-                        }
-                    })
-                    setBrandFieldsReady(true)
+                    // MERGE, never replace — the founder may already be editing.
+                    const { scope_families: _ignored, ...persona } = event.data
+                    setBrandData((current) => ({
+                        ...(current ?? emptyBrandShell([], targetSeeds)),
+                        ...persona,
+                        scope_families: current?.scope_families ?? [],
+                        target_seed_keywords:
+                            current?.target_seed_keywords ??
+                            persona.target_seed_keywords ??
+                            targetSeeds,
+                        search_country: current?.search_country || persona.search_country || "",
+                        search_topic: current?.search_topic || persona.search_topic || "general",
+                    }))
+                    // The crawl, handed forward so the scope call need not repeat it.
+                    if (Array.isArray(event.pages)) setCrawledPages(event.pages)
                     setBrandProfileReady(true)
                     completed = true
                 }
@@ -484,35 +463,11 @@ export default function OnboardingPage() {
 
             const data = complete.data
             if (!data) throw new Error("Failed to analyze brand")
-
-            // Advisory-only and intentionally NOT awaited before this screen
-            // renders — see the incident note on findSeedsWithoutDemand in
-            // lib/harvest/query-validation.ts. Badges appear a moment later,
-            // or not at all if this is slow or fails.
-            const seeds: string[] = (data.scope_families || []).flatMap(
-                (family: { seed_keywords?: string[] }) => family.seed_keywords || [],
-            )
-            if (seeds.length > 0) {
-                fetch("/api/analyze-brand/demand-check", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ seeds }),
-                })
-                    .then((r) => r.json())
-                    .then((demand) =>
-                        setSeedsWithoutDemand(
-                            Array.isArray(demand.seedsWithoutDemand)
-                                ? demand.seedsWithoutDemand
-                                : [],
-                        ),
-                    )
-                    .catch(() => {})
-            }
+            setStep("profile")
         } catch (e: any) {
             setError(e.message || "An error occurred")
             if (!completed) {
                 setBrandData(null)
-                setBrandFieldsReady(false)
                 setBrandProfileReady(false)
                 setScopeReady(false)
                 // The families are gone; notes about them must go too, or they
@@ -524,6 +479,80 @@ export default function OnboardingPage() {
             localStorage.removeItem(STORAGE_KEYS.ANALYZING_STARTED_AT)
             setAnalyzing(false)
             setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
+        }
+    }
+
+    /**
+     * Step 2 → 3. Fetches the product areas, re-using the crawl from step 1.
+     *
+     * Deliberately a second request rather than part of the first: the founder
+     * confirms their brand details before this runs, so the scope screen is
+     * never half-populated. It costs one LLM call, not another site crawl.
+     */
+    const handleFindScope = async (seeds: string[] = targetSeeds) => {
+        setStep("scope")
+        setScopeLoading(true)
+        setScopeReady(false)
+        setPhasesSeen(new Set())
+        setError("")
+        try {
+            const res = await fetch("/api/analyze-brand/scope", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    url: `https://${url}`,
+                    pages: crawledPages,
+                    targetSeeds: seeds,
+                }),
+            })
+            if (!res.ok && !res.body) {
+                const data = await res.json().catch(() => ({}))
+                throw new Error(data.error || "Failed to find product areas")
+            }
+
+            await consumeAnalyzeBrandStream(res, (event) => {
+                if (event.message) setAnalyzePhase(event.message)
+                setPhasesSeen((current) => new Set(current).add(event.phase))
+
+                if (event.scope_families) {
+                    setScopeReady(true)
+                    const families = trimFamiliesToSearchCap(event.scope_families)
+                    setScopeAnalysisIssues(
+                        Array.isArray(event.scope_analysis_issues)
+                            ? event.scope_analysis_issues
+                            : [],
+                    )
+                    setBrandData((current) =>
+                        current
+                            ? { ...current, scope_families: families, target_seed_keywords: seeds }
+                            : emptyBrandShell(families, seeds),
+                    )
+
+                    // Advisory only, never awaited — see the incident note on
+                    // findSeedsWithoutDemand in lib/harvest/query-validation.ts.
+                    const flat = families.flatMap((family) => family.seed_keywords || [])
+                    if (flat.length > 0) {
+                        fetch("/api/analyze-brand/demand-check", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ seeds: flat }),
+                        })
+                            .then((r) => r.json())
+                            .then((demand) =>
+                                setSeedsWithoutDemand(
+                                    Array.isArray(demand.seedsWithoutDemand)
+                                        ? demand.seedsWithoutDemand
+                                        : [],
+                                ),
+                            )
+                            .catch(() => {})
+                    }
+                }
+            })
+        } catch (e: any) {
+            setError(e.message || "Could not work out what you sell")
+        } finally {
+            setScopeLoading(false)
         }
     }
 
@@ -720,11 +749,12 @@ export default function OnboardingPage() {
                                 underneath the founder — and the island resizes at
                                 the same moment, which read as a jump to nowhere. */}
                             {step !== "audit-results" && (
-                                <ol className="flex items-center gap-1 border-b border-stone-100 px-4 py-2 text-[10px] sm:px-6">
+                                <ol className="flex justify-center items-center gap-1 border-b border-stone-100 px-4 py-3 text-[10px] sm:px-6">
                                     {[
-                                        { key: "site", label: "Website", done: Boolean(brandData), active: step === "brand" && !brandData },
-                                        { key: "confirm", label: "Confirm what you sell", done: step !== "brand", active: step === "brand" && Boolean(brandData) },
-                                        { key: "audit", label: "Audit", done: false, active: step === "audit" },
+                                        { key: "site", label: "Website", done: step !== "brand", active: step === "brand" },
+                                        { key: "profile", label: "Your brand", done: ["scope", "extras", "audit"].includes(step), active: step === "profile" },
+                                        { key: "scope", label: "What you sell", done: ["extras", "audit"].includes(step), active: step === "scope" },
+                                        { key: "audit", label: "Audit", done: false, active: step === "extras" || step === "audit" },
                                     ].map((entry, entryIndex) => (
                                         <li key={entry.key} className="flex items-center gap-1">
                                             {entryIndex > 0 ? <span className="text-stone-300">·</span> : null}
@@ -755,476 +785,98 @@ export default function OnboardingPage() {
                                         exit={{ opacity: 0, x: 20 }}
                                         className="px-4 py-6 sm:px-6"
                                     >
-                                        {!brandData ? (
-                                            // URL Input Form
-                                            <div className="space-y-6">
-                                                <div className="text-center space-y-3">
-                                                    <div className="flex justify-center">
-                                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center border border-stone-200">
-                                                            <Sparkles className="w-6 h-6 text-stone-600" />
-                                                        </div>
-                                                    </div>
-                                                    <h2 className={`text-xl font-bold text-stone-900`}>
-                                                        Let&apos;s understand your brand
-                                                    </h2>
-                                                    <p className={`text-sm text-stone-500`}>
-                                                        Share your website so we can understand your product and build your brand DNA & voice profile.
-                                                    </p>
-                                                </div>
+                                        <SiteStep
+                                            url={url}
+                                            onUrlChange={setUrl}
+                                            analyzing={analyzing}
+                                            analyzePhase={analyzePhase}
+                                            analysisInterrupted={analysisInterrupted}
+                                            phasesSeen={phasesSeen}
+                                            pageCount={pageCount}
+                                            onAnalyze={handleAnalyzeBrand}
+                                        />
+                                    </motion.div>
+                                )}
 
-                                                <div className="flex">
-                                                    <div className="flex-1 flex">
-                                                        <span className="inline-flex items-center px-3 text-sm text-stone-500 bg-stone-100 border border-r-0 border-stone-200 rounded-l-md font-medium select-none">
-                                                            https://
-                                                        </span>
-                                                        <Input
-                                                            type="text"
-                                                            placeholder="yourwebsite.com"
-                                                            className="flex-1 bg-stone-50 border-stone-200 py-2 px-3 text-sm rounded-l-none focus:ring-0 focus:outline-none focus-visible:ring-0"
-                                                            value={url}
-                                                            disabled={analyzing}
-                                                            onChange={(e) => setUrl(e.target.value.replace(/^https?:\/\//i, ''))}
-                                                        />
-                                                    </div>
-                                                </div>
+                                {step === "profile" && brandData && (
+                                    <motion.div
+                                        key="profile-step"
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 20 }}
+                                        className="px-4 py-6 sm:px-6"
+                                    >
+                                        <ProfileStep
+                                            brand={brandData}
+                                            onFieldChange={updateField}
+                                            onArrayTextChange={(field, value) =>
+                                                updateArray(field, value)
+                                            }
+                                            onPillChange={(field, value) =>
+                                                setBrandData((prev) =>
+                                                    prev ? { ...prev, [field]: value } : null,
+                                                )
+                                            }
+                                            onConfirm={() => handleFindScope()}
+                                        />
+                                    </motion.div>
+                                )}
 
-                                                {/* Optional Competitor Input */}
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <label className="text-xs font-medium text-stone-500">
-                                                            Know your competitors? <span className="text-stone-400">(optional — improves audit accuracy)</span>
-                                                        </label>
-                                                    </div>
-                                                    <PillInput
-                                                        value={competitors}
-                                                        onChange={setCompetitors}
-                                                        placeholder="e.g. competitor.com (press Enter to add)"
-                                                        variant="url"
-                                                        disabled={analyzing}
-                                                    />
-                                                    <p className="text-[10px] text-stone-400">
-                                                        Optional. We&apos;ll keep yours and find others if you add fewer than four.
-                                                    </p>
-                                                </div>
+                                {step === "scope" && brandData && (
+                                    <motion.div
+                                        key="scope-step"
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 20 }}
+                                        className="px-4 py-6 sm:px-6"
+                                    >
+                                        <ScopeStep
+                                            brand={brandData}
+                                            targetSeeds={targetSeeds}
+                                            seedsWithoutDemand={seedsWithoutDemand}
+                                            scopeLoading={scopeLoading}
+                                            scopeReady={scopeReady}
+                                            phasesSeen={phasesSeen}
+                                            scopeAnalysisIssues={scopeAnalysisIssues}
+                                            scopeBlockers={scopeBlockers}
+                                            onFamiliesChange={(scope_families) =>
+                                                setBrandData((current) =>
+                                                    current ? { ...current, scope_families } : current,
+                                                )
+                                            }
+                                            onTargetSeedsChange={(seeds) => {
+                                                // Both, deliberately: the component reads the prop,
+                                                // the server validator reads brandData.
+                                                setTargetSeeds(seeds)
+                                                setBrandData((current) =>
+                                                    current
+                                                        ? { ...current, target_seed_keywords: seeds }
+                                                        : current,
+                                                )
+                                            }}
+                                            onLookAgain={handleFindScope}
+                                            onRestart={() => resetToBrandStep("")}
+                                            onContinue={() => setStep("extras")}
+                                        />
+                                    </motion.div>
+                                )}
 
-                                                <div className="space-y-2">
-                                                    <label className="text-xs font-medium text-stone-600">
-                                                        What do people type into Google to find a tool like yours?
-                                                    </label>
-                                                    <PillInput
-                                                        value={targetSeeds}
-                                                        onChange={setTargetSeeds}
-                                                        placeholder="e.g. ai photo restoration (press Enter to add)"
-                                                        disabled={analyzing}
-                                                    />
-                                                    <p className="text-[10px] leading-relaxed text-stone-400">
-                                                        Not your brand name — the words a stranger would search.
-                                                        Two to five words each, and just your main ones rather
-                                                        than dozens of variations. We treat these as the truth
-                                                        about what you sell, so every one becomes a product area
-                                                        you confirm before research starts.
-                                                    </p>
-                                                </div>
-
-                                                <Button
-                                                    onClick={handleAnalyzeBrand}
-                                                    disabled={analyzing || !url}
-                                                    className={`
-                          w-full font-semibold gap-2
-                          bg-gradient-to-b from-stone-800 to-stone-950
-                          hover:from-stone-700 hover:to-stone-900
-                          shadow-sm
-                        `}
-                                                >
-                                                    <motion.div
-                                                        animate={analyzing ? {
-                                                            scale: [1, 1.2, 1],
-                                                            rotate: [0, 180, 360],
-                                                        } : {}}
-                                                        transition={{
-                                                            duration: 2,
-                                                            repeat: Infinity,
-                                                            ease: "easeInOut"
-                                                        }}
-                                                    >
-                                                        <Globe className="w-4 h-4 text-white" />
-                                                    </motion.div>
-                                                    {analyzing
-                                                        ? analyzePhase
-                                                        : analysisInterrupted
-                                                          ? "Run Analyze again"
-                                                          : "Find my business areas"}
-                                                </Button>
-                                                {analyzing && (
-                                                    <div className="space-y-2 rounded-lg bg-stone-50 px-3 py-2.5">
-                                                        <AnalyzePhaseList seen={phasesSeen} pageCount={pageCount} />
-                                                        <p className="text-[11px] text-stone-400">
-                                                            Usually 1–3 minutes. Keep this tab open —
-                                                            refreshing cannot resume the in-flight read.
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            // Brand review — page scrolls; no nested 60vh trap
-                                            <div className="space-y-4 pb-1">
-                                                <div className="flex items-baseline justify-between gap-3">
-                                                    <h2 className="font-serif text-xl tracking-tight text-stone-900">
-                                                        Confirm what you sell
-                                                    </h2>
-                                                </div>
-                                                {/* The branch used to key on brandFieldsReady, which is
-                                                    TRUE exactly when the message was wrong — it printed
-                                                    "Building brand profile…" (already finished) while the
-                                                    category list was the thing still running. */}
-                                                {analyzing && !brandProfileReady && (
-                                                    <p className="text-xs text-stone-500">
-                                                        {scopeReady
-                                                            ? "Brand voice still loading… You can confirm product areas now."
-                                                            : "Finding product areas… this is the slow part."}
-                                                    </p>
-                                                )}
-
-                                                {analyzing && (brandData.scope_families?.length ?? 0) === 0 ? (
-                                                    <ScopeFamilySkeleton />
-                                                ) : (
-                                                <ScopeFamilyReview
-                                                    families={brandData.scope_families || []}
-                                                    targetSeeds={brandData.target_seed_keywords || targetSeeds}
-                                                    seedsWithoutDemand={seedsWithoutDemand}
-                                                    onChange={(scope_families) =>
-                                                        setBrandData((current) =>
-                                                            current
-                                                                ? { ...current, scope_families }
-                                                                : current,
-                                                        )
-                                                    }
-                                                    onChangeTargetSeeds={(seeds) => {
-                                                        // Both, deliberately: the component reads the prop,
-                                                        // the server validator reads brandData.
-                                                        setTargetSeeds(seeds)
-                                                        setBrandData((current) =>
-                                                            current
-                                                                ? { ...current, target_seed_keywords: seeds }
-                                                                : current,
-                                                        )
-                                                    }}
-                                                    onRestart={() => resetToBrandStep("")}
-                                                />
-                                                )}
-
-                                                {scopeAnalysisIssues.length > 0 && (
-                                                    <details className="text-xs text-stone-500">
-                                                        <summary className="cursor-pointer hover:text-stone-700">
-                                                            Extraction notes ({scopeAnalysisIssues.length})
-                                                        </summary>
-                                                        <ul className="mt-1.5 list-disc space-y-1 pl-4">
-                                                            {scopeAnalysisIssues.map((issue, index) => (
-                                                                <li key={`${issue.family || "scope"}-${index}`}>
-                                                                    {issue.family ? `${issue.family}: ` : ""}
-                                                                    {issue.message}
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </details>
-                                                )}
-
-                                                <details className="group rounded-lg border border-stone-200" open={brandFieldsReady ? undefined : false}>
-                                                    <summary className={`list-none px-3 py-2.5 text-sm text-stone-600 marker:content-none [&::-webkit-details-marker]:hidden ${brandFieldsReady ? "cursor-pointer" : "cursor-default opacity-60"}`}>
-                                                        <span className="flex items-center justify-between gap-2">
-                                                            <span>
-                                                                Brand voice &amp; details
-                                                                <span className="ml-1.5 text-xs text-stone-400">
-                                                                    {brandFieldsReady
-                                                                        ? "optional review (we need it for brand aligned articles writing)"
-                                                                        : "loading…"}
-                                                                </span>
-                                                            </span>
-                                                            {brandFieldsReady && (
-                                                                <>
-                                                                    <span className="text-xs text-stone-400 group-open:hidden">
-                                                                        Show
-                                                                    </span>
-                                                                    <span className="hidden text-xs text-stone-400 group-open:inline">
-                                                                        Hide
-                                                                    </span>
-                                                                </>
-                                                            )}
-                                                        </span>
-                                                    </summary>
-                                                    {brandFieldsReady && (
-                                                    <div className="space-y-5 border-t border-stone-100 px-3 py-4">
-
-                                                {/* 1. Product Identity */}
-                                                <div className="space-y-3">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>1. Product Identity</h3>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 text-stone-600`}>Product Name</label>
-                                                            <Input value={brandData.product_name} onChange={e => updateField('product_name', e.target.value)} className="text-sm" />
-                                                        </div>
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 text-stone-600`}>What is it literally?</label>
-                                                            <Input value={brandData.product_identity.literally} onChange={e => updateField('product_identity.literally', e.target.value)} className="text-sm" />
-                                                        </div>
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 text-stone-600`}>What is it emotionally?</label>
-                                                            <Input value={brandData.product_identity.emotionally} onChange={e => updateField('product_identity.emotionally', e.target.value)} className="text-sm" />
-                                                        </div>
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 text-stone-600`}>What is it NOT?</label>
-                                                            <Input value={brandData.product_identity.not} onChange={e => updateField('product_identity.not', e.target.value)} className="text-sm" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* 2. Mission */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>2. Mission</h3>
-                                                    <label className={`block text-xs font-medium text-stone-600`}>The "Why"</label>
-                                                    <Textarea value={brandData.mission} onChange={e => updateField('mission', e.target.value)} className="text-sm min-h-[60px]" />
-                                                </div>
-
-                                                {/* 3. Audience */}
-                                                <div className="space-y-3">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>3. Audience</h3>
-                                                    <div className="grid grid-cols-1 gap-3">
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 text-stone-600`}>Primary Audience</label>
-                                                            <Input value={brandData.audience.primary} onChange={e => updateField('audience.primary', e.target.value)} className="text-sm" />
-                                                        </div>
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 text-stone-600`}>Psychology (Desires/Fears)</label>
-                                                            <Textarea value={brandData.audience.psychology} onChange={e => updateField('audience.psychology', e.target.value)} className="text-sm min-h-[60px]" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* 4. Strategic Positioning */}
-                                                <div className="space-y-3">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>4. Strategic Positioning</h3>
-                                                    <div>
-                                                        <label className={`block text-xs font-medium mb-1 text-stone-600`}>Category</label>
-                                                        <Input
-                                                            value={brandData.category || ''}
-                                                            onChange={e => updateField('category', e.target.value)}
-                                                            className="text-sm"
-                                                            placeholder="e.g., Privacy-First Web Analytics, AI Photo Restoration"
-                                                        />
-                                                        <p className={`text-[10px] text-stone-400 mt-1`}>How would you describe your product category?</p>
-                                                    </div>
-                                                </div>
-
-                                                {/* 5. Enemy */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>5. Enemy (What you fight against)</h3>
-                                                    <Textarea
-                                                        value={brandData.enemy.join('\n')}
-                                                        onChange={e => updateArray('enemy', e.target.value)}
-                                                        className="text-sm"
-                                                        placeholder="Describe the problem or enemy you are fighting against..."
-                                                        rows={4}
-                                                    />
-                                                </div>
-
-                                                {/* 6. Voice & Tone */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>6. Brand Voice & Tone</h3>
-                                                    <Textarea
-                                                        value={brandData.style_dna}
-                                                        onChange={e => updateField('style_dna', e.target.value)}
-                                                        className="text-sm"
-                                                        placeholder="Describe your brand's voice and tone in detail."
-                                                        rows={4}
-                                                    />
-                                                    <p className={`text-[10px] text-right text-stone-400`}>Comprehensive writing style guide</p>
-                                                </div>
-
-                                                {/* 7. Unique Value Proposition */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>7. Unique Value Proposition</h3>
-                                                    <Textarea
-                                                        value={brandData.uvp.join('\n')}
-                                                        onChange={e => updateArray('uvp', e.target.value)}
-                                                        className="text-sm"
-                                                        placeholder="What makes your product unique?"
-                                                        rows={4}
-                                                    />
-                                                </div>
-
-                                                {/* 8. Core Features */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>8. Core Features</h3>
-                                                    <PillInput
-                                                        value={brandData.core_features}
-                                                        onChange={arr => setBrandData(prev => prev ? ({ ...prev, core_features: arr }) : null)}
-                                                        className="min-h-[80px]"
-                                                        placeholder="Type feature and press Enter"
-                                                    />
-                                                    <p className={`text-[10px] text-right text-stone-400`}>Press Enter to add feature</p>
-                                                </div>
-
-                                                {/* 9. Pricing */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>9. Pricing</h3>
-                                                    <PillInput
-                                                        value={brandData.pricing || []}
-                                                        onChange={arr => setBrandData(prev => prev ? ({ ...prev, pricing: arr }) : null)}
-                                                        className="min-h-[80px]"
-                                                        placeholder="Type plan and press Enter"
-                                                    />
-                                                    <p className={`text-[10px] text-right text-stone-400`}>One line e.g. "Pro Plan: $29/mo"</p>
-                                                </div>
-
-                                                {/* 10. How it Works */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>10. How it Works</h3>
-                                                    <Textarea
-                                                        value={brandData.how_it_works?.join('\n') || ''}
-                                                        onChange={e => updateArray('how_it_works', e.target.value)}
-                                                        className="text-sm"
-                                                        placeholder="One step per line"
-                                                        rows={4}
-                                                    />
-                                                </div>
-
-                                                {/* 11. Featured Image Style */}
-                                                <div className="space-y-2">
-                                                    <h3 className={`text-sm font-semibold border-b pb-2 border-stone-100 text-stone-900`}>11. Featured Image Style</h3>
-                                                    <label className={`block text-xs font-medium mb-1 text-stone-600`}>Style Preference</label>
-                                                    <select
-                                                        className={`w-full h-10 rounded-md border px-3 text-sm bg-white border-stone-200 text-stone-900`}
-                                                        value={brandData.image_style || "stock"}
-                                                        onChange={e => updateField('image_style', e.target.value)}
-                                                    >
-                                                        <option value="stock">Stock Photography (Professional, Realistic)</option>
-                                                        <option value="illustration">Modern Illustration (Flat, Vector)</option>
-                                                        <option value="indo">Indo (Vibrant, Cultural Elements)</option>
-                                                        <option value="minimalist">Minimalist (Clean, Abstract)</option>
-                                                        <option value="cyberpunk">Cyberpunk (Neon, Tech)</option>
-                                                        <option value="watercolor">Watercolor (Artistic, Soft)</option>
-                                                    </select>
-                                                    <p className={`text-[10px] text-right text-stone-400`}>Select the style for AI-generated featured images.</p>
-                                                </div>
-                                                    </div>
-                                                    )}
-                                                </details>
-
-                                                <div className="sticky bottom-0 space-y-3 border-t border-stone-100 bg-white/95 py-3 backdrop-blur-sm">
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <div>
-                                                            <label className="mb-1 block text-[10px] font-medium text-stone-400">
-                                                                Country
-                                                            </label>
-                                                            <select
-                                                                className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs text-stone-900"
-                                                                value={brandData.search_country || ""}
-                                                                onChange={e => updateField('search_country', e.target.value)}
-                                                                disabled={!brandProfileReady}
-                                                            >
-                                                                <option value="">Global</option>
-                                                                <option value="australia">Australia</option>
-                                                                <option value="united states">United States</option>
-                                                                <option value="united kingdom">United Kingdom</option>
-                                                                <option value="canada">Canada</option>
-                                                                <option value="india">India</option>
-                                                                <option value="germany">Germany</option>
-                                                                <option value="france">France</option>
-                                                                <option value="japan">Japan</option>
-                                                                <option value="brazil">Brazil</option>
-                                                                <option value="netherlands">Netherlands</option>
-                                                                <option value="singapore">Singapore</option>
-                                                                <option value="new zealand">New Zealand</option>
-                                                                <option value="ireland">Ireland</option>
-                                                                <option value="south africa">South Africa</option>
-                                                                <option value="united arab emirates">UAE</option>
-                                                                <option value="sweden">Sweden</option>
-                                                                <option value="switzerland">Switzerland</option>
-                                                                <option value="italy">Italy</option>
-                                                                <option value="spain">Spain</option>
-                                                                <option value="mexico">Mexico</option>
-                                                                <option value="south korea">South Korea</option>
-                                                                <option value="indonesia">Indonesia</option>
-                                                                <option value="philippines">Philippines</option>
-                                                                <option value="malaysia">Malaysia</option>
-                                                                <option value="thailand">Thailand</option>
-                                                                <option value="poland">Poland</option>
-                                                                <option value="nigeria">Nigeria</option>
-                                                                <option value="pakistan">Pakistan</option>
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="mb-1 block text-[10px] font-medium text-stone-400">
-                                                                Topic
-                                                            </label>
-                                                            {/* Gated like Country. Left ungated it accepted a
-                                                                choice that the `complete` event then overwrote. */}
-                                                            <select
-                                                                className="h-8 w-full rounded-md border border-stone-200 bg-white px-2 text-xs text-stone-900 disabled:opacity-50"
-                                                                value={brandData.search_topic || "general"}
-                                                                disabled={!brandProfileReady}
-                                                                onChange={e => updateField('search_topic', e.target.value)}
-                                                            >
-                                                                <option value="general">General</option>
-                                                                <option value="news">News</option>
-                                                                <option value="finance">Finance</option>
-                                                                <option value="journal">Journal</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Named, clickable blockers. Without these the server
-                                                        collapses a half-filled category to the single
-                                                        string "Brand details are invalid." */}
-                                                    {!analyzing && scopeBlockers.length > 0 && (
-                                                        <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200">
-                                                            <p className="text-[11px] font-medium text-amber-900">
-                                                                {scopeBlockers.length === 1
-                                                                    ? "One thing left before we can start"
-                                                                    : `${scopeBlockers.length} things left before we can start`}
-                                                            </p>
-                                                            <ul className="mt-1 space-y-0.5">
-                                                                {scopeBlockers.map((blocker, index) => (
-                                                                    <li key={`${blocker.familyId}-${blocker.field}-${index}`}>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => focusScopeField(blocker)}
-                                                                            className="text-left text-[11px] leading-snug text-amber-800 underline-offset-2 hover:underline"
-                                                                        >
-                                                                            {blocker.familyName ? `${blocker.familyName}: ` : ""}
-                                                                            {blocker.message}
-                                                                        </button>
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-
-                                                    <Button
-                                                        onClick={handleSaveBrand}
-                                                        disabled={savingBrand || analyzing || !brandProfileReady || scopeBlockers.length > 0}
-                                                        className={`
-                          w-full h-10 font-semibold
-                          bg-gradient-to-b from-stone-800 to-stone-950
-                          hover:from-stone-700 hover:to-stone-900
-                          disabled:opacity-50
-                        `}
-                                                    >
-                                                        {savingBrand ? (
-                                                            <>
-                                                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                                                Saving...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                Continue
-                                                                <ArrowRight className="w-4 h-4 ml-2" />
-                                                            </>
-                                                        )}
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        )}
+                                {step === "extras" && brandData && (
+                                    <motion.div
+                                        key="extras-step"
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 20 }}
+                                        className="px-4 py-6 sm:px-6"
+                                    >
+                                        <ExtrasStep
+                                            brand={brandData}
+                                            competitors={competitors}
+                                            onCompetitorsChange={setCompetitors}
+                                            onFieldChange={updateField}
+                                            saving={savingBrand}
+                                            onStart={handleSaveBrand}
+                                        />
                                     </motion.div>
                                 )}
 
@@ -1279,12 +931,21 @@ export default function OnboardingPage() {
                                             </div>
                                         ) : (
                                             <div className="text-center py-8 space-y-4">
-                                                <p className="text-stone-500 text-sm">
+                                                {/* Breathing text, not a spinner — same language as the
+                                                    step loader, which is the only waiting treatment here. */}
+                                                <motion.p
+                                                    className="text-stone-500 text-sm"
+                                                    animate={isLoadingScope ? { opacity: [1, 0.55, 1] } : { opacity: 1 }}
+                                                    transition={
+                                                        isLoadingScope
+                                                            ? { duration: 2.4, repeat: Infinity, ease: "easeInOut" }
+                                                            : { duration: 0.2 }
+                                                    }
+                                                >
                                                     {isLoadingScope
-                                                        ? "Loading the verified scope and source evidence..."
+                                                        ? "Loading the verified scope and source evidence…"
                                                         : "Audit scope is not available yet."}
-                                                </p>
-                                                {isLoadingScope && <Loader2 className="mx-auto h-5 w-5 animate-spin text-stone-500" />}
+                                                </motion.p>
                                             </div>
                                         )}
                                     </motion.div>

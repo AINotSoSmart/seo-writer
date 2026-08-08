@@ -609,8 +609,14 @@ export function ScopeFamilyReview({
                                 />
                             </div>
 
-                            {/* Always rendered. A family whose contract was null used to render
-                                no editor at all, which made it unfixable except by deleting it. */}
+                            {/* Shown ONLY when something is actually missing.
+                                Extraction fills the contract in the normal case, so the
+                                founder sees a name and keywords and nothing else. This
+                                editor exists to repair a broken extraction — surfacing it
+                                unconditionally turned a rare failure into a five-field
+                                form on every category, for everyone. When a family does
+                                have a gap it opens itself, amber, with the reason. */}
+                            {gaps.length > 0 ? (
                             <details
                                 className={cn(
                                     "rounded-md px-2 py-1.5",
@@ -718,6 +724,7 @@ export function ScopeFamilyReview({
                                         ))}
                                     </div>
                             </details>
+                            ) : null}
 
                             {family.evidence.length > 0 ? (
                                 <details>
