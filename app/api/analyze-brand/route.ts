@@ -2,17 +2,11 @@ import { NextRequest } from "next/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { jsonrepair } from "jsonrepair"
-import {
-  MAX_TOTAL_SCOPE_SEEDS,
-  normalizeSeed,
-  trimFamiliesToSearchCap,
-  validateGroundedScope,
-} from "@/lib/brand-scope"
+import { MAX_TOTAL_SCOPE_SEEDS, normalizeSeed } from "@/lib/brand-scope"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
-import {
-  buildRankedBrandCorpus,
-  extractScopeFamilies,
-} from "@/lib/scope-extraction"
+// Scope extraction moved to ./scope/route.ts — this call now only reads the
+// brand's persona, and hands its crawl over so the next one need not repeat it.
+import { buildRankedBrandCorpus } from "@/lib/scope-extraction"
 import { selectRepresentativeBrandUrls } from "@/lib/brand/representative-pages"
 import { fetchAllSitemapUrls } from "@/lib/audit/site-scanner"
 import {
@@ -27,11 +21,20 @@ export const maxDuration = 300 // 5 minute timeout
 const BRAND_CRAWL_LIMIT = 8
 /** Use one crawler fallback only when direct representative extraction is thin. */
 const THIN_CORPUS_CHARS = 1_500
+/**
+ * Per-page budget for the corpus handed to the scope call.
+ *
+ * Matches `PER_PAGE_CHARS` in lib/scope-extraction.ts, which trims to exactly
+ * this anyway — so the round trip carries nothing the scope call would not have
+ * used. 8 pages x 2,400 chars is ~19KB, which is a cheap price for not crawling
+ * the site a second time.
+ */
+const SCOPE_PAGE_CHARS = 2_400
 
 const CRAWL_INSTRUCTIONS =
   "Prioritize the homepage (/), /pricing or /price, and product/feature/use-case/service pages. Deprioritize blog, news, careers, legal, login, and signup. Product scope and pricing matter more than writing-style samples."
 
-type CrawledPage = { url: string; content: string }
+type CrawledPage = { url: string; title?: string; content: string }
 
 function pagesFromCrawl(crawlResponse: unknown): CrawledPage[] {
   const raw = crawlResponse as { results?: unknown[]; data?: unknown[] }
@@ -41,6 +44,11 @@ function pagesFromCrawl(crawlResponse: unknown): CrawledPage[] {
     const rawPage = page as Record<string, unknown>
     return {
       url: String(rawPage.url || ""),
+      // Kept, finally. A JS-rendered site returns empty markdown but usually
+      // still has a real <title>/og:title, which is the only signal left to
+      // build scope from. This used to be discarded here and again in the
+      // crawl_done payload.
+      title: String(rawPage.title || "").trim() || undefined,
       content: String(
         rawPage.rawContent ||
           rawPage.markdown ||
@@ -244,46 +252,14 @@ export async function POST(req: NextRequest) {
       Extract into JSON format.
     `
 
-    // Commercial scope is extracted by its own focused call (lib/scope-extraction.ts).
-    // Started before the persona call and awaited after, so the split costs a
-    // few thousand tokens and no wall-clock time. Events emit as each finishes
-    // so onboarding can unlock scope review early.
-    const scopePromise = extractScopeFamilies(url, crawledPages, targetSeeds).then(
-      (extractedFamilies) => {
-        const grounded = validateGroundedScope(
-          extractedFamilies,
-          crawledPages,
-          url,
-          targetSeeds,
-        )
-        if (grounded.families.length === 0) {
-          // Name the measurable reason. A site that renders entirely in
-          // JavaScript yields almost no readable text, and the generic "please
-          // retry" told the founder to repeat something that cannot succeed.
-          const readableChars = totalContentChars(crawledPages)
-          throw new Error(
-            grounded.issues[0]?.message ||
-              (readableChars < THIN_CORPUS_CHARS
-                ? `We reached your site but could only read ${readableChars} characters across ${crawledPages.length} page${
-                    crawledPages.length === 1 ? "" : "s"
-                  } — it may render entirely in JavaScript, which we cannot see. Add your main customer searches and we will build from those instead.`
-                : "We could not identify what this website sells. Please retry, or add your main customer searches so we can start from those."),
-          )
-        }
-        const scopedFamilies = trimFamiliesToSearchCap(grounded.families)
-        emit({
-          phase: "scope_ready",
-          message: `Mapped ${scopedFamilies.length} product area${
-            scopedFamilies.length === 1 ? "" : "s"
-          }…`,
-          scope_families: scopedFamilies,
-          scope_analysis_issues: grounded.issues,
-          unassigned_target_seeds: grounded.unassignedTargetSeeds,
-        })
-        return { scopedFamilies, grounded }
-      },
-    )
-
+    // Scope extraction is NOT run here — it is its own call, POST
+    // /api/analyze-brand/scope, made after the founder has confirmed these brand
+    // details. Onboarding is sequential so each screen waits only on its own
+    // data; running both here is what produced a confirm screen where half the
+    // content arrived a persona-call later than the rest.
+    //
+    // The second call re-uses this crawl (returned below), so it costs one LLM
+    // call rather than another 20-60s of sitemap walking and extraction.
     const brandPromise = (async () => {
       const response = await client.models.generateContent({
         model: "gemini-3.1-flash-lite",
@@ -421,31 +397,27 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      emit({
-        phase: "brand_ready",
-        message: ANALYZE_PHASE_COPY.brand_ready,
-        brand: brandData,
-      })
       return brandData
     })()
 
-    let scopeResult: Awaited<typeof scopePromise>
     let brandData: Record<string, unknown>
     try {
-      ;[scopeResult, brandData] = await Promise.all([scopePromise, brandPromise])
+      brandData = await brandPromise
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "We could not read what your website sells. Please retry."
-      console.error("[Brand Analysis] Parallel extract failed:", error)
+      console.error("[Brand Analysis] Persona extract failed:", error)
       emit({ phase: "error", error: message })
       return
     }
 
+    // Scope is empty at this point by design — the next call fills it. Parsed
+    // here anyway so an unusable persona fails now rather than two screens later.
     const validated = BrandDetailsSchema.safeParse({
       ...brandData,
-      scope_families: scopeResult.scopedFamilies,
+      scope_families: [],
       target_seed_keywords: targetSeeds,
     })
     if (!validated.success) {
@@ -461,6 +433,12 @@ export async function POST(req: NextRequest) {
       return
     }
 
+    emit({
+      phase: "brand_ready",
+      message: ANALYZE_PHASE_COPY.brand_ready,
+      brand: validated.data,
+    })
+
     // Demand-checking seed keywords against Google Suggest is advisory only and
     // must never sit in this request's critical path — see the incident note
     // on seed demand validation in lib/harvest/query-validation.ts. The client
@@ -469,11 +447,18 @@ export async function POST(req: NextRequest) {
     emit({
       phase: "complete",
       message: ANALYZE_PHASE_COPY.complete,
-      data: {
-        ...validated.data,
-        scope_analysis_issues: scopeResult.grounded.issues,
-        unassigned_target_seeds: scopeResult.grounded.unassignedTargetSeeds,
-      },
+      data: validated.data,
+      // The corpus, handed to the scope call so it need not crawl again.
+      // Trimmed to the same budget lib/scope-extraction.ts already applies, so
+      // nothing extra is carried over the wire.
+      pages: crawledPages
+        .filter((page) => page.url)
+        .slice(0, BRAND_CRAWL_LIMIT)
+        .map((page) => ({
+          url: page.url,
+          title: page.title,
+          content: (page.content || "").slice(0, SCOPE_PAGE_CHARS),
+        })),
     })
   })
 }

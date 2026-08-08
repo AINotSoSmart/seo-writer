@@ -37,6 +37,39 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const text = (relativePath) =>
     readFile(path.join(root, relativePath), "utf8")
 
+const ONBOARDING_ROUTE = "app/(onboarding)/onboarding/page.tsx"
+const ONBOARDING_STEPS_DIR = "components/onboarding/steps"
+
+/**
+ * The whole onboarding surface: the route plus every step screen it renders.
+ *
+ * COPY AND JSX ASSERTIONS MUST READ THIS, never `page.tsx` alone. The route was
+ * a single 1,300-line component holding five screens; splitting it is the right
+ * move, but a test that greps one file turns every extraction into a silent
+ * assertion loss — the string is still on screen, the test just stopped looking
+ * at the file it moved to. Reading the directory makes the assertion about what
+ * the user sees rather than about where a developer happened to put it.
+ *
+ * Assertions about the route's OWN behaviour — its state machine, storage keys,
+ * recovery effects — keep reading `page.tsx` directly, because that is exactly
+ * what they are about.
+ */
+async function onboardingSurface() {
+    let stepFiles = []
+    try {
+        stepFiles = (await readdir(path.join(root, ONBOARDING_STEPS_DIR)))
+            .filter((name) => name.endsWith(".tsx"))
+            .sort()
+    } catch {
+        // Not split yet. The route alone is the whole surface.
+    }
+    const parts = await Promise.all([
+        text(ONBOARDING_ROUTE),
+        ...stepFiles.map((name) => text(`${ONBOARDING_STEPS_DIR}/${name}`)),
+    ])
+    return parts.join("\n")
+}
+
 test("brand analysis selects a bounded, diverse product corpus", () => {
     const bringBack = selectRepresentativeBrandUrls(
         "https://bringback.pro",
@@ -912,6 +945,99 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
     assert.doesNotMatch(console_, /onError/)
 })
 
+test("each onboarding screen is its own file, and the route keeps the machine", async () => {
+    const route = await text(ONBOARDING_ROUTE)
+    const stepFiles = (await readdir(path.join(root, ONBOARDING_STEPS_DIR)))
+        .filter((name) => name.endsWith(".tsx"))
+        .sort()
+
+    assert.deepEqual(stepFiles, [
+        "extras-step.tsx",
+        "profile-step.tsx",
+        "scope-step.tsx",
+        "site-step.tsx",
+    ])
+    for (const name of stepFiles) {
+        assert.match(await text(`${ONBOARDING_STEPS_DIR}/${name}`), /^"use client"/)
+    }
+
+    // The route renders each screen and owns nothing of their markup.
+    for (const component of ["SiteStep", "ProfileStep", "ScopeStep", "ExtrasStep"]) {
+        assert.match(route, new RegExp(`<${component}\\b`), `route must render ${component}`)
+    }
+
+    // …and it KEEPS the state machine, the data calls and the recovery effects.
+    // Those are the route's job; pushing them into a screen would scatter the
+    // flow across five files and put us back where this started.
+    for (const owned of [
+        /type Step =/,
+        /const resetToBrandStep = useCallback/,
+        /handleAnalyzeBrand/,
+        /handleFindScope/,
+        /handleSaveBrand/,
+        /STORAGE_KEYS/,
+        /migrateLegacyStep/,
+    ]) {
+        assert.match(route, owned, `route must own ${owned}`)
+    }
+
+    // The screens are presentational: no fetching, no storage, no routing.
+    for (const name of stepFiles) {
+        const source = await text(`${ONBOARDING_STEPS_DIR}/${name}`)
+        assert.doesNotMatch(source, /fetch\(/, `${name}: screens must not fetch`)
+        assert.doesNotMatch(source, /localStorage/, `${name}: screens must not touch storage`)
+        assert.doesNotMatch(source, /useRouter|setStep\(/, `${name}: screens must not navigate`)
+    }
+
+    // Splitting must not have shrunk the file by moving copy somewhere unread.
+    // Every one of these lives in a step file now, and the surface helper is the
+    // only reason the assertions elsewhere in this suite still see them.
+    const surface = await onboardingSurface()
+    for (const literal of [
+        "Find my business areas",
+        "What do people type into Google to find a tool like yours",
+        "keep yours and find others",
+        "Usually 1–3 minutes",
+    ]) {
+        assert.ok(surface.includes(literal), `surface lost: ${literal}`)
+        assert.ok(!route.includes(literal), `expected ${literal} to live in a step file`)
+    }
+})
+
+test("onboarding asks one question, and scope generates itself", async () => {
+    const [analyze, scope, page] = await Promise.all([
+        text("app/api/analyze-brand/route.ts"),
+        text("app/api/analyze-brand/scope/route.ts"),
+        onboardingSurface(),
+    ])
+
+    // STEP 1 TAKES A URL AND NOTHING ELSE. Competitors were never read by this
+    // endpoint, and the extractor has an explicit "no target searches supplied"
+    // branch — yet both sat on the first screen, in front of any value. The
+    // destructure is the contract: if a third field appears here, the first
+    // screen has grown a field it does not need.
+    assert.match(analyze, /const \{ url, targetSeeds: rawTargetSeeds = \[\] \} = await req\.json\(\)/)
+    assert.doesNotMatch(analyze, /competitors/)
+
+    // Competitors and country/topic live on their own skippable screen, after
+    // the founder has seen something worth the input.
+    assert.match(page, /step === "extras"/)
+    assert.match(page, /keep yours and find others/)
+
+    // SCOPE MUST GENERATE ITSELF. Returning zero areas and handing the founder a
+    // blank form is the failure this endpoint exists to prevent, and an empty
+    // markdown corpus — what any JS-rendered site produces — used to do exactly
+    // that. Three tiers must be attempted before anyone is asked anything.
+    assert.match(scope, /batchExtractTitles/)      // tier 2: raw-HTML titles
+    assert.match(scope, /tvly\.search/)            // tier 3: search-index cache
+    assert.match(scope, /fetchAllSitemapUrls/)
+    // Titles are the signal a JS-rendered site still exposes; they were being
+    // dropped in pagesFromCrawl and again in the crawl_done payload.
+    assert.match(analyze, /title: String\(rawPage\.title \|\| ""\)/)
+    // And when all three fail, ONE question — never a grid of fields.
+    assert.match(scope, /Tell us in one line/)
+})
+
 test("the confirm gate is one rule, and the UI can always satisfy it", async () => {
     const { mechanicsGaps, isPlaceholderAction, MECHANICS_GAP_COPY } = await import(
         "../lib/scope-mechanics.ts"
@@ -1004,11 +1130,11 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
     // A null contract must still render an editor, or the family is unfixable.
     assert.doesNotMatch(review, /\{family\.capability_contract \? \(/)
     // Continue must be able to explain itself before the server ever answers.
-    for (const host of [
-        "app/(onboarding)/onboarding/page.tsx",
-        "components/brand-onboarding.tsx",
+    for (const [label, source] of [
+        ["onboarding", await onboardingSurface()],
+        ["components/brand-onboarding.tsx", await text("components/brand-onboarding.tsx")],
     ]) {
-        assert.match(await text(host), /findScopeBlockers\(/, `${host}: must pre-flight`)
+        assert.match(source, /findScopeBlockers\(/, `${label}: must pre-flight`)
     }
 })
 
@@ -1126,8 +1252,9 @@ test("a founder target search can never be silently dropped from scope", async (
 })
 
 test("scope extraction is its own call, not a field on the persona prompt", async () => {
-    const [route, extraction] = await Promise.all([
+    const [route, scopeRoute, extraction] = await Promise.all([
         text("app/api/analyze-brand/route.ts"),
+        text("app/api/analyze-brand/scope/route.ts"),
         text("lib/scope-extraction.ts"),
     ])
 
@@ -1135,14 +1262,20 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     // "Style DNA". The most consequential decision in the product must not
     // compete for attention with prose about tone of voice.
     assert.doesNotMatch(route, /Commercial Scope Families/)
-    assert.match(route, /extractScopeFamilies\(/)
     assert.match(extraction, /gemini-3-flash-preview/)
 
-    // Started before the persona await so the split costs no wall-clock time.
-    assert.ok(
-        route.indexOf("const scopePromise") < route.indexOf("const response = await client"),
-        "scope extraction must start before the persona call is awaited",
-    )
+    // It is now its own ENDPOINT, which is stronger than its own function call.
+    // Onboarding runs sequentially — the founder confirms brand details, then
+    // scope is fetched — so each screen waits only on its own data. The
+    // "start scope before awaiting persona" assertion that used to live here
+    // described the parallel race this replaces, and is deliberately gone.
+    assert.match(scopeRoute, /extractScopeFamilies\(/)
+    assert.doesNotMatch(route, /extractScopeFamilies\(/)
+    assert.doesNotMatch(route, /const scopePromise/)
+
+    // The second call must not re-crawl. The first hands over its corpus.
+    assert.match(route, /pages: crawledPages/)
+    assert.match(scopeRoute, /body\?\.pages/)
 
     // Brand crawl burned ~80s / ~10 Tavily credits at limit 20 + advanced.
     // Bound to 8 pages, prefer basic, escalate only when the corpus is thin,
@@ -1169,16 +1302,21 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
 
 test("brand analyze streams real phases and unlocks scope before persona finishes", async () => {
     const [onboarding, brandOnboarding, route, stream] = await Promise.all([
-        text("app/(onboarding)/onboarding/page.tsx"),
+        onboardingSurface(),
         text("components/brand-onboarding.tsx"),
         text("app/api/analyze-brand/route.ts"),
         text("lib/analyze-brand/stream.ts"),
     ])
+    const onboardingRoute = await text(ONBOARDING_ROUTE)
 
     assert.match(route, /application\/x-ndjson/)
-    assert.match(route, /phase:\s*"scope_ready"/)
     assert.match(route, /phase:\s*"brand_ready"/)
     assert.match(route, /phase:\s*"complete"/)
+    // scope_ready now belongs to the second call, not this one.
+    const scopeRoute = await text("app/api/analyze-brand/scope/route.ts")
+    assert.match(scopeRoute, /application\/x-ndjson/)
+    assert.match(scopeRoute, /phase:\s*"scope_ready"/)
+    assert.doesNotMatch(route, /phase:\s*"scope_ready"/)
     assert.match(stream, /consumeAnalyzeBrandStream/)
     assert.match(stream, /Reading your site/)
     assert.match(stream, /Finding product areas/)
@@ -1197,11 +1335,6 @@ test("brand analyze streams real phases and unlocks scope before persona finishe
             source,
             /brandProfileReady/,
             `${file}: Continue gated until validated complete payload`,
-        )
-        assert.match(
-            source,
-            /Brand voice still loading/,
-            `${file}: progressive unlock copy while persona finishes`,
         )
         assert.match(
             source,
@@ -1224,15 +1357,55 @@ test("brand analyze streams real phases and unlocks scope before persona finishe
             `${file}: retired optimistic ETA`,
         )
     }
-    assert.match(onboarding, /ANALYZING_STARTED_AT/)
+    // "Brand voice still loading…" used to be pinned here. It was an apology for
+    // persona and scope racing into one screen. Onboarding is now sequential —
+    // the persona is confirmed two screens before scope is even requested — so
+    // the copy is gone and the invariant it stood in for is replaced by the
+    // stronger one below: each screen has its own step, and its own event.
+    // The state machine belongs to the route, so these read the route directly.
+    assert.match(onboardingRoute, /type Step =[\s\S]{0,120}"profile"[\s\S]{0,60}"scope"/)
+    assert.match(onboardingRoute, /step === "profile"/)
+    assert.match(onboardingRoute, /step === "scope"/)
+    assert.match(onboardingRoute, /handleFindScope/)
+    assert.match(onboardingRoute, /analyze-brand\/scope/)
+    // One waiting treatment, driven by real phases — never a spinner.
+    assert.match(onboarding, /phases=\{BRAND_ANALYZE_PHASES\}/)
+    assert.match(onboarding, /phases=\{SCOPE_ANALYZE_PHASES\}/)
+    assert.doesNotMatch(onboarding, /Loader2 className=/)
+
+    assert.match(onboardingRoute, /ANALYZING_STARTED_AT/)
     assert.match(onboarding, /keep yours and find others/)
     assert.match(brandOnboarding, /ANALYZING_STARTED_KEY/)
     // Demand check stays out of the analyze critical path.
-    assert.match(onboarding, /analyze-brand\/demand-check/)
+    assert.match(onboardingRoute, /analyze-brand\/demand-check/)
     assert.doesNotMatch(
         await text("app/api/analyze-brand/route.ts"),
         /findSeedsWithoutDemand/,
     )
+})
+
+test("onboarding profile can edit full brand DNA before the audit", async () => {
+    const [profile, editor, brandOnboarding, surface] = await Promise.all([
+        text("components/onboarding/steps/profile-step.tsx"),
+        text("components/brand-details-editor.tsx"),
+        text("components/brand-onboarding.tsx"),
+        onboardingSurface(),
+    ])
+
+    // The compact card stays; the rest is one click away on the same step —
+    // not deferred to Settings after the audit has already frozen a snapshot.
+    assert.match(profile, /Edit full brand details/)
+    assert.match(profile, /BrandDetailsEditor/)
+    assert.match(profile, /skipAuditCoreFields/)
+    assert.match(profile, /the audit uses what you confirm here/)
+    assert.doesNotMatch(profile, /review it later in Settings/)
+    assert.doesNotMatch(surface, /you can review it later in Settings/)
+
+    // Shared editor owns the writer-facing fields both surfaces must expose.
+    for (const field of ["mission", "style_dna", "core_features", "audience.primary", "how_it_works"]) {
+        assert.match(editor, new RegExp(field.replace(".", "\\.")), `editor must expose ${field}`)
+    }
+    assert.match(brandOnboarding, /BrandDetailsEditor/)
 })
 
 test("user-supplied competitors top up via discovery instead of freezing the list", async () => {
@@ -2444,7 +2617,7 @@ test("confirmed business scope is the only production relevance contract", async
         demandFilter,
     ] = await Promise.all([
         text("app/api/analyze-brand/route.ts"),
-        text("app/(onboarding)/onboarding/page.tsx"),
+        onboardingSurface(),
         text("components/onboarding/scope-family-review.tsx"),
         text("app/api/topical-audit/route.ts"),
         text("lib/harvest/assembly.ts"),
@@ -2467,7 +2640,8 @@ test("confirmed business scope is the only production relevance contract", async
     assert.match(onboarding, /What do people type into Google to find a tool like yours/)
     assert.match(onboarding, /Find my business areas/)
     assert.match(onboarding, /<ScopeFamilyReview/)
-    assert.match(onboarding, /onboarding_competitors/)
+    // Storage keys belong to the route, not to a screen.
+    assert.match(await text(ONBOARDING_ROUTE), /onboarding_competitors/)
     assert.match(review, /disableAdd=\{atCap\}/)
     assert.match(review, /\{totalDirections\}\/\{MAX_SEARCH_DIRECTIONS\}/)
     assert.match(review, /Evidence \(\{family\.evidence\.length\}\)/)
@@ -2477,7 +2651,11 @@ test("confirmed business scope is the only production relevance contract", async
     assert.match(review, /What this helps with/)
     assert.match(review, /Add a keyword, Enter/)
     assert.doesNotMatch(review, /Google searches|search chips|Customer job/)
-    assert.match(analysis, /trimFamiliesToSearchCap/)
+    // The cap is applied where scope is now produced — the scope endpoint.
+    assert.match(
+        await text("app/api/analyze-brand/scope/route.ts"),
+        /trimFamiliesToSearchCap/,
+    )
     assert.match(
         await text("lib/scope-search-cap.ts"),
         /export function trimFamiliesToSearchCap/,

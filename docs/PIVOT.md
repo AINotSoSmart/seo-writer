@@ -10,15 +10,16 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-04
+Last implementation update: 2026-08-08
 
 Status: **domain-agnostic capability/article contracts and the evidence-bound
 writer repair are implemented; representative first-party page selection,
 exact-quote research, deterministic section packets, intent-sized output and
 bounded images are active. The writer now proves each section finished before an
 article may be marked complete — a truncated, under-length or uncited article
-fails instead of publishing. Checkout remains disabled pending the staging and
-external release gate**
+fails instead of publishing. Onboarding profile step keeps a compact confirm
+card and exposes full brand-DNA editing before the audit. Checkout remains
+disabled pending the staging and external release gate**
 
 ## 0. 2026-08-04 (second pass) writer completion gate
 
@@ -740,6 +741,9 @@ Public/product cleanup completed:
   and published progress.
 - Onboarding is outside the dashboard sidebar layout and uses a minimal,
   authenticated, distraction-free shell while preserving the existing flow.
+  The profile step confirms name / what-it-is / category, then optionally
+  expands the full brand-DNA editor before scope and audit — Settings is not
+  the first place to correct extracted voice, audience, or features.
 - Active integrations are WordPress and manual delivery only.
 - Action Board, SEO Health, GSC, Shopify, Webflow, credit APIs, ad-hoc
   generation, pillar generation, and link-sync runtime paths are removed or
@@ -937,13 +941,151 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     `placeholder` attribute. `action: "Describe what…"` was simultaneously the
     default and the rejection condition, and `scope-classifier.ts` inlines that
     string as the definition of the business.
-26. **Tightening a demand gate has failed three times; measure first.** The
+26. **Never ask onboarding for something the next call does not need.**
+    `/api/analyze-brand` destructures exactly `{ url, targetSeeds }` — yet the
+    first screen also collected competitors, which that endpoint never reads.
+    Before adding a field, find the line that consumes it; if the consumer runs
+    three screens later, ask three screens later.
+27. **One waiting treatment, and it must be honest.** Onboarding has exactly one
+    loader: stacked phase lines, running one lit, rest dimmed. No spinners. Every
+    line corresponds to a real stream event — if a stretch of work is silent,
+    emit a phase for it rather than padding the list with a timed fake.
+28. **A test that greps one file blocks the refactor it should survive.** Before
+    extracting anything out of a file the contract suite reads, change the
+    assertion to read the *surface* — see `onboardingSurface()`. Otherwise the
+    extraction either breaks the suite or, worse, passes while the assertion
+    quietly looks at a file the string no longer lives in. Test the behaviour,
+    not the filename.
+29. **Tightening a demand gate has failed three times; measure first.** The
     8-article floor destroyed 33% of real demand once and returned 0 clusters
     from 123 real gaps another time. Before adding any threshold that can
     shrink scope, re-run a real audit and diff the plan. A fix that is correct
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-08 - pre-audit brand DNA editing restored on profile step
+
+**Founder verdict.** Deferring the twelve writer-facing brand fields to Settings
+after the audit was wrong: an audit (and later articles) consume the brand blob
+confirmed during onboarding. Correcting voice, audience, features, or UVP only
+after that run has no effect on the evidence just purchased.
+
+**What changed.** Step 2 still opens as a compact card (name, what it is,
+category, voice teaser). A collapsed **Edit full brand details** disclosure now
+mounts the shared `BrandDetailsEditor` — the same form Settings uses via
+`BrandOnboarding` — so the founder can fix or add anything before scope/audit.
+Copy no longer points people at Settings for first review.
+
+**Shared surface.** The old fifteen-field accordion in `brand-onboarding.tsx`
+moved to `components/brand-details-editor.tsx`. Onboarding passes
+`skipAuditCoreFields` so the three audit-critical inputs are not duplicated
+above the disclosure; Settings keeps the full form.
+
+### 2026-08-05 - onboarding asks one question at a time
+
+**Founder verdict on the flow as a whole**, after the dead-end fix landed:
+
+> "why the search areas are not automatically generated if user dont provide
+> anything… why the search area generation and brand dna/details generation are
+> not in seperate steps and forms… currently half things come first, half things
+> come later… a long list of inputs just for finding search scope areas, and you
+> left it all on users"
+
+All three were correct, and the previous pass had made one of them worse: it
+surfaced a five-field mechanics editor on every category so a *broken*
+extraction could be repaired, which taxed the ~90% of runs where extraction
+worked. Optimising the failure path is not free.
+
+**What the code actually said.**
+
+- Scope areas *are* auto-generated. `extractScopeFamilies` builds from the
+  crawled pages and its prompt has an explicit "the founder supplied no target
+  searches, discover from the PAGES alone" branch. It returned `[]` only when the
+  corpus was blank — a JS-rendered SPA — and we then handed over a blank form.
+  Note the asymmetry that made this obvious: the **persona** call already had a
+  `JSON.stringify(crawlResponse)` fallback; scope extraction had none.
+- Step 1 asked for three things the endpoint does not need. It destructures
+  exactly `{ url, targetSeeds }`; `competitors` is never read there.
+- "Half things come first" was literal: persona (`flash-lite`) and scope
+  (`flash-preview` + grounding) ran concurrently into one screen, tracked by
+  three separate readiness flags.
+- Of the 15 fields in "Brand voice & details", only `product_name`,
+  `product_identity.literally` and `category` are read by the audit. Twelve are
+  writer-only; `mission` and `enemy` have **no reader anywhere in the repo**.
+
+**The flow now.** One screen, one question, each waiting only on its own data:
+
+```
+1 URL          one field
+  ↓ step loader
+2 Brand        compact card — name, what it is, category — confirm
+  ↓ step loader
+3 Scope        product areas, confirm
+4 Extras       competitors / country / topic  ·  skippable
+5 Audit
+```
+
+**Two calls, one crawl.** `POST /api/analyze-brand` now returns persona **and
+its crawl**; the new `POST /api/analyze-brand/scope` runs extraction over that
+supplied corpus. Sequential screens without a second sitemap walk — the second
+call is one LLM call, not another 20-60s of crawling. `pagesFromCrawl` keeps
+`title` now; it was dropped twice before.
+
+**Scope generates itself, in three tiers.** Crawled markdown → page titles via
+`batchExtractTitles` (raw HTML, so it works on the SPA that was failing) →
+`tvly.search` cached content. Only if all three are empty does it ask, and then
+it is one question, never a grid.
+
+**One loader, everywhere.** `AnalyzePhaseList` renders both waits — stacked
+lines, running line lit and breathing, completed dimmed with a `✓`, upcoming
+faint. Only the phase list differs. Every `Loader2` spinner is gone from
+onboarding; `CustomSpinner` remains for the pre-auth check, which precedes any
+step. Phases are real NDJSON events — a loader that lies is worse than a spinner.
+
+**Also.** The mechanics editor renders only when `mechanicsGaps(...)` is
+non-empty, so the happy path never sees it. The 15-field accordion is gone from
+onboarding (still extracted, still saved, still editable in Settings).
+`brandFieldsReady` was dead state and is removed. `brand-onboarding.tsx` chains
+the two calls — without that, re-analysing from Settings would have silently
+wiped a brand's product areas.
+
+**Four deliberate test edits.** `extractScopeFamilies`, `scope_ready` and
+`trimFamiliesToSearchCap` assertions were *redirected* to the scope endpoint —
+the invariants hold, they moved. `"Brand voice still loading"` was **deleted**:
+it was copy apologising for a race between persona and scope, and sequential
+steps remove the race. It is replaced by stronger assertions — each screen has
+its own step value, its own event, and its own phase list — plus a new test
+pinning that step 1 takes a URL alone and that all three scope tiers exist.
+
+70/70 contract groups pass; `tsc` clean on every touched path.
+
+**Not verified.** `/onboarding` is auth-gated and API routes are intercepted by
+the same middleware, so none of this was exercised in a browser from the dev
+session. It needs a logged-in click-through.
+
+**Then split, in that order.** The screens now live in
+`components/onboarding/steps/{site,profile,scope,extras}-step.tsx` and the route
+is 1,330 → **966 lines**.
+
+The test rewrite came first, and it had to. Roughly eight assertions greped
+`page.tsx` for user-visible copy; extracting a screen would have moved the string
+out of the file the assertion reads, and every one would have passed by
+vacuously looking at the wrong place. `onboardingSurface()` in the contract suite
+now joins the route with every file in the steps directory, so copy assertions
+are about **what the user sees** rather than where a developer put it. Verified
+the hard way: all four pinned literals — `Find my business areas`,
+`What do people type into Google…`, `keep yours and find others`,
+`Usually 1–3 minutes` — are now absent from the route and present in step files,
+and the suite stays green only because the helper exists.
+
+Assertions about the route's own behaviour still read the route directly, which
+is what they are about. A new test pins the division: the route renders the four
+screens and keeps `type Step`, `resetToBrandStep`, the three handlers,
+`STORAGE_KEYS` and `migrateLegacyStep`; the screens are presentational and may
+not `fetch`, touch `localStorage`, or navigate.
+
+71/71 contract groups pass; `tsc` clean.
 
 ### 2026-08-05 - onboarding's two validators contradicted each other
 

@@ -5,9 +5,12 @@ import { BrandDetails } from "@/lib/schemas/brand"
 import { Loader2, ArrowLeft, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-
 import { PillInput } from "@/components/ui/pill-input"
+import {
+    BrandDetailsEditor,
+    type BrandArrayTextField,
+    type BrandPillField,
+} from "@/components/brand-details-editor"
 import {
     ScopeFamilyReview,
     ScopeFamilySkeleton,
@@ -19,6 +22,7 @@ import {
     ANALYZE_PHASE_COPY,
     consumeAnalyzeBrandStream,
     emptyBrandShell,
+    type AnalyzedPage,
 } from "@/lib/analyze-brand/stream"
 
 const ANALYZING_STARTED_KEY = "brand_onboarding_analyzing_started_at"
@@ -89,6 +93,8 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
         setError("")
         localStorage.setItem(ANALYZING_STARTED_KEY, String(Date.now()))
         let completed = false
+        /** The crawl from call one, handed to call two so it need not repeat it. */
+        let crawled: AnalyzedPage[] = []
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
@@ -103,15 +109,6 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             const complete = await consumeAnalyzeBrandStream(res, (event) => {
                 if (event.message) setAnalyzePhase(event.message)
 
-                if (event.phase === "scope_ready" && event.scope_families) {
-                    setScopeReady(true)
-                    const families = trimFamiliesToSearchCap(event.scope_families)
-                    setBrandData((current) => {
-                        if (current) return { ...current, scope_families: families }
-                        return emptyBrandShell(families, targetSeeds)
-                    })
-                }
-
                 if (event.phase === "brand_ready" && event.brand) {
                     setBrandFieldsReady(true)
                     setBrandData((current) => ({
@@ -124,27 +121,22 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                 }
 
                 if (event.phase === "complete" && event.data) {
-                    setScopeReady(true)
                     // MERGE, never replace — see the same handler in
                     // app/(onboarding)/onboarding/page.tsx for why. Replacing
                     // discarded every edit made during the wait.
-                    const { scope_families: serverFamilies, ...persona } = event.data
-                    setBrandData((current) => {
-                        const families = current?.scope_families?.length
-                            ? current.scope_families
-                            : trimFamiliesToSearchCap(serverFamilies || [])
-                        return {
-                            ...(current ?? emptyBrandShell(families, targetSeeds)),
-                            ...persona,
-                            scope_families: families,
-                            target_seed_keywords:
-                                current?.target_seed_keywords ??
-                                persona.target_seed_keywords ??
-                                targetSeeds,
-                            search_country: current?.search_country || persona.search_country || "",
-                            search_topic: current?.search_topic || persona.search_topic || "general",
-                        }
-                    })
+                    const { scope_families: _ignored, ...persona } = event.data
+                    setBrandData((current) => ({
+                        ...(current ?? emptyBrandShell([], targetSeeds)),
+                        ...persona,
+                        scope_families: current?.scope_families ?? [],
+                        target_seed_keywords:
+                            current?.target_seed_keywords ??
+                            persona.target_seed_keywords ??
+                            targetSeeds,
+                        search_country: current?.search_country || persona.search_country || "",
+                        search_topic: current?.search_topic || persona.search_topic || "general",
+                    }))
+                    if (Array.isArray(event.pages)) crawled = event.pages
                     setBrandFieldsReady(true)
                     setBrandProfileReady(true)
                     completed = true
@@ -153,6 +145,30 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
 
             const data = complete.data
             if (!data) throw new Error("Failed to analyze brand")
+
+            // Scope is a SECOND call now (see app/api/analyze-brand/scope).
+            // Settings is a single screen rather than a wizard, so it chains the
+            // two immediately instead of pausing to confirm the persona — but it
+            // must chain them, or re-analysing here would silently wipe the
+            // brand's product areas.
+            const scopeRes = await fetch("/api/analyze-brand/scope", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url, pages: crawled, targetSeeds }),
+            })
+            await consumeAnalyzeBrandStream(scopeRes, (event) => {
+                if (event.message) setAnalyzePhase(event.message)
+                if (event.scope_families) {
+                    setScopeReady(true)
+                    const families = trimFamiliesToSearchCap(event.scope_families)
+                    setBrandData((current) =>
+                        current
+                            ? { ...current, scope_families: families }
+                            : emptyBrandShell(families, targetSeeds),
+                    )
+                    data.scope_families = families
+                }
+            })
 
             // Advisory-only and intentionally NOT awaited before this screen
             // renders — see the incident note on findSeedsWithoutDemand in
@@ -444,201 +460,16 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                 )}
 
                 {brandFieldsReady ? (
-                <>
-                {/* 1. Product Identity */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">1. Product Identity</h3>
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1 text-stone-600">Product Name</label>
-                            <Input
-                                value={brandData.product_name}
-                                onChange={e => updateField('product_name', e.target.value)}
-                                className="bg-stone-50 border-stone-200"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1 text-stone-600">What is it literally?</label>
-                            <Input
-                                value={brandData.product_identity.literally}
-                                onChange={e => updateField('product_identity.literally', e.target.value)}
-                                className="bg-stone-50 border-stone-200"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1 text-stone-600">What is it emotionally?</label>
-                            <Input
-                                value={brandData.product_identity.emotionally}
-                                onChange={e => updateField('product_identity.emotionally', e.target.value)}
-                                className="bg-stone-50 border-stone-200"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1 text-stone-600">What is it NOT?</label>
-                            <Input
-                                value={brandData.product_identity.not}
-                                onChange={e => updateField('product_identity.not', e.target.value)}
-                                className="bg-stone-50 border-stone-200"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. Category (Strategic Positioning) */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">2. Strategic Positioning</h3>
-                    <div>
-                        <label className="block text-xs font-medium mb-1 text-stone-600">Category</label>
-                        <Input
-                            value={brandData.category || ""}
-                            onChange={e => updateField('category', e.target.value)}
-                            placeholder="e.g., Privacy-First Web Analytics, AI Photo Restoration"
-                            className="bg-stone-50 border-stone-200"
-                        />
-                        <p className="text-[10px] text-stone-400 mt-1">How would you describe your product category?</p>
-                    </div>
-                </div>
-
-                {/* 2. Mission */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">2. Mission</h3>
-                    <div>
-                        <label className="block text-xs font-medium mb-1 text-stone-600">The "Why"</label>
-                        <Textarea
-                            value={brandData.mission}
-                            onChange={e => updateField('mission', e.target.value)}
-                            className="bg-stone-50 border-stone-200 min-h-[80px]"
-                        />
-                    </div>
-                </div>
-
-                {/* 3. Audience */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">3. Audience</h3>
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1 text-stone-600">Primary Audience</label>
-                            <Input
-                                value={brandData.audience.primary}
-                                onChange={e => updateField('audience.primary', e.target.value)}
-                                className="bg-stone-50 border-stone-200"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1 text-stone-600">Psychology (Desires/Fears)</label>
-                            <Textarea
-                                value={brandData.audience.psychology}
-                                onChange={e => updateField('audience.psychology', e.target.value)}
-                                className="bg-stone-50 border-stone-200 min-h-[80px]"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* 4. Enemy */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">4. Enemy (What you fight against)</h3>
-                    <div className="relative">
-                        <Textarea
-                            value={Array.isArray(brandData.enemy) ? brandData.enemy.join('\n') : brandData.enemy || ""}
-                            onChange={e => setBrandData(prev => prev ? ({ ...prev, enemy: e.target.value.split('\n') }) : null)}
-                            className="bg-stone-50 border-stone-200 min-h-[80px]"
-                            placeholder="Describe the problem or enemy you are fighting against..."
-                        />
-                    </div>
-                </div>
-
-                {/* 5. Writing Style DNA */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">5. Writing Style</h3>
-                    <div className="relative">
-                        <Textarea
-                            value={brandData.style_dna || ""}
-                            onChange={e => setBrandData(prev => prev ? ({ ...prev, style_dna: e.target.value }) : null)}
-                            placeholder="Describe your brand's writing style. E.g.: Write in a conversational yet authoritative tone. Use 'we' when referring to the brand. Keep sentences varied. Avoid corporate jargon."
-                            className="bg-stone-50 border-stone-200 min-h-[100px]"
-                        />
-                        <p className="text-[10px] text-stone-400 mt-1 text-right">Comprehensive writing style guide</p>
-                    </div>
-                </div>
-
-                {/* 6. UVP */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">6. Unique Value Proposition</h3>
-                    <div className="relative">
-                        <Textarea
-                            value={Array.isArray(brandData.uvp) ? brandData.uvp.join('\n') : brandData.uvp || ""}
-                            onChange={e => setBrandData(prev => prev ? ({ ...prev, uvp: e.target.value.split('\n') }) : null)}
-                            className="bg-stone-50 border-stone-200 min-h-[80px]"
-                            placeholder="What makes your product unique?"
-                        />
-                    </div>
-                </div>
-
-                {/* 7. Core Features */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">7. Core Features</h3>
-                    <div className="relative">
-                        <PillInput
-                            value={brandData.core_features}
-                            onChange={arr => setBrandData(prev => prev ? ({ ...prev, core_features: arr }) : null)}
-                            className="bg-stone-50 border-stone-200 min-h-[80px]"
-                            placeholder="Type feature and press Enter"
-                            variant="keyword"
-                        />
-                        <p className="text-[10px] text-stone-400 mt-1 text-right">Press Enter to add feature</p>
-                    </div>
-                </div>
-
-                {/* 8. Pricing */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">8. Pricing</h3>
-                    <div className="relative">
-                        <PillInput
-                            value={brandData.pricing || []}
-                            onChange={arr => setBrandData(prev => prev ? ({ ...prev, pricing: arr }) : null)}
-                            className="bg-stone-50 border-stone-200 min-h-[80px]"
-                            placeholder="Type plan and press Enter"
-                            variant="keyword"
-                        />
-                        <p className="text-[10px] text-stone-400 mt-1 text-right">One line e.g. "Pro Plan: $29/mo"</p>
-                    </div>
-                </div>
-
-                {/* 9. How it Works */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">9. How it Works</h3>
-                    <div className="relative">
-                        <Textarea
-                            value={Array.isArray(brandData.how_it_works) ? brandData.how_it_works.join('\n') : brandData.how_it_works || ""}
-                            onChange={e => setBrandData(prev => prev ? ({ ...prev, how_it_works: e.target.value.split('\n') }) : null)}
-                            className="bg-stone-50 border-stone-200 min-h-[80px]"
-                            placeholder="Step 1: ..."
-                        />
-                    </div>
-                </div>
-
-                {/* 10. Image Style */}
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b border-stone-100 pb-2 text-stone-900">10. Featured Image Style</h3>
-                    <div>
-                        <label className="block text-xs font-medium mb-1 text-stone-600">Style Preference</label>
-                        <select
-                            className="flex h-10 w-full items-center justify-between rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm placeholder:text-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-400 disabled:cursor-not-allowed disabled:opacity-50"
-                            value={brandData.image_style || "stock"}
-                            onChange={e => updateField('image_style', e.target.value)}
-                        >
-                            <option value="stock">Stock Photography (Professional, Realistic)</option>
-                            <option value="illustration">Modern Illustration (Flat, Vector)</option>
-                            <option value="indo">Indo (Vibrant, Cultural Elements)</option>
-                            <option value="minimalist">Minimalist (Clean, Abstract)</option>
-                            <option value="cyberpunk">Cyberpunk (Neon, Tech)</option>
-                            <option value="watercolor">Watercolor (Artistic, Soft)</option>
-                        </select>
-                        <p className="text-[10px] text-stone-400 mt-1">Select the style for AI-generated featured images.</p>
-                    </div>
-                </div>
-                </>
+                    <BrandDetailsEditor
+                        brand={brandData}
+                        onFieldChange={updateField}
+                        onArrayTextChange={(field: BrandArrayTextField, value) =>
+                            setBrandData((prev) => (prev ? { ...prev, [field]: value.split("\n") } : null))
+                        }
+                        onPillChange={(field: BrandPillField, value) =>
+                            setBrandData((prev) => (prev ? { ...prev, [field]: value } : null))
+                        }
+                    />
                 ) : (
                     <p className="text-sm text-stone-400">Brand voice &amp; details loading…</p>
                 )}
