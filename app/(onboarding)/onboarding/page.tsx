@@ -31,6 +31,10 @@ import {
     type AnalyzeBrandPhase,
     type AnalyzedPage,
 } from "@/lib/analyze-brand/stream"
+import {
+    persistCrawlPages,
+    restoreCrawlPages,
+} from "@/lib/brand-analyze-corpus"
 // One screen per file. The route owns the state machine, the data calls and the
 // recovery effects; each screen owns its own markup. See the onboardingSurface()
 // helper in the contract suite for why copy assertions read this directory
@@ -50,6 +54,8 @@ const STORAGE_KEYS = {
     SCOPE_ANALYSIS_ISSUES: 'onboarding_scope_analysis_issues',
     TARGET_SEEDS: 'onboarding_target_seeds',
     ANALYZING_STARTED_AT: 'onboarding_analyzing_started_at',
+    SCOPE_STARTED_AT: 'onboarding_scope_started_at',
+    CRAWL_PAGES: 'onboarding_crawl_pages',
 } as const
 
 /**
@@ -166,6 +172,7 @@ export default function OnboardingPage() {
             setSeedsWithoutDemand([])
             setCompetitors([])
             setTargetSeeds([])
+            setCrawledPages([])
             setAuditScope(null)
             setGapEvidence([])
             setPlannedArticles([])
@@ -195,6 +202,11 @@ export default function OnboardingPage() {
         const analyzingStartedAt = localStorage.getItem(
             STORAGE_KEYS.ANALYZING_STARTED_AT,
         )
+        const scopeStartedAt = localStorage.getItem(
+            STORAGE_KEYS.SCOPE_STARTED_AT,
+        )
+        const restoredPages = restoreCrawlPages(STORAGE_KEYS.CRAWL_PAGES)
+        if (restoredPages.length > 0) setCrawledPages(restoredPages)
 
         // Only clear storage if: user completed onboarding (has brandId) AND has no unsaved brandData
         // This allows fresh start for returning users while preserving progress for those mid-onboarding
@@ -272,12 +284,34 @@ export default function OnboardingPage() {
 
         // A refresh mid-analyze cannot resume the in-flight request, but URL /
         // seeds / competitors are still here — tell the founder to re-run.
+        // Do not auto-call handleAnalyzeBrand; the server corpus skips Tavily
+        // if the crawl already finished.
         if (analyzingStartedAt && !savedBrandData) {
             localStorage.removeItem(STORAGE_KEYS.ANALYZING_STARTED_AT)
             setAnalysisInterrupted(true)
             setError(
                 "Last analysis was interrupted — your website and searches are still here. Run Analyze again.",
             )
+        }
+
+        if (scopeStartedAt) {
+            localStorage.removeItem(STORAGE_KEYS.SCOPE_STARTED_AT)
+            const restoredFamilies = savedBrandData
+                ? (() => {
+                      try {
+                          return trimFamiliesToSearchCap(
+                              JSON.parse(savedBrandData).scope_families || [],
+                          )
+                      } catch {
+                          return []
+                      }
+                  })()
+                : []
+            if (restoredFamilies.length === 0) {
+                setError(
+                    "Last look was interrupted — your website and pages are still here. Look again.",
+                )
+            }
         }
 
         // Restore step from URL or fallback to saved step, or default to brand.
@@ -378,6 +412,11 @@ export default function OnboardingPage() {
 
     useEffect(() => {
         if (!isHydrated) return
+        persistCrawlPages(STORAGE_KEYS.CRAWL_PAGES, crawledPages)
+    }, [crawledPages, isHydrated])
+
+    useEffect(() => {
+        if (!isHydrated) return
         if (brandId) {
             localStorage.setItem(STORAGE_KEYS.BRAND_ID, brandId)
         }
@@ -415,7 +454,7 @@ export default function OnboardingPage() {
                     targetSeeds,
                 }),
             })
-            if (!res.ok && !res.body) {
+            if (!res.ok) {
                 const data = await res.json().catch(() => ({}))
                 throw new Error(data.error || "Failed to analyze brand")
             }
@@ -425,6 +464,10 @@ export default function OnboardingPage() {
                 setPhasesSeen((current) => new Set(current).add(event.phase))
                 if (event.phase === "crawl_done" && Array.isArray(event.pages)) {
                     setPageCount(event.pages.length)
+                    if (event.pages.some((page) => (page.content || "").trim())) {
+                        setCrawledPages(event.pages)
+                        persistCrawlPages(STORAGE_KEYS.CRAWL_PAGES, event.pages)
+                    }
                 }
 
                 if (event.phase === "brand_ready" && event.brand) {
@@ -455,7 +498,10 @@ export default function OnboardingPage() {
                         search_topic: current?.search_topic || persona.search_topic || "general",
                     }))
                     // The crawl, handed forward so the scope call need not repeat it.
-                    if (Array.isArray(event.pages)) setCrawledPages(event.pages)
+                    if (Array.isArray(event.pages)) {
+                        setCrawledPages(event.pages)
+                        persistCrawlPages(STORAGE_KEYS.CRAWL_PAGES, event.pages)
+                    }
                     setBrandProfileReady(true)
                     completed = true
                 }
@@ -495,6 +541,10 @@ export default function OnboardingPage() {
         setScopeReady(false)
         setPhasesSeen(new Set())
         setError("")
+        localStorage.setItem(
+            STORAGE_KEYS.SCOPE_STARTED_AT,
+            String(Date.now()),
+        )
         try {
             const res = await fetch("/api/analyze-brand/scope", {
                 method: "POST",
@@ -517,7 +567,7 @@ export default function OnboardingPage() {
                         : null,
                 }),
             })
-            if (!res.ok && !res.body) {
+            if (!res.ok) {
                 const data = await res.json().catch(() => ({}))
                 throw new Error(data.error || "Failed to find product areas")
             }
@@ -526,10 +576,11 @@ export default function OnboardingPage() {
                 if (event.message) setAnalyzePhase(event.message)
                 setPhasesSeen((current) => new Set(current).add(event.phase))
 
-                if ((event.scope_families?.length ?? 0) > 0) {
+                const incomingFamilies = event.scope_families
+                if (incomingFamilies && incomingFamilies.length > 0) {
                     setScopeReady(true)
                     setError("")
-                    const families = trimFamiliesToSearchCap(event.scope_families)
+                    const families = trimFamiliesToSearchCap(incomingFamilies)
                     setScopeAnalysisIssues(
                         Array.isArray(event.scope_analysis_issues)
                             ? event.scope_analysis_issues
@@ -565,6 +616,7 @@ export default function OnboardingPage() {
         } catch (e: any) {
             setError(e.message || "Could not work out what you sell")
         } finally {
+            localStorage.removeItem(STORAGE_KEYS.SCOPE_STARTED_AT)
             setScopeLoading(false)
         }
     }

@@ -10,7 +10,7 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-08
+Last implementation update: 2026-08-13
 
 Status: **domain-agnostic capability/article contracts and the evidence-bound
 writer repair are implemented; representative first-party page selection,
@@ -20,7 +20,10 @@ article may be marked complete — a truncated, under-length or uncited article
 fails instead of publishing. Onboarding profile step keeps a compact confirm
 card and exposes full brand-DNA editing before the audit. Scope refinement
 folds delivery/handoff families into acquisition jobs using the confirmed
-brand profile before harvest. Checkout remains
+brand profile before harvest. Brand crawl is checkpointed in Postgres and
+localStorage (24h TTL): refresh cannot resume the HTTP stream but does not
+re-extract; SPA scope fallback is titles-only; 3 Tavily analyzes per user per
+day. Checkout remains
 disabled pending the staging and external release gate**
 
 ## 0. 2026-08-04 (second pass) writer completion gate
@@ -968,6 +971,25 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-13 - brand crawl checkpoint (refresh-safe, spend-safe)
+
+**Founder evidence.** Refresh during Analyze or Find areas aborted the NDJSON
+`fetch`. `crawledPages` lived only in React state; `crawl_done` sent URLs
+without content; the next Analyze paid Tavily again; scope with `pages: []`
+walked the sitemap and ran an advanced Tavily search. Free onboarding would
+double-bill on retry.
+
+**Repair.** `brand_analyze_corpus` stores the 8-page crawl as soon as extract
+finishes (before the persona LLM). A 24h cache hit skips Tavily. A fresh
+overlapping `running` row is refused. Cache hits do not count toward a cap of
+3 Tavily-touching analyzes per user per day. Scope reads that corpus when the
+client body is thin; empty-markdown fallback is unpaid HTML titles only — no
+`tvly.search` advanced path. The client persists/restores `CRAWL_PAGES` and
+sets `SCOPE_STARTED_AT` like the analyze interrupt, without auto-retry.
+
+Apply `supabase/migrations/20260813_brand_analyze_corpus.sql` in the Supabase
+SQL editor (never `supabase db push`).
 
 ### 2026-08-08 - scope role refinement keeps delivery out of harvest
 
