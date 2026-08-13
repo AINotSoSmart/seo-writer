@@ -526,8 +526,9 @@ export default function OnboardingPage() {
                 if (event.message) setAnalyzePhase(event.message)
                 setPhasesSeen((current) => new Set(current).add(event.phase))
 
-                if (event.scope_families) {
+                if ((event.scope_families?.length ?? 0) > 0) {
                     setScopeReady(true)
+                    setError("")
                     const families = trimFamiliesToSearchCap(event.scope_families)
                     setScopeAnalysisIssues(
                         Array.isArray(event.scope_analysis_issues)
@@ -851,6 +852,7 @@ export default function OnboardingPage() {
                                             phasesSeen={phasesSeen}
                                             scopeAnalysisIssues={scopeAnalysisIssues}
                                             scopeBlockers={scopeBlockers}
+                                            error={error}
                                             onFamiliesChange={(scope_families) =>
                                                 setBrandData((current) =>
                                                     current ? { ...current, scope_families } : current,

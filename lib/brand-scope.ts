@@ -426,7 +426,7 @@ export function validateConfirmedScope(brandData: BrandDetails): {
         const gaps = mechanicsGaps(family.capability_contract)
         if (gaps.length > 0) {
             errors.push(
-                `${family.name} needs confirmed mechanics in “How we understand this works.” ${MECHANICS_GAP_COPY[gaps[0]]}`,
+                `${family.name} needs confirmed mechanics. ${MECHANICS_GAP_COPY[gaps[0]]}`,
             )
         }
 

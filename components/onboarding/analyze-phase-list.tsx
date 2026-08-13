@@ -37,6 +37,7 @@ const PHASE_LABEL: Record<ListedPhase, string> = {
     brand_ready: "Building your brand profile",
     scope_started: "Grouping what you sell",
     scope_grounding: "Checking each area against your site",
+    scope_refining: "Separating what buyers search for from how you deliver",
     scope_ready: "Product areas ready",
 }
 

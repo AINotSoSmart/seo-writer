@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import {
     ArrowDown,
     ArrowUp,
@@ -15,7 +14,6 @@ import {
     fallbackCapabilityContract,
 } from "@/lib/writer/article-contract"
 import {
-    MECHANICS_GAP_COPY,
     isPlaceholderAction,
     mechanicsGaps,
 } from "@/lib/scope-mechanics"
@@ -28,7 +26,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PillInput } from "@/components/ui/pill-input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
 
 function normalizeSeed(value: string): string {
     return value.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()
@@ -243,6 +240,31 @@ function withFounderConfirmedOperation(
     }
 }
 
+/**
+ * The four visible founder fields must satisfy the confirm gate without an
+ * engineer schema. Description is the customer job; if action is empty or
+ * still a placeholder, description also becomes the action so a fact mints.
+ * A richer extracted action is left alone.
+ */
+function withFounderVisibleFields(
+    contract: CapabilityContract,
+    familyId: string,
+    description: string,
+    deliveryMode: string,
+): CapabilityContract {
+    const current = contract.operations[0]
+    const action =
+        !current || isPlaceholderAction(current.action)
+            ? description
+            : current.action
+    return withFounderConfirmedOperation(
+        { ...contract, deliveryMode },
+        familyId,
+        0,
+        { customerJob: description, action },
+    )
+}
+
 export function ScopeFamilyReview({
     families,
     targetSeeds,
@@ -250,6 +272,7 @@ export function ScopeFamilyReview({
     onChange,
     onChangeTargetSeeds,
     onRestart,
+    failedEmpty = false,
 }: {
     families: ScopeFamily[]
     targetSeeds: string[]
@@ -267,11 +290,9 @@ export function ScopeFamilyReview({
     onChangeTargetSeeds?: (seeds: string[]) => void
     /** Offered only when the founder has deleted every category. */
     onRestart?: () => void
+    /** Stream died with no families — do not imply the site sells nothing. */
+    failedEmpty?: boolean
 }) {
-    // Auto-opens the mechanics editor for any incomplete family, then respects a
-    // manual collapse. The cure for the confirm gate used to be hidden behind a
-    // closed 10px disclosure with no error styling and no link from the banner.
-    const [openMechanics, setOpenMechanics] = useState<Record<string, boolean>>({})
     const noDemand = new Set(seedsWithoutDemand.map(normalizeSeed))
     const ordered = [...families]
         .filter((family) => family.enabled)
@@ -463,9 +484,9 @@ export function ScopeFamilyReview({
                     this means the founder deleted everything. Say so. */}
                 {ordered.length === 0 ? (
                     <p className="px-3 py-4 text-xs leading-relaxed text-stone-500">
-                        No product areas yet. Nothing gets researched until there is at
-                        least one — add a category below and say what it does for
-                        customers.
+                        {failedEmpty
+                            ? "No product areas were saved from this run. Retry, or add a category below — this does not mean your site sells nothing."
+                            : "No product areas yet. Nothing gets researched until there is at least one — add a category below and say what it does for customers."}
                     </p>
                 ) : null}
                 {ordered.map((family, index) => {
@@ -473,17 +494,12 @@ export function ScopeFamilyReview({
                         noDemand.has(normalizeSeed(seed)),
                     )
                     const familyKey = family.id || `scope-${index}`
-                    // Never null. A missing contract falls back to an editable
-                    // shape so the family can be repaired instead of only deleted.
                     const contract =
                         family.capability_contract ??
                         fallbackCapabilityContract({
                             name: family.name,
                             description: family.description,
                         })
-                    // Computed from the STORED contract, not the fallback — a
-                    // family with no contract must still read as incomplete.
-                    const gaps = mechanicsGaps(family.capability_contract)
                     return (
                         <article
                             key={familyKey}
@@ -582,7 +598,7 @@ export function ScopeFamilyReview({
                                 />
                             </div>
 
-                            <div>
+                            <div id={`scope-field-${familyKey}-action`}>
                                 <p className={fieldLabelClass}>What this helps with</p>
                                 <Input
                                     id={`scope-field-${familyKey}-description`}
@@ -591,15 +607,11 @@ export function ScopeFamilyReview({
                                         replace(index, {
                                             ...family,
                                             description: event.target.value,
-                                            // Routed through the founder-confirmed helper, not a
-                                            // plain copy. Editing this field used to update
-                                            // customerJob but mint no fact, so the most visible
-                                            // field on the row did nothing for the confirm gate.
-                                            capability_contract: withFounderConfirmedOperation(
+                                            capability_contract: withFounderVisibleFields(
                                                 contract,
                                                 familyKey,
-                                                0,
-                                                { customerJob: event.target.value },
+                                                event.target.value,
+                                                contract.deliveryMode,
                                             ),
                                             priority: index,
                                         })
@@ -609,122 +621,27 @@ export function ScopeFamilyReview({
                                 />
                             </div>
 
-                            {/* Shown ONLY when something is actually missing.
-                                Extraction fills the contract in the normal case, so the
-                                founder sees a name and keywords and nothing else. This
-                                editor exists to repair a broken extraction — surfacing it
-                                unconditionally turned a rare failure into a five-field
-                                form on every category, for everyone. When a family does
-                                have a gap it opens itself, amber, with the reason. */}
-                            {gaps.length > 0 ? (
-                            <details
-                                className={cn(
-                                    "rounded-md px-2 py-1.5",
-                                    gaps.length > 0
-                                        ? "bg-amber-50/70 ring-1 ring-amber-200"
-                                        : "bg-stone-50/80",
-                                )}
-                                open={openMechanics[familyKey] ?? gaps.length > 0}
-                                onToggle={(event) =>
-                                    setOpenMechanics((current) => ({
-                                        ...current,
-                                        [familyKey]: event.currentTarget.open,
-                                    }))
-                                }
-                            >
-                                <summary
-                                    className={cn(
-                                        "cursor-pointer text-[10px] font-medium hover:text-stone-700",
-                                        gaps.length > 0 ? "text-amber-800" : "text-stone-500",
-                                    )}
-                                >
-                                    How we understand this works
-                                    {gaps.length > 0 ? " · needs a moment" : null}
-                                </summary>
-                                {gaps.length > 0 ? (
-                                    <p className="mt-1.5 text-[11px] leading-snug text-amber-800">
-                                        {MECHANICS_GAP_COPY[gaps[0]]}
-                                    </p>
-                                ) : null}
-                                <div className="mt-2 space-y-2">
-                                        <div>
-                                            <p className={fieldLabelClass}>Delivered as</p>
-                                            <Input
-                                                id={`scope-field-${familyKey}-deliveryMode`}
-                                                value={contract.deliveryMode}
-                                                onChange={(event) =>
-                                                    replace(index, {
-                                                        ...family,
-                                                        capability_contract: {
-                                                            ...contract,
-                                                            deliveryMode: event.target.value,
-                                                        },
-                                                    })
-                                                }
-                                                placeholder="e.g. Browser-based software"
-                                                className="mt-0.5 h-7 border-stone-200 bg-white px-2 text-xs shadow-none"
-                                            />
-                                        </div>
-                                        {contract.operations.map((operation, operationIndex) => (
-                                            <div key={operation.key} className="space-y-1.5 border-t border-stone-200 pt-2 first:border-0 first:pt-0">
-                                                <Input
-                                                    id={operationIndex === 0 ? `scope-field-${familyKey}-action` : undefined}
-                                                    value={operation.action}
-                                                    onChange={(event) => {
-                                                        replace(index, {
-                                                            ...family,
-                                                            capability_contract: withFounderConfirmedOperation(
-                                                                contract,
-                                                                familyKey,
-                                                                operationIndex,
-                                                                {
-                                                                    action: event.target.value,
-                                                                    customerJob: family.description || operation.customerJob,
-                                                                },
-                                                            ),
-                                                        })
-                                                    }}
-                                                    aria-label={`How ${family.name || "this category"} works`}
-                                                    placeholder="What the product does to the input"
-                                                    className="h-7 border-stone-200 bg-white px-2 text-xs shadow-none"
-                                                />
-                                                <div className="grid gap-1.5 sm:grid-cols-3">
-                                                    {(["inputs", "outputs", "limits"] as const).map((field) => (
-                                                        <Input
-                                                            key={field}
-                                                            value={operation[field].join(", ")}
-                                                            onChange={(event) => {
-                                                                const values = event.target.value
-                                                                    .split(",")
-                                                                    .map((item) => item.trim())
-                                                                    .filter(Boolean)
-                                                                    .slice(0, 8)
-                                                                replace(index, {
-                                                                    ...family,
-                                                                    capability_contract: withFounderConfirmedOperation(
-                                                                        contract,
-                                                                        familyKey,
-                                                                        operationIndex,
-                                                                        { [field]: values },
-                                                                    ),
-                                                                })
-                                                            }}
-                                                            placeholder={
-                                                                field === "inputs"
-                                                                    ? "Inputs, comma separated"
-                                                                    : field === "outputs"
-                                                                      ? "Outputs, comma separated"
-                                                                      : "Known limits, comma separated"
-                                                            }
-                                                            className="h-7 border-stone-200 bg-white px-2 text-[11px] shadow-none"
-                                                        />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                            </details>
-                            ) : null}
+                            <div>
+                                <p className={fieldLabelClass}>Delivered as</p>
+                                <Input
+                                    id={`scope-field-${familyKey}-deliveryMode`}
+                                    value={contract.deliveryMode}
+                                    onChange={(event) =>
+                                        replace(index, {
+                                            ...family,
+                                            capability_contract: withFounderVisibleFields(
+                                                contract,
+                                                familyKey,
+                                                family.description,
+                                                event.target.value,
+                                            ),
+                                            priority: index,
+                                        })
+                                    }
+                                    placeholder="e.g. Browser software, done-for-you, app, API"
+                                    className="mt-0.5 h-7 border-0 bg-transparent px-1.5 text-xs text-stone-500 shadow-none placeholder:text-stone-300"
+                                />
+                            </div>
 
                             {family.evidence.length > 0 ? (
                                 <details>
