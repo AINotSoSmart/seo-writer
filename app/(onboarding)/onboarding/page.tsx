@@ -576,10 +576,11 @@ export default function OnboardingPage() {
                 if (event.message) setAnalyzePhase(event.message)
                 setPhasesSeen((current) => new Set(current).add(event.phase))
 
-                if ((event.scope_families?.length ?? 0) > 0) {
+                const incomingFamilies = event.scope_families
+                if (incomingFamilies && incomingFamilies.length > 0) {
                     setScopeReady(true)
                     setError("")
-                    const families = trimFamiliesToSearchCap(event.scope_families)
+                    const families = trimFamiliesToSearchCap(incomingFamilies)
                     setScopeAnalysisIssues(
                         Array.isArray(event.scope_analysis_issues)
                             ? event.scope_analysis_issues

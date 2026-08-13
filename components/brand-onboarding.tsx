@@ -209,9 +209,10 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             }
             await consumeAnalyzeBrandStream(scopeRes, (event) => {
                 if (event.message) setAnalyzePhase(event.message)
-                if (event.scope_families) {
+                const incomingFamilies = event.scope_families
+                if (incomingFamilies && incomingFamilies.length > 0) {
                     setScopeReady(true)
-                    const families = trimFamiliesToSearchCap(event.scope_families)
+                    const families = trimFamiliesToSearchCap(incomingFamilies)
                     setBrandData((current) =>
                         current
                             ? { ...current, scope_families: families }
