@@ -14,6 +14,7 @@ import {
     fallbackCapabilityContract,
 } from "@/lib/writer/article-contract"
 import {
+    MECHANICS_GAP_COPY,
     isPlaceholderAction,
     mechanicsGaps,
 } from "@/lib/scope-mechanics"
@@ -26,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PillInput } from "@/components/ui/pill-input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 
 function normalizeSeed(value: string): string {
     return value.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()
