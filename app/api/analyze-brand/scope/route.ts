@@ -197,6 +197,14 @@ export async function POST(req: NextRequest) {
           }))
       : []
 
+    const heartbeat = (
+      phase: AnalyzeBrandStreamEvent["phase"],
+      message: string,
+    ) => {
+      const id = setInterval(() => emit({ phase, message }), 15_000)
+      return () => clearInterval(id)
+    }
+
     emit({ phase: "scope_started", message: "Grouping what you sell…" })
 
     // Tier 1: the corpus the first call already crawled.
@@ -233,18 +241,27 @@ export async function POST(req: NextRequest) {
       `[Scope] corpus=${corpusTier} pages=${pages.length} chars=${usableChars(pages)}`,
     )
 
-    const extracted = await extractScopeFamilies(
-      url,
-      pages.map((page) => ({ url: page.url, content: page.content || "" })),
-      targetSeeds,
-      brandProfile
-        ? {
-            product_name: brandProfile.product_name,
-            product_identity: brandProfile.product_identity,
-            category: brandProfile.category,
-          }
-        : null,
+    const stopExtractBeat = heartbeat(
+      "scope_started",
+      "Grouping what you sell…",
     )
+    let extracted
+    try {
+      extracted = await extractScopeFamilies(
+        url,
+        pages.map((page) => ({ url: page.url, content: page.content || "" })),
+        targetSeeds,
+        brandProfile
+          ? {
+              product_name: brandProfile.product_name,
+              product_identity: brandProfile.product_identity,
+              category: brandProfile.category,
+            }
+          : null,
+      )
+    } finally {
+      stopExtractBeat()
+    }
 
     emit({ phase: "scope_grounding", message: "Checking each area against your site…" })
 
@@ -265,36 +282,43 @@ export async function POST(req: NextRequest) {
       return
     }
 
-    emit({
-      phase: "scope_grounding",
-      message: "Separating what buyers search for from how you deliver…",
-    })
-    const refined = await refineScopeRoles(
-      grounded.families,
-      brandProfile,
-      targetSeeds,
-    )
-    const issues = [...grounded.issues, ...refined.issues]
-
-    if (refined.families.length === 0) {
-      emit({
-        phase: "error",
-        error:
-          "We could not work out what you sell from your website, your page titles, or search results. Tell us in one line and we will build from that.",
-      })
-      return
-    }
-
-    const scopedFamilies = trimFamiliesToSearchCap(refined.families)
+    // Unlock confirm as soon as grounding has families. Refine can still
+    // replace this list; if the function is killed during refine the client
+    // already has something real instead of an empty "found nothing" card.
+    const groundedFamilies = trimFamiliesToSearchCap(grounded.families)
     emit({
       phase: "scope_ready",
-      message: `Mapped ${scopedFamilies.length} product area${
-        scopedFamilies.length === 1 ? "" : "s"
+      message: `Mapped ${groundedFamilies.length} product area${
+        groundedFamilies.length === 1 ? "" : "s"
       }…`,
-      scope_families: scopedFamilies,
-      scope_analysis_issues: issues,
+      scope_families: groundedFamilies,
+      scope_analysis_issues: grounded.issues,
       unassigned_target_seeds: grounded.unassignedTargetSeeds,
     })
+
+    emit({
+      phase: "scope_refining",
+      message: "Separating what buyers search for from how you deliver…",
+    })
+    const stopRefineBeat = heartbeat(
+      "scope_refining",
+      "Separating what buyers search for from how you deliver…",
+    )
+    let refined
+    try {
+      refined = await refineScopeRoles(
+        grounded.families,
+        brandProfile,
+        targetSeeds,
+      )
+    } finally {
+      stopRefineBeat()
+    }
+    const issues = [...grounded.issues, ...refined.issues]
+    const scopedFamilies =
+      refined.families.length > 0
+        ? trimFamiliesToSearchCap(refined.families)
+        : groundedFamilies
 
     emit({
       phase: "complete",

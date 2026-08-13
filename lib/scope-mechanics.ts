@@ -89,15 +89,15 @@ export function isMechanicsConfirmed(
 /** Written for a founder, not an engineer. Each names the field to go fix. */
 export const MECHANICS_GAP_COPY: Record<MechanicsGap, string> = {
     missing_contract:
-        "This area has no mechanics recorded yet — open “How we understand this works” and describe what it does.",
+        "This area has no mechanics recorded yet — name it, say what it helps with, and how customers get it.",
     missing_delivery_mode:
-        "Say how it is delivered (for example: browser software, done-for-you service).",
+        "Say how customers get this (for example: browser software, done-for-you service).",
     missing_action:
-        "Say what it actually does, in one sentence, under “How we understand this works.”",
+        "Say in one line what this helps with.",
     placeholder_action:
         "Replace the placeholder wording with what it actually does — this sentence is what we match your customers’ searches against.",
     no_confirmed_facts:
-        "Type what this does in your own words so we have something verified to write from.",
+        "Say in one line what this helps with so we have something verified to write from.",
 }
 
 /** The single gap worth surfacing when there is only room for one line. */

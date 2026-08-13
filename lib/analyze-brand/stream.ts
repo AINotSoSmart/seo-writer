@@ -12,6 +12,7 @@ export type AnalyzeBrandPhase =
     | "crawl_done"
     | "scope_started"
     | "scope_grounding"
+    | "scope_refining"
     | "scope_ready"
     | "brand_ready"
     | "complete"
@@ -51,6 +52,7 @@ export const ANALYZE_PHASE_COPY = {
     crawl_done: "Reading your site…",
     scope_started: "Finding product areas…",
     scope_grounding: "Finding product areas…",
+    scope_refining: "Finding product areas…",
     scope_ready: "Finding product areas…",
     brand_ready: "Building brand profile…",
     complete: "Ready",
@@ -73,6 +75,7 @@ export const BRAND_ANALYZE_PHASES = [
 export const SCOPE_ANALYZE_PHASES = [
     "scope_started",
     "scope_grounding",
+    "scope_refining",
     "scope_ready",
 ] as const satisfies readonly AnalyzeBrandPhase[]
 
@@ -96,6 +99,18 @@ export async function consumeAnalyzeBrandStream(
     const decoder = new TextDecoder()
     let buffer = ""
     let lastEvent: AnalyzeBrandStreamEvent | null = null
+    let lastWithFamilies: AnalyzeBrandStreamEvent | null = null
+
+    const applyEvent = (event: AnalyzeBrandStreamEvent) => {
+        lastEvent = event
+        if ((event.scope_families?.length ?? 0) > 0) lastWithFamilies = event
+        onEvent(event)
+        if (event.phase === "error") {
+            throw new Error(event.error || "Brand analysis failed")
+        }
+        if (event.phase === "complete") return event
+        return null
+    }
 
     while (true) {
         const { done, value } = await reader.read()
@@ -112,26 +127,16 @@ export async function consumeAnalyzeBrandStream(
             } catch {
                 continue
             }
-            lastEvent = event
-            onEvent(event)
-            if (event.phase === "error") {
-                throw new Error(event.error || "Brand analysis failed")
-            }
-            if (event.phase === "complete") {
-                return event
-            }
+            const finished = applyEvent(event)
+            if (finished) return finished
         }
     }
 
     if (buffer.trim()) {
         try {
             const event = JSON.parse(buffer.trim()) as AnalyzeBrandStreamEvent
-            lastEvent = event
-            onEvent(event)
-            if (event.phase === "error") {
-                throw new Error(event.error || "Brand analysis failed")
-            }
-            if (event.phase === "complete") return event
+            const finished = applyEvent(event)
+            if (finished) return finished
         } catch (error) {
             if (error instanceof Error && error.message !== "Unexpected end of JSON input") {
                 throw error
@@ -140,7 +145,12 @@ export async function consumeAnalyzeBrandStream(
     }
 
     if (lastEvent?.phase === "complete") return lastEvent
-    throw new Error("Brand analysis ended before a complete result")
+    // Grounded families already unlocked the confirm screen. A killed function
+    // during refine must not throw that away and pretend we found nothing.
+    if (lastWithFamilies) return lastWithFamilies
+    throw new Error(
+        "Finding product areas hit a time limit before it finished. Retry — this does not mean your site sells nothing.",
+    )
 }
 
 /** Empty persona shell so scope review can render before brand_ready. */
