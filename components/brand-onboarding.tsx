@@ -24,8 +24,14 @@ import {
     emptyBrandShell,
     type AnalyzedPage,
 } from "@/lib/analyze-brand/stream"
+import {
+    persistCrawlPages,
+    restoreCrawlPages,
+} from "@/lib/brand-analyze-corpus"
 
 const ANALYZING_STARTED_KEY = "brand_onboarding_analyzing_started_at"
+const SCOPE_STARTED_KEY = "brand_onboarding_scope_started_at"
+const CRAWL_PAGES_KEY = "brand_onboarding_crawl_pages"
 
 interface BrandOnboardingProps {
     onComplete: (brandId: string) => void
@@ -53,6 +59,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
     )
     const [seedsWithoutDemand, setSeedsWithoutDemand] = useState<string[]>([])
     const [error, setError] = useState("")
+    const [crawledPages, setCrawledPages] = useState<AnalyzedPage[]>([])
 
     /** Same live pre-flight as onboarding — see findScopeBlockers. */
     const scopeBlockers = useMemo(
@@ -68,12 +75,23 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
 
     useEffect(() => {
         if (typeof window === "undefined") return
+        const restored = restoreCrawlPages(CRAWL_PAGES_KEY)
+        if (restored.length > 0) setCrawledPages(restored)
         const started = localStorage.getItem(ANALYZING_STARTED_KEY)
         if (started && !initialData) {
             localStorage.removeItem(ANALYZING_STARTED_KEY)
             setError(
                 "Last analysis was interrupted — your website and searches are still here. Run Analyze again.",
             )
+        }
+        const scopeStarted = localStorage.getItem(SCOPE_STARTED_KEY)
+        if (scopeStarted && !initialData?.scope_families?.length) {
+            localStorage.removeItem(SCOPE_STARTED_KEY)
+            setError(
+                "Last look was interrupted — your website and pages are still here. Run Analyze again.",
+            )
+        } else if (scopeStarted) {
+            localStorage.removeItem(SCOPE_STARTED_KEY)
         }
     }, [initialData])
 
@@ -93,21 +111,28 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
         setError("")
         localStorage.setItem(ANALYZING_STARTED_KEY, String(Date.now()))
         let completed = false
-        /** The crawl from call one, handed to call two so it need not repeat it. */
-        let crawled: AnalyzedPage[] = []
+        let crawled: AnalyzedPage[] = crawledPages
         try {
             const res = await fetch("/api/analyze-brand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url, targetSeeds }),
             })
-            if (!res.ok && !res.body) {
+            if (!res.ok) {
                 const data = await res.json().catch(() => ({}))
                 throw new Error(data.error || "Failed to analyze brand")
             }
 
             const complete = await consumeAnalyzeBrandStream(res, (event) => {
                 if (event.message) setAnalyzePhase(event.message)
+
+                if (event.phase === "crawl_done" && Array.isArray(event.pages)) {
+                    if (event.pages.some((page) => (page.content || "").trim())) {
+                        crawled = event.pages
+                        setCrawledPages(event.pages)
+                        persistCrawlPages(CRAWL_PAGES_KEY, event.pages)
+                    }
+                }
 
                 if (event.phase === "brand_ready" && event.brand) {
                     setBrandFieldsReady(true)
@@ -136,7 +161,11 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                         search_country: current?.search_country || persona.search_country || "",
                         search_topic: current?.search_topic || persona.search_topic || "general",
                     }))
-                    if (Array.isArray(event.pages)) crawled = event.pages
+                    if (Array.isArray(event.pages)) {
+                        crawled = event.pages
+                        setCrawledPages(event.pages)
+                        persistCrawlPages(CRAWL_PAGES_KEY, event.pages)
+                    }
                     setBrandFieldsReady(true)
                     setBrandProfileReady(true)
                     completed = true
@@ -146,6 +175,8 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             const data = complete.data
             if (!data) throw new Error("Failed to analyze brand")
 
+            localStorage.removeItem(ANALYZING_STARTED_KEY)
+            localStorage.setItem(SCOPE_STARTED_KEY, String(Date.now()))
             // Scope is a SECOND call now (see app/api/analyze-brand/scope).
             // Settings is a single screen rather than a wizard, so it chains the
             // two immediately instead of pausing to confirm the persona — but it
@@ -172,6 +203,10 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                         : null,
                 }),
             })
+            if (!scopeRes.ok) {
+                const scopeErr = await scopeRes.json().catch(() => ({}))
+                throw new Error(scopeErr.error || "Failed to find product areas")
+            }
             await consumeAnalyzeBrandStream(scopeRes, (event) => {
                 if (event.message) setAnalyzePhase(event.message)
                 if (event.scope_families) {
@@ -218,6 +253,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
             }
         } finally {
             localStorage.removeItem(ANALYZING_STARTED_KEY)
+            localStorage.removeItem(SCOPE_STARTED_KEY)
             setAnalyzing(false)
             setAnalyzePhase(ANALYZE_PHASE_COPY.crawl_started)
         }

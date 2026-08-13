@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { jsonrepair } from "jsonrepair"
@@ -14,6 +14,18 @@ import {
   encodeAnalyzeEvent,
   type AnalyzeBrandStreamEvent,
 } from "@/lib/analyze-brand/stream"
+import {
+  MAX_TAVILY_STARTS_PER_DAY,
+  beginCorpusRun,
+  countTavilyStartsToday,
+  markTavilyStart,
+  normalizeAnalyzeHost,
+  readCorpus,
+  saveCorpusPages,
+  trimCorpusPages,
+  type CorpusPage,
+} from "@/lib/brand-analyze-corpus"
+import { createClient } from "@/utils/supabase/server"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -21,15 +33,6 @@ export const maxDuration = 300 // 5 minute timeout
 const BRAND_CRAWL_LIMIT = 8
 /** Use one crawler fallback only when direct representative extraction is thin. */
 const THIN_CORPUS_CHARS = 1_500
-/**
- * Per-page budget for the corpus handed to the scope call.
- *
- * Matches `PER_PAGE_CHARS` in lib/scope-extraction.ts, which trims to exactly
- * this anyway — so the round trip carries nothing the scope call would not have
- * used. 8 pages x 2,400 chars is ~19KB, which is a cheap price for not crawling
- * the site a second time.
- */
-const SCOPE_PAGE_CHARS = 2_400
 
 const CRAWL_INSTRUCTIONS =
   "Prioritize the homepage (/), /pricing or /price, and product/feature/use-case/service pages. Deprioritize blog, news, careers, legal, login, and signup. Product scope and pricing matter more than writing-style samples."
@@ -94,112 +97,175 @@ function streamResponse(
   })
 }
 
+function emitCrawlDone(
+  emit: (event: AnalyzeBrandStreamEvent) => void,
+  pages: CrawledPage[],
+) {
+  emit({
+    phase: "crawl_done",
+    message: ANALYZE_PHASE_COPY.crawl_done,
+    pages: trimCorpusPages(pages),
+  })
+}
+
 export async function POST(req: NextRequest) {
-  return streamResponse(async (emit) => {
-    const { url, targetSeeds: rawTargetSeeds = [] } = await req.json()
-    if (!url) {
-      emit({ phase: "error", error: "Missing URL" })
-      return
-    }
-
-    const apiKey = process.env.TAVILY_API_KEY
-    if (!apiKey) {
-      emit({ phase: "error", error: "Tavily API key not configured" })
-      return
-    }
-
-    const tvly = tavily({ apiKey })
-
-    const targetSeeds = Array.from(
-      new Set(
-        (Array.isArray(rawTargetSeeds) ? rawTargetSeeds : [])
-          .map((seed: unknown) => normalizeSeed(String(seed)))
-          .filter(Boolean),
-      ),
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json(
+      { error: "Sign in to analyze your website." },
+      { status: 401 },
     )
-    if (targetSeeds.length > MAX_TOTAL_SCOPE_SEEDS) {
-      emit({
-        phase: "error",
-        error: `Add no more than ${MAX_TOTAL_SCOPE_SEEDS} main customer searches.`,
-      })
-      return
-    }
+  }
 
+  const { url, targetSeeds: rawTargetSeeds = [] } = await req.json()
+  if (!url) {
+    return NextResponse.json({ error: "Missing URL" }, { status: 400 })
+  }
+
+  const host = normalizeAnalyzeHost(url)
+  if (!host) {
+    return NextResponse.json({ error: "That website URL is not valid." }, { status: 400 })
+  }
+
+  const targetSeeds = Array.from(
+    new Set(
+      (Array.isArray(rawTargetSeeds) ? rawTargetSeeds : [])
+        .map((seed: unknown) => normalizeSeed(String(seed)))
+        .filter(Boolean),
+    ),
+  )
+  if (targetSeeds.length > MAX_TOTAL_SCOPE_SEEDS) {
+    return NextResponse.json(
+      {
+        error: `Add no more than ${MAX_TOTAL_SCOPE_SEEDS} main customer searches.`,
+      },
+      { status: 400 },
+    )
+  }
+
+  const cachedPages = await readCorpus(supabase, user.id, host)
+  if (!cachedPages) {
+    const tavilyStarts = await countTavilyStartsToday(supabase, user.id)
+    if (tavilyStarts >= MAX_TAVILY_STARTS_PER_DAY) {
+      return NextResponse.json(
+        {
+          error:
+            "You've analyzed 3 websites today. Try again tomorrow, or refresh if you already analyzed this one — we keep those pages.",
+        },
+        { status: 429 },
+      )
+    }
+  }
+
+  return streamResponse(async (emit) => {
     emit({
       phase: "crawl_started",
       message: ANALYZE_PHASE_COPY.crawl_started,
     })
 
-    // Select before extracting so one sitemap branch cannot consume the page
-    // budget. The bounded crawl below is the only fallback.
-    const sitemapUrls = await fetchAllSitemapUrls(url)
-    // The sitemap walk is the longest silent stretch of the whole run. Say what
-    // it found before spending another 20-40s on extraction.
-    emit({
-      phase: "crawl_started",
-      message: sitemapUrls.length > 0
-        ? `Found ${sitemapUrls.length} page${sitemapUrls.length === 1 ? "" : "s"} in your sitemap…`
-        : "No sitemap found — reading your site directly…",
-    })
-    const representativeUrls = selectRepresentativeBrandUrls(
-      url,
-      sitemapUrls,
-      targetSeeds,
-      BRAND_CRAWL_LIMIT,
-    )
-    let crawlResponse: unknown
     let crawledPages: CrawledPage[] = []
-    if (representativeUrls.length > 0) {
-      crawlResponse = await tvly.extract(representativeUrls, {
-        extractDepth: "basic",
-        format: "markdown",
-      })
-      crawledPages = pagesFromCrawl(crawlResponse)
-      const failedResults = (crawlResponse as {
-        failedResults?: Array<{ url?: string; error?: string }>
-      }).failedResults || []
-      if (failedResults.length > 0) {
-        console.warn("[Brand Analysis] Representative extraction failures", failedResults)
-      }
-    }
+    let crawlResponse: unknown
+    let usedCache = Boolean(cachedPages)
 
-    // Sites without a usable sitemap get one bounded crawler fallback. There
-    // is no recursive or advanced-depth retry loop.
-    if (crawledPages.length < 3 || totalContentChars(crawledPages) < THIN_CORPUS_CHARS) {
-      // Another silent 20-40s. Name it rather than appear frozen.
+    if (cachedPages) {
+      crawledPages = cachedPages
       emit({
         phase: "crawl_started",
-        message: "Your sitemap was thin — reading the site directly…",
+        message: "Reusing pages we already read…",
       })
-      crawlResponse = await tvly.crawl(url, {
-        limit: BRAND_CRAWL_LIMIT,
-        extractDepth: "basic",
-        format: "markdown",
-        instructions: CRAWL_INSTRUCTIONS,
-      })
-      const fallbackPages = pagesFromCrawl(crawlResponse)
-      crawledPages = Array.from(
-        new Map([...crawledPages, ...fallbackPages].map((page) => [page.url, page])).values(),
-      ).slice(0, BRAND_CRAWL_LIMIT)
+      emitCrawlDone(emit, crawledPages)
+    } else {
+      const begun = await beginCorpusRun(supabase, user.id, host)
+      if (begun.kind === "blocked") {
+        emit({
+          phase: "error",
+          error:
+            "We're still reading this site. Wait a minute, then refresh — we will reuse the pages, not crawl again.",
+        })
+        return
+      }
+      if (begun.kind === "hit") {
+        usedCache = true
+        crawledPages = begun.pages
+        emit({
+          phase: "crawl_started",
+          message: "Reusing pages we already read…",
+        })
+        emitCrawlDone(emit, crawledPages)
+      } else {
+        const apiKey = process.env.TAVILY_API_KEY
+        if (!apiKey) {
+          emit({ phase: "error", error: "Tavily API key not configured" })
+          return
+        }
+        const tvly = tavily({ apiKey })
+        await markTavilyStart(supabase, user.id, host)
+
+        // Select before extracting so one sitemap branch cannot consume the page
+        // budget. The bounded crawl below is the only fallback.
+        const sitemapUrls = await fetchAllSitemapUrls(url)
+        emit({
+          phase: "crawl_started",
+          message: sitemapUrls.length > 0
+            ? `Found ${sitemapUrls.length} page${sitemapUrls.length === 1 ? "" : "s"} in your sitemap…`
+            : "No sitemap found — reading your site directly…",
+        })
+        const representativeUrls = selectRepresentativeBrandUrls(
+          url,
+          sitemapUrls,
+          targetSeeds,
+          BRAND_CRAWL_LIMIT,
+        )
+        if (representativeUrls.length > 0) {
+          crawlResponse = await tvly.extract(representativeUrls, {
+            extractDepth: "basic",
+            format: "markdown",
+          })
+          crawledPages = pagesFromCrawl(crawlResponse)
+          const failedResults = (crawlResponse as {
+            failedResults?: Array<{ url?: string; error?: string }>
+          }).failedResults || []
+          if (failedResults.length > 0) {
+            console.warn("[Brand Analysis] Representative extraction failures", failedResults)
+          }
+        }
+
+        if (crawledPages.length < 3 || totalContentChars(crawledPages) < THIN_CORPUS_CHARS) {
+          emit({
+            phase: "crawl_started",
+            message: "Your sitemap was thin — reading the site directly…",
+          })
+          crawlResponse = await tvly.crawl(url, {
+            limit: BRAND_CRAWL_LIMIT,
+            extractDepth: "basic",
+            format: "markdown",
+            instructions: CRAWL_INSTRUCTIONS,
+          })
+          const fallbackPages = pagesFromCrawl(crawlResponse)
+          crawledPages = Array.from(
+            new Map([...crawledPages, ...fallbackPages].map((page) => [page.url, page])).values(),
+          ).slice(0, BRAND_CRAWL_LIMIT)
+        }
+
+        await saveCorpusPages(supabase, user.id, host, crawledPages as CorpusPage[])
+        emitCrawlDone(emit, crawledPages)
+      }
     }
 
     const combinedContent =
       buildRankedBrandCorpus(crawledPages) ||
-      JSON.stringify(crawlResponse).slice(0, 20000)
+      (usedCache ? "" : JSON.stringify(crawlResponse || {}).slice(0, 20000))
 
     if (!combinedContent || combinedContent.length < 50) {
       emit({ phase: "error", error: "No content extracted from website" })
       return
     }
 
-    emit({
-      phase: "crawl_done",
-      message: ANALYZE_PHASE_COPY.crawl_done,
-      pages: crawledPages
-        .filter((page) => page.url)
-        .slice(0, 8)
-        .map((page) => ({ url: page.url })),
-    })
+    // crawl_done already emitted with full { url, title, content } so a
+    // refresh can checkpoint pages before the persona LLM finishes.
 
     const client = getGeminiClient()
 
@@ -451,14 +517,7 @@ export async function POST(req: NextRequest) {
       // The corpus, handed to the scope call so it need not crawl again.
       // Trimmed to the same budget lib/scope-extraction.ts already applies, so
       // nothing extra is carried over the wire.
-      pages: crawledPages
-        .filter((page) => page.url)
-        .slice(0, BRAND_CRAWL_LIMIT)
-        .map((page) => ({
-          url: page.url,
-          title: page.title,
-          content: (page.content || "").slice(0, SCOPE_PAGE_CHARS),
-        })),
+      pages: trimCorpusPages(crawledPages),
     })
   })
 }

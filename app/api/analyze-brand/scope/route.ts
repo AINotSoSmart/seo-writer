@@ -1,5 +1,4 @@
-import { NextRequest } from "next/server"
-import { tavily } from "@tavily/core"
+import { NextRequest, NextResponse } from "next/server"
 
 import {
   MAX_TOTAL_SCOPE_SEEDS,
@@ -12,8 +11,9 @@ import {
   refineScopeRoles,
   type ScopeBrandProfile,
 } from "@/lib/scope-role-refine"
-import { batchExtractTitles, fetchAllSitemapUrls } from "@/lib/audit/site-scanner"
-import { selectRepresentativeBrandUrls } from "@/lib/brand/representative-pages"
+import { batchExtractTitles } from "@/lib/audit/site-scanner"
+import { normalizeAnalyzeHost, readCorpus } from "@/lib/brand-analyze-corpus"
+import { createClient } from "@/utils/supabase/server"
 import {
   encodeAnalyzeEvent,
   type AnalyzeBrandStreamEvent,
@@ -77,23 +77,17 @@ function usableChars(pages: AnalyzedPage[]): number {
 }
 
 /**
- * Tier 2 — page titles fetched from raw HTML.
+ * Titles from raw HTML of URLs we already have.
  *
- * `extractPageTitle` requests the page directly rather than going through
- * Tavily, and falls back `<title>` → `og:title` → `meta[name=title]` → `<h1>` →
- * URL slug. A single-page app that returns an empty body to a markdown
- * extractor still almost always serves a real title and og:title in its shell,
- * so this is the tier that rescues the case that was failing.
+ * `extractPageTitle` is unpaid HTTP. A JS-rendered SPA that returns empty
+ * markdown still almost always serves a real <title>/og:title. Do not walk the
+ * sitemap again when the crawl cache or supplied pages already exist.
  */
 async function titleCorpus(subjectUrl: string, known: AnalyzedPage[]): Promise<AnalyzedPage[]> {
-  const sitemapUrls = await fetchAllSitemapUrls(subjectUrl).catch(() => [] as string[])
   const candidates = Array.from(
     new Set([
       subjectUrl,
       ...known.map((page) => page.url).filter(Boolean),
-      // Already ranked by product-surface signals and route-family diversity,
-      // so the first N are the pages most likely to describe what is sold.
-      ...selectRepresentativeBrandUrls(subjectUrl, sitemapUrls, [], MAX_TITLE_PAGES),
     ]),
   ).slice(0, MAX_TITLE_PAGES)
 
@@ -103,43 +97,22 @@ async function titleCorpus(subjectUrl: string, known: AnalyzedPage[]): Promise<A
     .map((info) => ({
       url: info.url,
       title: info.title,
-      // The title IS the content at this tier. Pairing it with the slug gives
-      // the model two independent hints per page.
       content: `${info.title}\n${decodeURIComponent(info.url)}`,
     }))
 }
 
-/**
- * Tier 3 — whatever the search index still holds.
- *
- * `tvly.search` is a different endpoint from `extract`/`crawl` and returns the
- * index's cached copy, which frequently survives where a live extraction of a
- * client-rendered page returns nothing. Same pattern as lib/scraper.ts.
- */
-async function searchCorpus(subjectUrl: string): Promise<AnalyzedPage[]> {
-  const apiKey = process.env.TAVILY_API_KEY
-  if (!apiKey) return []
-  try {
-    const tvly = tavily({ apiKey })
-    const response = await tvly.search(subjectUrl, {
-      searchDepth: "advanced",
-      includeRawContent: "markdown",
-      maxResults: 5,
-    })
-    return (response.results || [])
-      .map((result: Record<string, unknown>) => ({
-        url: String(result.url || subjectUrl),
-        title: String(result.title || "").trim() || undefined,
-        content: String(result.rawContent || result.content || "").slice(0, 2_400),
-      }))
-      .filter((page: AnalyzedPage) => (page.content || "").trim())
-  } catch (error) {
-    console.warn("[Scope] Search fallback failed:", error)
-    return []
-  }
-}
-
 export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json(
+      { error: "Sign in to analyze your website." },
+      { status: 401 },
+    )
+  }
+
   return streamResponse(async (emit) => {
     const body = await req.json()
     const url: string = body?.url || ""
@@ -207,33 +180,31 @@ export async function POST(req: NextRequest) {
 
     emit({ phase: "scope_started", message: "Grouping what you sell…" })
 
-    // Tier 1: the corpus the first call already crawled.
+    // The corpus the first call already crawled, then the 24h checkpoint if
+    // the client lost pages on refresh.
     let pages = supplied
     let corpusTier = "crawl"
 
-    // Tier 2: real page titles, fetched from raw HTML.
+    if (usableChars(pages) < THIN_CORPUS_CHARS) {
+      const host = normalizeAnalyzeHost(url)
+      const cached = host ? await readCorpus(supabase, user.id, host) : null
+      if (cached && usableChars(cached) > usableChars(pages)) {
+        pages = cached
+        corpusTier = "cache"
+      }
+    }
+
+    // Empty-markdown fallback: titles only (unpaid HTTP). Do not spend a
+    // Tavily search credit on a result this free funnel may never return.
     if (usableChars(pages) < THIN_CORPUS_CHARS) {
       emit({
         phase: "scope_started",
         message: "Your pages are mostly JavaScript — reading their titles instead…",
       })
-      const titles = await titleCorpus(url, supplied)
+      const titles = await titleCorpus(url, pages.length > 0 ? pages : supplied)
       if (titles.length > 0) {
         pages = titles
         corpusTier = "titles"
-      }
-    }
-
-    // Tier 3: the search index's cached copy.
-    if (usableChars(pages) < THIN_CORPUS_CHARS) {
-      emit({
-        phase: "scope_started",
-        message: "Checking what search engines have indexed for you…",
-      })
-      const searched = await searchCorpus(url)
-      if (usableChars(searched) > usableChars(pages)) {
-        pages = searched
-        corpusTier = "search"
       }
     }
 
@@ -277,7 +248,7 @@ export async function POST(req: NextRequest) {
       emit({
         phase: "error",
         error:
-          "We could not work out what you sell from your website, your page titles, or search results. Tell us in one line and we will build from that.",
+          "We could not work out what you sell from your website or your page titles. Tell us in one line and we will build from that.",
       })
       return
     }

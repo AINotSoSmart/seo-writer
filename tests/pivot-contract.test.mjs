@@ -1025,16 +1025,18 @@ test("onboarding asks one question, and scope generates itself", async () => {
     assert.match(page, /keep yours and find others/)
 
     // SCOPE MUST GENERATE ITSELF. Returning zero areas and handing the founder a
-    // blank form is the failure this endpoint exists to prevent, and an empty
-    // markdown corpus — what any JS-rendered site produces — used to do exactly
-    // that. Three tiers must be attempted before anyone is asked anything.
-    assert.match(scope, /batchExtractTitles/)      // tier 2: raw-HTML titles
-    assert.match(scope, /tvly\.search/)            // tier 3: search-index cache
-    assert.match(scope, /fetchAllSitemapUrls/)
+    // blank form is the failure this endpoint exists to prevent. The crawl
+    // checkpoint is tried first; empty markdown falls back to unpaid HTML titles
+    // — not a second Tavily search on this free funnel.
+    assert.match(scope, /batchExtractTitles/)
+    assert.match(scope, /readCorpus/)
+    assert.doesNotMatch(scope, /tvly\.search/)
+    assert.doesNotMatch(scope, /searchDepth:\s*"advanced"/)
+    assert.doesNotMatch(scope, /fetchAllSitemapUrls/)
     // Titles are the signal a JS-rendered site still exposes; they were being
     // dropped in pagesFromCrawl and again in the crawl_done payload.
     assert.match(analyze, /title: String\(rawPage\.title \|\| ""\)/)
-    // And when all three fail, ONE question — never a grid of fields.
+    // And when both fail, ONE question — never a grid of fields.
     assert.match(scope, /Tell us in one line/)
 })
 
@@ -1118,14 +1120,15 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
         }
     }
 
-    // The UI must not ship the rejection condition as a default, and the only
-    // cure must be reachable: the founder-fact helper has to fire from the
-    // visible description field, not just from inside a collapsed disclosure.
+    // The UI must not ship the rejection condition as a default. The cure is
+    // the four visible fields; description mints a founder fact via
+    // withFounderVisibleFields — not a collapsed mechanics disclosure.
     const review = await text("components/onboarding/scope-family-review.tsx")
     assert.doesNotMatch(review, /action: "Describe what your product/)
     assert.doesNotMatch(review, /customerJob: "Describe the customer job"/)
-    assert.match(review, /open=\{openMechanics\[familyKey\] \?\? gaps\.length > 0\}/)
-    assert.match(review, /customerJob: event\.target\.value/)
+    assert.match(review, /withFounderVisibleFields/)
+    assert.match(review, />What this helps with</)
+    assert.match(review, />Delivered as</)
     assert.match(review, /isPlaceholderAction\(operation\.action\)/)
     // A null contract must still render an editor, or the family is unfixable.
     assert.doesNotMatch(review, /\{family\.capability_contract \? \(/)
@@ -1192,7 +1195,7 @@ test("a founder target search can never be silently dropped from scope", async (
     const blocked = validateConfirmedScope(brand).errors
     assert.ok(blocked.length > 0, "a factless rescue family must not pass the gate")
     assert.ok(
-        blocked.some((message) => /Type what this does in your own words/.test(message)),
+        blocked.some((message) => /Say in one line what this helps with/.test(message)),
         `error must name the field to fix, got: ${JSON.stringify(blocked)}`,
     )
 
@@ -1491,7 +1494,7 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     )
 
     // The second call must not re-crawl. The first hands over its corpus.
-    assert.match(route, /pages: crawledPages/)
+    assert.match(route, /pages: trimCorpusPages\(crawledPages\)/)
     assert.match(scopeRoute, /body\?\.pages/)
 
     // Brand crawl burned ~80s / ~10 Tavily credits at limit 20 + advanced.
@@ -3494,4 +3497,77 @@ test("program writing uses bounded packets and skips legacy enrichment", async (
     // not the current writer — it masked the real writer bugs once already.
     assert.match(founderTest, /hydrated\.auditPolicyVersion !== HARVEST_POLICY\.version/)
     assert.match(founderTest, /allowStalePolicy/)
+})
+
+test("brand crawl is checkpointed so refresh does not re-extract", async () => {
+    const [
+        analyze,
+        scope,
+        corpus,
+        migration,
+        onboardingRoute,
+        brandOnboarding,
+    ] = await Promise.all([
+        text("app/api/analyze-brand/route.ts"),
+        text("app/api/analyze-brand/scope/route.ts"),
+        text("lib/brand-analyze-corpus.ts"),
+        text("supabase/migrations/20260813_brand_analyze_corpus.sql"),
+        text(ONBOARDING_ROUTE),
+        text("components/brand-onboarding.tsx"),
+    ])
+
+    assert.match(analyze, /maxDuration = 300/)
+    assert.match(scope, /maxDuration = 300/)
+    assert.doesNotMatch(analyze, /tasks\.trigger/)
+    assert.doesNotMatch(scope, /tasks\.trigger/)
+
+    const extractIdx = analyze.indexOf("tvly.extract")
+    const readIdx = analyze.indexOf("readCorpus")
+    assert.ok(readIdx >= 0 && extractIdx >= 0 && readIdx < extractIdx)
+
+    assert.match(analyze, /emitCrawlDone/)
+    assert.match(analyze, /trimCorpusPages/)
+    assert.doesNotMatch(
+        analyze,
+        /\.map\(\(page\) => \(\{\s*url: page\.url\s*\}\)\)/,
+    )
+    assert.match(analyze, /beginCorpusRun/)
+    assert.match(analyze, /kind === "blocked"/)
+    assert.match(analyze, /saveCorpusPages/)
+    assert.match(analyze, /countTavilyStartsToday/)
+    assert.match(analyze, /MAX_TAVILY_STARTS_PER_DAY/)
+    assert.match(corpus, /MAX_TAVILY_STARTS_PER_DAY = 3/)
+    assert.match(corpus, /tavily_started_at/)
+    assert.match(corpus, /beginCorpusRun/)
+    assert.match(corpus, /blocked/)
+
+    assert.doesNotMatch(scope, /tvly\.search/)
+    assert.doesNotMatch(scope, /searchDepth:\s*"advanced"/)
+    assert.match(scope, /readCorpus/)
+    assert.match(scope, /batchExtractTitles/)
+    assert.match(scope, /refineScopeRoles\(/)
+
+    assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.brand_analyze_corpus/)
+    assert.match(migration, /ENABLE ROW LEVEL SECURITY/)
+    assert.match(migration, /auth\.uid\(\) = user_id/)
+
+    assert.match(onboardingRoute, /CRAWL_PAGES/)
+    assert.match(onboardingRoute, /persistCrawlPages/)
+    assert.match(onboardingRoute, /restoreCrawlPages/)
+    assert.match(onboardingRoute, /SCOPE_STARTED_AT/)
+    assert.match(onboardingRoute, /Look again/)
+    assert.doesNotMatch(
+        onboardingRoute,
+        /if \(analyzingStartedAt[\s\S]{0,400}handleAnalyzeBrand\(/,
+    )
+    assert.doesNotMatch(
+        onboardingRoute,
+        /if \(scopeStartedAt[\s\S]{0,400}handleFindScope\(/,
+    )
+
+    assert.match(brandOnboarding, /CRAWL_PAGES_KEY/)
+    assert.match(brandOnboarding, /persistCrawlPages/)
+    assert.match(brandOnboarding, /restoreCrawlPages/)
+    assert.match(brandOnboarding, /SCOPE_STARTED_KEY/)
+    assert.doesNotMatch(brandOnboarding, /handleAnalyze\(\)/)
 })
