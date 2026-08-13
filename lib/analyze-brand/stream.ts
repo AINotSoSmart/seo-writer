@@ -98,12 +98,14 @@ export async function consumeAnalyzeBrandStream(
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ""
-    let lastEvent: AnalyzeBrandStreamEvent | null = null
-    let lastWithFamilies: AnalyzeBrandStreamEvent | null = null
+    const seen: {
+        last: AnalyzeBrandStreamEvent | null
+        withFamilies: AnalyzeBrandStreamEvent | null
+    } = { last: null, withFamilies: null }
 
     const applyEvent = (event: AnalyzeBrandStreamEvent) => {
-        lastEvent = event
-        if ((event.scope_families?.length ?? 0) > 0) lastWithFamilies = event
+        seen.last = event
+        if ((event.scope_families?.length ?? 0) > 0) seen.withFamilies = event
         onEvent(event)
         if (event.phase === "error") {
             throw new Error(event.error || "Brand analysis failed")
@@ -144,10 +146,10 @@ export async function consumeAnalyzeBrandStream(
         }
     }
 
-    if (lastEvent?.phase === "complete") return lastEvent
+    if (seen.last?.phase === "complete") return seen.last
     // Grounded families already unlocked the confirm screen. A killed function
     // during refine must not throw that away and pretend we found nothing.
-    if (lastWithFamilies) return lastWithFamilies
+    if (seen.withFamilies) return seen.withFamilies
     throw new Error(
         "Finding product areas hit a time limit before it finished. Retry — this does not mean your site sells nothing.",
     )
