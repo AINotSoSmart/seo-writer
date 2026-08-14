@@ -1,6 +1,5 @@
 "use client"
 
-import { motion } from "motion/react"
 import { Globe, Sparkles } from "lucide-react"
 
 import { AnalyzePhaseList } from "@/components/onboarding/analyze-phase-list"
@@ -23,12 +22,14 @@ import {
  * on the skippable screen before the audit runs.
  *
  * If a field is ever added back here, find the line that consumes it first.
+ *
+ * While the crawl runs this screen is ONLY the phase list — stacking it under
+ * the URL form made the wait look like the form was still the job.
  */
 export function SiteStep({
     url,
     onUrlChange,
     analyzing,
-    analyzePhase,
     analysisInterrupted,
     phasesSeen,
     pageCount,
@@ -43,62 +44,15 @@ export function SiteStep({
     pageCount: number
     onAnalyze: () => void
 }) {
-    return (
-        <div className="space-y-6">
-            <div className="text-center space-y-3">
-                <div className="flex justify-center">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center border border-stone-200">
-                        <Sparkles className="w-6 h-6 text-stone-600" />
-                    </div>
-                </div>
-                <h2 className="text-xl font-bold text-stone-900">
-                    Let&apos;s understand your brand
+    if (analyzing) {
+        return (
+            <div className="space-y-4 pb-1">
+                <h2 className="font-serif text-xl tracking-tight text-stone-900">
+                    Reading your site
                 </h2>
-                <p className="text-sm text-stone-500">
-                    Just your website. We&apos;ll work out the rest and show you what we found.
+                <p className="text-xs text-stone-500">
+                    Working out your brand from the pages.
                 </p>
-            </div>
-
-            <div className="flex">
-                <div className="flex-1 flex">
-                    <span className="inline-flex items-center px-3 text-sm text-stone-500 bg-stone-100 border border-r-0 border-stone-200 rounded-l-md font-medium select-none">
-                        https://
-                    </span>
-                    <Input
-                        type="text"
-                        placeholder="yourwebsite.com"
-                        className="flex-1 bg-stone-50 border-stone-200 py-2 px-3 text-sm rounded-l-none focus:ring-0 focus:outline-none focus-visible:ring-0"
-                        value={url}
-                        disabled={analyzing}
-                        onChange={(event) =>
-                            onUrlChange(event.target.value.replace(/^https?:\/\//i, ""))
-                        }
-                        onKeyDown={(event) => {
-                            if (event.key === "Enter" && url && !analyzing) onAnalyze()
-                        }}
-                    />
-                </div>
-            </div>
-
-            <Button
-                onClick={onAnalyze}
-                disabled={analyzing || !url}
-                className="w-full font-semibold gap-2 bg-gradient-to-b from-stone-800 to-stone-950 hover:from-stone-700 hover:to-stone-900 shadow-sm"
-            >
-                <motion.div
-                    animate={analyzing ? { scale: [1, 1.2, 1], rotate: [0, 180, 360] } : {}}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                    <Globe className="w-4 h-4 text-white" />
-                </motion.div>
-                {analyzing
-                    ? analyzePhase
-                    : analysisInterrupted
-                      ? "Run Analyze again"
-                      : "Find my business areas"}
-            </Button>
-
-            {analyzing && (
                 <div className="space-y-2 rounded-lg bg-stone-50 px-3 py-2.5">
                     <AnalyzePhaseList
                         phases={BRAND_ANALYZE_PHASES}
@@ -110,7 +64,54 @@ export function SiteStep({
                         refreshing cannot resume the in-flight read.
                     </p>
                 </div>
-            )}
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="space-y-3 text-center">
+                <div className="flex justify-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-stone-200 bg-gradient-to-br from-stone-100 to-stone-200">
+                        <Sparkles className="h-6 w-6 text-stone-600" />
+                    </div>
+                </div>
+                <h2 className="text-xl font-bold text-stone-900">
+                    Let&apos;s understand your brand
+                </h2>
+                <p className="text-sm text-stone-500">
+                    Just your website. We&apos;ll work out the rest and show you what we found.
+                </p>
+            </div>
+
+            <div className="flex">
+                <div className="flex flex-1">
+                    <span className="inline-flex select-none items-center rounded-l-md border border-r-0 border-stone-200 bg-stone-100 px-3 text-sm font-medium text-stone-500">
+                        https://
+                    </span>
+                    <Input
+                        type="text"
+                        placeholder="yourwebsite.com"
+                        className="flex-1 rounded-l-none border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:outline-none focus:ring-0 focus-visible:ring-0"
+                        value={url}
+                        onChange={(event) =>
+                            onUrlChange(event.target.value.replace(/^https?:\/\//i, ""))
+                        }
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" && url) onAnalyze()
+                        }}
+                    />
+                </div>
+            </div>
+
+            <Button
+                onClick={onAnalyze}
+                disabled={!url}
+                className="w-full gap-2 bg-gradient-to-b from-stone-800 to-stone-950 font-semibold shadow-sm hover:from-stone-700 hover:to-stone-900"
+            >
+                <Globe className="h-4 w-4 text-white" />
+                {analysisInterrupted ? "Run Analyze again" : "Find my business areas"}
+            </Button>
         </div>
     )
 }

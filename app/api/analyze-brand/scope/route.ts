@@ -242,10 +242,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log(
-      `[Scope] corpus=${corpusTier} pages=${pages.length} chars=${usableChars(pages)}`,
-    )
-
     const stopExtractBeat = heartbeat(
       "scope_started",
       "Grouping what you sell…",
@@ -271,6 +267,10 @@ export async function POST(req: NextRequest) {
       stopExtractBeat()
     }
 
+    console.log(
+      `[Scope] corpus=${corpusTier} pages=${pages.length} chars=${usableChars(pages)} extracted=${extracted.length}`,
+    )
+
     emit({ phase: "scope_grounding", message: "Checking each area against your site…" })
 
     const grounded = validateGroundedScope(
@@ -280,7 +280,10 @@ export async function POST(req: NextRequest) {
       targetSeeds,
     )
 
-    if (grounded.families.length === 0) {
+    // Brand-card fallback only when there was no usable site text.
+    // Using it after a failed extract on a real corpus made every site look
+    // like a single category named after the brand card.
+    if (grounded.families.length === 0 && usableChars(pages) < THIN_CORPUS_CHARS) {
       const fromBrand = familyFromConfirmedBrand(brandProfile)
       if (fromBrand) {
         grounded.families.push(fromBrand)

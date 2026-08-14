@@ -966,6 +966,27 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-14 - one-category collapse was a silent brand-card fallback
+
+Every live onboarding run was landing on a single family named after the
+confirmed Category, with the product name as a keyword and
+"Product or service described by the customer" as delivery. That is
+`familyFromConfirmedBrand`, not extraction: Gemini returned empty/unparsed JSON
+(or threw), we swallowed it, and the brand card filled the hole.
+
+Repair: recover JSON via `jsonrepair` and candidate parts; cap thinking with
+`thinkingLevel: "LOW"`; copy site quotes into capability facts so Continue is
+not blocked by an empty contract; use the brand-card family only when the
+corpus is actually thin. A failed extract on real page text asks to retry
+instead of faking one category. Prompt no longer tells the model a
+single-product business must be one family.
+
+### 2026-08-14 - site-step wait replaces the URL form
+
+Step 1 matches steps 2–3: as soon as Analyze starts, the sparkle header, URL
+field, and button are gone. The numbered phase list is the screen, not a strip
+under a form that looks like it is still waiting for input.
+
 ### 2026-08-14 - scope finder fails open without inventing markets
 
 Empty markdown, a heavy capability-contract extract, and grounding that wiped

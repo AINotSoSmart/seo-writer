@@ -1031,6 +1031,7 @@ test("onboarding asks one question, and scope generates itself", async () => {
     assert.match(scope, /batchExtractHtmlSnapshots/)
     assert.match(scope, /corpusTier = "html"/)
     assert.match(scope, /familyFromConfirmedBrand/)
+    assert.match(scope, /usableChars\(pages\) < THIN_CORPUS_CHARS/)
     assert.match(scope, /batchExtractTitles/)
     assert.match(scope, /readCorpus/)
     assert.doesNotMatch(scope, /tvly\.search/)
@@ -1558,6 +1559,12 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     assert.match(extraction, /filterSeedsAgainstCorpus/)
     assert.match(extraction, /EXTRACT_TIMEOUT_MS/)
     assert.match(extraction, /fallbackCapabilityContract/)
+    assert.match(extraction, /jsonrepair/)
+    assert.match(extraction, /thinkingConfig/)
+    assert.doesNotMatch(
+        extraction,
+        /A single-product business returns exactly one family/,
+    )
     assert.doesNotMatch(
         extraction,
         /required:\s*\[[^\]]*capability_contract/,

@@ -1,10 +1,13 @@
 import "server-only"
 
+import { jsonrepair } from "jsonrepair"
+
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { MAX_SCOPE_FAMILIES, MAX_TOTAL_SCOPE_SEEDS } from "@/lib/brand-scope"
 import {
     fallbackCapabilityContract,
     type CapabilityContract,
+    type CapabilityFact,
 } from "@/lib/writer/article-contract"
 
 /**
@@ -156,9 +159,9 @@ export async function extractScopeFamilies(
 - Product: ${brandProfile.product_name}
 - What it is: ${brandProfile.product_identity.literally}
 - Category: ${brandProfile.category || "(none)"}
-Emit families for customer acquisition jobs that fit this brand. Delivery
-formats, export/handoff packaging, and post-purchase workflow steps are NOT
-peer families — fold those into the job they serve.
+Emit families for every distinct customer job visible on the PAGES.
+The Category line is context, not the only family — do not collapse the
+whole site into that one name.
 `
             : ""
 
@@ -206,8 +209,9 @@ not.
   competitors.
 - A pricing tier, an integration, a technology, and a blog category are not
   families.
-- A single-product business returns exactly one family. Do not pad.
-- A business with genuinely separate capabilities returns one per capability.
+- One product can still have several customer jobs a stranger would search
+  separately (finding leads vs verifying emails vs sending cold email). Emit
+  one family per job. Do not collapse the whole site into the brand Category.
 - Discover omitted site capabilities: if the pages show photo animation and
   the founder only typed restoration searches, animation must still be its
   own family.
@@ -232,71 +236,18 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
     let responseText = ""
     try {
         const response = await withTimeout(
-            client.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                config: {
-                    temperature: 0,
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT" as const,
-                        properties: {
-                            families: {
-                                type: "ARRAY" as const,
-                                items: {
-                                    type: "OBJECT" as const,
-                                    properties: {
-                                        name: { type: "STRING" as const },
-                                        description: { type: "STRING" as const },
-                                        parent_hint: {
-                                            type: "STRING" as const,
-                                            nullable: true,
-                                        },
-                                        seed_keywords: {
-                                            type: "ARRAY" as const,
-                                            items: { type: "STRING" as const },
-                                        },
-                                        evidence: {
-                                            type: "ARRAY" as const,
-                                            items: {
-                                                type: "OBJECT" as const,
-                                                properties: {
-                                                    url: { type: "STRING" as const },
-                                                    quote: { type: "STRING" as const },
-                                                },
-                                                required: ["url", "quote"],
-                                            },
-                                        },
-                                    },
-                                    required: [
-                                        "name",
-                                        "description",
-                                        "seed_keywords",
-                                        "evidence",
-                                    ],
-                                },
-                            },
-                        },
-                        required: ["families"],
-                    },
-                },
-            }),
+            generateScopeJson(client, prompt),
             EXTRACT_TIMEOUT_MS,
         )
-        responseText = response.text || ""
+        responseText = modelJsonText(response)
     } catch (error) {
         console.warn("[Scope] extract failed open:", error)
         return []
     }
 
-    let parsed: { families?: unknown }
-    try {
-        parsed = JSON.parse(responseText || "{}")
-    } catch {
-        console.warn("[Scope] extract returned non-JSON")
-        return []
-    }
+    const parsed = parseScopeJson(responseText)
     const families = Array.isArray(parsed.families) ? parsed.families : []
+    console.log(`[Scope] extract parsed ${families.length} families, chars=${responseText.length}`)
     const allowedTokens = lexicalTokenSet([
         corpus,
         brandProfile?.product_name || "",
@@ -317,6 +268,14 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
                 allowedTokens,
                 name,
             )
+            const evidence = Array.isArray(family.evidence)
+                ? (family.evidence as Array<Record<string, unknown>>).map(
+                      (item) => ({
+                          url: String(item.url || ""),
+                          quote: String(item.quote || ""),
+                      }),
+                  )
+                : []
             return {
                 name,
                 description,
@@ -325,18 +284,12 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
                         ? family.parent_hint.trim()
                         : null,
                 seed_keywords,
-                evidence: Array.isArray(family.evidence)
-                    ? (family.evidence as Array<Record<string, unknown>>).map(
-                          (item) => ({
-                              url: String(item.url || ""),
-                              quote: String(item.quote || ""),
-                          }),
-                      )
-                    : [],
-                capability_contract: fallbackCapabilityContract({
-                    name: name || "Product area",
-                    description: description || name || "Customer-facing product area.",
-                }),
+                evidence,
+                capability_contract: contractFromEvidence(
+                    name || "Product area",
+                    description || name || "Customer-facing product area.",
+                    evidence,
+                ),
                 source: "extracted",
             }
         },
@@ -395,6 +348,129 @@ export function filterSeedsAgainstCorpus(
         .trim()
         .slice(0, 100)
     return fromName.length >= 2 ? [fromName] : []
+}
+
+const SCOPE_RESPONSE_SCHEMA = {
+    type: "OBJECT" as const,
+    properties: {
+        families: {
+            type: "ARRAY" as const,
+            items: {
+                type: "OBJECT" as const,
+                properties: {
+                    name: { type: "STRING" as const },
+                    description: { type: "STRING" as const },
+                    parent_hint: {
+                        type: "STRING" as const,
+                        nullable: true,
+                    },
+                    seed_keywords: {
+                        type: "ARRAY" as const,
+                        items: { type: "STRING" as const },
+                    },
+                    evidence: {
+                        type: "ARRAY" as const,
+                        items: {
+                            type: "OBJECT" as const,
+                            properties: {
+                                url: { type: "STRING" as const },
+                                quote: { type: "STRING" as const },
+                            },
+                            required: ["url", "quote"],
+                        },
+                    },
+                },
+                required: [
+                    "name",
+                    "description",
+                    "seed_keywords",
+                    "evidence",
+                ],
+            },
+        },
+    },
+    required: ["families"],
+}
+
+function modelJsonText(response: {
+    text?: string
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+}): string {
+    if (typeof response.text === "string" && response.text.trim()) return response.text
+    const parts = response.candidates?.[0]?.content?.parts
+    if (!Array.isArray(parts)) return ""
+    return parts.map((part) => part.text || "").join("")
+}
+
+function parseScopeJson(raw: string): { families?: unknown } {
+    const text = raw.trim()
+    if (!text) return {}
+    try {
+        return JSON.parse(text)
+    } catch {
+        try {
+            return JSON.parse(jsonrepair(text))
+        } catch {
+            console.warn("[Scope] extract returned non-JSON")
+            return {}
+        }
+    }
+}
+
+function contractFromEvidence(
+    name: string,
+    description: string,
+    evidence: Array<{ url: string; quote: string }>,
+): CapabilityContract {
+    const base = fallbackCapabilityContract({ name, description })
+    const facts: CapabilityFact[] = evidence
+        .filter((item) => item.url.trim() && item.quote.trim().length >= 8)
+        .slice(0, 8)
+        .map((item, index) => ({
+            id: `fact${index + 1}`,
+            url: item.url.trim(),
+            quote: item.quote.trim().slice(0, 500),
+        }))
+    if (facts.length === 0) return base
+    return {
+        ...base,
+        deliveryMode: "Product or service described on the website",
+        facts,
+        operations: [{
+            ...base.operations[0],
+            customerJob: description,
+            action: description,
+            evidenceRefs: facts.map((fact) => fact.id),
+        }],
+    }
+}
+
+async function generateScopeJson(
+    client: ReturnType<typeof getGeminiClient>,
+    prompt: string,
+) {
+    const request = {
+        model: "gemini-3-flash-preview",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+            temperature: 0,
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json",
+            responseSchema: SCOPE_RESPONSE_SCHEMA,
+        },
+    }
+    try {
+        return await client.models.generateContent({
+            ...request,
+            config: {
+                ...request.config,
+                thinkingConfig: { thinkingLevel: "LOW" },
+            },
+        })
+    } catch (error) {
+        console.warn("[Scope] thinkingConfig rejected, retrying without it:", error)
+        return await client.models.generateContent(request)
+    }
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
