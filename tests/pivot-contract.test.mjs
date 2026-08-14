@@ -1026,8 +1026,11 @@ test("onboarding asks one question, and scope generates itself", async () => {
 
     // SCOPE MUST GENERATE ITSELF. Returning zero areas and handing the founder a
     // blank form is the failure this endpoint exists to prevent. The crawl
-    // checkpoint is tried first; empty markdown falls back to unpaid HTML titles
-    // — not a second Tavily search on this free funnel.
+    // checkpoint is tried first; empty markdown falls back to unpaid HTML
+    // snapshots (meta / JSON-LD / body), then titles — not a second Tavily search.
+    assert.match(scope, /batchExtractHtmlSnapshots/)
+    assert.match(scope, /corpusTier = "html"/)
+    assert.match(scope, /familyFromConfirmedBrand/)
     assert.match(scope, /batchExtractTitles/)
     assert.match(scope, /readCorpus/)
     assert.doesNotMatch(scope, /tvly\.search/)
@@ -1037,7 +1040,12 @@ test("onboarding asks one question, and scope generates itself", async () => {
     // dropped in pagesFromCrawl and again in the crawl_done payload.
     assert.match(analyze, /title: String\(rawPage\.title \|\| ""\)/)
     // And when both fail, ONE question — never a grid of fields.
-    assert.match(scope, /Tell us in one line/)
+    assert.match(scope, /Add a short search phrase and look again/)
+    assert.doesNotMatch(scope, /Tell us in one line/)
+    const scopeStep = await text("components/onboarding/steps/scope-step.tsx")
+    assert.match(scopeStep, /failedEmpty \? null/)
+    assert.doesNotMatch(scopeStep, /add a category yourself/)
+    assert.doesNotMatch(scopeStep, /Research hit a time limit/)
 })
 
 test("the confirm gate is one rule, and the UI can always satisfy it", async () => {
@@ -1246,6 +1254,48 @@ test("a founder target search can never be silently dropped from scope", async (
     assert.equal(unverifiable.families.length, 1, "unverified families must be kept, not deleted")
     assert.equal(unverifiable.families[0].verified, false)
     assert.ok(unverifiable.issues.some((issue) => /could not match/i.test(issue.message)))
+
+    const overflow = validateGroundedScope(
+        Array.from({ length: 13 }, (_, index) => ({
+            name: `Area ${index + 1} Capability`,
+            description: "A customer-facing product area on the site.",
+            seed_keywords: [`area ${index + 1} search`],
+            evidence: [],
+            source: "extracted",
+        })),
+        pages,
+        "https://drawgle.com",
+        [],
+    )
+    assert.equal(overflow.families.length, 12, "overflow must slice, not wipe")
+    assert.ok(overflow.issues.some((issue) => /keeping the first 12/i.test(issue.message)))
+
+    const seedless = validateGroundedScope(
+        [
+            {
+                name: "AI Photo Restoration",
+                description: "Restore old family photos with AI.",
+                seed_keywords: [],
+                evidence: [],
+                source: "extracted",
+            },
+        ],
+        pages,
+        "https://drawgle.com",
+        [],
+    )
+    assert.equal(seedless.families.length, 1)
+    assert.ok(seedless.families[0].seed_keywords.includes("ai photo restoration"))
+
+    const { familyFromConfirmedBrand } = await import("../lib/brand-scope.ts")
+    const fromBrand = familyFromConfirmedBrand({
+        product_name: "Drawgle",
+        product_identity: { literally: "AI that turns a prompt into a mobile app screen." },
+        category: "AI Mobile App UI Design",
+    })
+    assert.ok(fromBrand)
+    assert.equal(fromBrand.source, "founder")
+    assert.ok(fromBrand.seed_keywords.length > 0)
 
     // Quote verification must survive paraphrase but still reject invention.
     const page = "turn any text prompt into a production ready mobile ui screen"
@@ -1505,6 +1555,13 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     assert.match(route, /THIN_CORPUS_CHARS/)
     assert.match(route, /buildRankedBrandCorpus/)
     assert.match(extraction, /export function buildRankedBrandCorpus/)
+    assert.match(extraction, /filterSeedsAgainstCorpus/)
+    assert.match(extraction, /EXTRACT_TIMEOUT_MS/)
+    assert.match(extraction, /fallbackCapabilityContract/)
+    assert.doesNotMatch(
+        extraction,
+        /required:\s*\[[^\]]*capability_contract/,
+    )
     assert.match(extraction, /Discover omitted site capabilities/)
     assert.match(
         extraction,
@@ -3544,6 +3601,7 @@ test("brand crawl is checkpointed so refresh does not re-extract", async () => {
     assert.doesNotMatch(scope, /tvly\.search/)
     assert.doesNotMatch(scope, /searchDepth:\s*"advanced"/)
     assert.match(scope, /readCorpus/)
+    assert.match(scope, /batchExtractHtmlSnapshots/)
     assert.match(scope, /batchExtractTitles/)
     assert.match(scope, /refineScopeRoles\(/)
 

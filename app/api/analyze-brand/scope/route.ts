@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import {
+  familyFromConfirmedBrand,
   MAX_TOTAL_SCOPE_SEEDS,
   normalizeSeed,
   trimFamiliesToSearchCap,
@@ -11,7 +12,10 @@ import {
   refineScopeRoles,
   type ScopeBrandProfile,
 } from "@/lib/scope-role-refine"
-import { batchExtractTitles } from "@/lib/audit/site-scanner"
+import {
+  batchExtractHtmlSnapshots,
+  batchExtractTitles,
+} from "@/lib/audit/site-scanner"
 import { normalizeAnalyzeHost, readCorpus } from "@/lib/brand-analyze-corpus"
 import { createClient } from "@/utils/supabase/server"
 import {
@@ -38,6 +42,9 @@ export const maxDuration = 300
 
 /** Below this, the crawled markdown is not a usable corpus. */
 const THIN_CORPUS_CHARS = 1_500
+/** HTML snapshots are heavier; keep the unpaid fallback bounded. */
+const MAX_HTML_PAGES = 8
+const HTML_CONCURRENCY = 4
 /** Titles are short; take more of them than we would full pages. */
 const MAX_TITLE_PAGES = 24
 const TITLE_CONCURRENCY = 10
@@ -83,6 +90,22 @@ function usableChars(pages: AnalyzedPage[]): number {
  * markdown still almost always serves a real <title>/og:title. Do not walk the
  * sitemap again when the crawl cache or supplied pages already exist.
  */
+async function htmlCorpus(subjectUrl: string, known: AnalyzedPage[]): Promise<AnalyzedPage[]> {
+  const candidates = Array.from(
+    new Set([
+      subjectUrl,
+      ...known.map((page) => page.url).filter(Boolean),
+    ]),
+  ).slice(0, MAX_HTML_PAGES)
+
+  const snapshots = await batchExtractHtmlSnapshots(candidates, HTML_CONCURRENCY)
+  return snapshots.map((snapshot) => ({
+    url: snapshot.url,
+    title: snapshot.title,
+    content: snapshot.content,
+  }))
+}
+
 async function titleCorpus(subjectUrl: string, known: AnalyzedPage[]): Promise<AnalyzedPage[]> {
   const candidates = Array.from(
     new Set([
@@ -194,15 +217,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Empty-markdown fallback: titles only (unpaid HTTP). Do not spend a
-    // Tavily search credit on a result this free funnel may never return.
+    // Empty-markdown fallback: unpaid HTML snapshot (meta, JSON-LD, body),
+    // then titles. Do not spend a Tavily search credit on this funnel.
     if (usableChars(pages) < THIN_CORPUS_CHARS) {
       emit({
         phase: "scope_started",
-        message: "Your pages are mostly JavaScript — reading their titles instead…",
+        message: "Your pages are mostly JavaScript — reading the HTML instead…",
+      })
+      const htmlPages = await htmlCorpus(url, pages.length > 0 ? pages : supplied)
+      if (usableChars(htmlPages) >= THIN_CORPUS_CHARS || usableChars(htmlPages) > usableChars(pages)) {
+        pages = htmlPages
+        corpusTier = "html"
+      }
+    }
+    if (usableChars(pages) < THIN_CORPUS_CHARS) {
+      emit({
+        phase: "scope_started",
+        message: "Still thin — using page titles…",
       })
       const titles = await titleCorpus(url, pages.length > 0 ? pages : supplied)
-      if (titles.length > 0) {
+      if (titles.length > 0 && usableChars(titles) > usableChars(pages)) {
         pages = titles
         corpusTier = "titles"
       }
@@ -216,7 +250,7 @@ export async function POST(req: NextRequest) {
       "scope_started",
       "Grouping what you sell…",
     )
-    let extracted
+    let extracted: Awaited<ReturnType<typeof extractScopeFamilies>> = []
     try {
       extracted = await extractScopeFamilies(
         url,
@@ -230,6 +264,9 @@ export async function POST(req: NextRequest) {
             }
           : null,
       )
+    } catch (error) {
+      console.warn("[Scope] extract threw; continuing with empty families:", error)
+      extracted = []
     } finally {
       stopExtractBeat()
     }
@@ -244,11 +281,23 @@ export async function POST(req: NextRequest) {
     )
 
     if (grounded.families.length === 0) {
+      const fromBrand = familyFromConfirmedBrand(brandProfile)
+      if (fromBrand) {
+        grounded.families.push(fromBrand)
+        grounded.issues.push({
+          family: fromBrand.name,
+          message:
+            "Built from the brand details you already confirmed because the site text was too thin to extract product areas.",
+        })
+      }
+    }
+
+    if (grounded.families.length === 0) {
       // Every automatic route is exhausted. Ask ONE question — never a form.
       emit({
         phase: "error",
         error:
-          "We could not work out what you sell from your website or your page titles. Tell us in one line and we will build from that.",
+          "We could not work out what you sell from your website. Add a short search phrase and look again.",
       })
       return
     }
