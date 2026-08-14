@@ -178,13 +178,27 @@ export function familyFromConfirmedBrand(
     const seed_keywords = Array.from(new Set(seedCandidates)).slice(0, 3)
     if (seed_keywords.length === 0) seed_keywords.push(normalizeSeed(name).slice(0, 100))
 
+    const base = fallbackCapabilityContract({ name, description })
     const parsed = ScopeFamilySchema.safeParse({
         id: randomUUID(),
         name,
         description,
         seed_keywords,
         evidence: [],
-        capability_contract: fallbackCapabilityContract({ name, description }),
+        capability_contract: {
+            ...base,
+            facts: [{
+                id: "fact1",
+                url: "founder-confirmed:onboarding",
+                quote: description.slice(0, 500),
+            }],
+            operations: [{
+                ...base.operations[0],
+                customerJob: description,
+                action: description,
+                evidenceRefs: ["fact1"],
+            }],
+        },
         source: "founder",
         verified: true,
         priority: 0,
