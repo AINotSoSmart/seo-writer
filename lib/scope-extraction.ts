@@ -236,7 +236,16 @@ Return at most ${MAX_SCOPE_FAMILIES} families, most important first.`
     let responseText = ""
     try {
         const response = await withTimeout(
-            generateScopeJson(client, prompt),
+            client.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                config: {
+                    temperature: 0,
+                    maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
+                    responseSchema: SCOPE_RESPONSE_SCHEMA,
+                },
+            }),
             EXTRACT_TIMEOUT_MS,
         )
         responseText = modelJsonText(response)
@@ -442,34 +451,6 @@ function contractFromEvidence(
             action: description,
             evidenceRefs: facts.map((fact) => fact.id),
         }],
-    }
-}
-
-async function generateScopeJson(
-    client: ReturnType<typeof getGeminiClient>,
-    prompt: string,
-) {
-    const request = {
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-            temperature: 0,
-            maxOutputTokens: 8192,
-            responseMimeType: "application/json",
-            responseSchema: SCOPE_RESPONSE_SCHEMA,
-        },
-    }
-    try {
-        return await client.models.generateContent({
-            ...request,
-            config: {
-                ...request.config,
-                thinkingConfig: { thinkingLevel: "LOW" },
-            },
-        })
-    } catch (error) {
-        console.warn("[Scope] thinkingConfig rejected, retrying without it:", error)
-        return await client.models.generateContent(request)
     }
 }
 

@@ -1560,7 +1560,7 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     assert.match(extraction, /EXTRACT_TIMEOUT_MS/)
     assert.match(extraction, /fallbackCapabilityContract/)
     assert.match(extraction, /jsonrepair/)
-    assert.match(extraction, /thinkingConfig/)
+    assert.doesNotMatch(extraction, /thinkingConfig/)
     assert.doesNotMatch(
         extraction,
         /A single-product business returns exactly one family/,
