@@ -974,12 +974,11 @@ confirmed Category, with the product name as a keyword and
 `familyFromConfirmedBrand`, not extraction: Gemini returned empty/unparsed JSON
 (or threw), we swallowed it, and the brand card filled the hole.
 
-Repair: recover JSON via `jsonrepair` and candidate parts; cap thinking with
-`thinkingLevel: "LOW"`; copy site quotes into capability facts so Continue is
-not blocked by an empty contract; use the brand-card family only when the
-corpus is actually thin. A failed extract on real page text asks to retry
-instead of faking one category. Prompt no longer tells the model a
-single-product business must be one family.
+Repair: recover JSON via `jsonrepair` and candidate parts; copy site quotes
+into capability facts so Continue is not blocked by an empty contract; use the
+brand-card family only when the corpus is actually thin. A failed extract on
+real page text asks to retry instead of faking one category. Prompt no longer
+tells the model a single-product business must be one family.
 
 ### 2026-08-14 - site-step wait replaces the URL form
 
