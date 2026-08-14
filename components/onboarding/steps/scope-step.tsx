@@ -73,7 +73,7 @@ export function ScopeStep({
                 <div className="space-y-2 rounded-lg bg-stone-50 px-3 py-2.5">
                     <AnalyzePhaseList phases={SCOPE_ANALYZE_PHASES} seen={phasesSeen} />
                 </div>
-            ) : (
+            ) : failedEmpty ? null : (
                 <ScopeFamilyReview
                     families={brand.scope_families || []}
                     targetSeeds={brand.target_seed_keywords || targetSeeds}
@@ -81,7 +81,6 @@ export function ScopeStep({
                     onChange={onFamiliesChange}
                     onChangeTargetSeeds={onTargetSeedsChange}
                     onRestart={onRestart}
-                    failedEmpty={failedEmpty}
                 />
             )}
 
@@ -136,11 +135,16 @@ export function ScopeStep({
             )}
 
             {failedEmpty ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                     <p className="text-xs leading-relaxed text-stone-500">
-                        Research hit a time limit before it finished. Retry, or add a
-                        category yourself — this does not mean your site sells nothing.
+                        We could not finish reading product areas from the site.
+                        Retry, or add one short phrase people search and look again.
                     </p>
+                    <PillInput
+                        value={targetSeeds}
+                        onChange={onTargetSeedsChange}
+                        placeholder="e.g. ai photo restoration (press Enter)"
+                    />
                     <Button
                         variant="outline"
                         size="sm"
@@ -152,7 +156,7 @@ export function ScopeStep({
                 </div>
             ) : null}
 
-            {!waiting ? (
+            {!waiting && !failedEmpty ? (
                 <div className="sticky bottom-0 space-y-3 border-t border-stone-100 bg-white/95 py-3 backdrop-blur-sm">
                     {!scopeLoading && scopeBlockers.length > 0 && (
                         <div className="rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-200">

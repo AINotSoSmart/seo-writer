@@ -10,21 +10,15 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-13
+Last implementation update: 2026-08-14
 
-Status: **domain-agnostic capability/article contracts and the evidence-bound
-writer repair are implemented; representative first-party page selection,
-exact-quote research, deterministic section packets, intent-sized output and
-bounded images are active. The writer now proves each section finished before an
-article may be marked complete — a truncated, under-length or uncited article
-fails instead of publishing. Onboarding profile step keeps a compact confirm
-card and exposes full brand-DNA editing before the audit. Scope refinement
-folds delivery/handoff families into acquisition jobs using the confirmed
-brand profile before harvest. Brand crawl is checkpointed in Postgres and
-localStorage (24h TTL): refresh cannot resume the HTTP stream but does not
-re-extract; SPA scope fallback is titles-only; 3 Tavily analyzes per user per
-day. Checkout remains
-disabled pending the staging and external release gate**
+Status: **scope finder no longer times out into a blank keyword form.** Thin SPA
+crawls fall back to unpaid HTML snapshots (meta/JSON-LD/body) then titles;
+extraction is a small families-only Gemini call with a 90s timeout and lexical
+seed filter; grounding slices overflow instead of wiping; last resort is one
+family from the confirmed brand card. Domain-agnostic writer contracts, crawl
+checkpoint, and scope role refinement remain. Checkout remains disabled pending
+the staging and external release gate
 
 ## 0. 2026-08-04 (second pass) writer completion gate
 
@@ -971,6 +965,26 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-14 - scope finder fails open without inventing markets
+
+Empty markdown, a heavy capability-contract extract, and grounding that wiped
+all families were sending founders to a blank "add your whole search scope"
+form. Repair:
+
+- Thin corpus now reads unpaid HTML snapshots (title, meta, JSON-LD, bounded
+  body) before titles. Still no Tavily search credit.
+- `extractScopeFamilies` asks only for name / description / seeds / evidence,
+  90s timeout, attaches `fallbackCapabilityContract` in code, and lexically
+  filters seeds against the corpus + confirmed brand card.
+- `validateGroundedScope` slices overflow to 12, salvages invalid rows, and
+  seeds a nameless-keyword family from its name. Never returns `[]` for overflow.
+- Zero families after that become one `source: "founder"` family from the
+  already-confirmed brand card. The empty Add-category grid is not the recovery
+  path.
+
+Re-run Drawgle from a clean analyze (no manual one-category rescue) before
+judging cluster count.
 
 ### 2026-08-13 - brand crawl checkpoint (refresh-safe, spend-safe)
 

@@ -261,6 +261,146 @@ export function cleanPageTitle(title: string): string {
     return title.trim()
 }
 
+export type HtmlSnapshot = {
+    url: string
+    title: string
+    content: string
+}
+
+const HTML_SNAPSHOT_MAX_BYTES = 65_536
+const HTML_BODY_CHARS = 2_000
+
+function metaTagContent(html: string, attr: "name" | "property", value: string): string {
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const named = new RegExp(
+        `<meta[^>]*${attr}=["']${escaped}["'][^>]*content=["']([\\s\\S]*?)["']`,
+        "i",
+    )
+    const reversed = new RegExp(
+        `<meta[^>]*content=["']([\\s\\S]*?)["'][^>]*${attr}=["']${escaped}["']`,
+        "i",
+    )
+    const match = html.match(named) || html.match(reversed)
+    return match?.[1] ? cleanPageTitle(match[1].trim()) : ""
+}
+
+function jsonLdLines(html: string): string[] {
+    const lines: string[] = []
+    const scripts = html.matchAll(
+        /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+    )
+    const take = (value: unknown, depth: number) => {
+        if (!value || depth > 4) return
+        if (Array.isArray(value)) {
+            for (const item of value) take(item, depth + 1)
+            return
+        }
+        if (typeof value !== "object") return
+        const row = value as Record<string, unknown>
+        if (Array.isArray(row["@graph"])) take(row["@graph"], depth + 1)
+        for (const key of ["name", "description", "applicationCategory", "alternateName"]) {
+            const field = row[key]
+            if (typeof field === "string" && field.trim()) {
+                lines.push(cleanPageTitle(field.trim()))
+            }
+        }
+    }
+    for (const match of scripts) {
+        try {
+            take(JSON.parse(match[1] || "null"), 0)
+        } catch {
+            /* malformed JSON-LD is not evidence */
+        }
+        if (lines.length >= 12) break
+    }
+    return lines
+}
+
+function visibleBodyText(html: string): string {
+    const stripped = html
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+    return stripped.slice(0, HTML_BODY_CHARS)
+}
+
+/**
+ * Unpaid same-host HTML snapshot for scope when Tavily markdown is empty.
+ * Titles alone were not enough to extract real jobs from a JS-rendered SPA.
+ */
+export async function extractHtmlSnapshot(url: string): Promise<HtmlSnapshot | null> {
+    try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 8000)
+        try {
+        const res = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+                "User-Agent": "Mozilla/5.0 (compatible; FlipAEO Bot/1.0)",
+                Accept: "text/html",
+            },
+            redirect: "follow",
+        })
+        clearTimeout(timeout)
+        if (!res.ok) return null
+
+        const reader = res.body?.getReader()
+        if (!reader) return null
+        let html = ""
+        const decoder = new TextDecoder()
+        let bytesRead = 0
+        while (bytesRead < HTML_SNAPSHOT_MAX_BYTES) {
+            const { done, value } = await reader.read()
+            if (done) break
+            html += decoder.decode(value, { stream: true })
+            bytesRead += value.length
+        }
+        reader.cancel()
+
+        const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+        const title =
+            metaTagContent(html, "property", "og:title") ||
+            (titleMatch?.[1] ? cleanPageTitle(titleMatch[1].trim()) : "") ||
+            metaTagContent(html, "name", "title")
+        const description =
+            metaTagContent(html, "name", "description") ||
+            metaTagContent(html, "property", "og:description")
+        const jsonLd = jsonLdLines(html)
+        const body = visibleBodyText(html)
+        const content = [title, description, ...jsonLd, body]
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join("\n")
+        if (content.length < 24) return null
+        return { url, title: title || extractTitleFromUrl(url), content }
+        } finally {
+            clearTimeout(timeout)
+        }
+    } catch {
+        return null
+    }
+}
+
+export async function batchExtractHtmlSnapshots(
+    urls: string[],
+    concurrency: number = 4,
+): Promise<HtmlSnapshot[]> {
+    const results: HtmlSnapshot[] = []
+    for (let i = 0; i < urls.length; i += concurrency) {
+        const batch = urls.slice(i, i + concurrency)
+        const settled = await Promise.allSettled(batch.map((url) => extractHtmlSnapshot(url)))
+        for (const result of settled) {
+            if (result.status === "fulfilled" && result.value) results.push(result.value)
+        }
+    }
+    return results
+}
+
 /**
  * Batch-extracts page titles with concurrency control.
  * Returns PageInfo[] for all URLs.

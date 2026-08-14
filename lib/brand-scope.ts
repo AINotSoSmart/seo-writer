@@ -127,6 +127,72 @@ function titleCase(value: string): string {
         .join(" ")
 }
 
+function salvageExtractedFamily(candidate: unknown): ScopeFamily | null {
+    if (!candidate || typeof candidate !== "object") return null
+    const row = candidate as Record<string, unknown>
+    const name = String(row.name || "").trim()
+    if (name.length < 2) return null
+    let description = String(row.description || "").trim()
+    if (description.length < 8) {
+        description = `Searches about ${name}.`.slice(0, 500)
+    }
+    if (description.length < 8) description = "Customer-facing product area."
+    const seed_keywords = Array.isArray(row.seed_keywords)
+        ? row.seed_keywords.map((seed) => String(seed).trim()).filter((seed) => seed.length >= 2)
+        : []
+    const parsed = ScopeFamilySchema.safeParse({
+        name: name.slice(0, 100),
+        description: description.slice(0, 500),
+        seed_keywords: (seed_keywords.length > 0 ? seed_keywords : [name]).slice(0, 8),
+        evidence: [],
+        source: "extracted",
+        verified: false,
+        priority: 0,
+        enabled: true,
+    })
+    return parsed.success ? parsed.data : null
+}
+
+/**
+ * Last-resort family from the brand card the founder already confirmed.
+ * Uses only those strings — does not invent adjacent markets.
+ */
+export function familyFromConfirmedBrand(
+    profile: {
+        product_name?: string
+        product_identity?: { literally?: string }
+        category?: string
+    } | null | undefined,
+): ScopeFamily | null {
+    if (!profile) return null
+    const name = (profile.category || profile.product_name || "").trim().slice(0, 100)
+    const description = (profile.product_identity?.literally || "").trim().slice(0, 500)
+    if (name.length < 2 || description.length < 8) return null
+
+    const seedCandidates = [
+        profile.category,
+        profile.product_name,
+    ]
+        .map((value) => normalizeSeed(String(value || "")))
+        .filter((seed) => seed.length >= 2 && seed.length <= 100)
+    const seed_keywords = Array.from(new Set(seedCandidates)).slice(0, 3)
+    if (seed_keywords.length === 0) seed_keywords.push(normalizeSeed(name).slice(0, 100))
+
+    const parsed = ScopeFamilySchema.safeParse({
+        id: randomUUID(),
+        name,
+        description,
+        seed_keywords,
+        evidence: [],
+        capability_contract: fallbackCapabilityContract({ name, description }),
+        source: "founder",
+        verified: true,
+        priority: 0,
+        enabled: true,
+    })
+    return parsed.success ? parsed.data : null
+}
+
 /**
  * Extracted families must cite text that was actually crawled from the audited
  * host. Founder- and user-created families are authoritative and need no quote.
@@ -159,30 +225,24 @@ export function validateGroundedScope(
             }),
     )
     const parsedFamilies = Array.isArray(rawFamilies) ? rawFamilies : []
-    if (parsedFamilies.length > MAX_SCOPE_FAMILIES) {
-        return {
-            families: [],
-            issues: [
-                {
-                    message: `Website analysis returned ${parsedFamilies.length} product areas; the maximum supported scope is ${MAX_SCOPE_FAMILIES}. Nothing was silently removed.`,
-                },
-            ],
-            unassignedTargetSeeds: Array.from(
-                new Set(targetSeeds.map(normalizeSeed).filter(Boolean)),
-            ),
-        }
+    const overflowed = parsedFamilies.length > MAX_SCOPE_FAMILIES
+    if (overflowed) {
+        issues.push({
+            message: `Website analysis returned ${parsedFamilies.length} product areas; keeping the first ${MAX_SCOPE_FAMILIES}.`,
+        })
     }
     const families: ScopeFamily[] = []
     const seenNames = new Set<string>()
 
-    for (const candidate of parsedFamilies) {
+    for (const candidate of parsedFamilies.slice(0, MAX_SCOPE_FAMILIES)) {
         const parsed = ScopeFamilySchema.safeParse(candidate)
-        if (!parsed.success) {
+        const family = parsed.success
+            ? parsed.data
+            : salvageExtractedFamily(candidate)
+        if (!family) {
             issues.push({ message: "An extracted product area had an invalid shape." })
             continue
         }
-
-        const family = parsed.data
         const nameNorm = normalizeText(family.name)
         if (seenNames.has(nameNorm)) {
             issues.push({
@@ -196,11 +256,20 @@ export function validateGroundedScope(
             new Set(family.seed_keywords.map(normalizeSeed).filter(Boolean)),
         ).slice(0, MAX_SEEDS_PER_FAMILY)
         if (seeds.length === 0) {
-            issues.push({
-                family: family.name,
-                message: "Product area has no usable search direction.",
-            })
-            continue
+            const fromName = normalizeSeed(family.name)
+            if (fromName.length >= 2) {
+                seeds.push(fromName.slice(0, 100))
+                issues.push({
+                    family: family.name,
+                    message: "No usable search direction was extracted; using the area name.",
+                })
+            } else {
+                issues.push({
+                    family: family.name,
+                    message: "Product area has no usable search direction.",
+                })
+                continue
+            }
         }
 
         const evidence = family.evidence.filter((item) => {
