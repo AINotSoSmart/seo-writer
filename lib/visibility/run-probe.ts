@@ -59,6 +59,11 @@ import {
     type RunSummary,
 } from "./gap-mapper"
 import { buildBuyerPrompts, DEFAULT_PROMPTS_PER_RUN } from "./prompt-builder"
+import {
+    encodeProbeFailureDetail,
+    probeFailureCopy,
+    type ProbeFailureCode,
+} from "./failure-copy"
 
 /**
  * Cloro is a queue, not a synchronous API, so the run is two phases: submit
@@ -886,12 +891,22 @@ export async function runVisibilityProbe(
             durationMs,
         }
     } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error)
+        // `failure_reason` is rendered verbatim on the waiting screen, so it
+        // carries customer copy and the exception text goes to `phase_detail`
+        // and the log. The first live run showed a founder
+        // "CLORO_API_KEY is not configured" — an internal secret's name, on the
+        // screen a paying customer would have seen.
+        const detail = error instanceof Error ? error.message : String(error)
+        const code: ProbeFailureCode =
+            error instanceof ProbeError ? error.reason : "unknown"
+        console.error(`[Probe] Run ${runId} failed (${code}):`, detail)
         await supabase
             .from("ai_probe_runs")
             .update({
                 status: "failed",
-                failure_reason: reason.slice(0, 1000),
+                failure_reason: probeFailureCopy(code).message,
+                phase: "failed",
+                phase_detail: encodeProbeFailureDetail(code, detail),
                 completed_at: new Date().toISOString(),
                 duration_ms: Date.now() - startedAt,
             })
@@ -903,7 +918,7 @@ export async function runVisibilityProbe(
         // later. Guarded on `running`, so re-probing an already-finalized audit
         // cannot reopen and destroy it.
         if (options.auditId) {
-            await failAuditRun(supabase, options.auditId, "probe_failed", reason)
+            await failAuditRun(supabase, options.auditId, code, detail)
         }
         throw error
     }

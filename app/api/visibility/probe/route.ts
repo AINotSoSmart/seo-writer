@@ -52,6 +52,10 @@ import {
 } from "@/lib/visibility/prompt-builder"
 import { bindPromptsToAuditScope } from "@/lib/visibility/prompt-binding"
 import { resolveLanguage, resolveRegion } from "@/lib/target-market"
+import {
+    decodeProbeFailureCode,
+    probeFailureCopy,
+} from "@/lib/visibility/failure-copy"
 import type { runProbeTask } from "@/trigger/run-probe"
 
 export const maxDuration = 60
@@ -140,7 +144,8 @@ async function openAuditForBrand(
             ok: false,
             status: 500,
             body: {
-                error: `Your brand record could not be read: ${brandError.message}`,
+                error: probeFailureCopy("brand_unreadable").message,
+                reason: "brand_unreadable",
             },
         }
     }
@@ -245,7 +250,9 @@ async function openAuditForBrand(
             ok: false,
             status: 500,
             body: {
-                error: `Could not open an audit for this brand: ${createError?.message ?? "unknown error"}`,
+                error:
+                    "We couldn't open an audit for this brand, so nothing was started and nothing was charged.",
+                reason: "audit_open_failed",
             },
         }
     }
@@ -307,8 +314,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
             {
                 error: cloroConfigured()
-                    ? "No engine selected."
-                    : "CLORO_API_KEY is not configured. Cloro drives the real ChatGPT and Google AI Mode answers; the provider APIs measure a different surface and are opt-in via allowApiSurface.",
+                    ? "No answer engine was selected for this run."
+                    : probeFailureCopy("no_engines").message,
                 reason: "no_engines",
             },
             { status: 503 },
@@ -389,8 +396,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
             {
                 error: brandError
-                    ? `Your brand record could not be read: ${brandError.message}`
-                    : "Brand not found",
+                    ? probeFailureCopy("brand_unreadable").message
+                    : "That brand no longer exists. Start again by adding a website.",
+                reason: brandError ? "brand_unreadable" : "brand_missing",
             },
             { status: brandError ? 500 : 404 },
         )
@@ -547,8 +555,9 @@ export async function POST(req: NextRequest) {
                 `Could not open a probe run: ${runError?.message ?? "unknown"}`,
             )
         }
+        console.error("[Probe API] Could not open a probe run:", runError)
         return NextResponse.json(
-            { error: `Could not open a probe run: ${runError?.message ?? "unknown"}` },
+            { error: probeFailureCopy("queue_failed").message, reason: "queue_failed" },
             { status: 500 },
         )
     }
@@ -615,7 +624,7 @@ export async function POST(req: NextRequest) {
             )
         }
         return NextResponse.json(
-            { error: "Could not enqueue the probe." },
+            { error: probeFailureCopy("queue_failed").message, reason: "queue_failed" },
             { status: 500 },
         )
     }
@@ -655,5 +664,24 @@ export async function GET(req: NextRequest) {
         Date.now() - new Date(run.started_at).getTime() >
             PROBE_STALE_AFTER_MINUTES * 60_000
 
-    return NextResponse.json({ ...run, stale })
+    /**
+     * `phase_detail` is two different things depending on status.
+     *
+     * While running it is progress the customer benefits from seeing — "20
+     * queued", "10 prompts x 2 engines" — written by the phase reporter. On
+     * failure the same column carries the tagged exception text, which must not
+     * leave the server. So it is forwarded during a run and withheld on
+     * failure, where the client gets the code and the customer-safe sentence
+     * already stored in `failure_reason`.
+     */
+    const { phase_detail: phaseDetail, ...rest } = run
+    const failed = run.status === "failed"
+    const failureCode = failed ? decodeProbeFailureCode(phaseDetail) : null
+    return NextResponse.json({
+        ...rest,
+        phase_detail: failed ? null : phaseDetail,
+        failureCode,
+        retryable: failureCode ? probeFailureCopy(failureCode).retryable : true,
+        stale,
+    })
 }

@@ -559,13 +559,16 @@ place, ahead of Gemini — and we can't measure it, because Cloro has no Claude
 scraper and its API is the wrong surface. That's a genuine hole in exactly your
 buyer segment. Don't claim coverage you don't have.
 
-**Status: built, wired, never run.** There's no Cloro key in the repo, so not one
-question has actually been asked. Onboarding now ends on the "answer engines
-aren't connected" screen rather than on a report — which is the honest outcome,
-because reporting you as absent from answers nobody collected would be a
-fabricated result. Before showing this to anyone: add the key, run it on two
-real sites and read fifty answers by hand. If the questions aren't ones a buyer
-would plausibly type, the whole thing is noise no matter how tidy the code is.
+**Status: built, wired, key present, not yet run.** A Cloro key now exists
+locally, so the first real run is possible. Before showing this to anyone: run
+it on two real sites and read fifty answers by hand. If the questions aren't
+ones a buyer would plausibly type, the whole thing is noise no matter how tidy
+the code is.
+
+Note the probe executes on Trigger.dev. With a **dev** Trigger key, a local
+worker (`npx trigger.dev@latest dev`) must be running or the run is created and
+never picked up — the console reports that honestly after 45 minutes rather than
+spinning forever, but it is a setup gap, not a product failure.
 
 **It costs real money per run,** unlike the audit (~$0.20). A run currently asks
 **10 questions** — roughly 90 Cloro credits, about four cents across both

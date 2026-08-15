@@ -15,6 +15,7 @@ import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import type { ProbeCompetitor } from "@/lib/visibility/answer-parser"
 import type { AiEngine } from "@/lib/visibility/engines"
 import { ProbeError, runVisibilityProbe } from "@/lib/visibility/run-probe"
+import { encodeProbeFailureDetail } from "@/lib/visibility/failure-copy"
 import { createAdminClient } from "@/utils/supabase/admin"
 
 export interface RunProbePayload {
@@ -90,13 +91,18 @@ export const runProbeTask = task({
                 creditsUsed: result.creditsUsed,
             }
         } catch (error) {
-            // `runVisibilityProbe` already writes status = failed with a reason.
-            // This only adds the operator-facing detail and re-throws so the run
-            // shows as failed in Trigger too.
+            // `runVisibilityProbe` already wrote customer copy to
+            // `failure_reason` and the tagged operator detail to `phase_detail`.
+            // This only covers a throw from BEFORE that handler could run — an
+            // adoption failure, say — and it uses the same encoding so the two
+            // cannot disagree about what a failed run looks like.
             const message = error instanceof Error ? error.message : String(error)
             await setPhase(
                 "failed",
-                error instanceof ProbeError ? `${error.reason}: ${message}` : message,
+                encodeProbeFailureDetail(
+                    error instanceof ProbeError ? error.reason : "unknown",
+                    message,
+                ),
             )
             throw error
         }

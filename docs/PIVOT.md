@@ -21,8 +21,12 @@ produce an audit record. Every gap the probe finds is finalized into
 `finalize_audit_run`, so `/audit` and `/content-plan` read a visibility audit
 exactly as they read a harvest one. The Google harvest is untouched and still
 reachable at `POST /api/topical-audit`; it simply has no UI caller. **Still not
-run against a live audit**: no `CLORO_API_KEY` exists in this repo, so the whole
-path remains code-complete and entirely unmeasured.
+run against a live audit** — but a `CLORO_API_KEY` now exists in the local
+environment, so the gate is no longer "get a key", it is "run it and read the
+answers by hand". Every claim in this document about probe behaviour remains
+unconfirmed against a completed run. Note the probe executes on Trigger.dev: with
+a **dev** Trigger key a local worker (`npx trigger.dev@latest dev`) must be
+running, or the run row is created and never picked up.
 
 Previously: **AI-visibility probing added as a second, parallel gap source**
 (§8), measuring the real consumer surfaces rather than the provider APIs.
@@ -982,6 +986,44 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-15 (twelfth pass) - the waiting screen was showing internal errors
+
+**What the founder saw on the second live attempt:**
+
+> CLORO_API_KEY is not configured, so the consumer surfaces cannot be measured.
+
+An internal secret's name, on the screen a paying customer would have seen, with
+nothing in it they could act on. `ai_probe_runs.failure_reason` is rendered
+verbatim by the console, and every failure path was writing raw exception text
+into it.
+
+**The rule now.** `failure_reason` is **customer copy and nothing else**.
+Exception text, Postgres messages, environment variable names and vendor error
+bodies go to `phase_detail` and the server log. `lib/visibility/failure-copy.ts`
+owns the mapping from failure code to customer sentence, plus whether a retry
+could plausibly help — a configuration failure is not retryable, and offering a
+button that fails identically one second later is worse than offering none.
+
+`phase_detail` is forwarded to the client **during** a run (it is progress the
+customer benefits from — "20 queued") and withheld **on failure**, where the
+client instead receives the code and decides retryability from that rather than
+by sniffing error text.
+
+Also sanitised in the same pass, all of them customer-visible: the driver
+message interpolated into "Your brand record could not be read: …" (introduced by
+the eleventh pass — my own leak), the `create_customer_audit_with_scope` RPC
+error, and the run-row insert error.
+
+A contract test asserts the copy table names no secret or vendor, that the route
+never interpolates a driver error into a customer message, and that the console
+keys off `failureCode` rather than text.
+
+**The underlying cause of that specific failure was not a code bug.**
+`CLORO_API_KEY` is in `.env.local`, which Next.js reads and the Trigger.dev dev
+CLI does not — it loads `.env`. So the route's engine check passed while the
+worker's failed. The probe genuinely executed, which is progress: the task, the
+audit shell and the failure path all ran for the first time.
 
 ### 2026-08-15 (eleventh pass) - "Brand not found" on a brand that was in the table
 

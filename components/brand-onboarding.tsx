@@ -401,7 +401,7 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                         )}
                     </Button>
                     {analyzing && (
-                        <p className="text-center text-[11px] text-stone-400">
+                        <p className="text-center text-[9px] text-stone-400">
                             Usually 1–3 minutes. Keep this tab open —
                             refreshing cannot resume the in-flight read.
                         </p>

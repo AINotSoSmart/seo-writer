@@ -59,7 +59,7 @@ export function SiteStep({
                         seen={phasesSeen}
                         pageCount={pageCount}
                     />
-                    <p className="text-[11px] text-stone-400">
+                    <p className="text-[9px] text-stone-400">
                         Usually 1–3 minutes. Keep this tab open —
                         refreshing cannot resume the in-flight read.
                     </p>

@@ -4253,6 +4253,50 @@ test("a probe resolves its rivals before it asks anything", async () => {
     assert.match(dashboard, /competitor discovery failed/)
 })
 
+test("a failed probe never shows the customer an internal error", async () => {
+    const [copy, probeRunner, probeRoute, console_] = await Promise.all([
+        text("lib/visibility/failure-copy.ts"),
+        text("lib/visibility/run-probe.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("components/visibility/probe-console.tsx"),
+    ])
+
+    // The first live run showed a founder "CLORO_API_KEY is not configured" on
+    // the waiting screen. `failure_reason` is rendered verbatim, so it carries
+    // customer copy only; the exception text goes to `phase_detail` and the log.
+    assert.match(probeRunner, /failure_reason: probeFailureCopy\(code\)\.message/)
+    assert.match(probeRunner, /phase_detail: encodeProbeFailureDetail\(code, detail\)/)
+
+    // No secret names, vendor names or SQL in anything a customer reads. Only
+    // the copy table itself — the file's own prose explains the incident and is
+    // allowed to name what leaked.
+    const copyTable = copy.slice(
+        copy.indexOf("export const PROBE_FAILURE_COPY"),
+        copy.indexOf("export function probeFailureCopy"),
+    )
+    assert.ok(copyTable.length > 0, "PROBE_FAILURE_COPY table not found")
+    assert.doesNotMatch(copyTable, /CLORO|TAVILY|SUPABASE|postgres|API_KEY/i)
+    assert.doesNotMatch(
+        probeRoute,
+        /error: `[^`]*\$\{(brandError|runError|createError)/,
+        "route must not interpolate driver errors into customer messages",
+    )
+    assert.doesNotMatch(
+        probeRoute,
+        /"CLORO_API_KEY is not configured/,
+        "the engine check must not name the secret to the customer",
+    )
+
+    // Operator detail is withheld on failure and forwarded during a run, where
+    // it is progress the customer benefits from.
+    assert.match(probeRoute, /phase_detail: failed \? null : phaseDetail/)
+
+    // Retryability is decided by the server's code, never by the client
+    // sniffing error text — that is how internal strings become load-bearing.
+    assert.match(console_, /data\.failureCode === "no_engines"/)
+    assert.match(console_, /retryBlocked: data\.retryable === false/)
+})
+
 test("a probe that dies closes the audit row it opened", async () => {
     const [guards, probeRunner, probeRoute] = await Promise.all([
         text("lib/audit/run-guards.ts"),

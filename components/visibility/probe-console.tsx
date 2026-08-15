@@ -106,7 +106,11 @@ type ProbeStatusResponse = {
     status: "running" | "completed" | "failed"
     phase?: string | null
     phase_detail?: string | null
+    /** Customer-safe sentence. The server keeps the raw detail — see failure-copy.ts. */
     failure_reason?: string | null
+    /** Why it failed, for deciding whether a retry can help. */
+    failureCode?: string | null
+    retryable?: boolean
     prompt_count?: number | null
     answer_count?: number | null
     gap_prompt_count?: number | null
@@ -216,10 +220,14 @@ export function ProbeConsole({
             stopPolling()
             setFailure({
                 message:
-                    data.failure_reason || "The probe could not be completed.",
-                unconfigured: false,
+                    data.failure_reason ||
+                    "The probe stopped before it finished. Nothing was charged.",
+                // A configuration failure cannot be retried into success, and
+                // the server decides that — the client never inspects error text
+                // to guess, which is how internal strings end up load-bearing.
+                unconfigured: data.failureCode === "no_engines",
                 retryAfterSeconds: 0,
-                retryBlocked: false,
+                retryBlocked: data.retryable === false,
             })
         },
         [advanceTo, completeOnce, stopPolling],
