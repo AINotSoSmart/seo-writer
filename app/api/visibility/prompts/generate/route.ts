@@ -24,6 +24,10 @@ interface GeneratePromptsRequest {
     competitors?: string[]
     /** ISO-639-1. Buyers ask in their own language, so the questions must be in it. */
     language?: string
+    /** Who buys it, so a prompt can open from their situation. */
+    audience?: string
+    /** What the product actually does, so a prompt can name a real constraint. */
+    coreFeatures?: string[]
     maxPrompts?: number
     /** Optional: regenerate prompts for a single scope family only */
     familyId?: string
@@ -100,23 +104,29 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Entity tokens to reject: product name and competitors
-        const entityTokens: string[] = []
+        // Only the customer's own name is contraband. Competitors are material:
+        // a buyer asking for a tool frames it against one they already use, and
+        // banning every rival name is what produced abstract category questions.
+        const subjectTokens: string[] = []
         if (body.productName?.trim()) {
-            entityTokens.push(body.productName.trim())
+            subjectTokens.push(body.productName.trim())
         }
-        if (Array.isArray(body.competitors)) {
-            for (const comp of body.competitors) {
-                if (comp?.trim()) entityTokens.push(comp.trim())
-            }
-        }
+
+        const incumbents = (body.competitors || [])
+            .map((competitor) => competitor?.trim())
+            .filter((competitor): competitor is string => Boolean(competitor))
 
         const subjectType = body.subjectType?.trim() || "software tool or service"
 
         const result = await buildBuyerPrompts(families, {
             subjectType,
             language: resolveLanguage(body.language),
-            entityTokens,
+            subjectTokens,
+            context: {
+                audience: body.audience?.trim() || undefined,
+                coreFeatures: body.coreFeatures,
+                incumbents,
+            },
             maxPrompts: body.maxPrompts,
         })
 

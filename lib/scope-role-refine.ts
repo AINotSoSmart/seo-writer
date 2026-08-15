@@ -297,14 +297,67 @@ export function applyScopeRoleRefinement(
         })
         if (after.length === before.length) continue
         if (after.length === 0) {
-            // Never leave an acquisition job with zero seeds: keep founder
-            // seeds if any were mis-marked, else keep original and warn.
+            /**
+             * Every search under this area was judged delivery, yet the area
+             * itself was judged an acquisition job. Those two judgments come
+             * from the same model call and they contradict each other — and the
+             * seed labels are the more trustworthy half, because each is judged
+             * on its own concrete words rather than on a category name that can
+             * sound market-like ("AI Developer Handoff Tool") while describing
+             * an output.
+             *
+             * Keeping it produced the worst available outcome: an area with its
+             * identifying searches stripped, still counted as a market, still
+             * generating buyer questions nobody would type. Fold it instead —
+             * unless the founder typed one of those searches themselves, in
+             * which case they outrank the classifier and the area stays.
+             */
             const founderKept = before.filter((seed) =>
                 founderSeeds.has(normalizeSeed(seed)),
             )
             if (founderKept.length > 0) {
                 family.seed_keywords = founderKept.slice(0, MAX_SEEDS_PER_FAMILY)
+                issues.push({
+                    family: family.name,
+                    message: `Kept "${family.name}" because you typed one of its searches, though the rest looked like delivery mechanics.`,
+                })
+                continue
             }
+
+            const host =
+                findFamilyByName(keptFamilies, family.parent_hint) ||
+                keptFamilies.find(
+                    (candidate) =>
+                        normalizeName(candidate.name) !== normalizeName(family.name) &&
+                        !foldAway.has(candidate.id || candidate.name),
+                )
+            if (host) {
+                host.evidence = [
+                    ...host.evidence,
+                    ...family.evidence.filter(
+                        (item) =>
+                            !host.evidence.some(
+                                (existing) =>
+                                    existing.url === item.url &&
+                                    normalizeName(existing.quote) ===
+                                        normalizeName(item.quote),
+                            ),
+                    ),
+                ].slice(0, 5)
+                host.capability_contract = mergeCapabilityContracts(
+                    host.capability_contract,
+                    family.capability_contract,
+                    host,
+                )
+                foldAway.add(family.id || family.name)
+                issues.push({
+                    family: host.name,
+                    message: `Folded "${family.name}" into "${host.name}" — every search under it described how you deliver rather than what a stranger would type to find you.`,
+                })
+                continue
+            }
+
+            // Nothing to fold into. Keep it rather than delete the only area.
             issues.push({
                 family: family.name,
                 message: `Some searches under "${family.name}" looked like delivery mechanics; review the remaining directions before continuing.`,
@@ -401,12 +454,26 @@ ${brandBlock}
 PROPOSED PRODUCT AREAS:
 ${familyBlock}
 
-For each area, assign a role:
-- acquisition_job: a job a FIRST-TIME BUYER would Google to find a product like this brand, before they know the brand. Peers that are genuinely different customer jobs stay acquisition_job even if one is narrower.
-- delivery_artifact: how the product packages or outputs the result (export format, zip, code handoff, file type, agent context pack, API response shape). Not what strangers search to discover the product.
-- workflow_step: a post-purchase step inside using the product (compile, handoff to Android Studio, publish, integrate).
+THE TEST. Apply it to every area and every seed, literally:
 
-Also label EACH seed the same way. A seed naming an output format, IDE, agent tool, export path, or packaging step is delivery_artifact or workflow_step even when its parent family is an acquisition_job.
+  Would someone who has NEVER HEARD OF THIS BRAND type this to FIND a tool like it?
+
+The searcher does not know this product exists and is describing their problem in
+their own words. A phrase that only makes sense once you are already using the
+product is NOT an acquisition job, however genuinely the brand sells it.
+
+For each area, assign a role:
+- acquisition_job: passes the test. A job a FIRST-TIME BUYER would Google to find a product like this brand, before they know the brand. Peers that are genuinely different customer jobs stay acquisition_job even if one is narrower.
+- delivery_artifact: how the product packages or outputs the result (export format, zip, code handoff, file type, agent context pack, API response shape, design tokens, generated assets). Fails the test — nobody hunting for this kind of product searches for its output format.
+- workflow_step: a post-purchase step inside using the product (compile, handoff to Android Studio, publish, integrate, sync, share with your team).
+
+Worked example, a tool that generates mobile app screens from a text prompt and then exports the code:
+- "AI Mobile UI Generator" -> acquisition_job (a stranger with this problem searches it)
+- "Screenshot to Mobile UI" -> acquisition_job (a different entry point, still a stranger's search)
+- "AI Developer Handoff Tool" -> delivery_artifact (this is what you receive AFTER choosing the product; no stranger looking for a UI generator searches it)
+- "Design Tokens Sync" -> workflow_step
+
+Also label EACH seed the same way. A seed naming an output format, IDE, agent tool, export path, or packaging step is delivery_artifact or workflow_step even when its parent family is an acquisition_job. Judge the seed on its own words, not on the area it currently sits under.
 
 When role is delivery_artifact or workflow_step, set fold_into to the exact name of the acquisition_job family it belongs under (usually parent_hint, or the brand's primary job). When role is acquisition_job, fold_into must be null.
 

@@ -165,7 +165,8 @@ whole site into that one name.
 `
             : ""
 
-    const prompt = `Identify every distinct thing this business sells.
+    const prompt = `Identify the SEARCH MARKETS this business competes in — the
+distinct things a stranger would go looking for and land on this product.
 
 Website: ${subjectUrl}
 
@@ -192,6 +193,38 @@ A family is a capability a customer would buy or use on its own — the job they
 came to get done. Name it the way its customers would name it when searching,
 not the way an engineer would describe the mechanism.
 
+THE ONE TEST EVERY FAMILY MUST PASS (apply it before emitting anything):
+
+  Would someone who has NEVER HEARD OF THIS COMPANY type this into Google or
+  ChatGPT to find a tool like this one?
+
+Read that literally. The searcher does not know this product exists, has not
+signed up, and is describing their problem in their own words. If a phrase only
+makes sense to someone who is ALREADY USING the product, it is not a family —
+it is something the product does once you are inside it.
+
+Fails the test, always — emit these as parent_hint on the real family, never as
+families of their own:
+- what the product hands you at the end: exports, handoffs, packages, file
+  formats, code output, design tokens, generated assets, reports, zips
+- what it plugs into: IDEs, agents, frameworks, editors, integrations, APIs
+- steps you take after you have already chosen the product: syncing,
+  publishing, importing, deploying, sharing with your team
+- pricing tiers, technologies, blog categories
+
+Worked example. A tool that generates mobile app screens from a text prompt and
+then lets you export the code:
+  PASSES -> "ai mobile app ui generator", "screenshot to editable ui",
+            "mobile ui templates"   (a stranger with this problem searches these)
+  FAILS  -> "developer handoff tool", "design to code export", "design tokens
+            sync"   (nobody hunting for a UI generator searches these; they are
+            how the result is delivered once you are a customer)
+Emitting the FAILS list as families points the entire audit at the wrong
+market and every downstream question measures a business this is not.
+
+When a capability is genuinely both — a real market AND how you deliver — keep
+it only if a stranger would search it as their entry point. Otherwise fold it.
+
 PEER-LEVEL RULE (important):
 Emit families at CONSISTENT depth. If one candidate is a specific case of
 another, do not present them as equals — emit the broader one as the family and
@@ -207,8 +240,6 @@ not.
 - "Generative AI Mobile UI" is a family. "Design Handoff and Implementation" is
   a step inside one, and naming it that way points the whole audit at the wrong
   competitors.
-- A pricing tier, an integration, a technology, and a blog category are not
-  families.
 - One product can still have several customer jobs a stranger would search
   separately (finding leads vs verifying emails vs sending cold email). Emit
   one family per job. Do not collapse the whole site into the brand Category.

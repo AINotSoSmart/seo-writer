@@ -700,6 +700,10 @@ export default function OnboardingPage() {
                     // founder reviews must already be in it — regenerating them
                     // later in a different language would invalidate the review.
                     language: brandData?.target_language,
+                    // Persona and features, so a question can open from the
+                    // buyer's situation instead of restating the category.
+                    audience: brandData?.audience?.primary,
+                    coreFeatures: brandData?.core_features,
                     competitors,
                 }),
             })
@@ -746,6 +750,10 @@ export default function OnboardingPage() {
                     // founder reviews must already be in it — regenerating them
                     // later in a different language would invalidate the review.
                     language: brandData?.target_language,
+                    // Persona and features, so a question can open from the
+                    // buyer's situation instead of restating the category.
+                    audience: brandData?.audience?.primary,
+                    coreFeatures: brandData?.core_features,
                     competitors,
                 }),
             })

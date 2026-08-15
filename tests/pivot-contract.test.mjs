@@ -1147,14 +1147,18 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
     }
 
     // The UI must not ship the rejection condition as a default. The cure is
-    // the four visible fields; description mints a founder fact via
+    // the visible fields; description mints a founder fact via
     // withFounderVisibleFields — not a collapsed mechanics disclosure.
     const review = await text("components/onboarding/scope-family-review.tsx")
     assert.doesNotMatch(review, /action: "Describe what your product/)
     assert.doesNotMatch(review, /customerJob: "Describe the customer job"/)
     assert.match(review, /withFounderVisibleFields/)
     assert.match(review, />What this helps with</)
-    assert.match(review, />Delivered as</)
+    // "Delivered as" is gone from the screen. Its extracted value is the same
+    // placeholder sentence for every family on every site — `contractFromEvidence`
+    // writes it unconditionally — so it asked the founder for work while
+    // teaching nobody anything. The contract still carries the field.
+    assert.doesNotMatch(review, />Delivered as</)
     assert.match(review, /isPlaceholderAction\(operation\.action\)/)
     // A null contract must still render an editor, or the family is unfixable.
     assert.doesNotMatch(review, /\{family\.capability_contract \? \(/)
@@ -2935,7 +2939,11 @@ test("confirmed business scope is the only production relevance contract", async
     assert.match(analysis, /Founder-provided target searches/)
     // Scope extraction moved out of the persona prompt into its own call.
     const scopeExtraction = await text("lib/scope-extraction.ts")
-    assert.match(scopeExtraction, /Identify every distinct thing this business sells/)
+    // The task is search markets, not an inventory of features. "Everything this
+    // business sells" is a truthful description of an export format, which is
+    // how a mobile-UI generator came back with "AI Developer Handoff Tool" as a
+    // peer market and pointed the whole audit at the wrong competitors.
+    assert.match(scopeExtraction, /Identify the SEARCH MARKETS this business competes in/)
     assert.match(scopeExtraction, /EXACT sentence copied character-for-character/)
     // The question must ask for search phrases. "What should this audit help you
     // become known for" asked for brand positioning, so founders supplied
@@ -4149,6 +4157,102 @@ test("confirmed prompts are rebound to the audit's own scope family ids", async 
     assert.match(binding, /unbound/)
     assert.match(probeRoute, /reason: "unbound_prompts"/)
     assert.match(probeRoute, /unboundPrompts/)
+})
+
+test("buyer prompts read like a person, not a blog title", async () => {
+    const [config, builder, mapper, runner] = await Promise.all([
+        text("lib/visibility/prompt-config.ts"),
+        text("lib/visibility/prompt-builder.ts"),
+        text("lib/visibility/gap-mapper.ts"),
+        text("lib/visibility/run-probe.ts"),
+    ])
+
+    // The first real run produced "Can you recommend a platform that helps me
+    // generate editable mobile UI screens and provides developer-ready
+    // implementation context?" — a brochure sentence with a question mark. A
+    // formal category question makes an assistant retreat to the safest listicle
+    // of whichever legacy tools have the most written about them, so the run
+    // measures a conversation no buyer ever had.
+
+    // 1. Intents are sentence SHAPES, not topic labels.
+    assert.match(config, /CONTEXT \+ PAIN \+ ASK/)
+    assert.match(config, /FRUSTRATED SWITCHER/)
+    assert.match(config, /CONSENSUS CHECK/)
+    assert.match(config, /FUNCTIONAL BRIDGE/)
+
+    // 2. Competitors are material, not contraband. Banning every rival name is
+    //    what left the model with nothing but abstract category questions —
+    //    comparative framing is the phrasing that makes an engine name
+    //    challengers at all.
+    assert.match(builder, /function namesSubject/)
+    assert.doesNotMatch(builder, /function namesTrackedEntity/)
+    assert.match(builder, /incumbents\?: string\[\]/)
+
+    // 3. Realism is a POSITIVE structural test, never a banned-word list — this
+    //    repo has twice been burned by blocklists that caught the previous
+    //    examples and missed the next.
+    assert.match(builder, /function readsLikeAPerson/)
+    assert.match(builder, /\\b\(i\|i'm/)
+
+    // 4. The persona the founder confirmed finally reaches the generator. It was
+    //    collected, stored, used by the writer months later, and never consulted
+    //    by the stage that decides what gets measured.
+    assert.match(runner, /coreFeatures: persona\.core_features/)
+    assert.match(runner, /audience: persona\.audience\?\.primary/)
+
+    // 5. A competitor the prompt itself named must not count as a rival for that
+    //    prompt, or our own prompt text tops the leaderboard.
+    assert.match(mapper, /namedInPrompt\(competitor\.name\)/)
+})
+
+test("a delivery artifact can never become a search market", async () => {
+    const [extraction, refine, mechanics, scopeStep] = await Promise.all([
+        text("lib/scope-extraction.ts"),
+        text("lib/scope-role-refine.ts"),
+        text("lib/scope-mechanics.ts"),
+        text("components/onboarding/steps/scope-step.tsx"),
+    ])
+
+    // This has regressed twice. A mobile-UI generator came back with
+    // "AI Developer Handoff Tool" and "design to code export" as peer markets —
+    // those are what you receive AFTER choosing the product, and every buyer
+    // question generated from them measures a business the customer is not in.
+    //
+    // The test must live in EXTRACTION, not only in the later refinement pass:
+    // refinement is a second opinion from the same model, and on this exact
+    // case it agreed the area was a real market while stripping its seeds.
+    for (const [name, source] of [
+        ["extraction", extraction],
+        ["role refinement", refine],
+    ]) {
+        assert.match(
+            source,
+            /NEVER HEARD OF THIS (COMPANY|BRAND)/,
+            `${name} must apply the stranger test`,
+        )
+    }
+    assert.match(extraction, /developer handoff tool/i)
+    assert.match(refine, /delivery_artifact/)
+
+    // When every search under an area is judged delivery, the area is delivery —
+    // the seed labels and the area label come from one model call, and the seeds
+    // are judged on their own concrete words. Keeping it produced an area with
+    // its identifying searches stripped that still generated questions.
+    assert.match(refine, /every search under it described how you deliver/)
+    // Unless the founder typed one of them; they outrank the classifier.
+    assert.match(refine, /because you typed one of its searches/)
+
+    // Continue must not depend on the founder touching a field. Requiring EVERY
+    // operation to carry evidence made folding produce an unsatisfiable form:
+    // the button unlocked only once an edit minted a founder-confirmed fact.
+    assert.match(
+        mechanics,
+        /!contract\.operations\.some\(\(operation\) => operation\.evidenceRefs\.length > 0\)/,
+    )
+
+    // Pipeline self-narration is not customer copy. Matches the rendered label,
+    // not the comment that records why it was removed.
+    assert.doesNotMatch(scopeStep, /Extraction notes \(\{/)
 })
 
 test("a probe measures the customer's market, not a default one", async () => {

@@ -987,6 +987,120 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (fourteenth pass) - the prompts were SEO titles with question marks
+
+**What the first generated set looked like:**
+
+> "Can you recommend a platform that helps me generate editable mobile UI screens
+> and provides developer-ready implementation context?"
+
+Nobody types that. It is a brochure sentence in interrogative form, and the
+problem is not only realism: **a formal category question produces a worse
+measurement.** Fed one, an assistant retreats to the safest top-of-funnel
+listicle naming whichever legacy tools have the most written about them. The run
+then reports the customer absent from a conversation no buyer was ever having.
+
+**Three causes, all fixed.**
+
+1. **The intent briefs were topic labels.** "asks for alternatives in this
+   category" — so the model wrote the tidiest sentence matching that
+   description, which is an SEO title. They are now sentence *shapes*:
+   CONTEXT + PAIN + ASK, FRUSTRATED SWITCHER, CONSENSUS CHECK, FUNCTIONAL
+   BRIDGE, STUCK MID-JOB. Same keys and weights, so nothing downstream moved.
+
+2. **Competitors were banned from prompt text.** `entityTokens` rejected any
+   prompt naming the subject *or any tracked rival*, which removed the most
+   natural way a buyer asks for anything — against a tool they already use. It
+   is also the phrasing that makes an engine list challengers instead of
+   reciting the same three leaders. Now `namesSubject` bans the customer's own
+   brand and domains only; competitors are supplied as `incumbents`, as
+   material.
+
+3. **The confirmed persona never reached the generator.** `audience`,
+   `core_features` and the rest were collected in onboarding, stored, consulted
+   by the writer months later — and never by the stage that decides what gets
+   measured. The generator saw a family name, a description and seeds. It now
+   receives who buys it, what the product does, and which tools those buyers
+   already use.
+
+**Two safeguards that came with it.**
+
+`readsLikeAPerson` requires a first-person opener or a named incumbent — a
+**positive structural test**, not a banned-word list, because this repo has twice
+been burned by blocklists that caught the previous examples and missed the next.
+The prohibited SEO openings and marketing words live in the instruction, where
+the model can weigh them, rather than in a filter that would silently drop good
+prompts.
+
+And `summarisePrompt` now **excludes a competitor the prompt itself named** from
+that prompt's rival counts. Allowing incumbents in prompt text means the named
+tool appears in the answer by construction; counting it would put our own prompt
+text at the top of the rival leaderboard. Absence of the *subject* is unaffected,
+because nothing lets a prompt name the customer.
+
+**Checked upstream first.** `flipaeo-visibility` is worse in the same direction:
+its literal instruction is *"A short, generic search query without any brand
+names"*, 30-100 characters, *"generic, high-volume industry queries"*, example
+`best CRM for small business`. Nothing to port.
+
+**Unverified.** This is a prompt-judgment change; the only proof is generating a
+set and reading it. 96 contract tests pass, `npx tsc --noEmit` clean, build clean.
+
+### 2026-08-15 (thirteenth pass) - the scope screen stops asking for things nobody can answer
+
+Four defects from a live Drawgle run, all on the confirm-scope screen.
+
+**1. "Delivered as" was always the same placeholder.** `contractFromEvidence`
+runs for every family and writes `"Product or service described on the website"`
+unconditionally — see the eleventh pass and `ROADMAP.md` §7c. Asking the founder
+to confirm a field that is identical on every site, for every brand, taught
+nobody anything. Removed from the screen; the contract still carries it, because
+the database requires `capability-v1` and the writer reads it.
+
+**2. Continue was disabled until any field was touched.** `mechanicsGaps`
+required **every** operation to carry an evidence reference. Role refinement
+folds a delivery family into its parent by appending the child's operations, and
+the merge base can be `fallbackCapabilityContract`, whose one operation has no
+references — so a complete-looking screen was unsatisfiable, and the button
+unlocked the instant an edit minted a founder-confirmed fact. Nothing about the
+business had changed; the founder had performed a ritual that repaired an
+internal structure. The rule is now "at least one operation is evidence-backed".
+
+**3. Extraction notes were customer copy.** "Folded X into Y", "Removed
+non-acquisition searches" — the pipeline narrating its own confusion to someone
+who only wants to know whether the list is right. Still produced, still returned,
+no longer rendered.
+
+**4. Delivery artifacts became search markets — the regression that keeps
+returning.** Drawgle came back with `AI Developer Handoff Tool`, `design to code
+export` and `design tokens sync` as peer markets. Nobody hunting for an AI mobile
+UI generator searches those; they are what you receive after choosing it.
+
+The refinement pass designed to catch this **ran, and agreed with the model**: it
+stripped the delivery-ish seeds and kept the family. That is the worst available
+outcome — an area with its identifying searches removed, still counted as a
+market, still generating buyer questions nobody would type.
+
+Two changes. **The stranger test now lives in extraction**, not only in
+refinement: *would someone who has never heard of this company type this to find
+a tool like it?*, with the Drawgle failure named in the prompt as a worked
+example, and the task reframed from "identify everything this business sells" —
+a description an export format satisfies truthfully — to "identify the search
+markets this business competes in". The same test and example were added to the
+role classifier. **And an area whose every search was judged delivery is now
+folded**, because the seed labels and the area label come from one model call and
+the seeds are judged on their own concrete words rather than on a category name
+that can sound market-like while describing an output. A founder-typed search
+still outranks the classifier and keeps the area.
+
+**Honest limit:** the fold would not have caught Drawgle on its own — the model
+also labelled `developer handoff tool` an acquisition seed. The prompt work is
+the primary fix and it is a judgment change, so the only proof is re-running
+Drawgle and checking `AI Developer Handoff Tool` is gone.
+
+95 contract tests pass, `tsc` clean, build clean. A new test pins the stranger
+test in both prompts, the fold, the Continue rule and the removed notes.
+
 ### 2026-08-15 (twelfth pass) - the waiting screen was showing internal errors
 
 **What the founder saw on the second live attempt:**

@@ -68,12 +68,26 @@ export function mechanicsGaps(
     } else if (contract.operations.some((operation) => isPlaceholderAction(operation.action))) {
         gaps.push("placeholder_action")
     }
-    // Facts and evidenceRefs fail together in practice — a fact is only ever
-    // minted alongside the ref that points at it — so they report as one gap
-    // the founder can actually act on.
+    /**
+     * At least one operation must be evidence-backed — not every one.
+     *
+     * This used to read `operations.some(op => op.evidenceRefs.length === 0)`,
+     * i.e. a single unbacked operation failed the whole contract. That is not a
+     * rule the founder can satisfy, because operations are not something they
+     * can see or edit: role refinement folds a delivery family into its parent
+     * by *appending* the child's operations, and the merge base can be
+     * `fallbackCapabilityContract`, whose one operation has no references at
+     * all. The observable symptom was Continue sitting disabled on a screen with
+     * three complete-looking categories, then enabling the instant any field was
+     * touched — because editing mints a founder-confirmed fact on the first
+     * operation. Nothing about the business had changed; the founder had simply
+     * performed the ritual that repaired an internal structure.
+     *
+     * Facts and refs still fail together, and are still reported as one gap.
+     */
     if (
         contract.facts.length === 0 ||
-        contract.operations.some((operation) => operation.evidenceRefs.length === 0)
+        !contract.operations.some((operation) => operation.evidenceRefs.length > 0)
     ) {
         gaps.push("no_confirmed_facts")
     }

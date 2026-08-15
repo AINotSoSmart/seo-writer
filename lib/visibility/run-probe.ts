@@ -367,11 +367,13 @@ export async function runVisibilityProbe(
 
         // ── 1. Prompts ──────────────────────────────────────────────────────
         await report("building_prompts", `${families.length} confirmed areas`)
-        const entityTokens = [
-            options.subjectName,
-            ...options.subjectDomains,
-            ...competitors.map((competitor) => competitor.name),
-        ].filter(Boolean)
+        // Only the customer's own identity is contraband. Competitor names are
+        // material: a buyer asking for a tool almost always frames it against
+        // one they already use, and banning every rival name is what left the
+        // generator writing abstract category questions.
+        const subjectTokens = [options.subjectName, ...options.subjectDomains].filter(
+            Boolean,
+        )
 
         let promptsToUse: import("./prompt-builder").BuyerPrompt[] = []
         let promptBuildErrors: string[] = []
@@ -379,10 +381,30 @@ export async function runVisibilityProbe(
         if (options.prompts && options.prompts.length > 0) {
             promptsToUse = options.prompts
         } else {
+            const { data: brandRow } = await supabase
+                .from("brand_details")
+                .select("brand_data")
+                .eq("id", options.brandId)
+                .maybeSingle()
+            const persona = (brandRow?.brand_data ?? {}) as {
+                audience?: { primary?: string }
+                core_features?: string[]
+            }
+
             const built = await buildBuyerPrompts(families, {
                 subjectType: options.subjectType,
                 language: options.language,
-                entityTokens,
+                subjectTokens,
+                // The persona the founder confirmed during onboarding, finally
+                // reaching the stage that decides what gets measured. It was
+                // collected, stored, used by the writer months later, and never
+                // consulted by the generator — which is why the questions read
+                // like category descriptions rather than someone's situation.
+                context: {
+                    audience: persona.audience?.primary,
+                    coreFeatures: persona.core_features,
+                    incumbents: competitors.map((competitor) => competitor.name),
+                },
                 maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
             })
             promptsToUse = built.prompts

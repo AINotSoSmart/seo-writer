@@ -22,36 +22,61 @@
  * engine answers with a list of named products — an informational prompt that
  * returns an explanation mentions nobody, and an absence there means very
  * little.
+ *
+ * ## Each brief is a SENTENCE SHAPE, not a topic
+ *
+ * They used to read like topic labels ("asks for alternatives in this
+ * category"), and the model dutifully produced the tidiest sentence matching
+ * that description — which is an SEO title with a question mark on it:
+ *
+ *     "Can you recommend a platform that helps me generate editable mobile UI
+ *      screens and provides developer-ready implementation context?"
+ *
+ * Nobody types that. It is marketing copy in interrogative form, and it is
+ * actively harmful as a measurement: fed a formal, category-level question, an
+ * answer engine returns the safe top-of-funnel listicle naming whichever legacy
+ * tools have the most written about them. The run then reports the customer
+ * absent from a conversation no buyer was ever having.
+ *
+ * Real prompts are: who I am + what is going wrong + what I want. First person,
+ * specific, often naming a tool the buyer already uses. So each brief below is
+ * the literal structure to fill in, with an incumbent where the shape calls for
+ * one — see `buildFamilyPrompt` for the rules that enforce it.
  */
 export const PROMPT_INTENTS = [
     {
         key: "recommendation",
         weight: 3,
-        brief: "asks the assistant to recommend a tool or provider for a specific job",
+        brief:
+            "CONTEXT + PAIN + ASK. \"I'm [who I am] using [current stack]. I'm trying to [job], but [what is going wrong]. What tool handles this?\" The buyer states their situation before they ask.",
         articleType: "commercial" as const,
     },
     {
         key: "alternatives",
         weight: 2,
-        brief: "asks for alternatives or options in this category, without naming any brand",
+        brief:
+            "FRUSTRATED SWITCHER. \"[Incumbent] is [too expensive / too heavy / missing X] for [my situation]. What is a simpler alternative that just does [core job]?\" Name a real incumbent — this is the phrasing that makes an engine list challengers.",
         articleType: "commercial" as const,
     },
     {
         key: "comparison",
         weight: 2,
-        brief: "asks how to choose between options, or what to look for when choosing",
+        brief:
+            "CONSENSUS CHECK. \"What are most [persona] using now for [job] instead of [legacy incumbent]?\" Asks what the community has moved to, which pushes the engine to synthesise recent discussion rather than recite old documentation.",
         articleType: "commercial" as const,
     },
     {
         key: "problem",
         weight: 2,
-        brief: "describes the underlying problem in the buyer's own words and asks how to solve it",
+        brief:
+            "FUNCTIONAL BRIDGE. \"Is there something that takes [input] and gives me [output] without [the step I hate]?\" Pure capability, described in the buyer's own mechanics — no product category named.",
         articleType: "informational" as const,
     },
     {
         key: "howto",
         weight: 1,
-        brief: "asks how to actually carry out the job",
+        brief:
+            "STUCK MID-JOB. \"I need to [specific task] — [constraint that makes it awkward]. How do people do this?\" A real task with a real obstacle, not a tutorial title.",
         articleType: "howto" as const,
     },
 ] as const

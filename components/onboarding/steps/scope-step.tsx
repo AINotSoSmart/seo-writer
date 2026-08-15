@@ -105,22 +105,13 @@ export function ScopeStep({
                 />
             )}
 
-            {scopeAnalysisIssues.length > 0 && !waiting && (
-                <details className="text-xs text-stone-500">
-                    <summary className="cursor-pointer hover:text-stone-700">
-                        Extraction notes ({scopeAnalysisIssues.length})
-                    </summary>
-                    <ul className="mt-1.5 list-disc space-y-1 pl-4">
-                        {scopeAnalysisIssues.map((issue, index) => (
-                            <li key={`${issue.family || "scope"}-${index}`}>
-                                {issue.family ? `${issue.family}: ` : ""}
-                                {issue.message}
-                            </li>
-                        ))}
-                    </ul>
-                </details>
-            )}
-
+            {/* Extraction notes used to render here. They are our pipeline
+                narrating itself — "Folded X into Y", "Removed non-acquisition
+                searches" — which reads as a confession of confusion to someone
+                who only wants to know whether the list is right. The founder
+                can see the list; that is the whole review. The notes are still
+                produced and still returned, they simply are not customer copy.
+                They remain available on the response for debugging. */}
             {scopeReady && (
                 <details className="rounded-lg border border-stone-200 px-3 py-2.5">
                     <summary className="cursor-pointer text-xs text-stone-600 hover:text-stone-900">

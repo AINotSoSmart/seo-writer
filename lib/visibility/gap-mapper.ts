@@ -128,10 +128,29 @@ export function summarisePrompt(
 ): PromptOutcome {
     const parsed = prompt.answers.map((answer) => answer.parsed)
 
+    /**
+     * A competitor the PROMPT named cannot count as a rival for that prompt.
+     *
+     * Buyer prompts may now name incumbents — "Figma is overkill for this, what
+     * else…" — because that is how people actually ask and it is what makes an
+     * engine list challengers. The cost is that the named tool then appears in
+     * the answer by construction, and counting it would put our own prompt text
+     * at the top of the rival leaderboard. That is measuring ourselves.
+     *
+     * Absence of the *subject* is unaffected: nothing lets a prompt name the
+     * customer's own brand, so "they were not mentioned" stays a real finding.
+     */
+    const promptText = prompt.text.toLowerCase().replace(/[^a-z0-9]/g, "")
+    const namedInPrompt = (name: string): boolean => {
+        const needle = name.toLowerCase().replace(/[^a-z0-9]/g, "")
+        return needle.length >= 4 && promptText.includes(needle)
+    }
+
     const rivalCounts = new Map<string, { name: string; url: string; answersNaming: number }>()
     for (const answer of parsed) {
         for (const competitor of answer.competitorMentions) {
             if (competitor.mentionCount === 0) continue
+            if (namedInPrompt(competitor.name)) continue
             const existing = rivalCounts.get(competitor.competitorId)
             if (existing) {
                 existing.answersNaming++

@@ -155,7 +155,9 @@ export function findScopeBlockers(
             blockers.push({
                 familyId,
                 familyName,
-                field: gaps[0] === "missing_delivery_mode" ? "deliveryMode" : "action",
+                // Both remaining gaps are fixed by editing the one line the
+                // founder can see; "Delivered as" is no longer on the screen.
+                field: "description",
                 message: MECHANICS_GAP_COPY[gaps[0]],
             })
         }
@@ -248,11 +250,20 @@ function withFounderConfirmedOperation(
  * still a placeholder, description also becomes the action so a fact mints.
  * A richer extracted action is left alone.
  */
+/**
+ * Keeps the capability contract in step with the one line the founder edits.
+ *
+ * `deliveryMode` is no longer among them. It was a field only this screen ever
+ * wrote, its extracted value is the same placeholder sentence for every family
+ * on every site, and no founder could say what belonged in it — so it asked for
+ * work while teaching nobody anything. The stored value is carried through
+ * untouched: the database requires a `capability-v1` object and the writer's
+ * frozen contract still reads it.
+ */
 function withFounderVisibleFields(
     contract: CapabilityContract,
     familyId: string,
     description: string,
-    deliveryMode: string,
 ): CapabilityContract {
     const current = contract.operations[0]
     const action =
@@ -261,8 +272,8 @@ function withFounderVisibleFields(
             : current.action
     return withFounderConfirmedOperation(
         // Typed by a human, so it is no longer a placeholder whatever it was a
-        // moment ago — and the warning above must stop showing.
-        { ...contract, deliveryMode, mechanicsSource: "founder" },
+        // moment ago.
+        { ...contract, mechanicsSource: "founder" },
         familyId,
         0,
         { customerJob: description, action },
@@ -615,7 +626,6 @@ export function ScopeFamilyReview({
                                                 contract,
                                                 familyKey,
                                                 event.target.value,
-                                                contract.deliveryMode,
                                             ),
                                             priority: index,
                                         })
@@ -623,40 +633,6 @@ export function ScopeFamilyReview({
                                     placeholder="One line — who it's for"
                                     className="mt-0.5 h-7 border-0 bg-transparent px-1.5 text-xs text-stone-500 shadow-none placeholder:text-stone-300"
                                 />
-                            </div>
-
-                            <div>
-                                <p className={fieldLabelClass}>Delivered as</p>
-                                {/* No warning banner here, deliberately. The value is
-                                    a placeholder for EVERY family — the scope prompt
-                                    is never asked for mechanics, so
-                                    `contractFromEvidence` manufactures all of them —
-                                    and a warning on every row is decoration, not
-                                    signal. The hint text does the work instead, and
-                                    `mechanicsSource` records the provenance for the
-                                    day extraction produces something real. */}
-                                <Input
-                                    id={`scope-field-${familyKey}-deliveryMode`}
-                                    value={contract.deliveryMode}
-                                    onChange={(event) =>
-                                        replace(index, {
-                                            ...family,
-                                            capability_contract: withFounderVisibleFields(
-                                                contract,
-                                                familyKey,
-                                                family.description,
-                                                event.target.value,
-                                            ),
-                                            priority: index,
-                                        })
-                                    }
-                                    placeholder="e.g. Browser software, done-for-you, app, API"
-                                    className="mt-0.5 h-7 border-0 bg-transparent px-1.5 text-xs text-stone-500 shadow-none placeholder:text-stone-300"
-                                />
-                                <p className="px-1.5 text-[10px] leading-relaxed text-stone-400">
-                                    Worth correcting — this and the line above shape the
-                                    buyer questions we ask the AI engines.
-                                </p>
                             </div>
 
                             {family.evidence.length > 0 ? (

@@ -99,24 +99,85 @@ function isPlausiblePrompt(text: string): boolean {
 }
 
 /**
- * True when the prompt names the subject brand or a tracked competitor.
+ * True when the prompt names the customer's own brand or domain.
  *
- * Such a prompt is not a discovery question. "Is Acme good for X" measures
- * whether the engine has an opinion about Acme, which is a different product
- * than the one being built here: we are asking whether a buyer who has never
- * heard of Acme is told about it.
+ * That prompt is not a discovery question. "Is Acme good for X" measures
+ * whether the engine has an opinion about Acme; we are asking whether a buyer
+ * who has never heard of Acme gets told about it.
+ *
+ * **Competitors are deliberately NOT banned here.** They were, and it was the
+ * single biggest cause of prompts no human would type: the most natural way a
+ * buyer asks for a tool is against one they already use — "Figma is overkill
+ * for this, what else…" — and forbidding every rival name left the model with
+ * nothing but abstract category questions to write. Comparative framing is also
+ * what makes an answer engine list challengers rather than recite the same
+ * three market leaders.
  */
-function namesTrackedEntity(text: string, entityTokens: string[]): boolean {
+function namesSubject(text: string, subjectTokens: string[]): boolean {
     const flattened = text.toLowerCase().replace(/[^a-z0-9]/g, "")
-    return entityTokens.some((token) => {
+    return subjectTokens.some((token) => {
         const needle = token.toLowerCase().replace(/[^a-z0-9]/g, "")
         return needle.length >= 4 && flattened.includes(needle)
     })
 }
 
+/**
+ * True when the prompt is written from a person's situation rather than as a
+ * topic.
+ *
+ * A positive structural test, not a banned-words list — this repo has twice
+ * been burned by blocklists that caught the previous examples and missed the
+ * next. It asks for evidence that a human is speaking: a first-person opener,
+ * or a named tool they already use. Both are facts about the string.
+ *
+ * The prompts that failed review had neither. "Can you recommend a platform
+ * that helps me generate editable mobile UI screens and provides
+ * developer-ready implementation context?" is a brochure sentence with a
+ * question mark, and a formal category question makes an assistant retreat to
+ * the safest possible listicle — so it measures a conversation no buyer had.
+ */
+function readsLikeAPerson(text: string, incumbents: string[]): boolean {
+    const lower = text.toLowerCase()
+    // Word boundaries are load-bearing: without them "i" matches inside
+    // "editable" and every candidate passes, making this test decorative.
+    const firstPerson =
+        /\b(i|i'm|im|i've|ive|we|we're|were|my|our|us)\b/.test(lower) ||
+        /\bwhat (are|is) (people|everyone|most|devs|developers|teams|founders)\b/.test(
+            lower,
+        )
+    const namesAnIncumbent = incumbents.some((name) => {
+        const needle = name.toLowerCase().replace(/[^a-z0-9]/g, "")
+        return (
+            needle.length >= 4 &&
+            lower.replace(/[^a-z0-9]/g, "").includes(needle)
+        )
+    })
+    return firstPerson || namesAnIncumbent
+}
+
+/** Everything about the business that makes a prompt sound like a person. */
+export interface PromptBrandContext {
+    /** Plain description of the product — "browser tool that generates app screens". */
+    subjectType: string
+    /** Who buys it, in the customer's own words. */
+    audience?: string
+    /** What it actually does, a few concrete capabilities. */
+    coreFeatures?: string[]
+    /**
+     * Tools the buyer already uses or is trying to move off.
+     *
+     * These may be NAMED in a prompt, and that is the point. Comparative
+     * framing — "X is too expensive for what I need, what else does Y?" — is
+     * how buyers actually ask, and it is the phrasing that makes an engine list
+     * challengers instead of reciting the same three market leaders. The
+     * customer's OWN brand is still banned; see `namesSubject`.
+     */
+    incumbents?: string[]
+}
+
 function buildFamilyPrompt(
     family: AuditScopeFamily,
-    subjectType: string,
+    context: PromptBrandContext,
     language: string,
 ): string {
     const operations = family.capabilityContract.operations
@@ -128,26 +189,50 @@ function buildFamilyPrompt(
         (intent) => `- ${intent.key} (${intent.weight} prompts): ${intent.brief}`,
     ).join("\n")
 
-    return `You write the questions real buyers type into AI assistants like ChatGPT when they are trying to solve a problem — before they know which products exist.
+    const incumbents = (context.incumbents || []).filter(Boolean).slice(0, 6)
+    const features = (context.coreFeatures || []).filter(Boolean).slice(0, 6)
 
-BUSINESS AREA (confirmed by the customer, do not widen or reinterpret it)
+    return `You write the messages real people type into ChatGPT when they are stuck and want a tool recommendation. Not search queries. Not blog titles. Messages.
+
+BUSINESS AREA (confirmed by the customer — do not widen or reinterpret it)
 Name: ${family.name}
 What it covers: ${family.description}
 Customer's own words for it: ${family.seedKeywords.join(", ")}
-Delivered as: ${subjectType}
+Delivered as: ${context.subjectType}
 Jobs this area actually performs:
 ${operations || "- (no operations recorded)"}
-
-WRITE ${PROMPTS_PER_FAMILY} PROMPTS, distributed exactly like this:
+${features.length ? `What the product actually does:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `Who buys it: ${context.audience}\n` : ""}${
+        incumbents.length
+            ? `Tools these buyers already use or are trying to replace (you MAY name these):\n${incumbents.map((name) => `- ${name}`).join("\n")}\n`
+            : ""
+    }
+WRITE ${PROMPTS_PER_FAMILY} PROMPTS, in these shapes, this many of each:
 ${intents}
 
+THE SHAPE OF A REAL PROMPT
+  who I am / what I'm using  +  what is going wrong  +  what I want
+
+Real:  "I'm building an MVP and I've got a folder of app screenshots. Is there
+        something that turns them into editable Figma components so I don't
+        redraw everything by hand?"
+Fake:  "What is the best tool to turn a static screenshot into an editable
+        mobile UI design?"
+
+The second one is a blog title with a question mark. It is not just unrealistic
+— it produces a WORSE measurement, because a formal category question makes the
+assistant fall back to the safest possible listicle of whichever legacy tools
+have the most written about them.
+
 RULES
-- Write what a buyer types, not what a marketer would search. Full questions or requests, not keyword fragments.
-- Never name any brand, product, or company — including the customer's. These prompts test who the assistant names on its own.
-- Stay strictly inside the business area above. A prompt about an adjacent problem is worse than no prompt.
-- Each prompt must stand alone with no prior context.
-- Vary the buyer's situation and constraints; do not write ${PROMPTS_PER_FAMILY} rewordings of one question.
-- Write every prompt in ${languageName(language)}. This is the language the customer's buyers use, and it is the language the answer engines will be asked in. Do not translate the business area above — quote its terms as the customer wrote them.`
+- First person. Start from the buyer's situation: "I'm…", "I've got…", "I need…", "We're on…", or "What are people using…".
+- Every prompt carries at least one concrete anchor: a named tool they already use, a stack or platform, a number, a file format, a deadline, or a specific annoyance. A prompt with no anchor is not a real message.
+- You MAY name the tools listed above as incumbents. Do NOT name the customer's own product — these prompts test whether an assistant recommends it unprompted, and naming it gives away the answer.
+- BANNED openings, because they are SEO artifacts rather than things people type: "What is the best…", "What are the best…", "Top tools for…", "How to [x] without [y]".
+- BANNED words, because no one types them at a chatbot: streamlined, seamless, cutting-edge, robust, efficiently, leverage, solution that provides, developer-ready, best-in-class.
+- Stay strictly inside the business area above. An adjacent problem is worse than no prompt.
+- Each prompt stands alone with no prior context, and reads like one message — one or two sentences.
+- Vary the situation. ${PROMPTS_PER_FAMILY} rewordings of one question measures one question.
+- Write every prompt in ${languageName(language)}. Do not translate the business area above — quote its terms as the customer wrote them.`
 }
 
 const RESPONSE_SCHEMA = {
@@ -187,8 +272,13 @@ export async function buildBuyerPrompts(
          * answer, which is the wrong measurement for a brand selling in Spain.
          */
         language?: string
-        /** Brand tokens to reject: the subject and every tracked competitor. */
-        entityTokens: string[]
+        /**
+         * Only the customer's own brand and domains. Competitors belong in
+         * `context.incumbents`, where they are material rather than contraband.
+         */
+        subjectTokens: string[]
+        /** What the product is, who buys it, and what they use today. */
+        context?: Omit<PromptBrandContext, "subjectType">
         maxPrompts?: number
     },
 ): Promise<PromptBuildResult> {
@@ -222,7 +312,10 @@ export async function buildBuyerPrompts(
                                 {
                                     text: buildFamilyPrompt(
                                         family,
-                                        options.subjectType,
+                                        {
+                                            ...(options.context || {}),
+                                            subjectType: options.subjectType,
+                                        },
                                         options.language ?? DEFAULT_LANGUAGE,
                                     ),
                                 },
@@ -252,7 +345,11 @@ export async function buildBuyerPrompts(
                         (row) =>
                             isPlausiblePrompt(row.text) &&
                             validIntents.has(row.intent) &&
-                            !namesTrackedEntity(row.text, options.entityTokens),
+                            !namesSubject(row.text, options.subjectTokens) &&
+                            readsLikeAPerson(
+                                row.text,
+                                options.context?.incumbents || [],
+                            ),
                     )
                     .map((row) => {
                         const intent = PROMPT_INTENTS.find(
