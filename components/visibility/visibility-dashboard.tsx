@@ -33,12 +33,21 @@ import {
     ChevronDown,
     ChevronRight,
     ExternalLink,
+    Handshake,
     Info,
     Layers,
+    PenLine,
 } from "lucide-react"
 
 import { AnswerEvidence } from "./answer-evidence"
+import { MethodPanel } from "./method-panel"
 import { VizTokens } from "./viz-tokens"
+import {
+    PAGE_SHAPE_LABELS,
+    type CitationBreakdown,
+    type PageShape,
+    type SourceType,
+} from "@/lib/visibility/citation-classifier"
 
 export interface DashboardPrompt {
     id: string
@@ -76,7 +85,22 @@ export interface DashboardSummary {
     leadRate: number
     presenceRate: number
     rivalLeaderboard: Array<{ name: string; url: string; promptsNaming: number }>
-    citedHosts: Array<{ host: string; count: number }>
+    citedHosts: Array<{
+        host: string
+        count: number
+        answersNaming: number
+        sourceType: SourceType
+    }>
+    citationBreakdown?: CitationBreakdown
+    keyPages?: Array<{
+        url: string
+        title: string
+        host: string
+        pageShape: PageShape
+        sourceType: SourceType
+        count: number
+        answersNaming: number
+    }>
 }
 
 export interface DashboardProps {
@@ -240,6 +264,8 @@ export function VisibilityDashboard(props: DashboardProps) {
     const barMax = Math.max(brandNamed, ...rivalRows.map((rival) => rival.promptsNaming), 1)
 
     const hostMax = Math.max(...summary.citedHosts.map((host) => host.count), 1)
+    const breakdown = summary.citationBreakdown
+    const keyPages = summary.keyPages ?? []
 
     const toggle = (id: string) => {
         setExpanded((current) => {
@@ -292,6 +318,13 @@ export function VisibilityDashboard(props: DashboardProps) {
                                 {creditsUsed} credits
                             </span>
                         )}
+                    </div>
+
+                    <div className="mt-4">
+                        <MethodPanel
+                            subjectName={subjectName}
+                            unclassifiedShare={breakdown?.unclassifiedShare ?? 0}
+                        />
                     </div>
                 </header>
 
@@ -484,7 +517,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </section>
                 )}
 
-                {/* ── 4. Sources (sequential) ──────────────────────────── */}
+                {/* ── 4. Sources — what the answers were built from ────── */}
                 {summary.citedHosts.length > 0 && (
                     <section className="mt-12">
                         <h2 className="text-xl font-semibold">
@@ -495,13 +528,146 @@ export function VisibilityDashboard(props: DashboardProps) {
                             here is what being recommended looks like underneath.
                         </p>
 
-                        <div className="mt-5 rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
+                        {breakdown && breakdown.totalCitations > 0 && (
+                            <>
+                                {/*
+                                 * The actionable split, and the reason this section exists:
+                                 * a source you can publish to yourself is a different kind
+                                 * of work from one someone else has to publish about you.
+                                 */}
+                                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                                    <div className="rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
+                                        <div className="flex items-center gap-2 text-sm font-medium">
+                                            <PenLine
+                                                className="size-4 text-[var(--viz-series-1)]"
+                                                aria-hidden
+                                            />
+                                            You can publish this
+                                        </div>
+                                        <div className="mt-2 text-3xl font-semibold tabular-nums">
+                                            {breakdown.publishShare}%
+                                        </div>
+                                        <p className="mt-1 text-sm text-[var(--viz-ink-secondary)]">
+                                            of citations are your pages or a competitor&apos;s —
+                                            answerable by writing better pages yourself.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
+                                        <div className="flex items-center gap-2 text-sm font-medium">
+                                            <Handshake
+                                                className="size-4 text-[var(--viz-series-2)]"
+                                                aria-hidden
+                                            />
+                                            You have to earn this
+                                        </div>
+                                        <div className="mt-2 text-3xl font-semibold tabular-nums">
+                                            {breakdown.earnShare}%
+                                        </div>
+                                        <p className="mt-1 text-sm text-[var(--viz-ink-secondary)]">
+                                            review sites, communities and press — a placement, not
+                                            a publishing job.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/*
+                                 * Stated at the top of the breakdown, not buried. Above a
+                                 * third, the categories describe the limits of our lists
+                                 * more than they describe the market, and the reader has to
+                                 * know that before reading the chart.
+                                 */}
+                                {breakdown.unclassifiedShare >= 33 && (
+                                    <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--viz-warning)]/40 bg-[var(--viz-warning)]/10 p-4 text-sm text-[var(--viz-ink-secondary)]">
+                                        <Info
+                                            className="mt-0.5 size-4 shrink-0 text-[var(--viz-warning-ink)]"
+                                            aria-hidden
+                                        />
+                                        <span>
+                                            <strong className="font-semibold text-[var(--viz-ink)]">
+                                                {breakdown.unclassifiedShare}% of citations
+                                                couldn&apos;t be categorised.
+                                            </strong>{" "}
+                                            Treat the categories below as a rough shape and read the
+                                            source list itself.
+                                        </span>
+                                    </p>
+                                )}
+
+                                <div className="mt-5 rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
+                                    <ul className="space-y-3">
+                                        {breakdown.byType.map((tally) => (
+                                            <li key={tally.sourceType}>
+                                                <div className="flex items-baseline justify-between gap-3">
+                                                    <span className="text-sm font-medium text-[var(--viz-ink)]">
+                                                        {tally.label}
+                                                    </span>
+                                                    <span className="shrink-0 text-sm tabular-nums text-[var(--viz-ink-secondary)]">
+                                                        {tally.citations} from {tally.hosts}{" "}
+                                                        {tally.hosts === 1 ? "site" : "sites"}
+                                                    </span>
+                                                </div>
+                                                <span className="viz-track mt-1.5 block w-full">
+                                                    <span
+                                                        className="viz-bar block"
+                                                        style={{
+                                                            width: `${Math.max(
+                                                                (tally.citations /
+                                                                    breakdown.totalCitations) *
+                                                                    100,
+                                                                1.5,
+                                                            )}%`,
+                                                            background:
+                                                                tally.actionability === "publish"
+                                                                    ? "var(--viz-series-1)"
+                                                                    : tally.actionability === "earn"
+                                                                      ? "var(--viz-series-2)"
+                                                                      : "var(--viz-muted-mark)",
+                                                        }}
+                                                    />
+                                                </span>
+                                                <p className="mt-1 text-xs text-[var(--viz-ink-muted)]">
+                                                    {tally.action}
+                                                </p>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <div className="mt-5 flex flex-wrap items-center gap-4 border-t border-[var(--viz-hairline)] pt-3 text-xs text-[var(--viz-ink-muted)]">
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span
+                                                className="inline-block size-2.5 rounded-sm"
+                                                style={{ background: "var(--viz-series-1)" }}
+                                            />
+                                            Publish
+                                        </span>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span
+                                                className="inline-block size-2.5 rounded-sm"
+                                                style={{ background: "var(--viz-series-2)" }}
+                                            />
+                                            Earn
+                                        </span>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span
+                                                className="inline-block size-2.5 rounded-sm"
+                                                style={{ background: "var(--viz-muted-mark)" }}
+                                            />
+                                            Neither
+                                        </span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        <h3 className="mt-8 text-sm font-medium">Most-cited sites</h3>
+                        <div className="mt-3 rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
                             <ul className="space-y-2.5">
                                 {summary.citedHosts.slice(0, 10).map((host) => {
-                                    const owned = subjectDomains.some(
-                                        (domain) =>
-                                            host.host === domain || host.host.endsWith(`.${domain}`),
-                                    )
+                                    const owned = host.sourceType === "owned"
+                                    // Host only. Appending the category truncated
+                                    // the hostname at 11rem — and the grouped
+                                    // breakdown directly above already carries
+                                    // category, so the suffix cost information in
+                                    // order to repeat information.
                                     return (
                                         <BarRow
                                             key={host.host}
@@ -510,7 +676,9 @@ export function VisibilityDashboard(props: DashboardProps) {
                                             max={hostMax}
                                             total={host.count}
                                             color={
-                                                owned ? "var(--viz-series-1)" : "var(--viz-seq-350)"
+                                                owned
+                                                    ? "var(--viz-series-1)"
+                                                    : "var(--viz-seq-350)"
                                             }
                                             emphasis={owned}
                                             suffix=""
@@ -519,6 +687,63 @@ export function VisibilityDashboard(props: DashboardProps) {
                                 })}
                             </ul>
                         </div>
+                    </section>
+                )}
+
+                {/* ── 4b. The pages that assemble recommendations ───────── */}
+                {keyPages.length > 0 && (
+                    <section className="mt-12">
+                        <h2 className="text-xl font-semibold">
+                            The lists the engines read
+                        </h2>
+                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
+                            Best-of lists, comparisons and reviews the answers were built from.
+                            This is how an engine assembles a recommendation — which makes these
+                            the most directly actionable rows in the report.
+                        </p>
+
+                        <ul className="mt-5 divide-y divide-[var(--viz-hairline)] overflow-hidden rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)]">
+                            {keyPages.map((page) => (
+                                <li key={page.url} className="p-4">
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <a
+                                            href={page.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer nofollow"
+                                            className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--viz-series-1)] hover:underline"
+                                        >
+                                            <span className="truncate">
+                                                {page.title || page.url}
+                                            </span>
+                                            <ExternalLink className="size-3 shrink-0" aria-hidden />
+                                        </a>
+                                        <span className="shrink-0 rounded-full border border-[var(--viz-hairline)] px-2 py-0.5 text-xs text-[var(--viz-ink-muted)]">
+                                            {PAGE_SHAPE_LABELS[page.pageShape]}
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-[var(--viz-ink-muted)]">
+                                        {page.host} · cited in {page.count}{" "}
+                                        {page.count === 1 ? "answer" : "answers"}
+                                        {page.answersNaming === 0 ? (
+                                            <span className="text-[var(--viz-critical)]">
+                                                {" "}
+                                                · none of them named you
+                                            </span>
+                                        ) : (
+                                            <span>
+                                                {" "}
+                                                · {page.answersNaming} named you
+                                            </span>
+                                        )}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="mt-3 text-xs text-[var(--viz-ink-muted)]">
+                            &ldquo;None of them named you&rdquo; describes the answers, not the
+                            page — we haven&apos;t fetched these pages, so we can&apos;t say
+                            whether a given one mentions you. Open a few and check.
+                        </p>
                     </section>
                 )}
 

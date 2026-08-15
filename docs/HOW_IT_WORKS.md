@@ -351,6 +351,27 @@ opens underneath — word for word, with your name and your competitors' names
 highlighted where they appear. If a claim isn't backed by the answer below it,
 the claim is wrong. That's the point: it's checkable.
 
+**The bit that turns it into work.** The report doesn't just list which sites
+the engines cited — it says what kind of site each one is, and whether you can
+do something about it yourself. Two numbers up top: how much of what the engines
+read is stuff you could *publish* (your pages, a competitor's page you could
+answer better), and how much you have to *earn* (a G2 listing, a Reddit thread,
+press). Then a list of the actual "best X" articles and comparison pages the
+answers were built from — because that's how an engine decides who to
+recommend, and getting onto those is a concrete job.
+
+Two honesty notes on that. When it says "none of the answers citing this page
+named you", that's about the answers, not the page — we haven't opened those
+pages, so we can't tell you whether a given one mentions you. And when it can't
+work out what kind of site something is, it says "uncategorised" rather than
+guessing; if that number gets above a third, the page tells you to ignore the
+categories and read the list instead.
+
+**"How these numbers work"** — a button at the top opens the arithmetic behind
+every figure on the page, plus a plain list of what this measurement *can't*
+tell you. Most tools hide that. Showing it is the cheapest trust you'll ever
+buy, and the reader who checks is the reader who buys.
+
 **What it does not do.** It does not track you daily, and it will not tell you
 "visibility went 12% to 31%". Ask an engine the same question twice and you can
 get two different answers — so a change between two runs is mostly noise, and

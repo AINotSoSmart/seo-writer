@@ -399,7 +399,10 @@ export async function runVisibilityProbe(
             domains: options.subjectDomains,
         }
         const byPrompt = new Map<string, ProbedPrompt>()
-        const citationsByPromptEngine = new Map<string, Map<AiEngine, Array<{ url: string }>>>()
+        const citationsByPromptEngine = new Map<
+            string,
+            Map<AiEngine, Array<{ url: string; title?: string }>>
+        >()
         const resultRows: any[] = []
 
         for (const { job, answer, taskId } of successful) {
@@ -463,11 +466,21 @@ export async function runVisibilityProbe(
         }
 
         const prompts = [...byPrompt.values()]
+        const classifyContext = {
+            subjectDomains: options.subjectDomains,
+            competitorDomains: options.competitors
+                .map((competitor) => competitor.domain)
+                .filter((domain): domain is string => Boolean(domain)),
+        }
         const outcomes = new Map<string, PromptOutcome>()
         for (const prompt of prompts) {
             outcomes.set(
                 prompt.id,
-                summarisePrompt(prompt, citationsByPromptEngine.get(prompt.id)!),
+                summarisePrompt(
+                    prompt,
+                    citationsByPromptEngine.get(prompt.id)!,
+                    classifyContext,
+                ),
             )
         }
 

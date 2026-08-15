@@ -3797,3 +3797,89 @@ test("the dashboard shows the evidence, not just the verdict", async () => {
     assert.match(dashboard, /Icon: AlertCircle/)
     assert.match(dashboard, /<meta\.Icon/)
 })
+
+test("the citation classifier ages by structure, not by a growing domain list", async () => {
+    // Upstream's classifier is a curated domain list, and it shows exactly how
+    // that decays: its "editorial" list carries motortrend.com, caranddriver.com
+    // and jalopnik.com, and its "forum" list carries bimmerpost.com and
+    // teslamotorsclub.com — one automotive customer's report, patched host by
+    // host. This repo already learned that lesson twice with content-quality
+    // regex lists: each round catches the previous examples and misses the next.
+    //
+    // So the ordering is load-bearing: facts, then structure, then a short list,
+    // then an honest "unclassified".
+    const classifier = await text("lib/visibility/citation-classifier.ts")
+
+    // Facts from the audit come first and are not list-driven.
+    assert.match(classifier, /if \(isSameOrSubdomain\(host, context\.subjectDomains\)\) return "owned"/)
+    assert.match(
+        classifier,
+        /if \(isSameOrSubdomain\(host, context\.competitorDomains\)\) return "competitor"/,
+    )
+
+    // Structural rules exist and do not depend on any list.
+    assert.match(classifier, /INSTITUTIONAL_TLD\s*=\s*\//)
+    assert.match(classifier, /LISTICLE_PATH\s*=\s*\//)
+    assert.match(classifier, /COMPARISON_PATH\s*=\s*\//)
+
+    // The honest default is a real category, and its share is reported.
+    assert.match(classifier, /return "unclassified"/)
+    assert.match(classifier, /unclassifiedShare/)
+
+    // Curated lists stay small. A list that grows past this is the signal that
+    // the rule is wrong, not that the list is short.
+    for (const listName of [
+        "COMMUNITY_HOSTS",
+        "SOCIAL_VIDEO_HOSTS",
+        "REVIEW_MARKETPLACE_HOSTS",
+        "PUBLISHER_HOSTS",
+    ]) {
+        const block = classifier.match(new RegExp(`const ${listName} = \\[([\\s\\S]*?)\\]`))
+        assert.ok(block, `${listName} is missing`)
+        const entries = block[1].split(",").filter((line) => line.trim().length > 0)
+        assert.ok(
+            entries.length <= 15,
+            `${listName} has ${entries.length} entries — curated lists must stay small; add a structural signal instead`,
+        )
+    }
+
+    // Every category carries an action. A count with no next step is trivia.
+    assert.match(classifier, /SOURCE_TYPE_ACTIONS/)
+    assert.match(classifier, /export function actionabilityOf/)
+})
+
+test("cited sources report co-occurrence, never a claim about the page", async () => {
+    // We have not fetched the cited pages, so "this listicle omits you" is a
+    // claim the data cannot support. What IS supportable is that the answers
+    // citing it did not name you. The wording has to keep those apart.
+    const [mapper, dashboard] = await Promise.all([
+        text("lib/visibility/gap-mapper.ts"),
+        text("components/visibility/visibility-dashboard.tsx"),
+    ])
+
+    assert.match(mapper, /answersNaming/)
+    assert.match(mapper, /co-occurrence/)
+    // The UI states the limit next to the claim. Whitespace-tolerant: this is
+    // prose inside JSX and the formatter is free to wrap it anywhere.
+    assert.match(dashboard, /describes the answers, not the\s+page/)
+    assert.match(dashboard, /haven&apos;t fetched these pages/)
+})
+
+test("the method panel reads its values from the code that computes them", async () => {
+    // Ansvisor's best idea: the formula dialog imports the scoring weights, so
+    // the explanation cannot drift from the implementation. A hand-written
+    // description of the arithmetic is a doc that goes stale silently.
+    const panel = await text("components/visibility/method-panel.tsx")
+
+    assert.match(panel, /import \{ PROMPT_INTENTS, PROMPTS_PER_FAMILY \} from "@\/lib\/visibility\/prompt-builder"/)
+    assert.match(panel, /from "@\/lib\/visibility\/citation-classifier"/)
+    assert.match(panel, /PROMPT_INTENTS\.map/)
+
+    // It must state limits, not only justify numbers.
+    assert.match(panel, /What this measurement cannot tell you/)
+    assert.match(panel, /we do not show a trend line/)
+    assert.match(panel, /uncategorised/)
+
+    // And it must not invent a composite score to explain.
+    assert.match(panel, /There is no visibility score/)
+})

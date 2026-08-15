@@ -976,6 +976,67 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (third pass) - citations became actions, and the numbers explain themselves
+
+Two additions, both aimed at the same problem: a founder reading this report for
+the first time has no reason to believe it.
+
+**1. Citation source classification** (`lib/visibility/citation-classifier.ts`).
+
+The report already listed the hosts the engines cited. A host list is trivia; a
+host list that says *what kind of place that is and what you can do about it* is
+a content brief. Every citation now carries a `sourceType`, a `pageShape` read
+off the URL, and an `actionability` of publish / earn / neither.
+
+The design was set by studying how upstream's version decays. Ansvisor
+classifies against curated domain lists, and the lists carry their history:
+`motortrend.com`, `caranddriver.com` and `jalopnik.com` sit in `editorial`;
+`bimmerpost.com`, `rennlist.com` and `teslamotorsclub.com` sit in `forum`. That
+is one automotive customer's report patched host by host, and the next customer
+in fintech starts from zero. This repo has already lost that argument twice with
+content-quality regex lists.
+
+So rules are ordered by how well they age — facts from the audit, then
+structural signals (TLD, URL path shape), then deliberately tiny lists, then an
+honest `unclassified` whose share is reported as a first-class number. A
+contract test caps each curated list at 15 entries so the sixteenth host forces
+a real decision instead of a quiet append.
+
+The most useful output is the new "lists the engines read" section: the best-of
+pages, comparisons and reviews the answers were assembled from. That is the
+mechanism by which an engine produces a recommendation, and it is directly
+actionable in a way a visibility percentage is not.
+
+**The claim there is carefully bounded.** We do not fetch cited pages, so "this
+listicle omits you" is unsupported. What is supported — and what is shown — is
+how many of the *answers* citing that page named the brand. The UI states the
+distinction underneath the list rather than letting the reader infer the
+stronger claim.
+
+**2. The method panel** (`components/visibility/method-panel.tsx`).
+
+Lifted from Ansvisor's `_formula-dialog.tsx`, whose good idea is structural: the
+weights in their dialog are imported from the scoring module, so the explanation
+cannot drift from the implementation. Ours imports `PROMPT_INTENTS` and the
+classifier's labels for the same reason, enforced by a contract test.
+
+It spends its space differently, because there is nothing to audit — every
+number on this report is already a count or a plain proportion. Instead it
+states what each verdict means precisely, how questions are generated, where the
+classifier stops being able to tell, and four things the measurement cannot do
+at all (including why there is no trend line).
+
+**A correction to my earlier position.** I refused to port upstream's weighted
+0-100 visibility score on the grounds that a composite is unfalsifiable. That
+was half right. The composite is unfalsifiable *on its own* — but Ansvisor pairs
+it with a formula dialog and a per-metric breakdown sheet, which is a legitimate
+answer I dismissed too quickly. The plain proportions stay, because they are
+simpler and equally checkable; the transparency mechanism was worth taking.
+
+Still unmeasured: no `CLORO_API_KEY`, so the classifier has never seen a real
+citation. The curated lists in particular are guesses until a real run tells us
+what share lands in `unclassified`.
+
 ### 2026-08-15 (second pass) - the probe was measuring the wrong surface
 
 **The bug.** The first pass called the OpenAI Responses API and Gemini with
@@ -3418,10 +3479,50 @@ else.
 
 ### The dashboard
 
-`components/visibility/visibility-dashboard.tsx`. Six sections, in claim ->
-evidence order: headline, rivals, per-surface split, cited sources, every
-question (expandable to the verbatim answer with brands marked in place), and
-the cluster plan.
+`components/visibility/visibility-dashboard.tsx`. Seven sections, in claim ->
+evidence order: headline, rivals, per-surface split, cited sources (grouped by
+what kind of source and what you can do about it), the shaped pages the engines
+read, every question (expandable to the verbatim answer with brands marked in
+place), and the cluster plan.
+
+**Citation classification** (`lib/visibility/citation-classifier.ts`) exists to
+turn a source list into a content decision. Rules are ordered by how well they
+age:
+
+1. **Facts from the audit** — `owned` and `competitor` come from the audit's own
+   domains and competitor set. Never a guess.
+2. **Structure** — `.edu`/`.gov`, and the URL's own path shape (`/best-…`,
+   `/…-vs-…`, `/…-alternatives`). Works on hosts nobody has catalogued.
+3. **Short curated lists** — Reddit, YouTube, G2 and a handful more. A contract
+   test caps each at 15 entries: a list that needs a 16th means the rule is
+   wrong, not the list.
+4. **`unclassified`** — the honest default, reported as a first-class number.
+   Above 33% the dashboard says the breakdown describes the limits of our lists
+   rather than the market.
+
+Ansvisor's classifier is the counter-example that set the design. Its
+`editorial` list contains `motortrend.com`, `caranddriver.com` and
+`jalopnik.com`; its `forum` list contains `bimmerpost.com` and
+`teslamotorsclub.com` — one automotive customer's report, patched host by host.
+That is the same decay this repo already hit twice with content-quality regex
+lists.
+
+The axis that matters is **publish vs earn**: a source you can write yourself is
+a different job from one someone else has to publish about you. That split is
+borrowed from upstream's own opportunity generator rather than its classifier.
+
+**"Cited alongside you" is not "mentions you."** Each source carries how many of
+the citing *answers* named the brand. We have not fetched the pages, so a claim
+about a page's contents would be unsupported; the UI says so directly under the
+list.
+
+**The method panel** (`components/visibility/method-panel.tsx`) is Ansvisor's
+best idea, adapted: their formula dialog imports the scoring weights from the
+scoring module so the explanation cannot drift from the implementation. Here the
+panel imports `PROMPT_INTENTS` and the classifier's own labels for the same
+reason. It differs in what it spends space on — there is no composite to audit,
+so it documents what each verdict means precisely, where the classifier stops
+working, and what the measurement cannot tell you at all.
 
 Chart forms follow the data's job. The rival chart is an **emphasis** form (the
 brand in the accent hue, competitors in de-emphasis gray) because one series is
@@ -3457,6 +3558,18 @@ fixed and always ship with an icon and a text label, never colour alone.
     They are measurements of different systems that diverge by up to 32 points.
     `ai_probe_results.surface` exists so every read path can group by it, and
     the dashboard reports per surface for the same reason.
-36. **Never re-run a probe as a retry.** `runProbeTask` is `maxAttempts: 1`
+36. **A curated domain list is a smell, not a feature.** If the classifier
+    needs another host to get one customer's report right, the rule is wrong.
+    Add a structural signal or let the citation stay `unclassified` — the
+    contract test caps each list at 15 entries precisely so this decision has
+    to be made deliberately.
+37. **Never say a page omits the brand.** We do not fetch cited pages. The
+    supportable claim is about the answers that cited it, and the wording in
+    both the summary and the UI has to keep those apart.
+38. **The method panel reads from the code, never from prose.** Any number or
+    definition it states must be imported from the module that computes it. A
+    hand-written formula is a doc that goes stale in silence — which is worse
+    than having no panel, because the reader trusted it.
+39. **Never re-run a probe as a retry.** `runProbeTask` is `maxAttempts: 1`
     deliberately: a retry re-submits every Cloro task and bills the credits a
     second time for a run whose partial answers are already stored.
