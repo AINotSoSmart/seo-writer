@@ -9,13 +9,34 @@
  * The probe reads the audit's *confirmed* scope families, which is what keeps
  * it honest: prompts measure the business the customer confirmed, not one a
  * model inferred from the homepage.
+ *
+ * ## Two ways in
+ *
+ * `auditId` probes an audit that already exists — a re-run from the dashboard.
+ *
+ * `brandId` is the onboarding path, and it opens the audit itself. Onboarding
+ * has a confirmed brand and confirmed prompts but no audit record, and the old
+ * answer — run the Google harvest to get one — meant the questions the customer
+ * had just reviewed were never asked. `create_customer_audit_with_scope` is the
+ * whole bridge: it writes the `topical_audits` row and freezes
+ * `brand_scope_families` into `audit_scope_families` in one transaction, and it
+ * does not start the harvest (the old route triggers that separately). The
+ * probe then finalizes the same row through `finalize_audit_run`, so a
+ * visibility run produces a normal completed audit that `/audit` and
+ * `/content-plan` already know how to read.
  */
 
 import { NextRequest, NextResponse } from "next/server"
 import { tasks } from "@trigger.dev/sdk/v3"
+import { randomBytes } from "crypto"
 
 import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
+import {
+    auditRetryState,
+    failAuditRun,
+    reclaimStaleAuditRuns,
+} from "@/lib/audit/run-guards"
 import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import type { CapabilityContract } from "@/lib/writer/article-contract"
 import {
@@ -29,6 +50,7 @@ import {
     DEFAULT_PROMPTS_PER_RUN,
     MAX_PROMPTS_PER_RUN,
 } from "@/lib/visibility/prompt-builder"
+import { bindPromptsToAuditScope } from "@/lib/visibility/prompt-binding"
 import type { runProbeTask } from "@/trigger/run-probe"
 
 export const maxDuration = 60
@@ -36,8 +58,18 @@ export const maxDuration = 60
 /** A run with no writer for this long is abandoned, not slow. */
 const PROBE_STALE_AFTER_MINUTES = 45
 
+/**
+ * Recorded on the audit row this route opens. `finalize_audit_run` overwrites
+ * it with the same value, so the policy version of a visibility audit reads the
+ * same whether it is inspected mid-run or after.
+ */
+const PROBE_POLICY_VERSION = "ai-probe-v1.0.0"
+
 interface ProbeRequest {
-    auditId: string
+    /** Probe an existing audit. Either this or `brandId` is required. */
+    auditId?: string
+    /** Open a fresh audit from the brand's confirmed scope, then probe it. */
+    brandId?: string
     engines?: AiEngine[]
     maxPrompts?: number
     /** User-confirmed buyer prompts. If omitted, prompts will be built from scope families. */
@@ -61,6 +93,157 @@ function hostOf(url: string): string | null {
     }
 }
 
+/**
+ * Opens the audit an onboarding probe will write into.
+ *
+ * Reuses a `running` row whose scope still matches rather than creating a
+ * second one: `create_customer_audit_with_scope` refuses outright while one
+ * exists, so without this a probe that failed to enqueue would lock the brand
+ * out of every audit path — Google harvest included — until the stale sweep
+ * caught up 40 minutes later.
+ */
+async function openAuditForBrand(
+    db: any,
+    userId: string,
+    brandId: string,
+): Promise<
+    | { ok: true; auditId: string; opened: boolean }
+    | { ok: false; status: number; body: Record<string, unknown> }
+> {
+    const { error: readinessError } = await db.rpc("assert_harvest_schema_ready")
+    if (readinessError) {
+        console.error("[Probe API] Database contract is not ready:", readinessError)
+        return {
+            ok: false,
+            status: 503,
+            body: {
+                error:
+                    "The audit service is temporarily unavailable while its database is being updated. No probe was started.",
+            },
+        }
+    }
+
+    const { data: brand } = await db
+        .from("brand_details")
+        .select("id, scope_confirmed_at, scope_contract_version, scope_hash")
+        .eq("id", brandId)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .maybeSingle()
+    if (!brand) {
+        return { ok: false, status: 404, body: { error: "Brand not found" } }
+    }
+
+    if (!brand.scope_confirmed_at || !brand.scope_hash) {
+        return {
+            ok: false,
+            status: 422,
+            body: {
+                error:
+                    "Confirm the product and service areas before probing. Prompts built from an unconfirmed scope measure the wrong business.",
+                reason: "no_scope",
+            },
+        }
+    }
+    if (brand.scope_contract_version !== "confirmed-business-scope-v2") {
+        return {
+            ok: false,
+            status: 409,
+            body: {
+                error:
+                    "Your saved product-area review predates verified business mechanics. Review and confirm it once before probing.",
+                reason: "stale_scope_contract",
+            },
+        }
+    }
+
+    // A run the worker never picked up must become a retryable failure before
+    // anything here reads or creates.
+    await reclaimStaleAuditRuns(db, userId, brandId)
+
+    const { data: running } = await db
+        .from("topical_audits")
+        .select("id, scope_hash")
+        .eq("user_id", userId)
+        .eq("brand_id", brandId)
+        .eq("run_status", "running")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+    if (running?.id) {
+        // Same brand, same confirmed scope, no results yet: adopt it. A
+        // mismatched hash would fail at finalize with "Brand scope changed
+        // while the audit was running", so close it now with a reason rather
+        // than 40 minutes from now with a cryptic one.
+        if (running.scope_hash === brand.scope_hash) {
+            return { ok: true, auditId: running.id, opened: false }
+        }
+        await failAuditRun(
+            db,
+            running.id,
+            "scope_changed",
+            "The confirmed product areas changed while this audit was open, so it was closed without results. Nothing was charged.",
+        )
+    }
+
+    // Repeated failures must not become repeated Cloro credits. Shared with the
+    // harvest route so one brand has one budget, not one per entry point.
+    const retry = await auditRetryState(db, userId, brandId)
+    if (retry.retryBlocked) {
+        return {
+            ok: false,
+            status: 429,
+            body: {
+                error:
+                    "This audit has failed several times. We have stopped retrying so it cannot keep consuming resources. Email support@flipaeo.com and we will look at the run.",
+                ...retry,
+            },
+        }
+    }
+    if (retry.retryAfterSeconds > 0) {
+        return {
+            ok: false,
+            status: 429,
+            body: {
+                error: `A previous audit failed. You can try again in ${Math.ceil(retry.retryAfterSeconds / 60)} minute(s).`,
+                ...retry,
+            },
+        }
+    }
+
+    const { data: auditId, error: createError } = await db.rpc(
+        "create_customer_audit_with_scope",
+        {
+            p_user_id: userId,
+            p_brand_id: brandId,
+            p_public_token: randomBytes(24).toString("hex"),
+            p_policy_version: PROBE_POLICY_VERSION,
+        },
+    )
+    if (createError || !auditId) {
+        console.error("[Probe API] Could not open the audit:", createError)
+        return {
+            ok: false,
+            status: 500,
+            body: {
+                error: `Could not open an audit for this brand: ${createError?.message ?? "unknown error"}`,
+            },
+        }
+    }
+
+    // The RPC is shared with the harvest, so it opens on that pipeline's first
+    // phase. A visibility run never does competitor discovery; say what is
+    // actually happening, or the audit row narrates a pipeline that is not
+    // running.
+    await db
+        .from("topical_audits")
+        .update({ generation_phase: "probing_ai_answers", updated_at: new Date().toISOString() })
+        .eq("id", auditId)
+
+    return { ok: true, auditId: String(auditId), opened: true }
+}
+
 export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const {
@@ -76,14 +259,32 @@ export async function POST(req: NextRequest) {
     } catch {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
-    if (!body.auditId) {
-        return NextResponse.json({ error: "auditId is required" }, { status: 400 })
+    if (!body.auditId && !body.brandId) {
+        return NextResponse.json(
+            { error: "auditId or brandId is required" },
+            { status: 400 },
+        )
+    }
+    // An omitted `prompts` means "build them from the confirmed scope"; an empty
+    // array means the caller confirmed nothing, and quietly generating a set
+    // nobody reviewed is the exact substitution this endpoint exists to stop.
+    if (Array.isArray(body.prompts) && body.prompts.length === 0) {
+        return NextResponse.json(
+            {
+                error:
+                    "Confirm at least one buyer question before probing. An empty confirmation cannot be replaced with questions nobody reviewed.",
+                reason: "no_prompts",
+            },
+            { status: 400 },
+        )
     }
 
     const engines = body.engines?.length
         ? body.engines
         : configuredEngines({ allowApiSurface: body.allowApiSurface })
 
+    // Checked before anything is created. An unconfigured engine must not leave
+    // an open audit row behind that blocks the next attempt.
     if (engines.length === 0) {
         return NextResponse.json(
             {
@@ -98,10 +299,24 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient() as any
 
+    // Resolve the audit — adopted, or opened here from the confirmed brand.
+    let auditId: string
+    let openedAuditHere = false
+    if (body.auditId) {
+        auditId = body.auditId
+    } else {
+        const opened = await openAuditForBrand(admin, user.id, body.brandId!)
+        if (!opened.ok) {
+            return NextResponse.json(opened.body, { status: opened.status })
+        }
+        auditId = opened.auditId
+        openedAuditHere = opened.opened
+    }
+
     const { data: audit } = await admin
         .from("topical_audits")
-        .select("id, user_id, brand_id, status, input_competitors")
-        .eq("id", body.auditId)
+        .select("id, user_id, brand_id, input_competitors")
+        .eq("id", auditId)
         .eq("user_id", user.id)
         .single()
     if (!audit) {
@@ -113,7 +328,7 @@ export async function POST(req: NextRequest) {
     const { data: live } = await admin
         .from("ai_probe_runs")
         .select("id, started_at")
-        .eq("audit_id", body.auditId)
+        .eq("audit_id", auditId)
         .eq("status", "running")
         .gte(
             "started_at",
@@ -122,7 +337,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
     if (live) {
         return NextResponse.json(
-            { runId: live.id, alreadyRunning: true },
+            { runId: live.id, auditId, alreadyRunning: true },
             { status: 202 },
         )
     }
@@ -139,9 +354,9 @@ export async function POST(req: NextRequest) {
     const { data: scopeRows } = await admin
         .from("audit_scope_families")
         .select(
-            "id, name, description, seed_keywords, priority, parent_scope_family_id, capability_contract",
+            "id, brand_scope_family_id, name, description, seed_keywords, priority, parent_scope_family_id, capability_contract",
         )
-        .eq("audit_id", body.auditId)
+        .eq("audit_id", auditId)
         .eq("user_id", user.id)
         .order("priority", { ascending: true })
 
@@ -165,6 +380,47 @@ export async function POST(req: NextRequest) {
         parentScopeFamilyId: row.parent_scope_family_id ?? null,
         capabilityContract: row.capability_contract as CapabilityContract,
     }))
+
+    /**
+     * Confirmed prompts arrive carrying whatever id the onboarding screen had —
+     * a brand family uuid, a `family-1` placeholder, or the family's name — and
+     * none of those is the `audit_scope_families.id` the persistence path
+     * requires. Rebinding here is what makes the confirmed questions reach the
+     * delivery tables; without it every gap is rejected by `finalize_audit_run`
+     * inside a catch, and the run reports success having written nothing.
+     */
+    let confirmedPrompts = body.prompts
+    if (confirmedPrompts?.length) {
+        const { bound, unbound } = bindPromptsToAuditScope(
+            confirmedPrompts,
+            scopeRows.map((row: any) => ({
+                id: row.id,
+                brandScopeFamilyId: row.brand_scope_family_id ?? null,
+                name: row.name,
+                seedKeywords: Array.isArray(row.seed_keywords) ? row.seed_keywords : [],
+            })),
+        )
+        if (unbound.length > 0) {
+            if (openedAuditHere) {
+                await failAuditRun(
+                    admin,
+                    auditId,
+                    "prompts_unbound",
+                    "Confirmed questions could not be matched to the confirmed product areas.",
+                )
+            }
+            return NextResponse.json(
+                {
+                    error:
+                        `${unbound.length} confirmed question${unbound.length === 1 ? "" : "s"} could not be matched to a confirmed product area, so the run was not started. Regenerate the questions for those areas and try again.`,
+                    reason: "unbound_prompts",
+                    unboundPrompts: unbound.map((prompt) => prompt.text),
+                },
+                { status: 409 },
+            )
+        }
+        confirmedPrompts = bound
+    }
 
     // Competitors come from the audit's own working set — the ones that
     // produced readable coverage, persisted by `run-audit.ts` — so the
@@ -207,7 +463,7 @@ export async function POST(req: NextRequest) {
         .insert({
             user_id: user.id,
             brand_id: brand.id,
-            audit_id: body.auditId,
+            audit_id: auditId,
             subject_name: brand.product_name || subjectHost || "the brand",
             subject_domains: subjectHost ? [subjectHost] : [],
             competitors,
@@ -218,6 +474,14 @@ export async function POST(req: NextRequest) {
         .select("id, public_token")
         .single()
     if (runError || !run) {
+        if (openedAuditHere) {
+            await failAuditRun(
+                admin,
+                auditId,
+                "probe_run_not_created",
+                `Could not open a probe run: ${runError?.message ?? "unknown"}`,
+            )
+        }
         return NextResponse.json(
             { error: `Could not open a probe run: ${runError?.message ?? "unknown"}` },
             { status: 500 },
@@ -229,7 +493,7 @@ export async function POST(req: NextRequest) {
             runId: run.id,
             userId: user.id,
             brandId: brand.id,
-            auditId: body.auditId,
+            auditId,
             subjectName: brand.product_name || subjectHost || "the brand",
             subjectDomains: subjectHost ? [subjectHost] : [],
             subjectType: brand.product_identity?.literally || "Product or service",
@@ -237,7 +501,7 @@ export async function POST(req: NextRequest) {
             families,
             engines,
             maxPrompts,
-            prompts: body.prompts,
+            prompts: confirmedPrompts,
         })
 
         await admin
@@ -248,26 +512,41 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
             {
                 runId: run.id,
+                auditId,
                 publicToken: run.public_token,
                 engines: engines.map((engine) => ({
                     id: engine,
                     label: ENGINE_SPECS[engine].label,
                     surface: ENGINE_SPECS[engine].surface,
                 })),
-                estimatedCredits: estimateCredits(maxPrompts, engines),
+                estimatedCredits: estimateCredits(
+                    confirmedPrompts?.length || maxPrompts,
+                    engines,
+                ),
                 maxPrompts,
             },
             { status: 202 },
         )
     } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
         await admin
             .from("ai_probe_runs")
             .update({
                 status: "failed",
-                failure_reason: `Could not enqueue: ${error instanceof Error ? error.message : String(error)}`,
+                failure_reason: `Could not enqueue: ${message}`,
                 completed_at: new Date().toISOString(),
             })
             .eq("id", run.id)
+        // An audit opened for a probe that never enqueued would otherwise stay
+        // `running` and block every audit path for this brand.
+        if (openedAuditHere) {
+            await failAuditRun(
+                admin,
+                auditId,
+                "queue_failed",
+                `The probe could not be queued: ${message}`,
+            )
+        }
         return NextResponse.json(
             { error: "Could not enqueue the probe." },
             { status: 500 },
@@ -293,7 +572,7 @@ export async function GET(req: NextRequest) {
     const { data: run } = await admin
         .from("ai_probe_runs")
         .select(
-            "id, status, phase, phase_detail, failure_reason, prompt_count, answer_count, gap_prompt_count, credits_used, engine_ledger, started_at, completed_at, duration_ms",
+            "id, audit_id, status, phase, phase_detail, failure_reason, prompt_count, answer_count, gap_prompt_count, credits_used, engine_ledger, started_at, completed_at, duration_ms",
         )
         .eq("id", runId)
         .eq("user_id", user.id)

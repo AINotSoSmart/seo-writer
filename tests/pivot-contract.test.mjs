@@ -880,20 +880,23 @@ test("SERP harvest uses bounded concurrency and a per-seed timeout under the Tav
 })
 
 test("audit Trigger maxDuration is 30 minutes with matching stale reclaim", async () => {
-    const [audit, prospect, route] = await Promise.all([
+    const [audit, prospect, guards] = await Promise.all([
         text("trigger/run-audit.ts"),
         text("trigger/run-prospect-audit.ts"),
-        text("app/api/topical-audit/route.ts"),
+        // The sweep moved out of the route when the visibility probe became a
+        // second way to open a run. Both entry points share the one definition.
+        text("lib/audit/run-guards.ts"),
     ])
     assert.match(audit, /maxDuration:\s*1800/)
     assert.match(prospect, /maxDuration:\s*1800/)
-    assert.match(route, /AUDIT_STALE_AFTER_MINUTES\s*=\s*40/)
+    assert.match(guards, /AUDIT_STALE_AFTER_MINUTES\s*=\s*40/)
 })
 
 test("a failed audit cannot be restarted by refreshing the page", async () => {
-    const [route, console_] = await Promise.all([
+    const [route, console_, guards] = await Promise.all([
         text("app/api/topical-audit/route.ts"),
         text("components/audit/audit-console.tsx"),
+        text("lib/audit/run-guards.ts"),
     ])
 
     // GET must report a failed run. finalize_audit_run only sets
@@ -905,8 +908,8 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
 
     // POST must refuse to re-run inside the cooldown, and stop entirely after
     // repeated failures.
-    assert.match(route, /AUDIT_RETRY_COOLDOWN_MINUTES\s*=\s*\d+/)
-    assert.match(route, /MAX_FAILURES_PER_COOLDOWN\s*=\s*\d+/)
+    assert.match(guards, /AUDIT_RETRY_COOLDOWN_MINUTES\s*=\s*\d+/)
+    assert.match(guards, /MAX_FAILURES_PER_COOLDOWN\s*=\s*\d+/)
     assert.match(route, /retryAfterSeconds/)
     assert.match(route, /status:\s*429/)
 
@@ -922,18 +925,24 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
     assert.match(recover, /if \(data\.status === "not_found"\) \{\s*await startAudit\(\)/)
 
     // GET and POST must derive the cooldown from one helper, so the countdown
-    // the customer sees is the same rule the endpoint enforces.
-    assert.match(route, /async function retryState/)
-    assert.equal((route.match(/retryState\(db, user\.id, brandId\)/g) || []).length, 2)
+    // the customer sees is the same rule the endpoint enforces. The helper is
+    // shared with the visibility probe, which opens runs through the same RPC —
+    // two copies of a cooldown drift, and the one that drifts lets a customer
+    // pay twice.
+    assert.match(guards, /export async function auditRetryState/)
+    assert.equal(
+        (route.match(/auditRetryState\(db, user\.id, brandId\)/g) || []).length,
+        2,
+    )
 
     // An abandoned `running` row must self-heal into a retryable failure.
     // Without this a stuck row blocked POST ("Audit already running") and made
     // GET report "running" forever, which the UI rendered as an endless loader.
-    assert.match(route, /async function reclaimStaleRuns/)
-    assert.match(route, /AUDIT_STALE_AFTER_MINUTES\s*=\s*\d+/)
-    assert.match(route, /failure_code:\s*"worker_never_ran"/)
+    assert.match(guards, /export async function reclaimStaleAuditRuns/)
+    assert.match(guards, /AUDIT_STALE_AFTER_MINUTES\s*=\s*\d+/)
+    assert.match(guards, /failure_code:\s*"worker_never_ran"/)
     assert.equal(
-        (route.match(/reclaimStaleRuns\(db, user\.id, brandId\)/g) || []).length,
+        (route.match(/reclaimStaleAuditRuns\(db, user\.id, brandId\)/g) || []).length,
         2,
         "both GET and POST must reclaim stale runs before reading or triggering",
     )
@@ -4051,10 +4060,125 @@ test("onboarding lets the user confirm, edit, and prune buyer prompts before pro
     assert.match(generateRoute, /normalizeScopeFamilies/)
     assert.match(generateRoute, /POST/)
 
-    // 3. The probe route and worker accept user-confirmed prompts.
+    // 3. The probe route and worker accept user-confirmed prompts. The route
+    //    forwards the REBOUND set (see the scope-binding test below), never the
+    //    raw body — the ids the onboarding screen had are not the ids the audit
+    //    uses.
     assert.match(probeRoute, /prompts\?: import\("@\/lib\/visibility\/prompt-builder"\)\.BuyerPrompt\[\]/)
-    assert.match(probeRoute, /prompts:\s*body\.prompts/)
+    assert.match(probeRoute, /prompts:\s*confirmedPrompts/)
     assert.match(probeRunner, /options\.prompts && options\.prompts\.length > 0/)
+
+    // 4. An empty confirmation is refused rather than quietly replaced with
+    //    generated questions nobody reviewed — the exact substitution this
+    //    screen exists to prevent.
+    assert.match(probeRoute, /Array\.isArray\(body\.prompts\) && body\.prompts\.length === 0/)
+    assert.match(probeRoute, /reason: "no_prompts"/)
+})
+
+test("onboarding probes the confirmed prompts instead of running the Google harvest", async () => {
+    const [route, console_, probeRoute] = await Promise.all([
+        text(ONBOARDING_ROUTE),
+        text("components/visibility/probe-console.tsx"),
+        text("app/api/visibility/probe/route.ts"),
+    ])
+
+    // The screens before the last one ask the customer to review the exact
+    // questions we are about to put to ChatGPT and Google AI Mode. Sending them
+    // into /api/topical-audit instead confirmed one thing and measured another.
+    assert.doesNotMatch(
+        route,
+        /fetch\("\/api\/topical-audit"/,
+        "onboarding must not start the Google harvest",
+    )
+    assert.match(route, /<ProbeConsole\b/)
+    assert.match(route, /prompts=\{prompts\}/)
+
+    // The confirmed prompts reach the probe, and the run id is persisted before
+    // anything else so a refresh adopts the run rather than buying a second one.
+    assert.match(console_, /fetch\("\/api\/visibility\/probe"/)
+    assert.match(console_, /brandId,/)
+    assert.match(console_, /prompts: prompts\.map/)
+    assert.match(route, /PROBE_RUN_ID/)
+    assert.match(console_, /if \(runIdRef\.current\) \{/)
+
+    // Exactly one auto-start, and only when no run exists — every probe spends
+    // real answer-engine credits.
+    const recover = console_.slice(console_.indexOf("const recoverOrStart"))
+    assert.equal(
+        (recover.match(/await startProbe\(\)/g) || []).length,
+        1,
+        "recoverOrStart must start a probe once, and only when none is in flight",
+    )
+
+    // Onboarding no longer needs the harvest to produce an audit record: the
+    // probe route opens one from the confirmed brand scope and the probe
+    // finalizes it.
+    assert.match(probeRoute, /create_customer_audit_with_scope/)
+    assert.match(probeRoute, /brandId\?: string/)
+})
+
+test("confirmed prompts are rebound to the audit's own scope family ids", async () => {
+    const [binding, probeRoute] = await Promise.all([
+        text("lib/visibility/prompt-binding.ts"),
+        text("app/api/visibility/probe/route.ts"),
+    ])
+
+    // `create_customer_audit_with_scope` copies confirmed families into
+    // audit_scope_families with NEW ids, keeping the brand id in
+    // brand_scope_family_id. A prompt confirmed during onboarding carries the
+    // brand id, a `family-1` placeholder, or the family name — none of which is
+    // the id finalize_audit_run accepts. Left unbound the run does not fail: it
+    // reports success and writes nothing, because the rejection happens inside
+    // a catch.
+    assert.match(binding, /export function bindPromptsToAuditScope/)
+    assert.match(binding, /brandScopeFamilyId/)
+    assert.match(probeRoute, /brand_scope_family_id/)
+    assert.match(probeRoute, /bindPromptsToAuditScope\(/)
+
+    // An unbindable prompt is returned to the caller, never dropped. A silently
+    // discarded question is a measurement the customer confirmed and did not get.
+    assert.match(binding, /unbound/)
+    assert.match(probeRoute, /reason: "unbound_prompts"/)
+    assert.match(probeRoute, /unboundPrompts/)
+})
+
+test("a probe that dies closes the audit row it opened", async () => {
+    const [guards, probeRunner, probeRoute] = await Promise.all([
+        text("lib/audit/run-guards.ts"),
+        text("lib/visibility/run-probe.ts"),
+        text("app/api/visibility/probe/route.ts"),
+    ])
+
+    // create_customer_audit_with_scope refuses to open a run while one is
+    // `running`, so a dead probe locks the brand out of EVERY audit path — the
+    // probe and the Google harvest both — until the 40-minute sweep.
+    assert.match(guards, /export async function failAuditRun/)
+    // Guarded on `running`: re-probing an already finalized audit must not
+    // reopen and destroy the report the customer is reading.
+    assert.match(guards, /\.eq\("run_status", "running"\)/)
+
+    for (const [name, source] of [
+        ["probe runner", probeRunner],
+        ["probe route", probeRoute],
+    ]) {
+        assert.match(source, /failAuditRun\(/, `${name} must close a dead audit row`)
+    }
+
+    // Finalization failure used to warn and continue, which produced the worst
+    // outcome available: a rendered cluster plan with empty query_pool,
+    // audit_clusters and planned_articles, so /content-plan offered to ship
+    // articles that did not exist.
+    assert.match(probeRunner, /failure_code|finalize_failed/)
+    assert.doesNotMatch(
+        probeRunner,
+        /console\.warn\(`\[Probe\] Warning: Could not finalize/,
+        "a failed finalize must mark the audit, not warn and continue",
+    )
+
+    // Zero gaps is the best possible result and the one finalize_audit_run
+    // refuses (empty pool). The row must still be closed, or it hangs.
+    assert.match(probeRunner, /queryRows\.length === 0/)
+    assert.match(probeRunner, /no_visibility_gaps/)
 })
 
 test("probe clusters freeze article contracts and finalize into relational delivery tables", async () => {

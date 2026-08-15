@@ -19,6 +19,7 @@
 
 import { randomUUID } from "crypto"
 import { createAdminClient } from "@/utils/supabase/admin"
+import { failAuditRun } from "@/lib/audit/run-guards"
 import { generateEmbedding } from "@/lib/gemini-embedding"
 import { mapWithConcurrency } from "@/lib/harvest/types"
 import type { AuditScopeFamily, ScopedHarvestedQuery } from "@/lib/harvest/scope-classifier"
@@ -584,7 +585,20 @@ export async function runVisibilityProbe(
                     competitor_matches: gap.competitors || [],
                 }))
 
-                if (queryRows.length > 0) {
+                // No losing prompt is the best possible result and the one that
+                // has nothing to deliver — `finalize_audit_run` refuses an empty
+                // pool. The audit row must still be closed, or it stays
+                // `running` and blocks every future audit for this brand until
+                // the 40-minute sweep. Said plainly, because "failed" here is a
+                // storage state, not a verdict on the run.
+                if (queryRows.length === 0) {
+                    await failAuditRun(
+                        supabase,
+                        options.auditId,
+                        "no_visibility_gaps",
+                        "Nothing went wrong: every confirmed question already named you, so there was no missing coverage to plan articles from. The full answer record is on the visibility report.",
+                    )
+                } else {
                     const { error: finalizeError } = await supabase.rpc("finalize_audit_run", {
                         p_audit_id: options.auditId,
                         p_query_rows: queryRows,
@@ -614,11 +628,39 @@ export async function runVisibilityProbe(
                     })
 
                     if (finalizeError) {
-                        console.warn(`[Probe] Warning: Could not finalize audit ${options.auditId}:`, finalizeError.message)
+                        // This used to warn and continue, which produced the
+                        // worst available outcome: the probe reported success,
+                        // the dashboard rendered a cluster plan, and query_pool,
+                        // audit_clusters and planned_articles were empty — so
+                        // /content-plan offered to ship articles that did not
+                        // exist. The measurement is still real and still on the
+                        // report; the *plan* is what failed, and the audit row
+                        // now says so.
+                        console.error(
+                            `[Probe] Could not finalize audit ${options.auditId}:`,
+                            finalizeError.message,
+                        )
+                        await failAuditRun(
+                            supabase,
+                            options.auditId,
+                            "finalize_failed",
+                            `The answers were collected and saved, but the delivery plan could not be written: ${finalizeError.message}`,
+                        )
                     }
                 }
             } catch (persistErr) {
-                console.warn(`[Probe] Error persisting audit tables for ${options.auditId}:`, persistErr)
+                const message =
+                    persistErr instanceof Error ? persistErr.message : String(persistErr)
+                console.error(
+                    `[Probe] Error persisting audit tables for ${options.auditId}:`,
+                    persistErr,
+                )
+                await failAuditRun(
+                    supabase,
+                    options.auditId,
+                    "persist_failed",
+                    `The answers were collected and saved, but the delivery plan could not be written: ${message}`,
+                )
             }
         }
 
@@ -682,6 +724,15 @@ export async function runVisibilityProbe(
                 duration_ms: Date.now() - startedAt,
             })
             .eq("id", runId)
+        // Close the audit this probe was writing into. `create_customer_audit_with_scope`
+        // refuses to open a second run while one is `running`, so a dead probe
+        // would otherwise lock the brand out of every audit path — the probe and
+        // the Google harvest both — until the stale sweep caught it 40 minutes
+        // later. Guarded on `running`, so re-probing an already-finalized audit
+        // cannot reopen and destroy it.
+        if (options.auditId) {
+            await failAuditRun(supabase, options.auditId, "probe_failed", reason)
+        }
         throw error
     }
 }

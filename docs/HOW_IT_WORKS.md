@@ -38,6 +38,13 @@ customer's back.
 
 ## 3. Stage 1 — The audit
 
+> **Read §11.5 first if you are following a live customer.** Steps 2–4 below
+> describe the Google harvest, which is no longer what runs after onboarding.
+> Step 1 — confirming the business scope — is unchanged and still comes first;
+> what happens after it is now the AI-visibility probe. The rest of this section
+> stays because the harvest is still in the code, still correct, and is the
+> fallback if the answer engines turn out to be the wrong bet.
+
 ### What it does, in order
 
 1. **Confirm the business scope.** Ask what people type into Google to find a
@@ -314,7 +321,20 @@ competitor with nicer copy.
 
 ## 11.5 The new bit: asking the AI engines directly
 
-Added 2026-08-15. It runs beside everything above, not instead of it.
+Added 2026-08-15. **As of the same day, this is what runs when someone finishes
+onboarding** — the Google harvest described in §3 is still in the code and still
+works, but nothing calls it any more.
+
+The reason is blunt: onboarding shows you the buyer questions and asks you to
+edit them, so those are the questions that have to get asked. It used to show
+you the questions and then run the Google harvest, which measured something
+else entirely.
+
+Everything downstream is unchanged. The probe writes its findings into the same
+audit tables through the same `finalize_audit_run`, so the saved audit at
+`/audit` and the delivery plan at `/content-plan` cannot tell which of the two
+sources filled them — and the price, the cluster rules and the writer never
+had to learn about any of this.
 
 **What it does.** Takes the business areas you already confirmed, writes the
 kind of question a buyer actually types ("what's the best tool for turning a
@@ -410,8 +430,11 @@ place, ahead of Gemini — and we can't measure it, because Cloro has no Claude
 scraper and its API is the wrong surface. That's a genuine hole in exactly your
 buyer segment. Don't claim coverage you don't have.
 
-**Status: built, never run.** There's no Cloro key in the repo, so not one
-question has actually been asked. Before showing this to anyone: run it on two
+**Status: built, wired, never run.** There's no Cloro key in the repo, so not one
+question has actually been asked. Onboarding now ends on the "answer engines
+aren't connected" screen rather than on a report — which is the honest outcome,
+because reporting you as absent from answers nobody collected would be a
+fabricated result. Before showing this to anyone: add the key, run it on two
 real sites and read fifty answers by hand. If the questions aren't ones a buyer
 would plausibly type, the whole thing is noise no matter how tidy the code is.
 

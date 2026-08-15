@@ -12,15 +12,22 @@ for what to do next.
 
 Last implementation update: 2026-08-15
 
-Status: **AI-visibility probing added as a second, parallel gap source** (§8),
-measuring the **real consumer surfaces** — ChatGPT and Google AI Mode via Cloro,
-not the provider APIs. Buyer prompts built from the confirmed families are asked
-of those surfaces; absence from an answer becomes a `GapItem` and feeds the
-existing clusterer unchanged. Runs on Trigger.dev. Ships with a dashboard whose
-every claim expands to the verbatim answer behind it. Nothing in the Google
-harvest path was altered — the two sources coexist and neither is yet the
-default. **Not run against a live audit**: no `CLORO_API_KEY` exists in this
-repo, so this is code-complete and entirely unmeasured.
+Status: **the AI-visibility probe is now the audit that runs after onboarding.**
+The confirmed buyer prompts are asked of the real consumer surfaces — ChatGPT
+and Google AI Mode via Cloro — and `POST /api/visibility/probe` opens its own
+audit from the confirmed brand scope, so the harvest is no longer needed to
+produce an audit record. Every gap the probe finds is finalized into
+`query_pool`, `audit_clusters` and `planned_articles` through the same
+`finalize_audit_run`, so `/audit` and `/content-plan` read a visibility audit
+exactly as they read a harvest one. The Google harvest is untouched and still
+reachable at `POST /api/topical-audit`; it simply has no UI caller. **Still not
+run against a live audit**: no `CLORO_API_KEY` exists in this repo, so the whole
+path remains code-complete and entirely unmeasured.
+
+Previously: **AI-visibility probing added as a second, parallel gap source**
+(§8), measuring the real consumer surfaces rather than the provider APIs.
+Absence from an answer becomes a `GapItem` and feeds the existing clusterer
+unchanged; the dashboard expands every claim to the verbatim answer behind it.
 
 Previously: **scope finder no longer times out into a blank keyword form.** Thin SPA
 crawls fall back to unpaid HTML snapshots (meta/JSON-LD/body) then titles;
@@ -975,6 +982,89 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-15 (ninth pass) - onboarding finally probes the prompts it asked you to confirm
+
+**The failure.** Onboarding generated buyer prompts, let the customer edit and
+prune them, said "we're about to ask AI these questions" — and then `Continue`
+ran `POST /api/topical-audit`. The confirmed prompts went into `localStorage`
+and nowhere else. `POST /api/visibility/probe` existed, was correct, and had no
+caller. The new road was built; onboarding kept directing traffic down the old
+highway.
+
+**What the previous pass assumed was missing, and was not.** The handoff note
+said a "lightweight way to create the audit record and confirmed scope families
+without running the old harvest" had to be built first. It already existed:
+`create_customer_audit_with_scope` writes the `topical_audits` row and freezes
+`brand_scope_families` into `audit_scope_families` — parent links included, and
+capability contracts via `trg_copy_audit_capability_contract` — in one
+transaction, and it does **not** start the harvest. The old route calls the RPC
+and triggers `run-topical-audit` as two separate steps; the probe path calls the
+first and skips the second.
+
+**The bug that would have made this look like it worked.** `audit_scope_families`
+rows get new ids, keeping the brand id in `brand_scope_family_id`. A prompt
+confirmed during onboarding carries whatever the screen had: a
+`brand_scope_families` uuid, a `family-1` placeholder minted by
+`prompts/generate`, or the family's own name (`prompts-step.tsx` uses
+`family.id || family.name`). None of those is the id the persistence path
+accepts. Unbound, every gap would reach `finalize_audit_run`, raise
+`Query references scope outside its audit`, and be swallowed by the `catch`
+around the whole persistence block — so the probe would report success, the
+dashboard would render a cluster plan, and `query_pool`, `audit_clusters` and
+`planned_articles` would be empty. `/content-plan` would offer to ship articles
+that do not exist. `lib/visibility/prompt-binding.ts` rebinds every prompt onto
+the audit's own family id (audit id → brand family id → family name → confirmed
+seed) and **returns** anything it cannot bind; the route refuses the run and
+names the questions rather than dropping them.
+
+**Changes.**
+
+1. **`lib/audit/run-guards.ts` (new).** The stale sweep, the retry cooldown and
+   `failAuditRun`, extracted from `app/api/topical-audit/route.ts`. There are now
+   two entry points that open a run through the same RPC, and that RPC refuses
+   while a `running` row exists — so a stuck row blocks *both* paths and one
+   brand must have one budget. Two copies of a cooldown drift, and the copy that
+   drifts is the one that lets a customer pay twice.
+2. **`POST /api/visibility/probe` accepts `brandId`.** It validates the confirmed
+   scope, reclaims stale runs, applies the shared cooldown, opens the audit via
+   the RPC, and sets `generation_phase = 'probing_ai_answers'` (the RPC opens on
+   the harvest's first phase, and an audit row must not narrate a pipeline that
+   is not running). `auditId` still works unchanged for a dashboard re-run.
+   Engines are checked *before* anything is created, so a missing `CLORO_API_KEY`
+   cannot leave an open audit row behind.
+3. **A dead probe closes its audit row.** `runVisibilityProbe`'s failure path,
+   the route's enqueue-failure path, and the unbindable-prompt refusal all call
+   `failAuditRun`, guarded on `run_status = 'running'` so re-probing a finalized
+   audit cannot reopen and destroy the report someone is reading. Two more holes
+   closed: a **failed finalize** now marks the audit instead of `console.warn`-ing
+   and continuing, and **zero gaps** — the best possible result, and the one
+   `finalize_audit_run` refuses because the pool is empty — closes the row with
+   `no_visibility_gaps` and a message saying nothing went wrong.
+4. **`components/visibility/probe-console.tsx` (new)** replaces `AuditConsole` in
+   the onboarding audit step. Same two rules as the console it replaces: a run
+   auto-starts only when none exists, and the failure state owns the surface. The
+   run id is persisted to `localStorage` the moment it exists, so a refresh
+   mid-probe adopts the run in flight instead of buying a second measurement. A
+   missing engine key renders as "answer engines aren't connected" with no retry
+   button, because retrying cannot fix a missing key.
+5. **Onboarding ends on `/visibility/[runId]`.** The probe finalizes its own
+   audit, so `/audit` and `/content-plan` are already populated when the customer
+   lands on the report.
+6. **An empty `prompts: []` is refused** (400, `no_prompts`). An omitted field
+   means "build them from the confirmed scope"; an empty array means the customer
+   confirmed nothing, and quietly generating an unreviewed set is the exact
+   substitution this whole screen exists to stop.
+
+**Tests.** 91 contract tests pass, `npx tsc --noEmit` is clean. Four assertions
+in the two moved-guard tests now read `lib/audit/run-guards.ts`; their intent —
+the numbers exist, and both GET and POST call them — is unchanged. Three tests
+were added: onboarding must not `fetch("/api/topical-audit")`, confirmed prompts
+must be rebound before they are forwarded, and a dead probe must close its audit
+row.
+
+**Unmeasured, still.** No prompt has been asked. Everything above is plumbing
+that has never carried water.
 
 ### 2026-08-15 (eighth pass) - content delivery action wired onto visibility dashboard
 

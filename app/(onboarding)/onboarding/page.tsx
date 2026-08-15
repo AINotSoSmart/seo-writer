@@ -20,7 +20,7 @@ import {
 import { BrandDetails } from "@/lib/schemas/brand"
 import { Button } from "@/components/ui/button"
 import { CustomSpinner } from "@/components/CustomSpinner"
-import { AuditConsole } from "@/components/audit/audit-console"
+import { ProbeConsole } from "@/components/visibility/probe-console"
 import { ScopeResults } from "@/components/audit/scope-results"
 import { findScopeBlockers } from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
@@ -55,6 +55,12 @@ const STORAGE_KEYS = {
     SCOPE_ANALYSIS_ISSUES: 'onboarding_scope_analysis_issues',
     TARGET_SEEDS: 'onboarding_target_seeds',
     PROMPTS: 'onboarding_prompts',
+    /**
+     * The live probe run. Persisted the moment the run id exists, so a refresh
+     * mid-probe adopts the run in flight instead of buying a second one — every
+     * probe spends real answer-engine credits.
+     */
+    PROBE_RUN_ID: 'onboarding_probe_run_id',
     ANALYZING_STARTED_AT: 'onboarding_analyzing_started_at',
     SCOPE_STARTED_AT: 'onboarding_scope_started_at',
     CRAWL_PAGES: 'onboarding_crawl_pages',
@@ -134,6 +140,8 @@ export default function OnboardingPage() {
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
 
     const [prompts, setPrompts] = useState<PromptItem[]>([])
+    /** The probe run this session is watching, if one is already in flight. */
+    const [probeRunId, setProbeRunId] = useState<string | null>(null)
     const [promptsLoading, setPromptsLoading] = useState(false)
     const [regeneratingFamilyId, setRegeneratingFamilyId] = useState<string | null>(null)
     const [promptsError, setPromptsError] = useState("")
@@ -181,6 +189,7 @@ export default function OnboardingPage() {
             setTargetSeeds([])
             setPrompts([])
             setPromptsError("")
+            setProbeRunId(null)
             setCrawledPages([])
             setAuditScope(null)
             setGapEvidence([])
@@ -293,6 +302,10 @@ export default function OnboardingPage() {
                 setPrompts([])
             }
         }
+        // Restored before the audit step renders, so the console adopts the run
+        // in flight rather than starting — and paying for — a second one.
+        const savedProbeRunId = localStorage.getItem(STORAGE_KEYS.PROBE_RUN_ID)
+        if (savedProbeRunId) setProbeRunId(savedProbeRunId)
 
         // Restore brandId if exists
         if (savedBrandId) {
@@ -787,7 +800,15 @@ export default function OnboardingPage() {
             const savedBrandId = res.brandId
             setBrandId(savedBrandId)
 
-            // Instead of triggering plan immediately, go to audit step
+            // A fresh save is a fresh measurement. Any run id left over from an
+            // earlier attempt would be adopted by the console and reported as
+            // this brand's result.
+            localStorage.removeItem(STORAGE_KEYS.PROBE_RUN_ID)
+            setProbeRunId(null)
+
+            // The confirmed scope is now frozen in brand_scope_families, which
+            // is everything the probe needs to open its own audit. Next screen
+            // asks the confirmed questions.
             setStep("audit")
 
         } catch (e: any) {
@@ -797,10 +818,28 @@ export default function OnboardingPage() {
         }
     }
 
-    // Audit completion handler
-    const handleAuditComplete = () => {
-        setStep("audit-results")
-    }
+    /** Persisted immediately: a refresh must adopt this run, never buy another. */
+    const handleProbeStarted = useCallback((runId: string) => {
+        setProbeRunId(runId)
+        localStorage.setItem(STORAGE_KEYS.PROBE_RUN_ID, runId)
+    }, [])
+
+    /**
+     * Onboarding ends on the visibility report, not on the old scope screen.
+     *
+     * The probe finalizes its own audit through `finalize_audit_run`, so the
+     * permanent views — `/audit` and `/content-plan` — are already populated by
+     * the time this fires. The report is where the finding is: which questions
+     * name a competitor instead of the customer, with the verbatim answer
+     * behind every claim.
+     */
+    const handleProbeComplete = useCallback(
+        (runId: string) => {
+            clearOnboardingStorage()
+            router.push(`/visibility/${runId}`)
+        },
+        [clearOnboardingStorage, router],
+    )
 
 
     // The immutable harvest is already the plan. Never mirror it into the
@@ -1097,11 +1136,12 @@ export default function OnboardingPage() {
                                         exit={{ opacity: 0, x: 20 }}
                                         className="p-6"
                                     >
-                                        <AuditConsole
-                                            brandData={brandData}
+                                        <ProbeConsole
                                             brandId={brandId}
-                                            brandUrl={`https://${url.trim()}`}
-                                            onComplete={handleAuditComplete}
+                                            prompts={prompts}
+                                            existingRunId={probeRunId}
+                                            onRunStarted={handleProbeStarted}
+                                            onComplete={handleProbeComplete}
                                         />
                                     </motion.div>
                                 )}
