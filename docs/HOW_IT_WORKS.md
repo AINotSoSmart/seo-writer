@@ -372,6 +372,26 @@ every figure on the page, plus a plain list of what this measurement *can't*
 tell you. Most tools hide that. Showing it is the cheapest trust you'll ever
 buy, and the reader who checks is the reader who buys.
 
+**What the engines searched for.** When someone asks ChatGPT a question, it
+doesn't search that sentence — it breaks it into its own searches. We record
+those. So the report shows the searches the engines actually ran on a buyer's
+behalf, how many of your questions triggered each one, and how often you turned
+up in the answers that used them. A search the engines keep running that never
+produces an answer naming you is the earliest possible warning: you're missing
+before the answer is even written.
+
+Two things to keep straight. This is **not search volume** — "12 of your 42
+questions triggered this" means the engines kept converging on that framing, not
+that 12 people searched it. And some engines publish their searches while others
+don't; where one didn't, the report names it rather than letting a short list
+look like the engine barely searched.
+
+(This is also why we didn't buy a keyword-volume tool. The standard trick is to
+boil your question down to a few broad Google terms, look up Google's volume,
+and multiply by a fixed number to call it "AI volume" — a real figure about a
+different search engine, three guesses deep. What the engines actually did is a
+smaller number and a true one.)
+
 **What it does not do.** It does not track you daily, and it will not tell you
 "visibility went 12% to 31%". Ask an engine the same question twice and you can
 get two different answers — so a change between two runs is mostly noise, and

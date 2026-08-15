@@ -427,6 +427,7 @@ export async function runVisibilityProbe(
                 model: answer.reportedModel,
                 answerText: answer.text,
                 parsed,
+                searchQueries: answer.searchQueries,
             })
             citationsByPromptEngine.get(job.prompt.id)!.set(job.engine, answer.citations)
 
@@ -496,7 +497,7 @@ export async function runVisibilityProbe(
                 .eq("id", outcome.promptId)
         }
 
-        const summary = summariseRun([...outcomes.values()])
+        const summary = summariseRun([...outcomes.values()], prompts)
 
         // ── 4. Gaps → the existing clusterer, unchanged ─────────────────────
         await report("clustering", `${summary.absentPromptCount + summary.outrankedPromptCount} losing prompts`)

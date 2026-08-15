@@ -37,6 +37,7 @@ import {
     Info,
     Layers,
     PenLine,
+    Radar,
 } from "lucide-react"
 
 import { AnswerEvidence } from "./answer-evidence"
@@ -48,6 +49,7 @@ import {
     type PageShape,
     type SourceType,
 } from "@/lib/visibility/citation-classifier"
+import { blindSpots, type FanOutSummary } from "@/lib/visibility/fan-out"
 
 export interface DashboardPrompt {
     id: string
@@ -92,6 +94,7 @@ export interface DashboardSummary {
         sourceType: SourceType
     }>
     citationBreakdown?: CitationBreakdown
+    fanOut?: FanOutSummary
     keyPages?: Array<{
         url: string
         title: string
@@ -266,6 +269,13 @@ export function VisibilityDashboard(props: DashboardProps) {
     const hostMax = Math.max(...summary.citedHosts.map((host) => host.count), 1)
     const breakdown = summary.citationBreakdown
     const keyPages = summary.keyPages ?? []
+    const fanOut = summary.fanOut
+    // Sub-queries the engines kept running and never found the brand in — a
+    // retrieval-level absence, upstream of anything the answer text shows.
+    const fanOutBlindSpots = useMemo(
+        () => (fanOut ? blindSpots(fanOut) : []),
+        [fanOut],
+    )
 
     const toggle = (id: string) => {
         setExpanded((current) => {
@@ -743,6 +753,134 @@ export function VisibilityDashboard(props: DashboardProps) {
                             &ldquo;None of them named you&rdquo; describes the answers, not the
                             page — we haven&apos;t fetched these pages, so we can&apos;t say
                             whether a given one mentions you. Open a few and check.
+                        </p>
+                    </section>
+                )}
+
+                {/* ── 4c. Query fan-out — what the engines searched ────── */}
+                {fanOut && fanOut.queries.length > 0 && (
+                    <section className="mt-12">
+                        <h2 className="text-xl font-semibold">
+                            What the engines searched for on your behalf
+                        </h2>
+                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
+                            The engines don&apos;t search your question verbatim — they break it
+                            into their own searches. These are the ones they actually ran, and
+                            how many of your {summary.promptCount} questions triggered each.
+                        </p>
+
+                        {/*
+                         * Coverage is stated before the data, because the fan-out
+                         * is unevenly exposed: Cloro's own note is that Perplexity
+                         * and Copilot populate it while ChatGPT returns the key
+                         * empty. An unexplained short list would read as "the
+                         * engines barely searched", which is false.
+                         */}
+                        {fanOut.hasSilentEngine && (
+                            <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--viz-hairline)] p-4 text-sm text-[var(--viz-ink-secondary)]">
+                                <Info
+                                    className="mt-0.5 size-4 shrink-0 text-[var(--viz-ink-muted)]"
+                                    aria-hidden
+                                />
+                                <span>
+                                    {fanOut.coverage
+                                        .filter(
+                                            (row) => row.answers > 0 && row.answersWithFanOut === 0,
+                                        )
+                                        .map((row) => engineLabels[row.engine] ?? row.engine)
+                                        .join(" and ")}{" "}
+                                    didn&apos;t expose its searches, so nothing below comes from
+                                    it. That&apos;s a limit of what the engine reports — not
+                                    evidence that it searched less.
+                                </span>
+                            </p>
+                        )}
+
+                        {fanOutBlindSpots.length > 0 && (
+                            <div className="mt-5 rounded-lg border border-[var(--viz-critical)]/30 bg-[var(--viz-critical)]/5 p-5">
+                                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                                    <Radar
+                                        className="size-4 text-[var(--viz-critical)]"
+                                        aria-hidden
+                                    />
+                                    Searches you never turned up in
+                                </h3>
+                                <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
+                                    The engines ran these repeatedly and no answer that used them
+                                    named you. That&apos;s an absence at the retrieval step —
+                                    before the answer was even written.
+                                </p>
+                                <ul className="mt-3 space-y-2">
+                                    {fanOutBlindSpots.slice(0, 8).map((query) => (
+                                        <li
+                                            key={query.queryNorm}
+                                            className="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                                        >
+                                            <span className="font-medium text-[var(--viz-ink)]">
+                                                &ldquo;{query.query}&rdquo;
+                                            </span>
+                                            <span className="tabular-nums text-[var(--viz-ink-secondary)]">
+                                                triggered by {query.prompts} of{" "}
+                                                {summary.promptCount} questions
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        <div className="mt-5 overflow-hidden rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)]">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-[var(--viz-hairline)] text-left text-xs text-[var(--viz-ink-muted)]">
+                                        <th className="px-4 py-2.5 font-medium">
+                                            Search the engine ran
+                                        </th>
+                                        <th className="px-4 py-2.5 text-right font-medium">
+                                            Your questions
+                                        </th>
+                                        <th className="px-4 py-2.5 text-right font-medium">
+                                            Named you
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {fanOut.queries.slice(0, 20).map((query) => (
+                                        <tr
+                                            key={query.queryNorm}
+                                            className="border-b border-[var(--viz-hairline)] last:border-0"
+                                        >
+                                            <td className="px-4 py-2.5 text-[var(--viz-ink)]">
+                                                {query.query}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right tabular-nums text-[var(--viz-ink-secondary)]">
+                                                {query.prompts}
+                                            </td>
+                                            <td
+                                                className={`px-4 py-2.5 text-right tabular-nums ${
+                                                    query.answersNaming === 0
+                                                        ? "text-[var(--viz-critical)]"
+                                                        : "text-[var(--viz-ink-secondary)]"
+                                                }`}
+                                            >
+                                                {query.answersNaming} / {query.occurrences}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/*
+                         * The line that keeps this honest. It is the difference
+                         * between this feature and the search-volume estimate we
+                         * deliberately did not buy.
+                         */}
+                        <p className="mt-3 text-xs text-[var(--viz-ink-muted)]">
+                            This is what the engines did, not how many people searched. A search
+                            appearing often means the engines kept converging on that framing
+                            across the questions we asked — it is not a search-volume figure and
+                            cannot be read as one.
                         </p>
                     </section>
                 )}

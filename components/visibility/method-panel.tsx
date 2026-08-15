@@ -235,6 +235,37 @@ export function MethodPanel({
                                 </p>
                             </Section>
 
+                            <Section title="What the engines searched for is not search volume">
+                                <p>
+                                    An engine doesn&apos;t search your question verbatim — it
+                                    breaks it into its own searches, and we record those. The
+                                    count next to each one is{" "}
+                                    <strong className="font-medium text-[var(--viz-ink)]">
+                                        how many of our questions triggered it
+                                    </strong>
+                                    , not how many people searched it.
+                                </p>
+                                <Formula>
+                                    questions triggering it ÷ questions we asked — never a
+                                    population estimate
+                                </Formula>
+                                <p>
+                                    This is the distinction that decided against buying a
+                                    search-volume vendor. The usual approach turns your question
+                                    into a few broad Google terms, looks up Google Ads volume, and
+                                    multiplies by a fixed constant to call it &ldquo;AI
+                                    volume&rdquo;. That number is three guesses stacked on a real
+                                    figure about a different search engine. A literal count of
+                                    what the engines did is smaller, and true.
+                                </p>
+                                <p>
+                                    Coverage is uneven: some engines publish their searches and
+                                    some don&apos;t. Where one didn&apos;t, the report says so
+                                    rather than letting a short list imply the engine searched
+                                    less.
+                                </p>
+                            </Section>
+
                             <Section title="&ldquo;Cited alongside you&rdquo; is not &ldquo;mentions you&rdquo;">
                                 <p>
                                     For each source we count how many of the answers citing it also

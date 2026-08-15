@@ -46,6 +46,7 @@ import {
 } from "./citation-classifier"
 import type { ParsedAnswer } from "./answer-parser"
 import { meanMentionPosition } from "./answer-parser"
+import { summariseFanOut, type FanOutSummary } from "./fan-out"
 
 export type PromptVerdict = "absent" | "outranked" | "present"
 
@@ -62,6 +63,8 @@ export interface ProbedPrompt {
         model: string
         answerText: string
         parsed: ParsedAnswer
+        /** Sub-queries this engine ran. Empty when the surface exposes none. */
+        searchQueries: string[]
     }>
 }
 
@@ -346,6 +349,11 @@ export interface RunSummary {
     /** Citations grouped by what kind of source they are. */
     citationBreakdown: CitationBreakdown
     /**
+     * The sub-queries the engines actually ran. Observed behaviour on the AI
+     * surface — never a volume estimate. See `fan-out.ts`.
+     */
+    fanOut: FanOutSummary
+    /**
      * The shaped pages the engines leaned on — best-of lists, comparisons and
      * reviews. These are how an engine assembles a recommendation, so they are
      * the most directly actionable rows in the whole report.
@@ -361,7 +369,10 @@ export interface RunSummary {
     }>
 }
 
-export function summariseRun(outcomes: PromptOutcome[]): RunSummary {
+export function summariseRun(
+    outcomes: PromptOutcome[],
+    prompts: ProbedPrompt[] = [],
+): RunSummary {
     const answerCount = outcomes.reduce((total, o) => total + o.answersTotal, 0)
     const presentAnswerCount = outcomes.reduce((total, o) => total + o.answersPresent, 0)
 
@@ -455,6 +466,16 @@ export function summariseRun(outcomes: PromptOutcome[]): RunSummary {
             .sort((a, b) => b.count - a.count)
             .slice(0, 20),
         citationBreakdown: summariseCitations(allCitations),
+        fanOut: summariseFanOut(
+            prompts.map((prompt) => ({
+                promptId: prompt.id,
+                answers: prompt.answers.map((answer) => ({
+                    engine: answer.engine,
+                    namedBrand: answer.parsed.mentionCount > 0,
+                    searchQueries: answer.searchQueries ?? [],
+                })),
+            })),
+        ),
         // Most-cited first, then the ones that never coincided with the brand —
         // a page the engines trust and you are absent from outranks one you
         // already appear alongside.

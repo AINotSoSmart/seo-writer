@@ -976,6 +976,86 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (fourth pass) - query fan-out, and the search-volume vendor we did not buy
+
+**The question that started it.** Ansvisor integrates DataForSEO. Worth
+understanding what for, before copying it.
+
+It is one endpoint — `keywords_data/google_ads/search_volume/live` — reached
+through a four-step chain:
+
+```
+"what are the best tools for managing remote teams?"
+    -> an LLM strips it to 5 broad Google head terms
+    -> DataForSEO returns Google Ads monthly volume for those
+    -> sum them
+    -> x AI_VOLUME_MULTIPLIER  (default 0.15, hardcoded, no derivation)
+    = est_ai_volume
+```
+
+That number is **40% of their opportunity score** (`nv * 40 + vg * 30 + cg * 20
++ iw * 10`). And their own keyword prompt admits what the chain costs:
+
+> *"Google Ads only returns search volume for keywords with measurable demand —
+> long-tail strings like 'best portable motion control for travel 2026' return
+> 0. Drop modifiers... NO 'best', NO '2026', NO 'for travel'."*
+
+The premise of AI search is that people ask long, specific, conversational
+questions. To get a number back, the pipeline has to shred exactly that.
+
+**Why we declined.** Four reasons, in order of weight:
+
+1. **We solved it upstream.** Our prompts come from customer-*confirmed* scope
+   families, priority-ordered by the buyer. That is a first-party importance
+   signal from the person paying. Ansvisor needs volume precisely because their
+   prompts are model-generated and nobody vouched for them.
+2. **`0.15` is a hand-picked constant** load-bearing on 40% of a score — exactly
+   what the standing rule against hand-tuned thresholds exists to prevent.
+3. **It re-imports the proxy chain the Cloro decision escaped.** Google volume
+   ranking AI gaps walks straight back to measuring the wrong surface.
+4. It would be the **only unverifiable term** in `scoreVisibilityGap`, whose
+   every current input is a counted fact from a stored answer.
+
+**What we built instead — and it was already paid for.**
+
+Cloro returns the sub-queries an engine actually ran to build its answer. We had
+been requesting and storing them (`ai_probe_results.search_queries`) and
+rendering them in exactly one expanded answer panel, never aggregated.
+
+`lib/visibility/fan-out.ts` now rolls them up per run: which searches the engines
+ran, how many of our questions triggered each, and — the actionable column — how
+many of the answers that ran it named the brand. A framing the engines keep
+reaching for and never find you in is an absence at the *retrieval* step,
+upstream of anything the answer text shows. `blindSpots()` surfaces exactly
+those.
+
+Observed, first-party, checkable, and free.
+
+**The counting rules that make it honest:**
+
+- A repeat inside one answer counts once, so a chatty engine cannot inflate its
+  own signal.
+- `prompts` counts distinct buyer questions, not raw occurrences: two engines
+  running the same sub-query for one question is agreement about that question,
+  not two units of demand.
+- Case variants fold; URLs and single characters are not searches.
+
+**Coverage is uneven and the UI says so.** Cloro's own note: Perplexity and
+Copilot populate the fan-out; **ChatGPT surfaces the key but returns it empty in
+practice**. Since `chatgpt-web` is half the default pair, a run can legitimately
+produce little fan-out — so `hasSilentEngine` names the engine that contributed
+nothing. An unexplained short list would read as "the engines barely searched",
+which is false, and is the same broken-source-looks-like-absence failure this
+codebase keeps relearning.
+
+**Testability note.** `fan-out.ts` imports relatively with explicit `.ts`
+extensions and carries no display names, following `harvest/absorption.ts`. That
+keeps it loadable under plain node, so the contract suite asserts its *behaviour*
+— fold, dedupe, blind spots, silent engines — instead of grepping its source.
+The decoupling was forced by a real constraint (`engines.ts` uses a TS parameter
+property that node's strip-only mode rejects) and the design is better for it: a
+pure counter should not know what things are called.
+
 ### 2026-08-15 (third pass) - citations became actions, and the numbers explain themselves
 
 Two additions, both aimed at the same problem: a founder reading this report for
@@ -3570,6 +3650,14 @@ fixed and always ship with an icon and a text label, never colour alone.
     definition it states must be imported from the module that computes it. A
     hand-written formula is a doc that goes stale in silence — which is worse
     than having no panel, because the reader trusted it.
-39. **Never re-run a probe as a retry.** `runProbeTask` is `maxAttempts: 1`
+39. **Fan-out is what the engines did, never how many people searched.** If a
+    column ever labels it volume, or a vendor's volume is multiplied into an
+    "AI volume" estimate, the product has quietly rejoined the category it
+    pivoted away from. Ansvisor's `est_ai_volume` is the worked example of how
+    that happens: a real figure about Google, three guesses deep.
+40. **An engine that exposes no fan-out is not an engine that did not search.**
+    ChatGPT returns the key empty. Say which engine was silent rather than
+    letting a short list imply the answer.
+41. **Never re-run a probe as a retry.** `runProbeTask` is `maxAttempts: 1`
     deliberately: a retry re-submits every Cloro task and bills the credits a
     second time for a run whose partial answers are already stored.

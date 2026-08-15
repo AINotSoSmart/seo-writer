@@ -3883,3 +3883,111 @@ test("the method panel reads its values from the code that computes them", async
     // And it must not invent a composite score to explain.
     assert.match(panel, /There is no visibility score/)
 })
+
+test("query fan-out counts what the engines did, and never implies volume", async () => {
+    // This is the only demand-side signal in the product observed on the AI
+    // surface itself, and it exists because the alternative was buying one.
+    // Ansvisor's `est_ai_volume` is Google Ads volume for five LLM-guessed head
+    // terms multiplied by a hardcoded 0.15 — three guesses stacked on a real
+    // figure about a different search engine. A literal count of what the
+    // engines actually ran is smaller and true, and the wording has to keep it
+    // that way.
+    const { summariseFanOut, blindSpots } = await import("../lib/visibility/fan-out.ts")
+
+    const summary = summariseFanOut([
+        {
+            promptId: "p1",
+            answers: [
+                {
+                    engine: "google-aimode",
+                    namedBrand: false,
+                    // A case variant and a repeat inside one answer, plus junk.
+                    searchQueries: [
+                        "best design to code tools 2026",
+                        "Best Design To Code Tools 2026",
+                        "sketch to ui",
+                        "https://example.com/page",
+                        "x",
+                    ],
+                },
+                { engine: "chatgpt-web", namedBrand: false, searchQueries: [] },
+            ],
+        },
+        {
+            promptId: "p2",
+            answers: [
+                {
+                    engine: "google-aimode",
+                    namedBrand: true,
+                    searchQueries: ["best design to code tools 2026"],
+                },
+                { engine: "chatgpt-web", namedBrand: true, searchQueries: [] },
+            ],
+        },
+        {
+            promptId: "p3",
+            answers: [
+                { engine: "google-aimode", namedBrand: false, searchQueries: ["sketch to ui"] },
+            ],
+        },
+    ])
+
+    const byNorm = Object.fromEntries(summary.queries.map((q) => [q.queryNorm, q]))
+
+    // Case variants fold together, and a repeat inside ONE answer counts once —
+    // otherwise a chatty engine inflates its own signal.
+    assert.equal(byNorm["best design to code tools 2026"].occurrences, 2)
+    assert.equal(byNorm["best design to code tools 2026"].prompts, 2)
+
+    // URLs and single characters are not searches.
+    assert.ok(!byNorm["https://example.com/page"])
+    assert.ok(!byNorm["x"])
+
+    // `answersNaming` is the actionable column: run twice, named in one.
+    assert.equal(byNorm["best design to code tools 2026"].answersNaming, 1)
+    assert.equal(byNorm["sketch to ui"].answersNaming, 0)
+
+    // A framing the engines keep reaching for and never find the brand in.
+    assert.deepEqual(
+        blindSpots(summary).map((q) => q.queryNorm),
+        ["sketch to ui"],
+    )
+
+    // An engine that exposes nothing must be visible, not implied. Cloro's own
+    // note: Perplexity and Copilot populate the fan-out, ChatGPT returns the
+    // key empty — and ChatGPT is half the default pair, so a short list must
+    // never read as "the engines barely searched".
+    assert.equal(summary.hasSilentEngine, true)
+    const chatgpt = summary.coverage.find((row) => row.engine === "chatgpt-web")
+    assert.equal(chatgpt.answers, 2)
+    assert.equal(chatgpt.answersWithFanOut, 0)
+
+    // No display names in a pure counter — labelling is the UI's job, and the
+    // decoupling is what keeps this module loadable here.
+    assert.ok(!("label" in chatgpt))
+})
+
+test("fan-out is never presented as search volume", async () => {
+    const [fanOut, dashboard, panel] = await Promise.all([
+        text("lib/visibility/fan-out.ts"),
+        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/method-panel.tsx"),
+    ])
+
+    // The module states the rule, and both surfaces that render it repeat it
+    // where the reader is looking at the number.
+    assert.match(fanOut, /never be rendered as volume/)
+    assert.match(dashboard, /not how many people searched|not a search-volume figure/)
+    assert.match(panel, /not search volume/)
+
+    // And no vendor crept back in.
+    const files = await Promise.all([
+        text("lib/visibility/fan-out.ts"),
+        text("lib/visibility/gap-mapper.ts"),
+        text("lib/visibility/run-probe.ts"),
+    ])
+    for (const file of files) {
+        assert.doesNotMatch(file, /dataforseo/i)
+        assert.doesNotMatch(file, /AI_VOLUME_MULTIPLIER/)
+    }
+})
