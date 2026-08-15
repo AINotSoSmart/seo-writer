@@ -394,6 +394,32 @@ stop agreeing about what was sold.
 | Clustering, titling, absorption, naming | **Unchanged, byte for byte.** |
 | Tavily research when an article is written | **Unchanged.** The writer still does a full contract-bound research pass at generation time. Tavily did not go away; it just isn't used to *find* the topics any more. |
 
+### 11.5.2b Why the competitor list still matters more than ever
+
+Worth being blunt about, because it is counter-intuitive: **the AI probe does
+not discover who beat you.** It counts names it was given. There is no
+open-ended "which brands appeared in this answer" extraction anywhere — not in
+our code and not in the open-source project ours was ported from.
+
+That is a deliberate trade, not an oversight. "ChatGPT named Notion and not you"
+is a claim you can check by reading the stored answer. "A model believes it saw
+a brand name" is not. The price of that certainty is that a rival we are not
+tracking is a rival we cannot see.
+
+So the tracked list *is* the rival column. If it is empty, the report can tell
+you that you are absent and can never tell you who took your place — which is
+the half customers actually care about.
+
+The probe therefore resolves the list **before it asks anything**: your own
+competitors first, then a web search fills the remaining slots up to four. If
+that discovery fails, the report says so in the rivals section instead of
+showing an empty chart, because "nobody was named" and "we had nobody to look
+for" are opposite findings that look identical.
+
+Citations are the exception, and a useful one: every URL the engines cite is
+captured whoever owns it. So unknown players do still surface — as sources
+rather than as names.
+
 ### 11.5.3 The one thing we gave up, said plainly
 
 The old audit read your site and subtracted what you already cover. The probe

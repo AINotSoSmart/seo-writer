@@ -90,6 +90,14 @@ export interface DashboardSummary {
     leadRate: number
     presenceRate: number
     rivalLeaderboard: Array<{ name: string; url: string; promptsNaming: number }>
+    /** How the tracked list was built — see RunSummary in gap-mapper.ts. */
+    competitorTracking?: {
+        tracked: number
+        supplied: number
+        discovered: number
+        discoveryAttempted: boolean
+        discoveryFailed: boolean
+    }
     citedHosts: Array<{
         host: string
         count: number
@@ -272,6 +280,7 @@ export function VisibilityDashboard(props: DashboardProps) {
     // Emphasis chart: the brand is the point, rivals are context. Ranked by how
     // many questions named each entity.
     const rivalRows = summary.rivalLeaderboard.slice(0, 8)
+    const tracking = summary.competitorTracking
     const brandNamed = summary.presentPromptCount + summary.outrankedPromptCount
     const barMax = Math.max(brandNamed, ...rivalRows.map((rival) => rival.promptsNaming), 1)
 
@@ -429,6 +438,23 @@ export function VisibilityDashboard(props: DashboardProps) {
                 </section>
 
                 {/* ── 2. Rivals (emphasis) ─────────────────────────────── */}
+                {/* An empty leaderboard has two completely different meanings and
+                    the reader cannot tell them apart from the chart's absence:
+                    nobody was named, or nobody was tracked. Mentions are counted
+                    against the tracked list only, so a run with an empty list
+                    was structurally incapable of naming a rival. Saying so is
+                    the same rule the engine ledger follows — a broken source
+                    must never look like an empty result. */}
+                {rivalRows.length === 0 && tracking && tracking.tracked === 0 && (
+                    <section className="mt-12">
+                        <h2 className="text-xl font-semibold">Who gets named instead</h2>
+                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
+                            {tracking.discoveryFailed
+                                ? "No competitors were tracked for this run, because competitor discovery failed. This is not a finding: the run could not have named a rival even if the engines recommended ten of them. Add competitors on your brand settings and probe again."
+                                : "No competitors were tracked for this run, so the answers were never checked against any rival. Add the companies you compete with and probe again to see who is being recommended in your place."}
+                        </p>
+                    </section>
+                )}
                 {rivalRows.length > 0 && (
                     <section className="mt-12">
                         <h2 className="text-xl font-semibold">Who gets named instead</h2>

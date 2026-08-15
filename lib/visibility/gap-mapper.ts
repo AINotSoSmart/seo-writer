@@ -335,6 +335,24 @@ export interface RunSummary {
     /** Competitors ranked by how many prompts named them. */
     rivalLeaderboard: Array<{ name: string; url: string; promptsNaming: number }>
     /**
+     * How the tracked competitor list was assembled, and whether an empty
+     * `rivalLeaderboard` is a finding or a failure.
+     *
+     * Mentions are counted against the supplied list only — there is no
+     * open-ended entity extraction — so an empty list means the run *could not*
+     * have named a rival. Reporting that as "no competitor was named" would be
+     * the same lie the engine ledger exists to prevent one stage later. Written
+     * by `runVisibilityProbe`, not by `summariseRun`, because it describes
+     * discovery rather than answers.
+     */
+    competitorTracking?: {
+        tracked: number
+        supplied: number
+        discovered: number
+        discoveryAttempted: boolean
+        discoveryFailed: boolean
+    }
+    /**
      * Domains the engines cited most across the whole run.
      *
      * `answersNaming` counts the citing answers that also named the brand —

@@ -43,6 +43,7 @@ interface ProbeConsoleProps {
  */
 type ProbePhase =
     | "queued"
+    | "finding_rivals"
     | "building_prompts"
     | "probing_engines"
     | "awaiting_answers"
@@ -51,6 +52,7 @@ type ProbePhase =
 
 const PHASE_ORDER: ProbePhase[] = [
     "queued",
+    "finding_rivals",
     "building_prompts",
     "probing_engines",
     "awaiting_answers",
@@ -62,6 +64,11 @@ const PHASE_COPY: Record<ProbePhase, { label: string; description: string }> = {
     queued: {
         label: "Queueing your questions",
         description: "Handing the confirmed questions to the answer engines.",
+    },
+    finding_rivals: {
+        label: "Working out who you compete with",
+        description:
+            "An answer that recommends someone else is only a finding if we know who they are — so the rivals are resolved before a single question is asked.",
     },
     building_prompts: {
         label: "Preparing the questions",

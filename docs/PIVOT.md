@@ -1063,6 +1063,29 @@ were added: onboarding must not `fetch("/api/topical-audit")`, confirmed prompts
 must be rebound before they are forwarded, and a dead probe must close its audit
 row.
 
+**Rival discovery reconnected (same day, after reading upstream).** The pivot
+silently disabled the product's main finding. `parseAnswer` counts mentions of
+the *supplied* competitor list and nothing else — there is no open-ended entity
+extraction, and upstream (`flipaeo-visibility`, `server/src/lib/response-parser.js`)
+does not have one either. What upstream *does* have is
+`server/src/routes/competitors.js`: an AI web-search call that auto-populates the
+list ("find 5-10 direct competitors", real verified domains only, retried if
+fewer than three). We have the equivalent in `discoverCompetitors`, and it was
+called from exactly one place — `run-audit.ts`'s `competitor_discovery` phase —
+which onboarding no longer runs. So the tracked list had become "whatever the
+customer typed on the extras screen", and typing nothing left the report able to
+say "you are absent" and structurally unable to say who took your place.
+
+`ensureTrackedCompetitors` in `lib/visibility/run-probe.ts` now fills the list as
+phase 0, before prompt building (so discovered names join `entityTokens` and a
+generated prompt cannot name a rival we only just learned about). Customer names
+outrank discovery via `mergeUserFirstCompetitors`; the merged list is persisted
+back to `brand_details.discovered_competitors` and onto the run row. Critically,
+`summary.competitorTracking` records whether an empty leaderboard is a finding or
+a failure — discovery that broke must never render as "nobody was named", the
+same rule the engine ledger enforces one stage later — and the dashboard says
+which.
+
 **Two known gaps, neither fixed in this pass.**
 
 1. **No coverage scan.** The Google harvest read the customer's site and

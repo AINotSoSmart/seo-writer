@@ -19,7 +19,11 @@
 
 import { randomUUID } from "crypto"
 import { createAdminClient } from "@/utils/supabase/admin"
+import { discoverCompetitors } from "@/lib/audit/competitor-scanner"
+import { mergeUserFirstCompetitors } from "@/lib/audit/merge-competitors"
 import { failAuditRun } from "@/lib/audit/run-guards"
+import { HARVEST_POLICY } from "@/lib/harvest/policy"
+import { extractSearchPrefs } from "@/lib/tavily-search"
 import { generateEmbedding } from "@/lib/gemini-embedding"
 import { mapWithConcurrency } from "@/lib/harvest/types"
 import type { AuditScopeFamily, ScopedHarvestedQuery } from "@/lib/harvest/scope-classifier"
@@ -132,6 +136,138 @@ export interface RunProbeOptions {
     onPhase?: ProbePhaseReporter
 }
 
+/** What the run ended up tracking, and whether that was a choice or a failure. */
+export interface CompetitorTracking {
+    competitors: ProbeCompetitor[]
+    /** Competitors the customer named themselves. */
+    supplied: number
+    /** Competitors found by discovery and added to the list. */
+    discovered: number
+    discoveryAttempted: boolean
+    /**
+     * Discovery ran and produced nothing because it broke — no Tavily key, a
+     * failed search, a failed filter. Distinct from "ran and found none",
+     * because an empty rival column caused by a missing key must never read as
+     * "no competitor was ever named". Same rule the engine ledger enforces one
+     * stage later.
+     */
+    discoveryFailed: boolean
+}
+
+/**
+ * Fills the tracked competitor list before any answer is parsed.
+ *
+ * `parseAnswer` counts mentions of the supplied list and nothing else, so this
+ * list is the entire rival column. Before the pivot the harvest filled it at
+ * its `competitor_discovery` phase; when onboarding stopped running the harvest
+ * the only remaining source was whatever the customer typed on the extras
+ * screen — and typing nothing silently disabled the product's main finding.
+ *
+ * The customer's own names always come first: `mergeUserFirstCompetitors` keeps
+ * them and discovery only fills the remaining slots.
+ */
+async function ensureTrackedCompetitors(
+    supabase: any,
+    options: RunProbeOptions,
+    report: ProbePhaseReporter,
+): Promise<CompetitorTracking> {
+    const supplied = options.competitors
+    const slots = HARVEST_POLICY.maxCompetitors - supplied.length
+    if (slots <= 0) {
+        return {
+            competitors: supplied,
+            supplied: supplied.length,
+            discovered: 0,
+            discoveryAttempted: false,
+            discoveryFailed: false,
+        }
+    }
+
+    await report(
+        "finding_rivals",
+        supplied.length > 0
+            ? `${supplied.length} named by you, looking for up to ${slots} more`
+            : `looking for up to ${slots}`,
+    )
+
+    const { data: brand } = await supabase
+        .from("brand_details")
+        .select("brand_data")
+        .eq("id", options.brandId)
+        .maybeSingle()
+    const brandData = brand?.brand_data
+    if (!brandData?.product_name) {
+        // Nothing to search with. Not a failure of discovery — it never ran.
+        return {
+            competitors: supplied,
+            supplied: supplied.length,
+            discovered: 0,
+            discoveryAttempted: false,
+            discoveryFailed: false,
+        }
+    }
+
+    let attempted = 0
+    let succeeded = 0
+    let discovered: Array<{ name: string; url: string; domain: string }> = []
+    try {
+        discovered = await discoverCompetitors(
+            brandData,
+            slots,
+            extractSearchPrefs(brandData),
+            (call) => {
+                attempted += 1
+                if (call.succeeded) succeeded += 1
+            },
+        )
+    } catch (error) {
+        console.error("[Probe] Competitor discovery threw:", error)
+    }
+
+    const merged = mergeUserFirstCompetitors(
+        supplied.map((competitor) => ({
+            name: competitor.name,
+            url: competitor.domain ? `https://${competitor.domain}` : competitor.name,
+            domain: competitor.domain ?? undefined,
+        })),
+        discovered,
+        HARVEST_POLICY.maxCompetitors,
+    )
+
+    const competitors: ProbeCompetitor[] = merged.map((competitor) => ({
+        id: competitor.domain || competitor.url || competitor.name,
+        name: competitor.name,
+        domain: competitor.domain ?? null,
+    }))
+
+    const added = Math.max(0, competitors.length - supplied.length)
+    if (added > 0) {
+        // Persisted so the report, the next probe and the dashboard all name the
+        // same rivals. The customer's entries survive: `merged` is user-first.
+        await supabase
+            .from("brand_details")
+            .update({
+                discovered_competitors: merged.map(({ name, url }) => ({ name, url })),
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", options.brandId)
+            .eq("user_id", options.userId)
+    }
+
+    await report(
+        "finding_rivals",
+        `${competitors.length} tracked (${added} discovered)`,
+    )
+
+    return {
+        competitors,
+        supplied: supplied.length,
+        discovered: added,
+        discoveryAttempted: true,
+        discoveryFailed: attempted > 0 && succeeded === 0,
+    }
+}
+
 /**
  * Executes the probe.
  *
@@ -203,12 +339,30 @@ export async function runVisibilityProbe(
     const runId: string = run.id
 
     try {
+        // ── 0. Rivals ───────────────────────────────────────────────────────
+        // Runs first, and it is not optional. `parseAnswer` counts mentions of
+        // the *supplied* list only — there is no open-ended entity extraction
+        // anywhere in this pipeline, by design, because "Notion was named and
+        // you weren't" is checkable and "the model thinks it saw a brand" is
+        // not. The consequence is that an empty list makes the entire rival
+        // column impossible: the report can say you are absent and can never
+        // say who took your place, which is the finding customers actually buy.
+        //
+        // It runs before prompt building so discovered names join `entityTokens`
+        // and a generated prompt cannot accidentally name a competitor.
+        const competitorTracking = await ensureTrackedCompetitors(
+            supabase,
+            options,
+            report,
+        )
+        const competitors = competitorTracking.competitors
+
         // ── 1. Prompts ──────────────────────────────────────────────────────
         await report("building_prompts", `${families.length} confirmed areas`)
         const entityTokens = [
             options.subjectName,
             ...options.subjectDomains,
-            ...options.competitors.map((competitor) => competitor.name),
+            ...competitors.map((competitor) => competitor.name),
         ].filter(Boolean)
 
         let promptsToUse: import("./prompt-builder").BuyerPrompt[] = []
@@ -421,7 +575,7 @@ export async function runVisibilityProbe(
         const resultRows: any[] = []
 
         for (const { job, answer, taskId } of successful) {
-            const parsed: ParsedAnswer = parseAnswer(answer, subject, options.competitors)
+            const parsed: ParsedAnswer = parseAnswer(answer, subject, competitors)
 
             let entry = byPrompt.get(job.prompt.id)
             if (!entry) {
@@ -484,7 +638,7 @@ export async function runVisibilityProbe(
         const prompts = [...byPrompt.values()]
         const classifyContext = {
             subjectDomains: options.subjectDomains,
-            competitorDomains: options.competitors
+            competitorDomains: competitors
                 .map((competitor) => competitor.domain)
                 .filter((domain): domain is string => Boolean(domain)),
         }
@@ -513,6 +667,17 @@ export async function runVisibilityProbe(
         }
 
         const summary = summariseRun([...outcomes.values()], prompts)
+        // Attached here rather than inside summariseRun: it is a fact about how
+        // the rival list was assembled, not about the answers. Without it an
+        // empty leaderboard is unreadable — "nobody beat you" and "we had
+        // nobody to look for" render identically.
+        summary.competitorTracking = {
+            tracked: competitors.length,
+            supplied: competitorTracking.supplied,
+            discovered: competitorTracking.discovered,
+            discoveryAttempted: competitorTracking.discoveryAttempted,
+            discoveryFailed: competitorTracking.discoveryFailed,
+        }
 
         // ── 4. Gaps → the existing clusterer with frozen contracts ────────
         await report("clustering", `${summary.absentPromptCount + summary.outrankedPromptCount} losing prompts`)
@@ -612,7 +777,7 @@ export async function runVisibilityProbe(
                                 summary.answerCount > 0
                                     ? Math.round((summary.presentAnswerCount / summary.answerCount) * 100)
                                     : 0,
-                            competitors_scanned: options.competitors.length,
+                            competitors_scanned: competitors.length,
                             user_pages_scanned: 0,
                             site_page_snapshot: [],
                         },
@@ -669,6 +834,9 @@ export async function runVisibilityProbe(
             .from("ai_probe_runs")
             .update({
                 status: "completed",
+                // The list actually used, which is not the list the route
+                // inserted when discovery added to it.
+                competitors,
                 prompt_count: summary.promptCount,
                 answer_count: summary.answerCount,
                 present_answer_count: summary.presentAnswerCount,

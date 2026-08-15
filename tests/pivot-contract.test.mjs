@@ -4142,6 +4142,42 @@ test("confirmed prompts are rebound to the audit's own scope family ids", async 
     assert.match(probeRoute, /unboundPrompts/)
 })
 
+test("a probe resolves its rivals before it asks anything", async () => {
+    const [probeRunner, parser, mapper, dashboard] = await Promise.all([
+        text("lib/visibility/run-probe.ts"),
+        text("lib/visibility/answer-parser.ts"),
+        text("lib/visibility/gap-mapper.ts"),
+        text("components/visibility/visibility-dashboard.tsx"),
+    ])
+
+    // Mentions are counted against the SUPPLIED list — there is no open-ended
+    // entity extraction, deliberately, because "Notion was named" is checkable
+    // and "the model thinks it saw a brand" is not. The consequence is that the
+    // list IS the rival column: empty list, no finding, ever.
+    assert.match(parser, /competitors\.map\(/)
+
+    // So the list must be filled before answers are parsed. The harvest used to
+    // do this at its competitor_discovery phase; when onboarding stopped running
+    // the harvest, the only source left was whatever the customer typed.
+    assert.match(probeRunner, /ensureTrackedCompetitors/)
+    assert.match(probeRunner, /discoverCompetitors\(/)
+    // The customer's own names outrank discovery.
+    assert.match(probeRunner, /mergeUserFirstCompetitors\(/)
+    // Discovery must run before prompt building, so a generated prompt cannot
+    // name a rival we only just learned about.
+    assert.ok(
+        probeRunner.indexOf("ensureTrackedCompetitors") <
+            probeRunner.indexOf('report("building_prompts"'),
+        "rivals must be resolved before prompts are built",
+    )
+
+    // An empty leaderboard because discovery broke must never render as "nobody
+    // was named" — the same rule the engine ledger enforces one stage later.
+    assert.match(mapper, /competitorTracking\?:/)
+    assert.match(probeRunner, /discoveryFailed/)
+    assert.match(dashboard, /competitor discovery failed/)
+})
+
 test("a probe that dies closes the audit row it opened", async () => {
     const [guards, probeRunner, probeRoute] = await Promise.all([
         text("lib/audit/run-guards.ts"),
