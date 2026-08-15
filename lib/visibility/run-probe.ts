@@ -51,7 +51,7 @@ import {
     type PromptOutcome,
     type RunSummary,
 } from "./gap-mapper"
-import { buildBuyerPrompts, MAX_PROMPTS_PER_RUN } from "./prompt-builder"
+import { buildBuyerPrompts, DEFAULT_PROMPTS_PER_RUN } from "./prompt-builder"
 
 /**
  * Cloro is a queue, not a synchronous API, so the run is two phases: submit
@@ -209,7 +209,7 @@ export async function runVisibilityProbe(
         const built = await buildBuyerPrompts(families, {
             subjectType: options.subjectType,
             entityTokens,
-            maxPrompts: options.maxPrompts ?? MAX_PROMPTS_PER_RUN,
+            maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
         })
         if (built.prompts.length === 0) {
             throw new ProbeError(

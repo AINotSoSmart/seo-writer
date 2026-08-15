@@ -25,7 +25,10 @@ import {
     estimateCredits,
     type AiEngine,
 } from "@/lib/visibility/engines"
-import { MAX_PROMPTS_PER_RUN } from "@/lib/visibility/prompt-builder"
+import {
+    DEFAULT_PROMPTS_PER_RUN,
+    MAX_PROMPTS_PER_RUN,
+} from "@/lib/visibility/prompt-builder"
 import type { runProbeTask } from "@/trigger/run-probe"
 
 export const maxDuration = 60
@@ -189,7 +192,13 @@ export async function POST(req: NextRequest) {
         .filter((competitor) => competitor.name.length > 0)
 
     const subjectHost = hostOf(brand.website_url || "")
-    const maxPrompts = Math.min(body.maxPrompts ?? MAX_PROMPTS_PER_RUN, MAX_PROMPTS_PER_RUN)
+    // Default small, ceiling high: a caller can ask for more once the questions
+    // have been eyeballed, but an omitted field never spends 60 prompts' worth
+    // of credits by accident.
+    const maxPrompts = Math.min(
+        body.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
+        MAX_PROMPTS_PER_RUN,
+    )
 
     const { data: run, error: runError } = await admin
         .from("ai_probe_runs")

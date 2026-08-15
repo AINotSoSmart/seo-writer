@@ -25,7 +25,9 @@
 import { useState } from "react"
 import { Sigma, X } from "lucide-react"
 
-import { PROMPT_INTENTS, PROMPTS_PER_FAMILY } from "@/lib/visibility/prompt-builder"
+// From the import-free config module, not the builder: this is a client
+// component and the builder pulls in the server-side Gemini client.
+import { PROMPT_INTENTS, PROMPTS_PER_FAMILY } from "@/lib/visibility/prompt-config"
 import {
     SOURCE_TYPE_LABELS,
     type SourceType,
@@ -56,9 +58,17 @@ const FACT_TYPES: SourceType[] = ["owned", "competitor"]
 export function MethodPanel({
     subjectName,
     unclassifiedShare,
+    promptCount,
 }: {
     subjectName: string
     unclassifiedShare: number
+    /**
+     * Questions this run actually asked. Stated rather than implied: the
+     * per-area candidate count and the run's budget are different numbers, and
+     * a panel that quoted only the first would be describing a run that didn't
+     * happen.
+     */
+    promptCount: number
 }) {
     const [open, setOpen] = useState(false)
 
@@ -163,10 +173,10 @@ export function MethodPanel({
 
                             <Section title="Where the questions come from">
                                 <p>
-                                    Each confirmed business area gets {PROMPTS_PER_FAMILY} questions,
-                                    written from that area&apos;s own description and your own words
-                                    for it — never invented topics. The mix is fixed in code so two
-                                    runs ask structurally comparable questions:
+                                    For each confirmed business area we write {PROMPTS_PER_FAMILY}{" "}
+                                    candidate questions, from that area&apos;s own description and
+                                    your own words for it — never invented topics. The mix is fixed
+                                    in code so two runs ask structurally comparable questions:
                                 </p>
                                 <ul className="list-disc space-y-1 pl-5">
                                     {PROMPT_INTENTS.map((intent) => (
@@ -178,6 +188,16 @@ export function MethodPanel({
                                         </li>
                                     ))}
                                 </ul>
+                                <p>
+                                    This run asked{" "}
+                                    <strong className="font-medium text-[var(--viz-ink)]">
+                                        {promptCount}
+                                    </strong>{" "}
+                                    of those candidates. When there are more candidates than the
+                                    run&apos;s budget, they are taken one area at a time in turn —
+                                    so a run measures the business rather than whichever area
+                                    happened to generate the most questions.
+                                </p>
                                 <p>
                                     No question names any brand, including yours. A question that
                                     names you would test whether the engine has an opinion about

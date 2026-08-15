@@ -976,6 +976,40 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (fifth pass) - default run size cut to 10 prompts
+
+Founder request: stop a first run costing more than it needs to.
+
+`DEFAULT_PROMPTS_PER_RUN = 10` (~90 Cloro credits, ~4 cents across the default
+engine pair). `MAX_PROMPTS_PER_RUN` stays 60. **They are deliberately two
+constants**: the default is a cost decision that should move as confidence
+grows, the ceiling is a safety rail that should not, and collapsing them would
+mean raising the cheap default also raised the spend cap. A request may still
+pass `maxPrompts` up to the ceiling with no redeploy.
+
+**Expected consequence, not a bug:** at 10 prompts there will usually be no
+cluster plan, because a qualified cluster needs 8-15 articles. Presence, rivals,
+sources and fan-out all still render, and the plan section says the scope was
+too thin. Documented in both the code and `HOW_IT_WORKS.md` so a thin first run
+does not read as a failure.
+
+**Two things this shook loose.**
+
+The method panel said "each confirmed business area gets 10 questions", which
+stops being true the moment a run-wide cap applies — with 5 families and a
+budget of 10, each area contributes ~2. It now says *candidate* questions and
+states what the run actually asked, passed in as `promptCount`. This is exactly
+the drift the panel exists to prevent, and it appeared within a day of the panel
+shipping.
+
+`PROMPT_INTENTS` and the run-size constants moved to `lib/visibility/prompt-config.ts`,
+an import-free module, for the same reason `cluster-types.ts` was split out of
+`clusterer.ts`: `prompt-builder.ts` imports the Gemini client, so anything
+importing it can only be asserted as text, and these values now carry real
+assertions. It also removes a `"use client"` component from a server client's
+import graph — which had been fine only because `geminiClient.ts` happens to
+read its key inside the function rather than at module scope.
+
 ### 2026-08-15 (fourth pass) - query fan-out, and the search-volume vendor we did not buy
 
 **The question that started it.** Ansvisor integrates DataForSEO. Worth
@@ -3542,7 +3576,7 @@ time out mid-flight and strand a `running` row with no writer.
 npm run dev
 curl -s -X POST http://127.0.0.1:3000/api/visibility/probe \
   -H 'content-type: application/json' \
-  -d '{"auditId":"<audit-with-confirmed-scope>","maxPrompts":20}' | jq
+  -d '{"auditId":"<audit-with-confirmed-scope>"}' | jq
 # -> 202 { runId, estimatedCredits, engines: [...] }
 
 curl -s "http://127.0.0.1:3000/api/visibility/probe?runId=<runId>" | jq
@@ -3552,6 +3586,18 @@ Requires `CLORO_API_KEY`. Without it the route returns 503 rather than quietly
 downgrading to the API surface — that fallback is opt-in via
 `allowApiSurface: true`, and every answer it produces is stored with
 `surface: "api"` and labelled as such in the UI.
+
+**Run size.** `DEFAULT_PROMPTS_PER_RUN` is **10** — about 90 credits, four
+cents. `MAX_PROMPTS_PER_RUN` stays 60 as a safety rail, and any run can ask for
+more via `maxPrompts` without a redeploy. The two are separate on purpose: the
+default is a cost decision that should move as confidence grows, the ceiling is
+a rail that should not.
+
+**Expect no cluster plan at 10 prompts.** A qualified cluster needs 8-15
+articles and ten prompts cannot collapse into that. Presence, rivals, sources
+and fan-out all still render; the plan section says the scope was too thin. That
+is the correct outcome of a sanity run, not a fault — raise `maxPrompts` to
+~40 once the questions read right.
 
 Then read `/visibility/<runId>` and open several questions. If the stored
 answers do not obviously support the verdicts, stop and fix that before anything

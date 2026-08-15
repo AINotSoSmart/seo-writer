@@ -415,9 +415,20 @@ question has actually been asked. Before showing this to anyone: run it on two
 real sites and read fifty answers by hand. If the questions aren't ones a buyer
 would plausibly type, the whole thing is noise no matter how tidy the code is.
 
-**It costs real money per run,** unlike the audit (~$0.20). Roughly 360 Cloro
-credits, about 14 cents, for 40 questions across both engines. Verify against
-your first invoice — that number came from their pricing page, not from a bill.
+**It costs real money per run,** unlike the audit (~$0.20). A run currently asks
+**10 questions** — roughly 90 Cloro credits, about four cents across both
+engines. That is deliberately small: until you have run it once, the only
+question worth answering is whether the questions themselves are any good, and
+10 answers that.
+
+Two consequences of starting small. You will probably get **no article plan** —
+a cluster needs 8-15 articles and ten questions can't fill one, so that section
+will say the scope was too thin. And the numbers are a small sample, so treat
+them as a smell test rather than a measurement. Once the questions read like
+things a buyer would actually type, raise it to about 40 and the plan appears.
+
+(Credit figures come from Cloro's pricing page, not from a bill. Check your
+first invoice.)
 
 ---
 

@@ -334,6 +334,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                         <MethodPanel
                             subjectName={subjectName}
                             unclassifiedShare={breakdown?.unclassifiedShare ?? 0}
+                            promptCount={summary.promptCount}
                         />
                     </div>
                 </header>

@@ -3871,7 +3871,10 @@ test("the method panel reads its values from the code that computes them", async
     // description of the arithmetic is a doc that goes stale silently.
     const panel = await text("components/visibility/method-panel.tsx")
 
-    assert.match(panel, /import \{ PROMPT_INTENTS, PROMPTS_PER_FAMILY \} from "@\/lib\/visibility\/prompt-builder"/)
+    assert.match(
+        panel,
+        /import \{ PROMPT_INTENTS, PROMPTS_PER_FAMILY \} from "@\/lib\/visibility\/prompt-config"/,
+    )
     assert.match(panel, /from "@\/lib\/visibility\/citation-classifier"/)
     assert.match(panel, /PROMPT_INTENTS\.map/)
 
@@ -3990,4 +3993,39 @@ test("fan-out is never presented as search volume", async () => {
         assert.doesNotMatch(file, /dataforseo/i)
         assert.doesNotMatch(file, /AI_VOLUME_MULTIPLIER/)
     }
+})
+
+test("run size defaults small and the ceiling is a separate rail", async () => {
+    // Every prompt costs real Cloro credits on every engine. An omitted
+    // `maxPrompts` must never spend a full-size run's worth by accident — but
+    // the cheap default and the safety ceiling are different decisions and must
+    // not be the same constant, or raising one silently raises the other.
+    const { DEFAULT_PROMPTS_PER_RUN, MAX_PROMPTS_PER_RUN } = await import(
+        "../lib/visibility/prompt-config.ts"
+    )
+
+    assert.ok(
+        DEFAULT_PROMPTS_PER_RUN < MAX_PROMPTS_PER_RUN,
+        "the default must be cheaper than the ceiling, not equal to it",
+    )
+    assert.ok(
+        DEFAULT_PROMPTS_PER_RUN <= 20,
+        "the default is a spend decision — keep it small until runs are calibrated",
+    )
+
+    const route = await text("app/api/visibility/probe/route.ts")
+    // An omitted field falls back to the default; an explicit one is clamped to
+    // the ceiling rather than to the default.
+    assert.match(route, /body\.maxPrompts \?\? DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(route, /MAX_PROMPTS_PER_RUN,\s*\)/)
+
+    // And the panel reports what the run actually asked, not the per-area
+    // candidate count — those are different numbers now that a cap applies.
+    const panel = await text("components/visibility/method-panel.tsx")
+    assert.match(panel, /promptCount/)
+    assert.match(panel, /candidate questions/)
+
+    // The panel is a client component; it must read these from the import-free
+    // config, not from the builder that pulls in the Gemini client.
+    assert.match(panel, /from "@\/lib\/visibility\/prompt-config"/)
 })

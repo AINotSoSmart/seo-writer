@@ -27,49 +27,23 @@
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import { normalizeQuery } from "@/lib/harvest/types"
+import {
+    DEFAULT_PROMPTS_PER_RUN,
+    PROMPT_INTENTS,
+    PROMPTS_PER_FAMILY,
+    type PromptIntentKey,
+} from "./prompt-config"
 
-/**
- * The buyer situations worth testing, and why each is here.
- *
- * `weight` is how many prompts of that intent each family gets. Commercial
- * intents are weighted up because they are the ones where an engine answers
- * with a list of named products — an informational prompt that returns an
- * explanation mentions nobody, and an absence there means very little.
- */
-export const PROMPT_INTENTS = [
-    {
-        key: "recommendation",
-        weight: 3,
-        brief: "asks the assistant to recommend a tool or provider for a specific job",
-        articleType: "commercial" as const,
-    },
-    {
-        key: "alternatives",
-        weight: 2,
-        brief: "asks for alternatives or options in this category, without naming any brand",
-        articleType: "commercial" as const,
-    },
-    {
-        key: "comparison",
-        weight: 2,
-        brief: "asks how to choose between options, or what to look for when choosing",
-        articleType: "commercial" as const,
-    },
-    {
-        key: "problem",
-        weight: 2,
-        brief: "describes the underlying problem in the buyer's own words and asks how to solve it",
-        articleType: "informational" as const,
-    },
-    {
-        key: "howto",
-        weight: 1,
-        brief: "asks how to actually carry out the job",
-        articleType: "howto" as const,
-    },
-] as const
+// Re-exported so existing importers keep one obvious entry point; the values
+// themselves live in the import-free config module so they stay assertable.
+export {
+    DEFAULT_PROMPTS_PER_RUN,
+    MAX_PROMPTS_PER_RUN,
+    PROMPT_INTENTS,
+    PROMPTS_PER_FAMILY,
+    type PromptIntentKey,
+} from "./prompt-config"
 
-export type PromptIntentKey = (typeof PROMPT_INTENTS)[number]["key"]
 
 export interface BuyerPrompt {
     /** Stable id assigned by the caller when persisted. */
@@ -94,14 +68,6 @@ export interface PromptBuildResult {
     report: PromptBuildReport
 }
 
-/** Prompts per family, before dedup. Sum of intent weights = 10. */
-export const PROMPTS_PER_FAMILY = PROMPT_INTENTS.reduce(
-    (total, intent) => total + intent.weight,
-    0,
-)
-
-/** Hard ceiling on one probe run, protecting spend and wall-clock. */
-export const MAX_PROMPTS_PER_RUN = 60
 
 const MAX_ATTEMPTS_PER_FAMILY = 2
 const RETRY_BASE_DELAY_MS = 1200
@@ -212,7 +178,7 @@ export async function buildBuyerPrompts(
     },
 ): Promise<PromptBuildResult> {
     const client = getGeminiClient()
-    const cap = options.maxPrompts ?? MAX_PROMPTS_PER_RUN
+    const cap = options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN
     const errors: string[] = []
     let callsAttempted = 0
     let callsSucceeded = 0
