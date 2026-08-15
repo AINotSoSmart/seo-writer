@@ -3706,3 +3706,94 @@ test("visibility gaps reuse the harvest clusterer rather than forking it", async
     // No local re-implementation of grouping.
     assert.doesNotMatch(probe, /function (collapse|group)[A-Za-z]*\(/)
 })
+
+test("visibility measures the consumer surface, never silently the API", async () => {
+    // The measurement this product sells is what a person sees in ChatGPT and
+    // Google AI Mode. The provider APIs are a different surface: Petra Labs
+    // measured a 32-point visibility swing across OpenAI's three surfaces on
+    // the same prompts on the same day, and one brand that appeared in 15-18%
+    // of chat trials appeared in ZERO API trials. Reporting that brand at 0%
+    // would be indistinguishable from a brand with no AI presence at all.
+    //
+    // So: Cloro is the default, the API path is opt-in, and every stored answer
+    // carries the surface it came from.
+    const [engines, probe, route, surfaces, dashboard] = await Promise.all([
+        text("lib/visibility/engines.ts"),
+        text("lib/visibility/run-probe.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("supabase/migrations/20260815_ai_visibility_surfaces.sql"),
+        text("components/visibility/visibility-dashboard.tsx"),
+    ])
+
+    // The default pair is the two consumer surfaces.
+    assert.match(engines, /DEFAULT_ENGINES[^\n]*=\s*\["chatgpt-web", "google-aimode"\]/)
+    assert.match(engines, /api\.cloro\.dev/)
+
+    // Every engine declares its surface, and the API engines are marked as such.
+    assert.match(engines, /surface: "consumer_app"/)
+    assert.match(engines, /"openai-api"[\s\S]{0,200}surface: "api"/)
+
+    // No Cloro key must never fall back to the API surface on its own.
+    assert.match(engines, /if \(!options\.allowApiSurface\) return \[\]/)
+    assert.match(route, /allowApiSurface/)
+
+    // The surface reaches the database on every answer row.
+    assert.match(probe, /surface: ENGINE_SPECS\[job\.engine\]\.surface/)
+    assert.match(surfaces, /ai_probe_results_surface_allowed/)
+    assert.match(surfaces, /CHECK \(surface IN \('consumer_app', 'api'\)\)/)
+
+    // And the dashboard reports per surface rather than averaging across kinds.
+    assert.match(dashboard, /never averaged together/)
+})
+
+test("a Cloro probe runs as a background task, not inside a request", async () => {
+    // Cloro is submit-and-poll: one task can take minutes, and upstream allows
+    // 30. A probe driven from a serverless route would time out mid-flight and
+    // strand a `running` row with no writer, which is the same shape as the
+    // audit's abandoned-run bug.
+    const [trigger, route, engines] = await Promise.all([
+        text("trigger/run-probe.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("lib/visibility/engines.ts"),
+    ])
+
+    assert.match(trigger, /id: "run-visibility-probe"/)
+    assert.match(trigger, /maxDuration: \d{4}/)
+    // A retry would re-submit every task and bill the credits twice.
+    assert.match(trigger, /retry: \{ maxAttempts: 1 \}/)
+
+    // The route enqueues and returns; it must not run the probe itself.
+    assert.match(route, /tasks\.trigger<typeof runProbeTask>/)
+    assert.doesNotMatch(route, /runVisibilityProbe\(/)
+    // One live probe per audit — two would double-bill the same measurement.
+    assert.match(route, /alreadyRunning/)
+
+    // Two-phase: submit everything, then poll everything.
+    assert.match(engines, /export async function submitCloroTask/)
+    assert.match(engines, /export async function pollCloroTask/)
+
+    // Credits are counted on success only, because Cloro does not bill failures.
+    const probe = await text("lib/visibility/run-probe.ts")
+    assert.match(probe, /entry\.creditsUsed \+= ENGINE_SPECS/)
+})
+
+test("the dashboard shows the evidence, not just the verdict", async () => {
+    // A founder told "you are absent from 26 questions" reasonably suspects a
+    // made-up number. The answer that produced each verdict has to be reachable
+    // without leaving the page, unedited.
+    const [dashboard, evidence] = await Promise.all([
+        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/answer-evidence.tsx"),
+    ])
+
+    assert.match(dashboard, /AnswerEvidence/)
+    assert.match(evidence, /answer\.answer_text/)
+    // Captured third-party text is rendered as text, never as HTML. Assert on
+    // the JSX usage, not the word — the comment explaining why an engine's
+    // output must never be injected is the part worth keeping.
+    assert.doesNotMatch(evidence, /dangerouslySetInnerHTML=\{/)
+    assert.match(evidence, /<mark/)
+    // Status is never carried by colour alone.
+    assert.match(dashboard, /Icon: AlertCircle/)
+    assert.match(dashboard, /<meta\.Icon/)
+})

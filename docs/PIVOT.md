@@ -12,12 +12,15 @@ for what to do next.
 
 Last implementation update: 2026-08-15
 
-Status: **AI-visibility probing added as a second, parallel gap source** (§8).
-Buyer prompts built from the confirmed families are asked of the answer engines;
-absence from an answer becomes a `GapItem` and feeds the existing clusterer
-unchanged. Nothing in the Google harvest path was altered — the two sources
-coexist and neither is yet the default. Not run against a live audit; no engine
-key is configured in this repo, so this is code-complete and unmeasured.
+Status: **AI-visibility probing added as a second, parallel gap source** (§8),
+measuring the **real consumer surfaces** — ChatGPT and Google AI Mode via Cloro,
+not the provider APIs. Buyer prompts built from the confirmed families are asked
+of those surfaces; absence from an answer becomes a `GapItem` and feeds the
+existing clusterer unchanged. Runs on Trigger.dev. Ships with a dashboard whose
+every claim expands to the verbatim answer behind it. Nothing in the Google
+harvest path was altered — the two sources coexist and neither is yet the
+default. **Not run against a live audit**: no `CLORO_API_KEY` exists in this
+repo, so this is code-complete and entirely unmeasured.
 
 Previously: **scope finder no longer times out into a blank keyword form.** Thin SPA
 crawls fall back to unpaid HTML snapshots (meta/JSON-LD/body) then titles;
@@ -972,6 +975,67 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-15 (second pass) - the probe was measuring the wrong surface
+
+**The bug.** The first pass called the OpenAI Responses API and Gemini with
+`googleSearch` grounding, and treated those answers as "what ChatGPT says". They
+are not. The provider API is a different surface from the consumer app —
+different system prompt, model routing, retrieval stack, memory, personalisation.
+
+Two independent sources say the gap is severe:
+
+- **Petra Labs**, 900 trials across paid ChatGPT, free ChatGPT and the API, same
+  prompts, same day: the same brand's visibility moved **32 percentage points**
+  across the three. One brand appeared in 15-18% of chat trials and **zero** API
+  trials. An API-only tool reports that brand at 0% — indistinguishable from a
+  brand with no AI presence at all.
+- **Ansvisor ships `allowedModels: []` on every paid tier**, Enterprise
+  included. Its commercial product is scraper-only. The people who wrote both
+  code paths decided the API path was not good enough to sell.
+
+Shipping the first pass would have meant telling a founder "you are invisible on
+ChatGPT" while they could open ChatGPT and see themselves. That is the single
+most expensive way this product can be wrong, and it would have been discovered
+by a customer rather than by us.
+
+**The fix.** `lib/visibility/engines.ts` now drives Cloro — `chatgpt-web` and
+`google-aimode`, the real consumer surfaces, submit-and-poll. Every stored
+answer carries `surface` (`consumer_app` | `api`) and no read path may average
+across the two. The API adapters survive behind `allowApiSurface` for
+self-hosters with no Cloro key, off by default: a silent fallback would replace
+the measurement the customer is paying for with a materially different one.
+
+Cloro also turned out to be **~10x cheaper** (~$0.14 vs ~$1.50-2.00 per
+40-prompt two-engine probe), so the accuracy fix and the cost fix were the same
+change. Credit figures are unverified against an invoice;
+`ai_probe_runs.credits_used` records actual consumption for reconciliation.
+
+**Consequences that were not optional.**
+
+- *Trigger.dev.* A Cloro task is queued work and can take minutes. The old API
+  route would have timed out mid-run and stranded a `running` row with no
+  writer — the same shape as the audit's abandoned-run bug. `trigger/run-probe.ts`
+  owns the run; the route enqueues and returns a `runId` to poll.
+- *Two-phase submit/poll.* Submitting all 80 tasks first puts the whole run into
+  Cloro's queue at once. Submit-and-wait per prompt would have serialised it
+  into hours.
+- *`maxAttempts: 1`.* A retry re-submits every task and bills the credits twice
+  for a run whose partial answers are already stored.
+
+**Surface selection.** ChatGPT (~63% of B2B AI referrals) and Google AI Mode —
+the highest-reach Google surface, since it sits inside Search rather than in the
+Gemini app. **Claude is a known blind spot**: ~18.5% of B2B referrals, second
+only to ChatGPT for this ICP, but Cloro has no Claude scraper and an API number
+beside two consumer numbers would corrupt the comparison.
+
+**The dashboard.** `components/visibility/` — six sections in claim -> evidence
+order, every question expanding to the verbatim answer with brands marked in
+place. Rendered and inspected in both themes before shipping; the palette was
+run through the data-viz validator rather than chosen by eye.
+
+**Still unmeasured.** No `CLORO_API_KEY` here, so not one prompt has been asked.
+Everything above is a defensible design and zero evidence.
 
 ### 2026-08-15 - AI-visibility probing as a second gap source
 
@@ -3245,8 +3309,9 @@ still the default; these two coexist and answer different questions.
         │             10 per family, weighted to commercial intent
         │             never names any brand — that is what makes it a discovery test
         ▼
-  answer engines      engines.ts · ChatGPT, Claude, Google AI, Perplexity
-        │             each is one fetch with the provider's own web-search tool
+  answer engines      engines.ts · ChatGPT + Google AI Mode via Cloro
+        │             the REAL consumer surfaces, submit-and-poll, not the APIs
+        │             (trigger/run-probe.ts owns the run — a task can take minutes)
         ▼
   counted facts       answer-parser.ts · mentions, first-mention rank, citations
         │             ported from Ansvisor, MIT, Empler AI Inc.
@@ -3279,23 +3344,95 @@ The two sources compose well and that is worth building next: a prompt the
 engines don't name you for *and* your site doesn't answer is the strongest
 signal this product can produce. It is not implemented.
 
+### Which surfaces, and why those
+
+| Surface | Via | Why |
+|---|---|---|
+| **ChatGPT** (`chatgpt-web`) | Cloro | ~63% of measurable B2B AI referrals. |
+| **Google AI Mode** (`google-aimode`) | Cloro | The highest-reach Google surface for someone researching a purchase — it sits inside Search, unlike the Gemini app. |
+
+Available but off by default: `google-aio`, `perplexity-web`, `gemini-web`.
+
+**Claude is deliberately absent** despite being ~18.5% of B2B referrals — second
+only to ChatGPT and well ahead of Gemini for this ICP. Cloro has no Claude
+scraper, so Claude is only reachable through its API, and an API number sitting
+beside two consumer numbers would corrupt the comparison. Revisit if a
+consumer-surface Claude scraper ships. Until then this is a known blind spot in
+the buyer segment that matters most, and it should be said out loud rather than
+papered over.
+
+### Why Cloro and not the provider APIs
+
+The first implementation called the OpenAI Responses API and Gemini grounding.
+That measured the wrong thing.
+
+- **Petra Labs**, 900 trials across paid ChatGPT, free ChatGPT and the API, same
+  prompts, same day: the same brand's visibility moved **32 percentage points**
+  across the three surfaces. One brand appeared in 15-18% of chat trials and
+  **zero** API trials — an API-only tool reports it at 0%, indistinguishable
+  from a brand with no AI presence.
+- **Ansvisor ships `allowedModels: []` on Starter, Growth and Enterprise.** Its
+  commercial product is scraper-only; API-model tracking is a per-customer DB
+  override. The people who wrote both paths decided the API path was not good
+  enough to sell.
+
+The consumer app is a different product wearing the same name: different system
+prompt, model routing, retrieval stack, memory and personalisation. Cloro drives
+the real surfaces and returns their markdown and sources.
+
+It is also **cheaper**, which was not the expected result:
+
+| Path | Per 40-prompt, 2-engine probe |
+|---|---|
+| Provider APIs | 80 calls x $10/1k web search + tokens ~ **$1.50-2.00** |
+| Cloro | ~360 credits at ~$0.0004 ~ **$0.14** |
+
+Credit figures are from Cloro's published pricing and are **unverified against
+an invoice**. `ai_probe_runs.credits_used` records what each run actually
+consumed so the first real bill can be reconciled against it.
+
 ### Running it
+
+The probe runs on Trigger.dev (`run-visibility-probe`), not in the request.
+Cloro is submit-and-poll and one task can take minutes; a serverless route would
+time out mid-flight and strand a `running` row with no writer.
 
 ```bash
 npm run dev
 curl -s -X POST http://127.0.0.1:3000/api/visibility/probe \
   -H 'content-type: application/json' \
   -d '{"auditId":"<audit-with-confirmed-scope>","maxPrompts":20}' | jq
+# -> 202 { runId, estimatedCredits, engines: [...] }
+
+curl -s "http://127.0.0.1:3000/api/visibility/probe?runId=<runId>" | jq
 ```
 
-Requires at least one of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
-`PERPLEXITY_API_KEY`. With none set the route returns 503 rather than an empty
-report. Start at `maxPrompts: 20` — the first run is a sanity check on prompt
-quality, not a measurement.
+Requires `CLORO_API_KEY`. Without it the route returns 503 rather than quietly
+downgrading to the API surface — that fallback is opt-in via
+`allowApiSurface: true`, and every answer it produces is stored with
+`surface: "api"` and labelled as such in the UI.
 
-Then read `/visibility/<runId>`, and open at least ten evidence links from it.
-If the stored answers do not obviously support the verdicts, stop and fix that
-before anything else.
+Then read `/visibility/<runId>` and open several questions. If the stored
+answers do not obviously support the verdicts, stop and fix that before anything
+else.
+
+### The dashboard
+
+`components/visibility/visibility-dashboard.tsx`. Six sections, in claim ->
+evidence order: headline, rivals, per-surface split, cited sources, every
+question (expandable to the verbatim answer with brands marked in place), and
+the cluster plan.
+
+Chart forms follow the data's job. The rival chart is an **emphasis** form (the
+brand in the accent hue, competitors in de-emphasis gray) because one series is
+the point and the rest are context. Sources are **sequential**, one hue. The
+question list is a **table** because seven-plus classes that all carry meaning
+belong in a table. There is no trend line — see below.
+
+The palette is the validated default from the data-viz method, run through the
+six checks in both modes: light `#2a78d6`/`#eb6834` (adjacent CVD dE 24.7,
+normal-vision 33.6), dark `#3987e5`/`#d95926` (26.8 / 31.8). Status colours are
+fixed and always ship with an icon and a text label, never colour alone.
 
 ### Rules for the next agent
 
@@ -3307,6 +3444,8 @@ before anything else.
     this product exists not to make.
 32. **A failed engine is not an absence.** Any new engine adapter must record
     its failures in the ledger and must not return an empty answer on error.
+    With a scraper vendor this matters *more*, not less: Cloro tasks time out
+    routinely, and a timeout rendered as "absent" is a fabricated finding.
 33. **Do not add a trend line without measuring variance first.** Probe the same
     site three times in one day. Whatever spread you see is the noise floor, and
     any "improvement" smaller than it is not an improvement. Ship the number
@@ -3314,3 +3453,10 @@ before anything else.
 34. **Do not let the probe silently become the audit.** It measures a different
     thing (see the table above). If the two are ever merged into one report,
     each gap must still say which source produced it.
+35. **Never average a consumer-surface number with an API-surface number.**
+    They are measurements of different systems that diverge by up to 32 points.
+    `ai_probe_results.surface` exists so every read path can group by it, and
+    the dashboard reports per surface for the same reason.
+36. **Never re-run a probe as a retry.** `runProbeTask` is `maxAttempts: 1`
+    deliberately: a retry re-submits every Cloro task and bills the credits a
+    second time for a run whose partial answers are already stored.

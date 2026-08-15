@@ -1,29 +1,49 @@
 /**
- * POST /api/visibility/probe — run an AI-visibility probe for one audit.
- * GET  /api/visibility/probe?runId=… — read a finished run.
+ * POST /api/visibility/probe   — enqueue a probe, return a run id to poll.
+ * GET  /api/visibility/probe?runId=… — run status and progress.
+ *
+ * The route does not run the probe. Cloro is an async queue and one task can
+ * take minutes, so the work belongs to `trigger/run-probe.ts`; this creates the
+ * run row (so the client has something to watch immediately) and hands it off.
  *
  * The probe reads the audit's *confirmed* scope families, which is what keeps
- * this honest: the prompts measure the business the customer confirmed, not a
- * business a model inferred from the homepage.
+ * it honest: prompts measure the business the customer confirmed, not one a
+ * model inferred from the homepage.
  */
 
 import { NextRequest, NextResponse } from "next/server"
+import { tasks } from "@trigger.dev/sdk/v3"
 
 import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
 import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import type { CapabilityContract } from "@/lib/writer/article-contract"
-import { configuredEngines, type AiEngine } from "@/lib/visibility/engines"
-import { ProbeError, runVisibilityProbe } from "@/lib/visibility/run-probe"
+import {
+    cloroConfigured,
+    configuredEngines,
+    ENGINE_SPECS,
+    estimateCredits,
+    type AiEngine,
+} from "@/lib/visibility/engines"
 import { MAX_PROMPTS_PER_RUN } from "@/lib/visibility/prompt-builder"
+import type { runProbeTask } from "@/trigger/run-probe"
 
-/** Probing 60 prompts across 4 engines is minutes of wall clock, not seconds. */
-export const maxDuration = 800
+export const maxDuration = 60
+
+/** A run with no writer for this long is abandoned, not slow. */
+const PROBE_STALE_AFTER_MINUTES = 45
 
 interface ProbeRequest {
     auditId: string
     engines?: AiEngine[]
     maxPrompts?: number
+    /**
+     * Opt in to the provider APIs when no Cloro key exists. Off by default:
+     * the API surface diverges from the consumer app by up to 32 points, so
+     * silently falling back to it would quietly replace the measurement the
+     * customer is paying for with a materially different one.
+     */
+    allowApiSurface?: boolean
 }
 
 function hostOf(url: string): string | null {
@@ -55,12 +75,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "auditId is required" }, { status: 400 })
     }
 
-    const engines = body.engines?.length ? body.engines : configuredEngines()
+    const engines = body.engines?.length
+        ? body.engines
+        : configuredEngines({ allowApiSurface: body.allowApiSurface })
+
     if (engines.length === 0) {
         return NextResponse.json(
             {
-                error:
-                    "No answer engine is configured. Set at least one of OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY or PERPLEXITY_API_KEY.",
+                error: cloroConfigured()
+                    ? "No engine selected."
+                    : "CLORO_API_KEY is not configured. Cloro drives the real ChatGPT and Google AI Mode answers; the provider APIs measure a different surface and are opt-in via allowApiSurface.",
+                reason: "no_engines",
             },
             { status: 503 },
         )
@@ -76,6 +101,25 @@ export async function POST(req: NextRequest) {
         .single()
     if (!audit) {
         return NextResponse.json({ error: "Audit not found" }, { status: 404 })
+    }
+
+    // One live probe per audit. Two concurrent runs would bill Cloro twice for
+    // the same measurement and race each other's cluster plan.
+    const { data: live } = await admin
+        .from("ai_probe_runs")
+        .select("id, started_at")
+        .eq("audit_id", body.auditId)
+        .eq("status", "running")
+        .gte(
+            "started_at",
+            new Date(Date.now() - PROBE_STALE_AFTER_MINUTES * 60_000).toISOString(),
+        )
+        .maybeSingle()
+    if (live) {
+        return NextResponse.json(
+            { runId: live.id, alreadyRunning: true },
+            { status: 202 },
+        )
     }
 
     const { data: brand } = await admin
@@ -101,6 +145,7 @@ export async function POST(req: NextRequest) {
             {
                 error:
                     "This audit has no confirmed business scope. Confirm scope before probing — prompts built from an unconfirmed scope measure the wrong business.",
+                reason: "no_scope",
             },
             { status: 409 },
         )
@@ -117,9 +162,8 @@ export async function POST(req: NextRequest) {
     }))
 
     // Competitors come from the audit's own working set — the ones that
-    // actually produced readable coverage, persisted by `run-audit.ts` — so the
-    // leaderboard names the same rivals the rest of the report does. Falling
-    // back to `input_competitors` covers an audit whose crawl is still pending.
+    // produced readable coverage, persisted by `run-audit.ts` — so the
+    // leaderboard names the same rivals the rest of the report does.
     const discovered: Array<{ name?: string; url?: string }> = Array.isArray(
         brand.discovered_competitors,
     )
@@ -137,8 +181,6 @@ export async function POST(req: NextRequest) {
         .map((competitor) => {
             const domain = hostOf(competitor.url || "")
             return {
-                // No competitor table exists, so the domain is the stable
-                // identity. `parseAnswer` only needs ids to be unique per run.
                 id: domain ?? String(competitor.url ?? competitor.name ?? ""),
                 name: competitor.name || domain || "",
                 domain,
@@ -147,9 +189,33 @@ export async function POST(req: NextRequest) {
         .filter((competitor) => competitor.name.length > 0)
 
     const subjectHost = hostOf(brand.website_url || "")
+    const maxPrompts = Math.min(body.maxPrompts ?? MAX_PROMPTS_PER_RUN, MAX_PROMPTS_PER_RUN)
+
+    const { data: run, error: runError } = await admin
+        .from("ai_probe_runs")
+        .insert({
+            user_id: user.id,
+            brand_id: brand.id,
+            audit_id: body.auditId,
+            subject_name: brand.product_name || subjectHost || "the brand",
+            subject_domains: subjectHost ? [subjectHost] : [],
+            competitors,
+            engines,
+            status: "running",
+            phase: "queued",
+        })
+        .select("id, public_token")
+        .single()
+    if (runError || !run) {
+        return NextResponse.json(
+            { error: `Could not open a probe run: ${runError?.message ?? "unknown"}` },
+            { status: 500 },
+        )
+    }
 
     try {
-        const result = await runVisibilityProbe(families, {
+        const handle = await tasks.trigger<typeof runProbeTask>("run-visibility-probe", {
+            runId: run.id,
             userId: user.id,
             brandId: brand.id,
             auditId: body.auditId,
@@ -157,40 +223,41 @@ export async function POST(req: NextRequest) {
             subjectDomains: subjectHost ? [subjectHost] : [],
             subjectType: brand.product_identity?.literally || "Product or service",
             competitors,
+            families,
             engines,
-            maxPrompts: Math.min(body.maxPrompts ?? MAX_PROMPTS_PER_RUN, MAX_PROMPTS_PER_RUN),
+            maxPrompts,
         })
 
-        return NextResponse.json({
-            runId: result.runId,
-            publicToken: result.publicToken,
-            summary: result.summary,
-            engineLedger: result.engineLedger,
-            promptBuildErrors: result.promptBuildErrors,
-            durationMs: result.durationMs,
-            clusters: result.clusters.map((cluster) => ({
-                name: cluster.name,
-                scopeFamilyId: cluster.scopeFamilyId,
-                articleCount: cluster.articles.length,
-                articles: cluster.articles.map((article) => ({
-                    title: article.title,
-                    mainKeyword: article.mainKeyword,
-                    articleType: article.articleType,
-                    sourceQueryIds: article.sourceQueryIds,
-                })),
-            })),
-        })
-    } catch (error) {
-        if (error instanceof ProbeError) {
-            const status = error.reason === "no_engines" ? 503 : 422
-            return NextResponse.json(
-                { error: error.message, reason: error.reason },
-                { status },
-            )
-        }
-        console.error("[visibility/probe] failed", error)
+        await admin
+            .from("ai_probe_runs")
+            .update({ trigger_run_id: handle.id })
+            .eq("id", run.id)
+
         return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Probe failed" },
+            {
+                runId: run.id,
+                publicToken: run.public_token,
+                engines: engines.map((engine) => ({
+                    id: engine,
+                    label: ENGINE_SPECS[engine].label,
+                    surface: ENGINE_SPECS[engine].surface,
+                })),
+                estimatedCredits: estimateCredits(maxPrompts, engines),
+                maxPrompts,
+            },
+            { status: 202 },
+        )
+    } catch (error) {
+        await admin
+            .from("ai_probe_runs")
+            .update({
+                status: "failed",
+                failure_reason: `Could not enqueue: ${error instanceof Error ? error.message : String(error)}`,
+                completed_at: new Date().toISOString(),
+            })
+            .eq("id", run.id)
+        return NextResponse.json(
+            { error: "Could not enqueue the probe." },
             { status: 500 },
         )
     }
@@ -213,7 +280,9 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient() as any
     const { data: run } = await admin
         .from("ai_probe_runs")
-        .select("*")
+        .select(
+            "id, status, phase, phase_detail, failure_reason, prompt_count, answer_count, gap_prompt_count, credits_used, engine_ledger, started_at, completed_at, duration_ms",
+        )
         .eq("id", runId)
         .eq("user_id", user.id)
         .single()
@@ -221,11 +290,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Run not found" }, { status: 404 })
     }
 
-    const { data: prompts } = await admin
-        .from("ai_probe_prompts")
-        .select("id, prompt, intent, article_type, verdict, answers_total, answers_present, mean_mention_position, scope_family_id")
-        .eq("run_id", runId)
-        .order("verdict", { ascending: true })
+    // A Trigger job that never started must not show a loader forever — the
+    // same failure the audit path hit before it grew an abandonment rule.
+    const stale =
+        run.status === "running" &&
+        Date.now() - new Date(run.started_at).getTime() >
+            PROBE_STALE_AFTER_MINUTES * 60_000
 
-    return NextResponse.json({ run, prompts: prompts || [] })
+    return NextResponse.json({ ...run, stale })
 }

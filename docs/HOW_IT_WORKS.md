@@ -318,13 +318,13 @@ Added 2026-08-15. It runs beside everything above, not instead of it.
 
 **What it does.** Takes the business areas you already confirmed, writes the
 kind of question a buyer actually types ("what's the best tool for turning a
-sketch into a working screen?"), and asks ChatGPT, Claude, Google AI and
-Perplexity. Then it counts: did they name you, who did they name instead, and
-which pages did they cite.
+sketch into a working screen?"), and asks **the real ChatGPT and the real Google
+AI Mode** — the same thing a person sees, not a developer API. Then it counts:
+did they name you, who did they name instead, and which pages did they cite.
 
 Anything you're absent from becomes a gap, and those gaps go into the *same*
-cluster machinery as everything else. The output is the same kind of plan —
-only the reason has changed:
+cluster machinery as everything else. The output is the same kind of plan — only
+the reason has changed:
 
 > Old: "17 articles, because Google autocomplete and competitor pages say these
 > topics have demand."
@@ -332,31 +332,51 @@ only the reason has changed:
 > New: "You were absent from 26 of 42 buyer questions. Competitors were named in
 > 19. These 17 articles target those 26."
 
-**Why bother.** The second one survives "why should I publish these?" The first
-one has been arguing with that question for six months.
+**Why the "real" bit matters so much.** The first version of this asked ChatGPT's
+developer API instead of the app. Those are not the same thing. Someone measured
+900 trials across the paid app, the free app and the API on the same day: the
+same brand's score moved **32 points** depending which one you asked. One brand
+showed up in 15-18% of app answers and *zero* API answers — a tool using the API
+would have reported that brand at 0%, exactly like a brand nobody has heard of.
+
+Imagine sending that report. The founder opens ChatGPT, types the question, sees
+their own name, and never replies to you again. So we route through Cloro, which
+drives the actual apps. It also costs about a tenth as much (~$0.14 a run versus
+~$1.50-2.00), so the accurate way was also the cheap way.
+
+**What you'll see.** One page. A big number (how often you got named), who got
+named instead, how the two engines differ, which pages the answers were built
+from, then every question we asked. Click any question and the actual answer
+opens underneath — word for word, with your name and your competitors' names
+highlighted where they appear. If a claim isn't backed by the answer below it,
+the claim is wrong. That's the point: it's checkable.
 
 **What it does not do.** It does not track you daily, and it will not tell you
 "visibility went 12% to 31%". Ask an engine the same question twice and you can
 get two different answers — so a change between two runs is mostly noise, and
-saying your articles caused it would be a claim the data can't support. Sell
-the gap, which is solid. Don't sell the trend until we've measured how much it
+saying your articles caused it would be a claim the data can't support. Sell the
+gap, which is solid. Don't sell the trend until we've measured how much it
 wobbles on its own.
 
-**What's honest about it, and what isn't.** Every answer is stored word for
-word, and every gap links to the answers that prove it — open them and check.
-But unlike a Google result, you can't go and see it for yourself independently:
-an AI answer is private and doesn't reproduce. The evidence is our recording of
-it. That's a real step down in proof strength, and both the report and the
-evidence page say so out loud rather than blurring it.
+**What's honest about it, and what isn't.** Every answer is stored word for word
+and every gap links to the answers that prove it. But unlike a Google result you
+can't go verify it independently — an AI answer is private and doesn't
+reproduce. The evidence is our recording of it. That's a real step down in proof
+strength, and the report says so out loud rather than blurring it.
 
-**Status: built, never run.** There's no engine API key in the repo, so not one
-question has actually been asked yet. Before showing this to anyone: run it on
-two real sites and read fifty answers by hand. If the questions aren't ones a
-buyer would plausibly type, the whole thing is noise no matter how tidy the code
-is.
+**One blind spot, named.** Claude is roughly 18% of B2B AI referrals — second
+place, ahead of Gemini — and we can't measure it, because Cloro has no Claude
+scraper and its API is the wrong surface. That's a genuine hole in exactly your
+buyer segment. Don't claim coverage you don't have.
 
-**It costs real money per run,** unlike the audit (~$0.20). Roughly 240
-search-grounded calls per probe. Measure it on the first real run.
+**Status: built, never run.** There's no Cloro key in the repo, so not one
+question has actually been asked. Before showing this to anyone: run it on two
+real sites and read fifty answers by hand. If the questions aren't ones a buyer
+would plausibly type, the whole thing is noise no matter how tidy the code is.
+
+**It costs real money per run,** unlike the audit (~$0.20). Roughly 360 Cloro
+credits, about 14 cents, for 40 questions across both engines. Verify against
+your first invoice — that number came from their pricing page, not from a bill.
 
 ---
 
