@@ -17,6 +17,13 @@ for what is being built, why, how it works, what is calibrated, and what is stil
 open. Read it fully before changing anything under `lib/harvest/`, `lib/audit/`,
 `lib/plans/`, or `trigger/`.
 
+**[`docs/ROADMAP.md`](docs/ROADMAP.md) is the other half**: what was deliberately
+deferred or rejected, and why. Read it before proposing a feature — several
+obvious-looking ideas (full-site coverage scanning, weighted opportunity scores,
+daily trend lines, open-ended entity extraction) have already been evaluated and
+declined with reasons. It also carries the one open correctness defect that has
+no owner yet: every probe currently measures the United States.
+
 Active branch: `pivot/closed-pool-harvest`.
 
 ## Standing instruction
