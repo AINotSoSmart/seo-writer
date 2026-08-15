@@ -174,6 +174,8 @@ export function emptyBrandShell(
         brand_keywords: [],
         scope_families: scopeFamilies,
         target_seed_keywords: targetSeeds,
+        target_region: "US",
+        target_language: "en",
         search_country: "",
         search_topic: "general",
         article_length: "long",

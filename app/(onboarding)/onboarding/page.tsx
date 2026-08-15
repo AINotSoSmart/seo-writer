@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "motion/react"
 // No Loader2: onboarding has exactly one waiting treatment, the step list.
@@ -24,6 +24,7 @@ import { ProbeConsole } from "@/components/visibility/probe-console"
 import { ScopeResults } from "@/components/audit/scope-results"
 import { findScopeBlockers } from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
+import { applyMarketDefaults } from "@/lib/target-market"
 import {
     ANALYZE_PHASE_COPY,
     consumeAnalyzeBrandStream,
@@ -142,6 +143,14 @@ export default function OnboardingPage() {
     const [prompts, setPrompts] = useState<PromptItem[]>([])
     /** The probe run this session is watching, if one is already in flight. */
     const [probeRunId, setProbeRunId] = useState<string | null>(null)
+    /**
+     * Competitor discovery, started while the founder reads the prompts screen
+     * so the confirmation list is already filled when they reach it. The list is
+     * not optional — mentions are counted against tracked names only — so making
+     * them recall four domains from memory would be the wrong ask.
+     */
+    const [discoveringCompetitors, setDiscoveringCompetitors] = useState(false)
+    const competitorDiscoveryRef = useRef(false)
     const [promptsLoading, setPromptsLoading] = useState(false)
     const [regeneratingFamilyId, setRegeneratingFamilyId] = useState<string | null>(null)
     const [promptsError, setPromptsError] = useState("")
@@ -539,6 +548,12 @@ export default function OnboardingPage() {
 
             const data = complete.data
             if (!data) throw new Error("Failed to analyze brand")
+            // Guess the market from the domain before the founder sees the
+            // screen. A `.de` site defaulting to United States is a wrong
+            // measurement nobody would think to check.
+            setBrandData((current) =>
+                current ? applyMarketDefaults(current, url) : current,
+            )
             setStep("profile")
         } catch (e: any) {
             setError(e.message || "An error occurred")
@@ -681,6 +696,10 @@ export default function OnboardingPage() {
                     scopeFamilies: activeFamilies,
                     productName: brandData?.product_name,
                     subjectType: brandData?.product_identity?.literally,
+                    // Buyers ask in their own language, so the questions the
+                    // founder reviews must already be in it — regenerating them
+                    // later in a different language would invalidate the review.
+                    language: brandData?.target_language,
                     competitors,
                 }),
             })
@@ -723,6 +742,10 @@ export default function OnboardingPage() {
                     familyId: target.id || familyId,
                     productName: brandData?.product_name,
                     subjectType: brandData?.product_identity?.literally,
+                    // Buyers ask in their own language, so the questions the
+                    // founder reviews must already be in it — regenerating them
+                    // later in a different language would invalidate the review.
+                    language: brandData?.target_language,
                     competitors,
                 }),
             })
@@ -817,6 +840,76 @@ export default function OnboardingPage() {
             setSavingBrand(false)
         }
     }
+
+    /**
+     * Fills the competitor list before the founder is asked to confirm it.
+     *
+     * Started on the prompts screen rather than the extras screen: discovery is
+     * a Tavily search plus a model filter and takes real seconds, and the
+     * founder is busy reading questions during exactly that window. Runs once,
+     * and never overwrites names they typed themselves.
+     */
+    useEffect(() => {
+        if (!isHydrated) return
+        if (step !== "prompts" && step !== "extras") return
+        if (competitorDiscoveryRef.current) return
+        if (competitors.length > 0) return
+        if (!brandData?.product_name || !url) return
+
+        competitorDiscoveryRef.current = true
+        setDiscoveringCompetitors(true)
+
+        const brandContext = [
+            brandData.product_name,
+            brandData.product_identity?.literally,
+            brandData.category,
+        ]
+            .filter(Boolean)
+            .join(" — ")
+
+        void fetch("/api/analyze-competitors", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                url: `https://${url}`,
+                brandContext,
+                searchPrefs: {
+                    country: brandData.search_country || "",
+                    topic: brandData.search_topic || "general",
+                },
+            }),
+        })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data) => {
+                const found: string[] = (data?.competitorBrands || [])
+                    .map((brand: { domain?: string; url?: string }) =>
+                        (brand.domain || brand.url || "").trim(),
+                    )
+                    .filter(Boolean)
+                if (found.length === 0) return
+                // Still never clobbers a founder who typed while we searched.
+                setCompetitors((current) =>
+                    current.length > 0
+                        ? current
+                        : Array.from(new Set(found)).slice(0, 4),
+                )
+            })
+            .catch(() => {
+                // Discovery is a convenience, not a gate. The screen already
+                // explains why the list matters and accepts typed entries.
+            })
+            .finally(() => setDiscoveringCompetitors(false))
+    }, [
+        brandData?.product_name,
+        brandData?.category,
+        brandData?.product_identity?.literally,
+        brandData?.search_country,
+        brandData?.search_topic,
+        competitors.length,
+        isHydrated,
+        step,
+        url,
+    ])
 
     /** Persisted immediately: a refresh must adopt this run, never buy another. */
     const handleProbeStarted = useCallback((runId: string) => {
@@ -973,9 +1066,9 @@ export default function OnboardingPage() {
                                     {[
                                         { key: "site", label: "Website", done: step !== "brand", active: step === "brand" },
                                         { key: "profile", label: "Your brand", done: ["scope", "prompts", "extras", "audit"].includes(step), active: step === "profile" },
-                                        { key: "scope", label: "What you sell", done: ["prompts", "extras", "audit"].includes(step), active: step === "scope" },
-                                        { key: "prompts", label: "AI Prompts", done: ["extras", "audit"].includes(step), active: step === "prompts" },
-                                        { key: "audit", label: "Audit", done: false, active: step === "extras" || step === "audit" },
+                                        { key: "scope", label: "Topics", done: ["prompts", "extras", "audit"].includes(step), active: step === "scope" },
+                                        { key: "prompts", label: "Questions", done: ["extras", "audit"].includes(step), active: step === "prompts" },
+                                        { key: "audit", label: "Rivals", done: false, active: step === "extras" || step === "audit" },
                                     ].map((entry, entryIndex) => (
                                         <li key={entry.key} className="flex items-center gap-1">
                                             {entryIndex > 0 ? <span className="text-stone-300">·</span> : null}
@@ -1120,6 +1213,7 @@ export default function OnboardingPage() {
                                         <ExtrasStep
                                             brand={brandData}
                                             competitors={competitors}
+                                            discovering={discoveringCompetitors}
                                             onCompetitorsChange={setCompetitors}
                                             onFieldChange={updateField}
                                             saving={savingBrand}

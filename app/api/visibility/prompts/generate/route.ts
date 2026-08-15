@@ -4,6 +4,7 @@ import { buildBuyerPrompts, type BuyerPrompt } from "@/lib/visibility/prompt-bui
 import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import type { CapabilityContract } from "@/lib/writer/article-contract"
 import { CAPABILITY_CONTRACT_VERSION } from "@/lib/writer/article-contract"
+import { resolveLanguage } from "@/lib/target-market"
 
 export const maxDuration = 60
 
@@ -21,6 +22,8 @@ interface GeneratePromptsRequest {
     productName?: string
     subjectType?: string
     competitors?: string[]
+    /** ISO-639-1. Buyers ask in their own language, so the questions must be in it. */
+    language?: string
     maxPrompts?: number
     /** Optional: regenerate prompts for a single scope family only */
     familyId?: string
@@ -112,6 +115,7 @@ export async function POST(req: NextRequest) {
 
         const result = await buildBuyerPrompts(families, {
             subjectType,
+            language: resolveLanguage(body.language),
             entityTokens,
             maxPrompts: body.maxPrompts,
         })

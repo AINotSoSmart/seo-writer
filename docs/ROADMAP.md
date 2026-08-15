@@ -245,31 +245,39 @@ though they cannot surface as names.
 
 ---
 
-## 7. Open defect — every probe measures the United States
+## 7. Fixed — every probe measured the United States
 
-**Status:** live bug. Not yet fixed.
+**Status:** fixed 2026-08-15 as part of §8. Kept here because the shape of the
+bug is worth remembering.
 
 [`engines.ts`](../lib/visibility/engines.ts) `buildCloroPayload` does
-`const country = (countryCode || "US").toUpperCase()`. The value is plumbed all
-the way through `trigger/run-probe.ts` → `runVisibilityProbe` → the Cloro
-payload — but **`app/api/visibility/probe/route.ts` never sets it**, and nothing
-in onboarding collects it.
+`const country = (countryCode || "US").toUpperCase()`. The value was plumbed the
+entire way — Trigger payload → `runVisibilityProbe` → request body — and
+**nothing ever set it**. A fully wired parameter with no writer looks correct in
+every file you read; it only shows up as a wrong answer nobody can see.
 
-So a customer in Germany, India or Australia is measured against US answers, and
-nothing on the report says so. `brand_data.search_country` exists but is a Tavily
-preference string (`"australia"`), not an ISO country code.
+Now: `target_region` (ISO-3166 alpha-2) on the brand, asked on the profile
+screen, pre-filled from the domain's ccTLD, read by the probe route.
 
-Language is a second, larger hole: `buildCloroPayload` takes a country and no
-language at all.
+**Still open — language on the answer engines.** `buildCloroPayload` accepts a
+country and no language field. Rather than invent a parameter the vendor may not
+accept, the chosen language steers **prompt generation** instead: the buyer
+questions are written in it, which is the half fully under our control. Sending
+a language to Cloro needs its API confirmed first.
 
-Fixing the country is small and should ride along with any onboarding change
-(§8). Language needs `engines.ts` work first.
+**Also still open — non-space-delimited languages.** `isPlausiblePrompt` rejects
+anything under four whitespace-separated words, so Japanese and Chinese prompts
+would each count as one word and be discarded — the run would blame the model
+for producing nothing usable. `TARGET_LANGUAGES` is therefore restricted to
+space-delimited scripts. Adding CJK means making prompt validation script-aware
+first.
 
 ---
 
-## 8. Proposed — onboarding rework
+## 8. Built — onboarding rework
 
-**Status:** proposed 2026-08-15, not approved, not built.
+**Status:** shipped 2026-08-15. Recorded here because the comparison is what
+justified each change; the implementation notes are in `PIVOT.md`.
 
 Prompted by comparing our flow against upstream's live onboarding.
 
@@ -277,12 +285,30 @@ Prompted by comparing our flow against upstream's live onboarding.
 |---|---|---|
 | Website → Your brand → What you sell → AI Prompts → Extras (competitors) → Audit | Brand → **Target market (region / state / language)** → **Topics** → Review prompts → **Competitors (required)** → done | Partly |
 
-**1. Collect region and language, early.** Upstream's first screen is "Select
-your target market", framed as *"Pick the region and language your audience
-uses. This helps us deliver more accurate AI visibility data."* This directly
-fixes §7, and it is a question customers understand instantly.
+**1. Collect region and language, early.** ✅ Built. Upstream's first screen is
+"Select your target market", framed as *"Pick the region and language your
+audience uses."* Ours sits on the profile screen rather than its own, for a
+reason upstream does not have: **the buyer questions are generated on the very
+next screen and are written in this language**, so asking later would mean
+reviewing questions in the wrong one. Pre-filled from the domain's ccTLD, so a
+`.de` site does not default to the United States.
 
-**2. Rename "product areas" to "topics", and state the arithmetic.** Upstream
+**1b. Two locales, not one.** ✅ Built, and deliberately not merged.
+`target_region` decides which country's answers we **measure** (Cloro).
+`search_country` / `search_topic` decide which sources we **research** — for
+competitor discovery now, and for the sources the writer cites later. They
+usually agree and they are still separate calls: a German company selling into
+the US wants US answers measured, while whether its article research should also
+be US-only is its own decision. Only the research locale has a valid "Global".
+Deriving one from the other looks tidy and silently changes what every future
+article cites.
+
+**2. Rename "product areas" to "topics", and state the arithmetic.** ✅ Built.
+The scope screen is now "Confirm your topics" and states what confirming
+actually decides: up to `PROMPTS_PER_FAMILY` questions per topic, the best
+`DEFAULT_PROMPTS_PER_RUN` asked on the first run, more addable later. Both
+numbers are **imported from `prompt-config.ts`**, never retyped — this exact
+claim drifted out of true once already. Upstream
 says *"5 prompts are created per topic"* and *"More can be added anytime from the
 dashboard"* — the second clause removes the fear of getting it wrong. Our screens
 say "What you sell" / "product areas" / "scope families" and never tell the
@@ -293,7 +319,10 @@ questions", which stopped being true the moment a run-wide cap applied.
 Naming is customer-facing only. `scope_families` is load-bearing across the
 database, the RPCs and the writer contracts; **do not rename the code.**
 
-**3. Competitors need a reason and near-mandatory status.** Upstream explains
+**3. Competitors need a reason and near-mandatory status.** ✅ Built. Discovery
+runs while the founder reads the prompts screen, so the list is pre-filled by the
+time they reach the confirmation; the button reads "Add a competitor to
+continue" until at least one survives. Upstream explains
 *"We'll track how often competitors appear alongside your brand in AI responses"*
 and disables the button with *"Add a competitor to continue"*. That is correct
 for the same reason established in §6: the list is the entire rival column. Ours
@@ -313,7 +342,7 @@ accordion to just before the first article is generated, not deleting it.
 **5. What NOT to copy.** Upstream tells customers prompts "will be sent to AI
 platforms daily". We deliberately do not do daily tracking (§5).
 
-### Build trigger
-
-Founder approval. Item 1 is worth doing regardless, because §7 is a correctness
-bug rather than a polish item.
+**Not done: deferring the brand-DNA accordion to first article generation.** The
+reasoning in item 4 still holds — those fields are early rather than useless —
+but moving them is a change to the generation path, not the onboarding path, and
+was left out of this pass.

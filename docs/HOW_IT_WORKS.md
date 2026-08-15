@@ -394,6 +394,25 @@ stop agreeing about what was sold.
 | Clustering, titling, absorption, naming | **Unchanged, byte for byte.** |
 | Tavily research when an article is written | **Unchanged.** The writer still does a full contract-bound research pass at generation time. Tavily did not go away; it just isn't used to *find* the topics any more. |
 
+### 11.5.1b Two countries, and why we ask you twice
+
+This looks like a duplicate question and isn't.
+
+**Market** (on the brand screen) is where the *buyer* is. ChatGPT and Google
+answer differently in Berlin and Boston, so this decides which country's answers
+we ask for. There is no "global" option, because there is no global answer — an
+engine answers from somewhere whether or not you choose, and not choosing just
+silently picks the United States.
+
+**Research country** (on the last screen) is where our *sources* come from —
+which pages we read when finding your rivals, and later when writing your
+articles. "Global" is a perfectly good answer here, and it is the default.
+
+They usually match. They don't have to: a German company selling into the US
+wants American answers measured, and may still be happy for its article research
+to range globally. Collapsing them into one control was tried and reverted,
+because it would have quietly changed which sources every future article cites.
+
 ### 11.5.2b Why the competitor list still matters more than ever
 
 Worth being blunt about, because it is counter-intuitive: **the AI probe does

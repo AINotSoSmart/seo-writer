@@ -427,6 +427,8 @@ export default function BrandOnboarding({ onComplete, onCancel, initialData, ini
                             brand_keywords: [], // Added to fix type error
                             scope_families: [],
                             target_seed_keywords: targetSeeds,
+                            target_region: "US",
+                            target_language: "en",
                             search_country: "",
                             search_topic: "general",
                             article_length: "long",

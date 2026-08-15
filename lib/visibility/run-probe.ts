@@ -121,7 +121,10 @@ export interface RunProbeOptions {
     subjectDomains: string[]
     subjectType: string
     competitors: ProbeCompetitor[]
+    /** ISO-3166 alpha-2 — which country's answers Cloro is asked for. */
     countryCode?: string
+    /** ISO-639-1 — the language the buyer questions are written in. */
+    language?: string
     engines?: AiEngine[]
     maxPrompts?: number
     /** Pre-built or user-confirmed buyer prompts. If omitted, prompts are built from scope families. */
@@ -373,6 +376,7 @@ export async function runVisibilityProbe(
         } else {
             const built = await buildBuyerPrompts(families, {
                 subjectType: options.subjectType,
+                language: options.language,
                 entityTokens,
                 maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
             })

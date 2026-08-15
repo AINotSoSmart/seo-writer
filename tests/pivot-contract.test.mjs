@@ -1006,7 +1006,10 @@ test("each onboarding screen is its own file, and the route keeps the machine", 
     for (const literal of [
         "Find my business areas",
         "What do people type into Google to find a tool like yours",
-        "keep yours and find others",
+        // Competitors stopped being "optional, we'll find others" when the
+        // probe made the tracked list the entire rival column — the screen now
+        // pre-fills it and waits for confirmation instead.
+        "Remove any that aren&apos;t real rivals",
         "Usually 1–3 minutes",
     ]) {
         assert.ok(surface.includes(literal), `surface lost: ${literal}`)
@@ -1029,10 +1032,14 @@ test("onboarding asks one question, and scope generates itself", async () => {
     assert.match(analyze, /const \{ url, targetSeeds: rawTargetSeeds = \[\] \} = await req\.json\(\)/)
     assert.doesNotMatch(analyze, /competitors/)
 
-    // Competitors and country/topic live on their own skippable screen, after
-    // the founder has seen something worth the input.
+    // Competitors and the research locale live on their own screen, after the
+    // founder has seen something worth the input. No longer skippable: the
+    // probe counts mentions against the tracked list only, so an empty list
+    // removes the rival half of the report rather than degrading it. Discovery
+    // pre-fills it so confirming is a glance, not a memory test.
     assert.match(page, /step === "extras"/)
-    assert.match(page, /keep yours and find others/)
+    assert.match(page, /Remove any that aren&apos;t real rivals/)
+    assert.match(page, /Add a competitor to continue/)
 
     // SCOPE MUST GENERATE ITSELF. Returning zero areas and handing the founder a
     // blank form is the failure this endpoint exists to prevent. The crawl
@@ -1668,7 +1675,9 @@ test("brand analyze streams real phases and unlocks scope before persona finishe
     assert.doesNotMatch(onboarding, /Loader2 className=/)
 
     assert.match(onboardingRoute, /ANALYZING_STARTED_AT/)
-    assert.match(onboarding, /keep yours and find others/)
+    // Competitors are still their own late screen, but no longer optional —
+    // the probe counts mentions against the tracked list and nothing else.
+    assert.match(onboarding, /Remove any that aren&apos;t real rivals/)
     assert.match(brandOnboarding, /ANALYZING_STARTED_KEY/)
     // Demand check stays out of the analyze critical path.
     assert.match(onboardingRoute, /analyze-brand\/demand-check/)
@@ -4140,6 +4149,44 @@ test("confirmed prompts are rebound to the audit's own scope family ids", async 
     assert.match(binding, /unbound/)
     assert.match(probeRoute, /reason: "unbound_prompts"/)
     assert.match(probeRoute, /unboundPrompts/)
+})
+
+test("a probe measures the customer's market, not a default one", async () => {
+    const [engines, probeRoute, market, profile, builder, extras] = await Promise.all([
+        text("lib/visibility/engines.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("lib/target-market.ts"),
+        text("components/onboarding/steps/profile-step.tsx"),
+        text("lib/visibility/prompt-builder.ts"),
+        text("components/onboarding/steps/extras-step.tsx"),
+    ])
+
+    // Cloro takes a country per request and falls back to the United States, so
+    // an unset value is not "no preference" — it is a silent, wrong measurement
+    // for every customer outside the US.
+    assert.match(engines, /countryCode \|\| "US"/)
+    assert.match(probeRoute, /resolveRegion\(brand\.brand_data\?\.target_region\)/)
+    assert.match(probeRoute, /countryCode,/)
+    assert.match(profile, /target_region/)
+
+    // Measurement locale and research locale are DIFFERENT questions and must
+    // not be collapsed. `search_country` is the Tavily string that decides which
+    // sources competitor discovery and the article writer see, it keeps a valid
+    // "Global" answer, and deriving it from the market would quietly change what
+    // every future article cites.
+    assert.match(extras, /search_country/)
+    assert.match(extras, /<option value="">Global<\/option>/)
+    assert.doesNotMatch(
+        market,
+        /search_country:\s*tavilyCountryForRegion/,
+        "market defaults must never rewrite the research locale",
+    )
+
+    // Buyers ask in their own language, so the questions must be written in it —
+    // an English question measures the English answer.
+    assert.match(builder, /languageName\(language\)/)
+    // And prompt validation must accept the scripts that language list allows.
+    assert.match(builder, /\\p\{L\}/)
 })
 
 test("a probe resolves its rivals before it asks anything", async () => {

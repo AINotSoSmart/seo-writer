@@ -27,6 +27,7 @@
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import { normalizeQuery } from "@/lib/harvest/types"
+import { DEFAULT_LANGUAGE, languageName } from "@/lib/target-market"
 import {
     DEFAULT_PROMPTS_PER_RUN,
     PROMPT_INTENTS,
@@ -83,10 +84,17 @@ const RETRY_BASE_DELAY_MS = 1200
 function isPlausiblePrompt(text: string): boolean {
     const trimmed = text.trim()
     if (trimmed.length < 15 || trimmed.length > 200) return false
+    // Word count assumes a space-delimited script. `TARGET_LANGUAGES` is
+    // restricted to those for exactly this reason — a Japanese prompt is one
+    // "word" here and would be rejected as gibberish, which would look like the
+    // model failing rather than the validator being wrong.
     const words = trimmed.split(/\s+/)
     if (words.length < 4 || words.length > 30) return false
     if (/https?:\/\/|[<>{}]/.test(trimmed)) return false
-    const letters = (trimmed.match(/[a-z]/gi) || []).length
+    // Any Unicode letter, not `[a-z]`. The ASCII version silently failed every
+    // prompt written in a language with accents or a non-Latin script, which
+    // meant offering a language and then producing nothing in it.
+    const letters = (trimmed.match(/\p{L}/gu) || []).length
     return letters / trimmed.length >= 0.6
 }
 
@@ -109,6 +117,7 @@ function namesTrackedEntity(text: string, entityTokens: string[]): boolean {
 function buildFamilyPrompt(
     family: AuditScopeFamily,
     subjectType: string,
+    language: string,
 ): string {
     const operations = family.capabilityContract.operations
         .slice(0, 4)
@@ -138,7 +147,7 @@ RULES
 - Stay strictly inside the business area above. A prompt about an adjacent problem is worse than no prompt.
 - Each prompt must stand alone with no prior context.
 - Vary the buyer's situation and constraints; do not write ${PROMPTS_PER_FAMILY} rewordings of one question.
-- Write in the same language as the customer's own words above.`
+- Write every prompt in ${languageName(language)}. This is the language the customer's buyers use, and it is the language the answer engines will be asked in. Do not translate the business area above — quote its terms as the customer wrote them.`
 }
 
 const RESPONSE_SCHEMA = {
@@ -172,6 +181,12 @@ export async function buildBuyerPrompts(
     families: AuditScopeFamily[],
     options: {
         subjectType: string
+        /**
+         * ISO-639-1. The language buyers ask in — and therefore the language the
+         * answer engines are asked in. An English question measures the English
+         * answer, which is the wrong measurement for a brand selling in Spain.
+         */
+        language?: string
         /** Brand tokens to reject: the subject and every tracked competitor. */
         entityTokens: string[]
         maxPrompts?: number
@@ -203,7 +218,15 @@ export async function buildBuyerPrompts(
                     contents: [
                         {
                             role: "user",
-                            parts: [{ text: buildFamilyPrompt(family, options.subjectType) }],
+                            parts: [
+                                {
+                                    text: buildFamilyPrompt(
+                                        family,
+                                        options.subjectType,
+                                        options.language ?? DEFAULT_LANGUAGE,
+                                    ),
+                                },
+                            ],
                         },
                     ],
                     config: {

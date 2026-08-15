@@ -51,6 +51,7 @@ import {
     MAX_PROMPTS_PER_RUN,
 } from "@/lib/visibility/prompt-builder"
 import { bindPromptsToAuditScope } from "@/lib/visibility/prompt-binding"
+import { resolveLanguage, resolveRegion } from "@/lib/target-market"
 import type { runProbeTask } from "@/trigger/run-probe"
 
 export const maxDuration = 60
@@ -344,12 +345,25 @@ export async function POST(req: NextRequest) {
 
     const { data: brand } = await admin
         .from("brand_details")
-        .select("id, product_name, website_url, product_identity, discovered_competitors")
+        .select(
+            "id, product_name, website_url, product_identity, discovered_competitors, brand_data",
+        )
         .eq("id", audit.brand_id)
         .single()
     if (!brand) {
         return NextResponse.json({ error: "Brand not found" }, { status: 404 })
     }
+
+    /**
+     * The market the answers are asked from.
+     *
+     * Cloro takes a country per request and `buildCloroPayload` falls back to
+     * `"US"`, so until this was read every probe measured the United States
+     * whoever the customer was — the parameter was plumbed the whole way and
+     * simply never set. Not to be confused with `search_country`, which is the
+     * Tavily research locale and a different question.
+     */
+    const countryCode = resolveRegion(brand.brand_data?.target_region)
 
     const { data: scopeRows } = await admin
         .from("audit_scope_families")
@@ -468,6 +482,7 @@ export async function POST(req: NextRequest) {
             subject_domains: subjectHost ? [subjectHost] : [],
             competitors,
             engines,
+            country_code: countryCode,
             status: "running",
             phase: "queued",
         })
@@ -500,6 +515,8 @@ export async function POST(req: NextRequest) {
             competitors,
             families,
             engines,
+            countryCode,
+            language: resolveLanguage(brand.brand_data?.target_language),
             maxPrompts,
             prompts: confirmedPrompts,
         })

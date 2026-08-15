@@ -28,7 +28,10 @@ export interface RunProbePayload {
     competitors: ProbeCompetitor[]
     families: AuditScopeFamily[]
     engines: AiEngine[]
+    /** ISO-3166 alpha-2. Which country's answers Cloro is asked for. */
     countryCode?: string
+    /** ISO-639-1. The language the buyer questions are written in. */
+    language?: string
     maxPrompts?: number
     prompts?: import("@/lib/visibility/prompt-builder").BuyerPrompt[]
 }
@@ -69,6 +72,7 @@ export const runProbeTask = task({
                 subjectType: payload.subjectType,
                 competitors: payload.competitors,
                 countryCode: payload.countryCode,
+                language: payload.language,
                 engines: payload.engines,
                 maxPrompts: payload.maxPrompts,
                 prompts: payload.prompts,

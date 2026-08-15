@@ -983,6 +983,61 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (tenth pass) - onboarding rework, and the parameter nobody ever set
+
+Prompted by comparing our onboarding against the upstream project's live flow.
+Reasoning and the upstream citations are in [`ROADMAP.md`](ROADMAP.md) §8.
+
+**1. Every probe was measuring the United States.** `buildCloroPayload` does
+`const country = (countryCode || "US").toUpperCase()`, and the value was plumbed
+the entire way — Trigger payload → `runVisibilityProbe` → request body — with
+**no writer anywhere**. A fully wired parameter that nothing sets reads as
+correct in every file you open; it surfaces only as a wrong answer no one can
+see. `target_region` (ISO-3166 alpha-2) now lives on the brand, is asked on the
+profile screen, is pre-filled from the domain's ccTLD, and is read by the probe
+route.
+
+**2. Measurement locale and research locale are two questions, kept apart.**
+`search_country` is a Tavily string that decides which sources competitor
+discovery and the *writer* see; `target_region` decides which country's answers
+we ask for. Deriving one from the other was implemented, then reverted on
+founder challenge — it would have silently changed the sources every future
+article cites, and only the research locale has a valid "Global". Both are asked,
+labelled for their job, on different screens.
+
+**3. Language reaches prompt generation, not Cloro.** `buildCloroPayload` has no
+language field, and inventing a vendor parameter to look complete is how a paid
+integration breaks. So `target_language` steers `buildBuyerPrompts` — the buyer
+questions are written in the customer's language, which is the half fully under
+our control. Two consequences handled: `isPlausiblePrompt` counted `[a-z]`, so it
+would have rejected every accented or non-Latin prompt (now `\p{L}`), and its
+four-word minimum assumes a space-delimited script, so `TARGET_LANGUAGES` is
+restricted to those and says why.
+
+**4. The scope screen states its own arithmetic.** "Confirm your topics", with
+what confirming actually decides: up to `PROMPTS_PER_FAMILY` questions per topic,
+the best `DEFAULT_PROMPTS_PER_RUN` asked first, more addable later. Both numbers
+are imported from `prompt-config.ts` rather than retyped — this claim already
+drifted out of true once, when a run-wide cap made a per-topic promise false.
+Naming changed in customer-facing copy only; `scope_families` is load-bearing
+across the database, the RPCs and the writer contracts.
+
+**5. Competitors became a confirmation, not an optional field.** Discovery runs
+while the founder reads the prompts screen, so the list is filled by the time
+they reach it, and the button reads "Add a competitor to continue" until one
+survives. Same structural reason as the ninth pass: mentions are counted against
+the tracked list only, so an empty list removes half the report rather than
+degrading it.
+
+**Not changed, deliberately.** The brand profile screen is already three fields
+with the rest behind an accordion, and those extra fields are not vestigial —
+`generate-blog.ts` injects `core_features`, `pricing`, `uvp` and `how_it_works`
+into article sections. They are *early*, not useless; moving them to just before
+first generation is a change to the writer path and was left out of this pass.
+
+93 contract tests pass, `npx tsc --noEmit` clean, `next build` exit 0. Three
+onboarding copy assertions were updated where the copy deliberately changed.
+
 ### 2026-08-15 (ninth pass) - onboarding finally probes the prompts it asked you to confirm
 
 **The failure.** Onboarding generated buyer prompts, let the customer edit and

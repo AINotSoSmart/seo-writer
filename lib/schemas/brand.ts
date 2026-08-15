@@ -94,6 +94,18 @@ export const BrandDetailsSchema = z.object({
   scope_families: z.array(ScopeFamilySchema).max(12).default([]),
   /** Founder-supplied search direction captured before brand analysis. */
   target_seed_keywords: z.array(z.string().trim().min(2).max(100)).max(12).default([]),
+  /**
+   * The market the brand is measured in — ISO-3166 alpha-2.
+   *
+   * Load-bearing for the AI probe: Cloro takes a country per request and
+   * defaults to `US`, so a brand without this is measured against American
+   * answers whoever it sells to. `search_country` below is the Tavily string
+   * for the same fact and is derived from this one — see lib/target-market.ts
+   * for why one question feeds two formats.
+   */
+  target_region: z.string().trim().optional().default("US"),
+  /** ISO-639-1. The language buyer questions are written in. */
+  target_language: z.string().trim().optional().default("en"),
   search_country: z.string().optional().default(""),       // Tavily search country filter, e.g. "australia"
   search_topic: z.enum(["general", "news", "finance", "journal"]).optional().default("general"),
   article_length: z.enum(["short", "medium", "long", "very_long", "extra_long"]).optional().default("long"),

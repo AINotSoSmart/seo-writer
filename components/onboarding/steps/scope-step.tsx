@@ -15,6 +15,13 @@ import {
     type AnalyzeBrandPhase,
 } from "@/lib/analyze-brand/stream"
 import type { BrandDetails, ScopeFamily } from "@/lib/schemas/brand"
+// Imported, never retyped: the run cap and the per-topic count are the numbers
+// the pipeline actually uses, and a hardcoded copy of them is a promise that
+// silently stops being true the next time either one moves.
+import {
+    DEFAULT_PROMPTS_PER_RUN,
+    PROMPTS_PER_FAMILY,
+} from "@/lib/visibility/prompt-config"
 
 /**
  * Step 3 of onboarding. What we think you sell.
@@ -61,12 +68,26 @@ export function ScopeStep({
         <div className="space-y-4 pb-1">
             <div className="flex items-baseline justify-between gap-3">
                 <h2 className="font-serif text-xl tracking-tight text-stone-900">
-                    Confirm what you sell
+                    Confirm your topics
                 </h2>
             </div>
 
-            {waiting && (
+            {waiting ? (
                 <p className="text-xs text-stone-500">Working out everything you sell.</p>
+            ) : (
+                /* The arithmetic, stated. A founder confirming topics is really
+                   deciding how many buyer questions get asked, and until this
+                   line existed nothing on the screen said so. The numbers are
+                   imported rather than written down — this exact claim has
+                   drifted out of true once already, when a run-wide cap was
+                   added and the copy still promised a per-topic count. */
+                <p className="text-xs leading-relaxed text-stone-500">
+                    These are what we ask ChatGPT and Google AI Mode about. We write
+                    up to {PROMPTS_PER_FAMILY} buyer questions per topic, and your
+                    first run asks the best {DEFAULT_PROMPTS_PER_RUN} across all of
+                    them — you review every one on the next screen, and can add more
+                    later from your dashboard.
+                </p>
             )}
 
             {waiting ? (
