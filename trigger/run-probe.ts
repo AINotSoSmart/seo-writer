@@ -30,6 +30,7 @@ export interface RunProbePayload {
     engines: AiEngine[]
     countryCode?: string
     maxPrompts?: number
+    prompts?: import("@/lib/visibility/prompt-builder").BuyerPrompt[]
 }
 
 export const runProbeTask = task({
@@ -70,6 +71,7 @@ export const runProbeTask = task({
                 countryCode: payload.countryCode,
                 engines: payload.engines,
                 maxPrompts: payload.maxPrompts,
+                prompts: payload.prompts,
                 existingRunId: payload.runId,
                 onPhase: setPhase,
             })

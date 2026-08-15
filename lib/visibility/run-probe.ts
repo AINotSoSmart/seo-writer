@@ -117,6 +117,8 @@ export interface RunProbeOptions {
     countryCode?: string
     engines?: AiEngine[]
     maxPrompts?: number
+    /** Pre-built or user-confirmed buyer prompts. If omitted, prompts are built from scope families. */
+    prompts?: import("./prompt-builder").BuyerPrompt[]
     /**
      * Reuse a run row the caller already created. The API route inserts the row
      * so it can hand the client an id to poll immediately, then the Trigger task
@@ -206,24 +208,34 @@ export async function runVisibilityProbe(
             ...options.competitors.map((competitor) => competitor.name),
         ].filter(Boolean)
 
-        const built = await buildBuyerPrompts(families, {
-            subjectType: options.subjectType,
-            entityTokens,
-            maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
-        })
-        if (built.prompts.length === 0) {
+        let promptsToUse: import("./prompt-builder").BuyerPrompt[] = []
+        let promptBuildErrors: string[] = []
+
+        if (options.prompts && options.prompts.length > 0) {
+            promptsToUse = options.prompts
+        } else {
+            const built = await buildBuyerPrompts(families, {
+                subjectType: options.subjectType,
+                entityTokens,
+                maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
+            })
+            promptsToUse = built.prompts
+            promptBuildErrors = built.report.errors
+        }
+
+        if (promptsToUse.length === 0) {
             throw new ProbeError(
-                `No buyer prompts could be built from the confirmed scope. ${built.report.errors.join("; ")}`,
+                `No buyer prompts could be built from the confirmed scope.${promptBuildErrors.length ? ` ${promptBuildErrors.join("; ")}` : ""}`,
                 "no_prompts",
             )
         }
 
         await report(
             "estimated_cost",
-            `~${estimateCredits(built.prompts.length, engines)} Cloro credits`,
+            `~${estimateCredits(promptsToUse.length, engines)} Cloro credits`,
         )
 
-        const promptRows = built.prompts.map((prompt) => ({
+        const promptRows = promptsToUse.map((prompt) => ({
             run_id: runId,
             user_id: options.userId,
             scope_family_id: prompt.scopeFamilyId,
@@ -545,7 +557,7 @@ export async function runVisibilityProbe(
             summary,
             clusters,
             engineLedger,
-            promptBuildErrors: built.report.errors,
+            promptBuildErrors,
             creditsUsed: engineLedger.reduce(
                 (total, entry) => total + entry.creditsUsed,
                 0,

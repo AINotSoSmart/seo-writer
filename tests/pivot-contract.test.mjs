@@ -954,6 +954,7 @@ test("each onboarding screen is its own file, and the route keeps the machine", 
     assert.deepEqual(stepFiles, [
         "extras-step.tsx",
         "profile-step.tsx",
+        "prompts-step.tsx",
         "scope-step.tsx",
         "site-step.tsx",
     ])
@@ -962,7 +963,7 @@ test("each onboarding screen is its own file, and the route keeps the machine", 
     }
 
     // The route renders each screen and owns nothing of their markup.
-    for (const component of ["SiteStep", "ProfileStep", "ScopeStep", "ExtrasStep"]) {
+    for (const component of ["SiteStep", "ProfileStep", "ScopeStep", "PromptsStep", "ExtrasStep"]) {
         assert.match(route, new RegExp(`<${component}\\b`), `route must render ${component}`)
     }
 
@@ -4028,4 +4029,30 @@ test("run size defaults small and the ceiling is a separate rail", async () => {
     // The panel is a client component; it must read these from the import-free
     // config, not from the builder that pulls in the Gemini client.
     assert.match(panel, /from "@\/lib\/visibility\/prompt-config"/)
+})
+
+test("onboarding lets the user confirm, edit, and prune buyer prompts before probing", async () => {
+    const [page, promptsStep, generateRoute, probeRoute, probeRunner] = await Promise.all([
+        onboardingSurface(),
+        text("components/onboarding/steps/prompts-step.tsx"),
+        text("app/api/visibility/prompts/generate/route.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("lib/visibility/run-probe.ts"),
+    ])
+
+    // 1. Prompts step is a distinct screen rendered in the onboarding surface.
+    assert.match(page, /Confirm the questions buyers ask AI/)
+    assert.match(page, /Why are brands not named in these questions\?/)
+    assert.match(promptsStep, /onRegenerateFamily/)
+    assert.match(promptsStep, /checkBrandMention/)
+
+    // 2. The generation endpoint bridges confirmed scope to the prompt builder.
+    assert.match(generateRoute, /buildBuyerPrompts/)
+    assert.match(generateRoute, /normalizeScopeFamilies/)
+    assert.match(generateRoute, /POST/)
+
+    // 3. The probe route and worker accept user-confirmed prompts.
+    assert.match(probeRoute, /prompts\?: import\("@\/lib\/visibility\/prompt-builder"\)\.BuyerPrompt\[\]/)
+    assert.match(probeRoute, /prompts:\s*body\.prompts/)
+    assert.match(probeRunner, /options\.prompts && options\.prompts\.length > 0/)
 })

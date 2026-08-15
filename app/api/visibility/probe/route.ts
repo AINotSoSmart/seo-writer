@@ -40,6 +40,8 @@ interface ProbeRequest {
     auditId: string
     engines?: AiEngine[]
     maxPrompts?: number
+    /** User-confirmed buyer prompts. If omitted, prompts will be built from scope families. */
+    prompts?: import("@/lib/visibility/prompt-builder").BuyerPrompt[]
     /**
      * Opt in to the provider APIs when no Cloro key exists. Off by default:
      * the API surface diverges from the consumer app by up to 32 points, so
@@ -235,6 +237,7 @@ export async function POST(req: NextRequest) {
             families,
             engines,
             maxPrompts,
+            prompts: body.prompts,
         })
 
         await admin

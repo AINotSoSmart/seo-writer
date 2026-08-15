@@ -43,6 +43,7 @@ import {
 import { SiteStep } from "@/components/onboarding/steps/site-step"
 import { ProfileStep } from "@/components/onboarding/steps/profile-step"
 import { ScopeStep } from "@/components/onboarding/steps/scope-step"
+import { PromptsStep, type PromptItem } from "@/components/onboarding/steps/prompts-step"
 import { ExtrasStep } from "@/components/onboarding/steps/extras-step"
 
 const STORAGE_KEYS = {
@@ -53,6 +54,7 @@ const STORAGE_KEYS = {
     COMPETITORS: 'onboarding_competitors',
     SCOPE_ANALYSIS_ISSUES: 'onboarding_scope_analysis_issues',
     TARGET_SEEDS: 'onboarding_target_seeds',
+    PROMPTS: 'onboarding_prompts',
     ANALYZING_STARTED_AT: 'onboarding_analyzing_started_at',
     SCOPE_STARTED_AT: 'onboarding_scope_started_at',
     CRAWL_PAGES: 'onboarding_crawl_pages',
@@ -69,7 +71,7 @@ const STORAGE_KEYS = {
  * `brand` keeps its name: `resetToBrandStep` must still land on the first
  * screen, and that string is pinned by the deleted-brand recovery test.
  */
-type Step = "brand" | "profile" | "scope" | "extras" | "audit" | "audit-results"
+type Step = "brand" | "profile" | "scope" | "prompts" | "extras" | "audit" | "audit-results"
 
 /** Legacy sessions persisted `step: "brand"` for what is now three screens. */
 function migrateLegacyStep(step: string | null, hasBrandData: boolean): Step | null {
@@ -131,6 +133,11 @@ export default function OnboardingPage() {
     const [isLoadingScope, setIsLoadingScope] = useState(false)
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
 
+    const [prompts, setPrompts] = useState<PromptItem[]>([])
+    const [promptsLoading, setPromptsLoading] = useState(false)
+    const [regeneratingFamilyId, setRegeneratingFamilyId] = useState<string | null>(null)
+    const [promptsError, setPromptsError] = useState("")
+
     const [error, setError] = useState("")
 
     /** Recomputed live so Continue explains itself instead of failing server-side. */
@@ -172,6 +179,8 @@ export default function OnboardingPage() {
             setSeedsWithoutDemand([])
             setCompetitors([])
             setTargetSeeds([])
+            setPrompts([])
+            setPromptsError("")
             setCrawledPages([])
             setAuditScope(null)
             setGapEvidence([])
@@ -274,6 +283,14 @@ export default function OnboardingPage() {
                 setScopeAnalysisIssues(JSON.parse(savedScopeIssues))
             } catch {
                 setScopeAnalysisIssues([])
+            }
+        }
+        const savedPrompts = localStorage.getItem(STORAGE_KEYS.PROMPTS)
+        if (savedPrompts) {
+            try {
+                setPrompts(JSON.parse(savedPrompts))
+            } catch {
+                setPrompts([])
             }
         }
 
@@ -621,6 +638,105 @@ export default function OnboardingPage() {
         }
     }
 
+    /**
+     * Step 3 → 4. Generates candidate buyer prompts from the confirmed scope.
+     *
+     * Scoped to each confirmed family. If the user already confirmed or edited
+     * prompts, they are reused unless the business scope changed.
+     */
+    const handleProceedToPrompts = async () => {
+        setStep("prompts")
+        setPromptsError("")
+
+        const activeFamilies = (brandData?.scope_families || []).filter((f) => f.enabled !== false)
+        const hasAllFamilies =
+            activeFamilies.length > 0 &&
+            activeFamilies.every((f) =>
+                prompts.some((p) => p.scopeFamilyId === (f.id || f.name) || p.sourceSeed === f.name),
+            )
+
+        if (prompts.length > 0 && hasAllFamilies) {
+            return
+        }
+
+        setPromptsLoading(true)
+        try {
+            const res = await fetch("/api/visibility/prompts/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    scopeFamilies: activeFamilies,
+                    productName: brandData?.product_name,
+                    subjectType: brandData?.product_identity?.literally,
+                    competitors,
+                }),
+            })
+
+            const data = await res.json()
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to generate candidate buyer questions")
+            }
+
+            const items: PromptItem[] = (data.prompts || []).map((p: any, idx: number) => ({
+                ...p,
+                id: `prompt-${idx}-${Date.now()}`,
+            }))
+
+            setPrompts(items)
+            localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(items))
+        } catch (err: any) {
+            setPromptsError(
+                err.message || "Could not generate buyer questions. You can add them manually.",
+            )
+        } finally {
+            setPromptsLoading(false)
+        }
+    }
+
+    /** Regenerates candidate buyer questions for a single scope family. */
+    const handleRegenerateFamily = async (familyId: string) => {
+        const activeFamilies = (brandData?.scope_families || []).filter((f) => f.enabled !== false)
+        const target = activeFamilies.find((f) => (f.id || f.name) === familyId)
+        if (!target) return
+
+        setRegeneratingFamilyId(familyId)
+        setPromptsError("")
+        try {
+            const res = await fetch("/api/visibility/prompts/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    scopeFamilies: [target],
+                    familyId: target.id || familyId,
+                    productName: brandData?.product_name,
+                    subjectType: brandData?.product_identity?.literally,
+                    competitors,
+                }),
+            })
+
+            const data = await res.json()
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to regenerate questions for this area")
+            }
+
+            const newItems: PromptItem[] = (data.prompts || []).map((p: any, idx: number) => ({
+                ...p,
+                id: `prompt-${familyId}-${idx}-${Date.now()}`,
+            }))
+
+            const remaining = prompts.filter(
+                (p) => p.scopeFamilyId !== familyId && p.sourceSeed !== target.name,
+            )
+            const updated = [...remaining, ...newItems]
+            setPrompts(updated)
+            localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(updated))
+        } catch (err: any) {
+            setPromptsError(err.message || "Failed to regenerate questions for this area")
+        } finally {
+            setRegeneratingFamilyId(null)
+        }
+    }
+
     // Helper to clean array data
     const cleanArray = (arr: string[] | undefined) => {
         if (!arr) return []
@@ -817,8 +933,9 @@ export default function OnboardingPage() {
                                 <ol className="flex justify-center items-center gap-1 border-b border-stone-100 px-4 py-3 text-[10px] sm:px-6">
                                     {[
                                         { key: "site", label: "Website", done: step !== "brand", active: step === "brand" },
-                                        { key: "profile", label: "Your brand", done: ["scope", "extras", "audit"].includes(step), active: step === "profile" },
-                                        { key: "scope", label: "What you sell", done: ["extras", "audit"].includes(step), active: step === "scope" },
+                                        { key: "profile", label: "Your brand", done: ["scope", "prompts", "extras", "audit"].includes(step), active: step === "profile" },
+                                        { key: "scope", label: "What you sell", done: ["prompts", "extras", "audit"].includes(step), active: step === "scope" },
+                                        { key: "prompts", label: "AI Prompts", done: ["extras", "audit"].includes(step), active: step === "prompts" },
                                         { key: "audit", label: "Audit", done: false, active: step === "extras" || step === "audit" },
                                     ].map((entry, entryIndex) => (
                                         <li key={entry.key} className="flex items-center gap-1">
@@ -922,6 +1039,32 @@ export default function OnboardingPage() {
                                             }}
                                             onLookAgain={handleFindScope}
                                             onRestart={() => resetToBrandStep("")}
+                                            onContinue={handleProceedToPrompts}
+                                        />
+                                    </motion.div>
+                                )}
+
+                                {step === "prompts" && brandData && (
+                                    <motion.div
+                                        key="prompts-step"
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 20 }}
+                                        className="px-4 py-6 sm:px-6"
+                                    >
+                                        <PromptsStep
+                                            prompts={prompts}
+                                            scopeFamilies={brandData.scope_families || []}
+                                            productName={brandData.product_name || ""}
+                                            loading={promptsLoading}
+                                            regeneratingFamilyId={regeneratingFamilyId}
+                                            error={promptsError}
+                                            onPromptsChange={(newPrompts) => {
+                                                setPrompts(newPrompts)
+                                                localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(newPrompts))
+                                            }}
+                                            onRegenerateFamily={handleRegenerateFamily}
+                                            onBack={() => setStep("scope")}
                                             onContinue={() => setStep("extras")}
                                         />
                                     </motion.div>

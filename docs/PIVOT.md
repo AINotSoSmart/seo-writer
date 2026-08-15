@@ -976,6 +976,17 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (sixth pass) - onboarding prompt confirmation screen
+
+Founder request: let users confirm, review, edit, prune and add custom buyer prompts before probing.
+
+1. **New Screen:** `components/onboarding/steps/prompts-step.tsx` added to the onboarding flow as step 4 (`Website -> Your brand -> What you sell -> AI Prompts -> Audit`).
+2. **Review & Edit:** Prompts are grouped by confirmed scope family, carrying color-coded intent badges (`Alternatives`, `Best-Of`, `Comparison`, `Workflow`, `How-To`, `Custom`). Users can edit prompt phrasing inline, remove prompts with one click, or add custom buyer questions with real-time brand name detection (warning if brand name is mentioned to protect blind discovery).
+3. **Per-Family Regeneration:** Users can re-roll candidate questions for an individual scope family if needed.
+4. **API Bridge:** `POST /api/visibility/prompts/generate` bridges the client component to `buildBuyerPrompts()` in `lib/visibility/prompt-builder.ts`.
+5. **Probe Execution:** `lib/visibility/run-probe.ts`, `trigger/run-probe.ts`, and `app/api/visibility/probe/route.ts` accept confirmed `BuyerPrompt[]` arrays and execute them directly rather than generating unreviewed ones.
+6. **Tests:** All 86 contract tests pass (`node tests/pivot-contract.test.mjs`), and `npx tsc --noEmit` is 100% clean.
+
 ### 2026-08-15 (fifth pass) - default run size cut to 10 prompts
 
 Founder request: stop a first run costing more than it needs to.
