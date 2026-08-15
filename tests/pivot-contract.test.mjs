@@ -2513,6 +2513,9 @@ test("scope classification rejects undeliverable topics, not just irrelevant one
     assert.match(classifier, /buildFamilyAliasMaps|aliasToId/)
     assert.match(classifier, /resolveFamilyRef/)
     assert.match(classifier, /BATCH_SIZE = 25/)
+    assert.match(classifier, /partial batch, keeping valid rows and retrying the rest/)
+    assert.match(classifier, /jsonrepair/)
+    assert.match(classifier, /pendingAfter/)
     assert.match(classifier, /family_id=\$\{alias\}/)
     assert.match(
         classifier,

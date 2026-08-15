@@ -1,5 +1,7 @@
 import "server-only"
 
+import { jsonrepair } from "jsonrepair"
+
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { findThirdPartyBrand, type HarvestedQuery } from "./types"
 import type { CapabilityContract } from "../writer/article-contract"
@@ -74,8 +76,9 @@ const BATCH_SIZE = 25
 /**
  * Classification runs *after* the whole harvest — autocomplete, Tavily, and
  * every competitor page fetch. A batch that exhausts its attempts aborts the
- * audit with the money already spent, so the retry budget here is worth more
- * than it looks. Two bare attempts made one transient 503 fatal.
+ * audit with the money already spent. Retries keep already-valid rows and ask
+ * only for the missing indexes so a 9/25 truncated response cannot discard
+ * the 9 and fail-close the run.
  */
 const MAX_ATTEMPTS_PER_BATCH = 4
 const RETRY_BASE_DELAY_MS = 700
@@ -103,8 +106,8 @@ const VALID_SOLUTION_MODES = new Set<SolutionMode>([
 /**
  * Must stay in step with both the ScopeDecision union AND the responseSchema
  * enum below. A value the schema permits but this set omits is treated as a
- * contract violation, which fails the whole batch and — after four attempts —
- * aborts an audit whose harvest spend is already committed.
+ * contract violation, which skips that row. After four attempts a still-
+ * incomplete batch aborts an audit whose harvest spend is already committed.
  */
 const VALID_DECISIONS = new Set<ScopeDecision>([
     "direct",
@@ -114,6 +117,30 @@ const VALID_DECISIONS = new Set<ScopeDecision>([
     "publisher_specific",
     "platform_native",
 ])
+
+function modelJsonText(response: {
+    text?: string
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+}): string {
+    if (typeof response.text === "string" && response.text.trim()) return response.text
+    const parts = response.candidates?.[0]?.content?.parts
+    if (!Array.isArray(parts)) return ""
+    return parts.map((part) => part.text || "").join("")
+}
+
+function parseClassifierJson(raw: string): { assignments?: unknown } {
+    const text = raw.trim()
+    if (!text) return {}
+    try {
+        return JSON.parse(text)
+    } catch {
+        try {
+            return JSON.parse(jsonrepair(text))
+        } catch {
+            return {}
+        }
+    }
+}
 
 // findThirdPartyBrand lives in ./types.ts beside brandTokensFromUrls and
 // containsExcludedBrand — this module is server-only and cannot be imported by
@@ -262,7 +289,7 @@ export async function classifyQueriesToScope(
 
     for (let offset = 0; offset < classifiable.length; offset += BATCH_SIZE) {
         const batch = classifiable.slice(offset, offset + BATCH_SIZE)
-        const prompt = `You are enforcing a customer-confirmed business scope.
+        const promptHead = `You are enforcing a customer-confirmed business scope.
 
 Your task is classification, not brainstorming. For every observed search:
 - "direct": a person searching it could reasonably be trying to understand,
@@ -353,19 +380,26 @@ ${families
         return `- family_id=${alias}\n  name=${family.name}\n  customer job=${family.description}\n  delivery=${family.capabilityContract.deliveryMode}\n  confirmed searches=${family.seedKeywords.join(" | ")}\n  operations:\n${operations}`
     })
     .join("\n")}
+`
 
-OBSERVED SEARCHES (${batch.length} items — return exactly ${batch.length} assignments):
-${batch
-    .map(
-        (query, index) =>
-            `${index}. ${query.query} [source=${query.source}; discovered_from=${query.source_seed || "page"}]\n   source_context=${query.source_context}`,
-    )
-    .join("\n")}`
-
-        let byIndex: Map<number, RawAssignment> | null = null
+        const filled = new Map<number, RawAssignment>()
         let lastError = "invalid response"
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_BATCH; attempt++) {
+            const pending = Array.from(
+                { length: batch.length },
+                (_, index) => index,
+            ).filter((index) => !filled.has(index))
+            if (pending.length === 0) break
+
+            const prompt = `${promptHead}
+OBSERVED SEARCHES (${pending.length} items — return exactly ${pending.length} assignments using the original index numbers shown):
+${pending
+    .map((index) => {
+        const query = batch[index]
+        return `${index}. ${query.query} [source=${query.source}; discovered_from=${query.source_seed || "page"}]\n   source_context=${query.source_context}`
+    })
+    .join("\n")}`
             callsAttempted++
             if (attempt > 1) {
                 // Exponential backoff with jitter, matching suggest-client.ts.
@@ -437,21 +471,19 @@ ${batch
                         },
                     },
                 })
-                const parsed = JSON.parse(response.text || "{}")
+                const parsed = parseClassifierJson(modelJsonText(response))
                 const assignments: RawAssignment[] = Array.isArray(
                     parsed.assignments,
                 )
                     ? parsed.assignments
                     : []
 
-                const candidate = new Map<number, RawAssignment>()
-                let malformed = false
+                const pendingSet = new Set(pending)
                 for (const assignment of assignments) {
                     if (
                         !Number.isInteger(assignment.index) ||
-                        assignment.index < 0 ||
-                        assignment.index >= batch.length ||
-                        candidate.has(assignment.index)
+                        !pendingSet.has(assignment.index) ||
+                        filled.has(assignment.index)
                     ) {
                         continue
                     }
@@ -461,8 +493,7 @@ ${batch
                         !VALID_CAPABILITY_FITS.has(assignment.capability_fit) ||
                         !VALID_SOLUTION_MODES.has(assignment.solution_mode)
                     ) {
-                        malformed = true
-                        break
+                        continue
                     }
 
                     const resolved = resolveFamilyRef(
@@ -473,11 +504,8 @@ ${batch
                     )
 
                     if (assignment.decision === "direct") {
-                        if (!resolved) {
-                            malformed = true
-                            break
-                        }
-                        const family = families.find((candidate) => candidate.id === resolved)
+                        if (!resolved) continue
+                        const family = families.find((row) => row.id === resolved)
                         const operationKey =
                             typeof assignment.operation_key === "string" && assignment.operation_key.trim()
                                 ? assignment.operation_key.trim()
@@ -492,10 +520,9 @@ ${batch
                             (assignment.capability_fit === "educational" && assignment.solution_mode !== "category_educational") ||
                             (assignment.capability_fit !== "educational" && assignment.solution_mode !== "product_led")
                         ) {
-                            malformed = true
-                            break
+                            continue
                         }
-                        candidate.set(assignment.index, {
+                        filled.set(assignment.index, {
                             ...assignment,
                             family_id: resolved,
                             operation_key: operationExists ? operationKey : null,
@@ -503,40 +530,35 @@ ${batch
                     } else {
                         // Non-direct: an unknown/mangled family_id must not
                         // fail the whole batch — clear it and keep the decision.
-                        candidate.set(assignment.index, {
+                        filled.set(assignment.index, {
                             ...assignment,
                             family_id: resolved,
                         })
                     }
                 }
 
-                if (malformed || candidate.size !== batch.length) {
-                    const diag = diagnoseContractFailure(
-                        assignments,
-                        batch.length,
-                        aliasToId,
-                        nameToId,
-                        familyIds,
-                    )
-                    lastError =
-                        candidate.size !== batch.length
-                            ? `${candidate.size}/${batch.length} decisions`
-                            : "assignments violated the scope response contract"
-                    console.error(
-                        "[scope-classifier] contract violation",
-                        JSON.stringify({
-                            attempt,
-                            offset,
-                            lastError,
-                            ...diag,
-                        }),
-                    )
-                    continue
+                if (filled.size === batch.length) {
+                    callsSucceeded++
+                    break
                 }
 
-                byIndex = candidate
-                callsSucceeded++
-                break
+                lastError = `${filled.size}/${batch.length} decisions`
+                console.error(
+                    "[scope-classifier] partial batch, keeping valid rows and retrying the rest",
+                    JSON.stringify({
+                        attempt,
+                        offset,
+                        lastError,
+                        pendingAfter: batch.length - filled.size,
+                        ...diagnoseContractFailure(
+                            assignments,
+                            batch.length,
+                            aliasToId,
+                            nameToId,
+                            familyIds,
+                        ),
+                    }),
+                )
             } catch (error) {
                 lastError =
                     error instanceof Error ? error.message : "unknown error"
@@ -552,11 +574,12 @@ ${batch
             }
         }
 
-        if (!byIndex) {
+        if (filled.size !== batch.length) {
             throw new Error(
                 `Business-scope classification failed after ${MAX_ATTEMPTS_PER_BATCH} bounded attempts: ${lastError}`,
             )
         }
+        const byIndex = filled
 
         for (let index = 0; index < batch.length; index++) {
             const query = batch[index]

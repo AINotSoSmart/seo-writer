@@ -10,15 +10,12 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-14
+Last implementation update: 2026-08-15
 
-Status: **scope finder no longer times out into a blank keyword form.** Thin SPA
-crawls fall back to unpaid HTML snapshots (meta/JSON-LD/body) then titles;
-extraction is a small families-only Gemini call with a 90s timeout and lexical
-seed filter; grounding slices overflow instead of wiping; last resort is one
-family from the confirmed brand card. Domain-agnostic writer contracts, crawl
-checkpoint, and scope role refinement remain. Checkout remains disabled pending
-the staging and external release gate
+Status: **audit classifier keeps valid rows from a short Gemini batch and retries
+only the missing indexes** (the 9/25 production death). Scope-finder fallback no
+longer fakes one brand-card category. Checkout remains disabled pending the
+staging and external release gate
 
 ## 0. 2026-08-04 (second pass) writer completion gate
 
@@ -966,6 +963,20 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 - classifier 9/25 no longer discards the 9
+
+Production died with `Business-scope classification failed after 4 bounded
+attempts: 9/25 decisions`. Harvest spend was already committed. Gemini had
+returned nine valid rows; the classifier treated a short batch as a total miss,
+threw those nine away, and retried the full 25. Four of those and the audit
+failed closed.
+
+Repair in `lib/harvest/scope-classifier.ts`: keep every valid assignment across
+attempts, retry only missing indexes, skip a bad row instead of aborting the
+batch, recover JSON via `jsonrepair` and candidate parts. Still fail-closed if
+the map is incomplete after four attempts — missing queries are not labelled
+`unrelated`.
+
 ### 2026-08-14 - one-category collapse was a silent brand-card fallback
 
 Every live onboarding run was landing on a single family named after the
@@ -1845,7 +1856,8 @@ Worked examples said `-> direct` with no `family_id`, teaching the wrong shape.
 - Durable `console.error("[scope-classifier] …")` diagnostics on contract
   violations so the next Trigger failure names the counters.
 
-Contract suite pins aliases, batch size, and the non-direct clear path.
+Contract suite pins aliases, batch size, the non-direct clear path, and
+keeping valid rows while retrying only the missing indexes (2026-08-15).
 
 ### 2026-08-02 - a deleted brand stranded onboarding
 
