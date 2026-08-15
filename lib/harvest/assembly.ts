@@ -55,11 +55,11 @@ export interface HarvestInput {
     subjectType?: string
 }
 
-function freezeArticleContracts(
+export function freezeArticleContracts(
     clusters: ArticleCluster[],
     families: AuditScopeFamily[],
     evidenceById: Map<string, { evidence: ScopedHarvestedQuery; embedding: number[] }>,
-    input: HarvestInput,
+    input: Partial<HarvestInput>,
 ): void {
     const familyById = new Map(families.map((family) => [family.id, family]))
 

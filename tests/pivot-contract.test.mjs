@@ -4056,3 +4056,26 @@ test("onboarding lets the user confirm, edit, and prune buyer prompts before pro
     assert.match(probeRoute, /prompts:\s*body\.prompts/)
     assert.match(probeRunner, /options\.prompts && options\.prompts\.length > 0/)
 })
+
+test("probe clusters freeze article contracts and finalize into relational delivery tables", async () => {
+    const [assembly, probeRunner, migration] = await Promise.all([
+        text("lib/harvest/assembly.ts"),
+        text("lib/visibility/run-probe.ts"),
+        text("supabase/migrations/20260815_ai_visibility_probe.sql"),
+    ])
+
+    // 1. freezeArticleContracts is exported and reusable across gap sources.
+    assert.match(assembly, /export function freezeArticleContracts/)
+
+    // 2. runVisibilityProbe calls freezeArticleContracts on clustered gaps.
+    assert.match(probeRunner, /import \{ freezeArticleContracts \} from "@\/lib\/harvest\/assembly"/)
+    assert.match(probeRunner, /freezeArticleContracts\(named, families, evidenceById/)
+
+    // 3. Probe finalization persists into topical_audits, query_pool, audit_clusters, and planned_articles.
+    assert.match(probeRunner, /supabase\.rpc\("finalize_audit_run"/)
+    assert.match(probeRunner, /source:\s*"ai_answer"/)
+    assert.match(probeRunner, /contract_version:\s*article\.articleContract\?\.version \|\| "article-contract-v1"/)
+
+    // 4. Migration allows 'ai_answer' in query_pool.source.
+    assert.match(migration, /CHECK \(source IN \('autocomplete', 'paa', 'competitor_sitemap', 'ai_answer'\)\)/)
+})

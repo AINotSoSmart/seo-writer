@@ -976,6 +976,16 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (seventh pass) - probe connected to article delivery engine
+
+Founder directive: connect the AI visibility probe directly to the article delivery pipeline, freeze article contracts, and persist into relational delivery tables.
+
+1. **`freezeArticleContracts` Exported:** [`lib/harvest/assembly.ts`](lib/harvest/assembly.ts) now exports `freezeArticleContracts` for reuse across gap sources.
+2. **Contract Freezing in Probe Runner:** [`lib/visibility/run-probe.ts`](lib/visibility/run-probe.ts) (`clusterVisibilityGaps`) builds `evidenceById` and calls `freezeArticleContracts` so every article in probe clusters carries a frozen, verifiable `article_contract` (version `article-contract-v1`), research query, intent roles, and capability facts.
+3. **Atomic Delivery Table Persistence:** When `options.auditId` is provided (e.g. from onboarding or dashboard audit runs), `runVisibilityProbe` commits `queryRows` (`source = 'ai_answer'`), `clusterRows`, and `articleRows` via `finalize_audit_run` into `topical_audits`, `query_pool`, `audit_clusters`, and `planned_articles`.
+4. **Writer Contract Safety:** `ship-cluster.ts` validates `article_contract` without throwing `audit_requires_writer_contract_refresh`.
+5. **Contract Test Suite:** All 87 contract tests pass (`node tests/pivot-contract.test.mjs`), and `npx tsc --noEmit` passes with 0 errors.
+
 ### 2026-08-15 (sixth pass) - onboarding prompt confirmation screen
 
 Founder request: let users confirm, review, edit, prune and add custom buyer prompts before probing.

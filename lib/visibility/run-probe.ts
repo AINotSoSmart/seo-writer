@@ -17,10 +17,12 @@
  * this product can be.
  */
 
+import { randomUUID } from "crypto"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { generateEmbedding } from "@/lib/gemini-embedding"
 import { mapWithConcurrency } from "@/lib/harvest/types"
-import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
+import type { AuditScopeFamily, ScopedHarvestedQuery } from "@/lib/harvest/scope-classifier"
+import { freezeArticleContracts } from "@/lib/harvest/assembly"
 import {
     collapseToArticles,
     groupIntoClusters,
@@ -511,11 +513,114 @@ export async function runVisibilityProbe(
 
         const summary = summariseRun([...outcomes.values()], prompts)
 
-        // ── 4. Gaps → the existing clusterer, unchanged ─────────────────────
+        // ── 4. Gaps → the existing clusterer with frozen contracts ────────
         await report("clustering", `${summary.absentPromptCount + summary.outrankedPromptCount} losing prompts`)
 
         const gaps = toGapItems(prompts, outcomes, runId)
-        const clusters = await clusterVisibilityGaps(gaps, families)
+        const clusters = await clusterVisibilityGaps(gaps, families, {
+            subjectName: options.subjectName,
+            subjectType: options.subjectType,
+        })
+
+        // ── 5. Relational persistence to topical_audits (if auditId provided)
+        if (options.auditId) {
+            try {
+                const clusterIds = clusters.map(() => randomUUID())
+                const clusterRows = clusters.map((cluster, index) => ({
+                    id: clusterIds[index],
+                    scope_family_id: cluster.scopeFamilyId,
+                    name: cluster.name,
+                    description: "",
+                    priority: index,
+                    article_count: cluster.articles.length,
+                    competitor_urls: cluster.competitorUrls || [],
+                }))
+
+                const articleRows = clusters.flatMap((cluster, clusterIndex) =>
+                    cluster.articles.map((article, articleIndex) => ({
+                        id: randomUUID(),
+                        cluster_id: clusterIds[clusterIndex],
+                        scope_family_id: cluster.scopeFamilyId,
+                        title: article.title,
+                        main_keyword: article.mainKeyword,
+                        supporting_keywords: article.supportingKeywords || [],
+                        source_query_ids: article.sourceQueryIds,
+                        sub_node_intents: article.subNodes.map((node) => node.intent),
+                        sub_node_query_ids: article.subNodes.flatMap((node) => node.sourceQueryIds),
+                        origin_scope_family_id: article.originScopeFamilyId ?? null,
+                        article_type: article.articleType,
+                        article_contract: article.articleContract,
+                        contract_version: article.articleContract?.version || "article-contract-v1",
+                        intent_role: articleIndex === 0 ? "pillar" : "supporting",
+                        is_pillar: articleIndex === 0,
+                    })),
+                )
+
+                const embeddings = await mapWithConcurrency(gaps, EMBEDDING_CONCURRENCY, (gap) =>
+                    generateEmbedding(gap.query, "RETRIEVAL_QUERY"),
+                )
+                const embeddingMap = new Map<string, number[]>()
+                gaps.forEach((gap, index) => {
+                    if (embeddings[index]) embeddingMap.set(gap.queryId, embeddings[index])
+                })
+
+                const queryRows = gaps.map((gap) => ({
+                    id: gap.queryId,
+                    scope_family_id: gap.scopeFamilyId,
+                    query: gap.query,
+                    query_norm: gap.query.trim().toLowerCase(),
+                    source: "ai_answer",
+                    source_url: gap.sourceUrl,
+                    source_seed: prompts.find((p) => p.id === gap.queryId)?.sourceSeed || gap.query,
+                    observed_value: outcomes.get(gap.queryId)?.verdict || "absent",
+                    source_context: gap.sourceContext,
+                    intent_binding: gap.intentBinding,
+                    observed_at: new Date().toISOString(),
+                    embedding: embeddingMap.get(gap.queryId) || null,
+                    status: "gap",
+                    covered_by_url: null,
+                    covered_by_title: null,
+                    coverage_similarity: 0,
+                    competitor_matches: gap.competitors || [],
+                }))
+
+                if (queryRows.length > 0) {
+                    const { error: finalizeError } = await supabase.rpc("finalize_audit_run", {
+                        p_audit_id: options.auditId,
+                        p_query_rows: queryRows,
+                        p_cluster_rows: clusterRows,
+                        p_article_rows: articleRows,
+                        p_statistics: {
+                            pool_size: queryRows.length,
+                            article_count: articleRows.length,
+                            cluster_count: clusterRows.length,
+                            authority_score:
+                                summary.answerCount > 0
+                                    ? Math.round((summary.presentAnswerCount / summary.answerCount) * 100)
+                                    : 0,
+                            competitors_scanned: options.competitors.length,
+                            user_pages_scanned: 0,
+                            site_page_snapshot: [],
+                        },
+                        p_result_hash: `ai-probe-${runId}`,
+                        p_policy_version: "ai-probe-v1.0.0",
+                        p_source_call_ledger: engineLedger.map((e) => ({
+                            source: e.engine,
+                            attempted: e.attempted,
+                            succeeded: e.succeeded,
+                            failed: e.failed,
+                            cached: 0,
+                        })),
+                    })
+
+                    if (finalizeError) {
+                        console.warn(`[Probe] Warning: Could not finalize audit ${options.auditId}:`, finalizeError.message)
+                    }
+                }
+            } catch (persistErr) {
+                console.warn(`[Probe] Error persisting audit tables for ${options.auditId}:`, persistErr)
+            }
+        }
 
         const durationMs = Date.now() - startedAt
         await supabase
@@ -544,6 +649,8 @@ export async function runVisibilityProbe(
                         mainKeyword: article.mainKeyword,
                         articleType: article.articleType,
                         sourceQueryIds: article.sourceQueryIds,
+                        articleContract: article.articleContract,
+                        contractVersion: article.articleContract?.version,
                     })),
                 })),
                 completed_at: new Date().toISOString(),
@@ -589,6 +696,7 @@ export async function runVisibilityProbe(
 export async function clusterVisibilityGaps(
     gaps: ReturnType<typeof toGapItems>,
     families: AuditScopeFamily[],
+    context?: { subjectName?: string; subjectType?: string },
 ): Promise<ArticleCluster[]> {
     if (gaps.length === 0) return []
 
@@ -651,5 +759,37 @@ export async function clusterVisibilityGaps(
         { parentByFamilyId },
     )
 
-    return nameClusters(absorbed.clusters)
+    const named = await nameClusters(absorbed.clusters)
+
+    // Build evidence map so freezeArticleContracts can bind frozen intent
+    // contracts and capability facts into every planned article row.
+    const evidenceById = new Map<
+        string,
+        { evidence: ScopedHarvestedQuery; embedding: number[] }
+    >()
+    for (const gap of gaps) {
+        const embedding = embeddingMap.get(gap.queryId) || []
+        evidenceById.set(gap.queryId, {
+            evidence: {
+                query: gap.query,
+                query_norm: gap.query.trim().toLowerCase(),
+                source: "ai_answer",
+                source_url: gap.sourceUrl,
+                source_seed: gap.query,
+                observed_value: "absent",
+                source_context: gap.sourceContext,
+                intent_binding: gap.intentBinding,
+                observed_at: new Date().toISOString(),
+                scope_family_id: gap.scopeFamilyId,
+            },
+            embedding,
+        })
+    }
+
+    freezeArticleContracts(named, families, evidenceById, {
+        subjectName: context?.subjectName,
+        subjectType: context?.subjectType,
+    })
+
+    return named
 }
