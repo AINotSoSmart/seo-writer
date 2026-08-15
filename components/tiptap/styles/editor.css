@@ -1,0 +1,268 @@
+/* TipTap Editor Styles */
+
+/* Base editor content */
+.ProseMirror {
+    outline: none;
+}
+
+.ProseMirror>*+* {
+    margin-top: 0.75em;
+}
+
+/* Placeholder styling - first empty paragraph */
+.ProseMirror p.is-editor-empty:first-child::before {
+    color: hsl(var(--muted-foreground));
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+}
+
+/* Empty paragraph visual indicator - like WordPress */
+.ProseMirror p.is-empty:not(:first-child)::before {
+    color: #94a3b8;
+    content: 'Write something here....';
+    float: left;
+    height: 0;
+    pointer-events: none;
+    font-style: italic;
+}
+
+/* Empty paragraphs have a min height so they're visible */
+.ProseMirror p {
+    min-height: 1.5em;
+}
+
+/* Focused paragraph gets a subtle left border */
+.ProseMirror p:focus,
+.ProseMirror p.has-focus {
+    border-left: 2px solid #3b82f6;
+    padding-left: 0.75rem;
+    margin-left: -0.75rem;
+    border-radius: 2px;
+}
+
+/* Code block styling - Editor only, CMS will use their own styles */
+.ProseMirror pre {
+    background: #1e293b;
+    border-radius: 0.5rem;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    border: 1px solid #334155;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.ProseMirror pre code {
+    background: none !important;
+    color: #e2e8f0;
+    font-size: 0.875rem;
+    padding: 0;
+    font-family: inherit;
+    text-decoration: none !important;
+    border: none !important;
+    -webkit-text-decoration-skip: none;
+}
+
+/* Disable spell-check styling in code blocks */
+.ProseMirror pre [data-spelling-error],
+.ProseMirror pre .ProseMirror-spelling-error,
+.ProseMirror code [data-spelling-error],
+.ProseMirror code .ProseMirror-spelling-error {
+    text-decoration: none !important;
+    border-bottom: none !important;
+}
+
+/* Inline code */
+.ProseMirror code {
+    background: #f1f5f9;
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875em;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    color: #0f172a;
+    text-decoration: none !important;
+}
+
+/* Blockquote */
+.ProseMirror blockquote {
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+    font-family: 'Georgia', serif;
+    font-style: italic;
+    color: #312e81;
+    font-size: 1.125rem;
+    position: relative;
+}
+
+.ProseMirror blockquote::before {
+    content: '"';
+    font-family: serif;
+    font-size: 3rem;
+    color: #c7d2fe;
+    position: absolute;
+    top: -0.5rem;
+    left: 0.5rem;
+    line-height: 1;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Table styling */
+.ProseMirror table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.5rem;
+}
+
+/* Divider styling */
+.ProseMirror hr {
+    border: none;
+    border-top: 2px solid #e5e7eb;
+    margin: 2rem 0;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+    border: 1px solid #e5e7eb;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    min-width: 100px;
+}
+
+.ProseMirror th {
+    background: #f3f4f6;
+    font-weight: 600;
+    border-bottom: 2px solid #d1d5db;
+}
+
+.ProseMirror tr:nth-child(even) td {
+    background: #f9fafb;
+}
+
+/* Table resize handle */
+.ProseMirror .tableWrapper {
+    overflow-x: auto;
+}
+
+.ProseMirror .column-resize-handle {
+    background-color: hsl(var(--primary));
+    width: 4px;
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: 0;
+    cursor: col-resize;
+}
+
+/* Task list */
+.ProseMirror ul[data-type="taskList"] {
+    list-style: none;
+    padding: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.ProseMirror ul[data-type="taskList"] li>label {
+    flex: 0 0 auto;
+    margin-top: 0.25rem;
+}
+
+.ProseMirror ul[data-type="taskList"] li>div {
+    flex: 1 1 auto;
+}
+
+/* Highlight */
+.ProseMirror mark {
+    background-color: hsl(48, 100%, 70%);
+    border-radius: 0.125rem;
+    padding: 0.0625rem 0;
+}
+
+/* Images */
+.ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+    outline: 3px solid hsl(var(--primary));
+}
+
+/* Horizontal rule */
+.ProseMirror hr {
+    border: none;
+    border-top: 2px solid hsl(var(--border));
+    margin: 1.5rem 0;
+}
+
+/* List styling */
+.ProseMirror ul,
+.ProseMirror ol {
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+}
+
+.ProseMirror ul {
+    list-style-type: disc;
+}
+
+.ProseMirror ol {
+    list-style-type: decimal;
+}
+
+.ProseMirror li {
+    margin: 0.25rem 0;
+    display: list-item;
+}
+
+.ProseMirror li p {
+    display: inline;
+    margin: 0;
+}
+
+.ProseMirror li>p:first-child {
+    display: inline;
+}
+
+/* Link styling */
+.ProseMirror a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.ProseMirror a:hover {
+    opacity: 0.8;
+}
+
+/* Selection styling */
+.ProseMirror ::selection {
+    background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+.ProseMirror:focus ::selection {
+    background-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+/* Selection on webkit browsers */
+.ProseMirror ::-moz-selection {
+    background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* General text selection */
+.editor-prose ::selection,
+.editor-prose *::selection {
+    background-color: rgba(59, 130, 246, 0.3) !important;
+    color: inherit;
+}

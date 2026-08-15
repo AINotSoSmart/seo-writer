@@ -1,0 +1,85 @@
+"use client"
+
+import { useEffect } from "react"
+import { Navbar } from '@/components/landing/Navbar'
+import { Footer } from "@/components/landing/Footer"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { RefreshCw, ArrowLeft, Home } from "lucide-react"
+import { ErrorGraphic } from "@/components/ui/error-graphic"
+
+export default function BlogPostError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    // Log the error to an error reporting service
+    console.error('Blog post error:', error)
+  }, [error])
+
+  return (
+    <div className="min-h-screen bg-white flex flex-col relative">
+      <Navbar />
+
+      <main className="flex-1 flex items-center justify-center pt-24 pb-16 px-4 relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:24px_24px] opacity-40 -z-10"></div>
+
+        <div className="w-full max-w-5xl grid md:grid-cols-2 gap-12 items-center">
+
+          {/* Left Side: content */}
+          <div className="order-2 md:order-1 flex flex-col items-start text-left">
+            <div className="inline-block bg-red-100 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] px-3 py-1 mb-6 transform rotate-1">
+              <span className="font-mono font-bold text-xs uppercase tracking-widest">
+                Content Error
+              </span>
+            </div>
+
+            <h1 className="font-display font-black text-4xl md:text-5xl mb-6 uppercase leading-[0.9]">
+              Failed To<br />Load Article
+            </h1>
+
+            <p className="font-sans text-gray-600 text-lg mb-8 leading-relaxed border-l-4 border-black pl-4 py-1 max-w-md">
+              We're having trouble loading this specific article. It might have been moved or deleted, or there's a temporary system issue.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+              <Button
+                onClick={reset}
+                className="flex-1 h-12 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all bg-black text-white rounded-none"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+
+              <Link href="/blog" className="flex-1">
+                <Button variant="outline" className="w-full h-12 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all bg-white text-black hover:bg-gray-50 rounded-none">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Blog
+                </Button>
+              </Link>
+            </div>
+
+            {process.env.NODE_ENV === 'production' && (
+              <div className="mt-8 p-4 bg-gray-50 border-2 border-black/10 text-left w-full max-w-md">
+                <h3 className="font-mono font-bold text-xs text-gray-500 mb-1 uppercase">Diagnostics Code</h3>
+                <p className="text-xs text-gray-400 font-mono break-all">{error.digest || error.message || 'ERR_ARTICLE_LOAD'}</p>
+              </div>
+            )}
+
+          </div>
+
+          {/* Right Side: Graphic */}
+          <div className="order-1 md:order-2 flex justify-center transform hover:scale-105 transition-transform duration-500">
+            <ErrorGraphic mode="error" />
+          </div>
+
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+}
