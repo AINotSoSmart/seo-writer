@@ -1063,8 +1063,33 @@ were added: onboarding must not `fetch("/api/topical-audit")`, confirmed prompts
 must be rebound before they are forwarded, and a dead probe must close its audit
 row.
 
+**Two known gaps, neither fixed in this pass.**
+
+1. **No coverage scan.** The Google harvest read the customer's site and
+   subtracted what it already covered. The probe does not — `toGapItems` sets
+   `userStatus: "gap"` meaning "absent from the AI answer", explicitly a claim
+   about the engine and not about the site, and persists `user_pages_scanned: 0`
+   with `covered_by_url: null`. So the plan can propose an article for a page
+   the customer already has. Defensible (if an engine won't name you for a
+   question you already cover, the page is not working), but it is a **different
+   promise** from "we found what's missing from your site", and nothing should be
+   sold on the old wording until the scanner — which still exists and still works
+   — is reattached.
+2. **The visibility report is reachable exactly once.** `app-sidebar.tsx` has no
+   entry for it and there is no index of past runs, so a customer sees
+   `/visibility/[runId]` at the end of onboarding and can never return.
+   `/audit` also still describes provenance in Google-harvest language, and its
+   evidence source column degrades to the literal string `"source"` because
+   `safeHostname` cannot parse an `/evidence/ai-answer/…` path.
+
 **Unmeasured, still.** No prompt has been asked. Everything above is plumbing
 that has never carried water.
+
+**Docs.** `HOW_IT_WORKS.md` §1, §3 and §11.5 rewritten for the new path: §11.5.1
+is the step-by-step of what now makes the content plan, §11.5.2 is the table of
+what died versus what only moved (the writer's Tavily research pass moved
+nowhere — it was always at generation time), §11.5.3 states the coverage loss
+plainly, and §11.5.5 lists every dashboard page with its real state.
 
 ### 2026-08-15 (eighth pass) - content delivery action wired onto visibility dashboard
 

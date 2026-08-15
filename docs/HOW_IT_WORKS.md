@@ -10,13 +10,22 @@ what the code does, the code is right and this file is a bug.
 Someone gives us a website, optional competitors, and their main customer
 searches. We show the distinct product/service areas we found with exact page
 evidence; they correct and confirm that business scope before research starts.
-We then collect real search questions from Google and competitor pages. A query
-enters only when it directly belongs to one confirmed area. We check which ones
-their site already answers, group the gaps inside each area, and show the
-six-cluster program before payment. If they buy, we deliver one complete cluster
-at a time. After cluster six, cancellation is scheduled for period end.
+We then write the questions a buyer would type into ChatGPT about those areas,
+show them the questions, and let them edit, delete and add before anything is
+asked. Then we ask the real ChatGPT and the real Google AI Mode. Every question
+where the answer names competitors and not them is a gap. We group those gaps
+inside each area, and show the six-cluster program before payment. If they buy,
+we deliver one complete cluster at a time. After cluster six, cancellation is
+scheduled for period end.
 
 That's it. Everything below is detail.
+
+**One thing changed on 2026-08-15 and this file is still catching up.** The
+sentence above used to read "we collect real search questions from Google and
+competitor pages, then check which ones their site already answers". That
+machinery still exists and still works — §3 and §4 describe it — but nothing
+calls it after onboarding any more. §11.5 is the current path and the honest
+comparison of what we gained and what we gave up.
 
 ---
 
@@ -330,13 +339,80 @@ edit them, so those are the questions that have to get asked. It used to show
 you the questions and then run the Google harvest, which measured something
 else entirely.
 
-Everything downstream is unchanged. The probe writes its findings into the same
-audit tables through the same `finalize_audit_run`, so the saved audit at
-`/audit` and the delivery plan at `/content-plan` cannot tell which of the two
-sources filled them — and the price, the cluster rules and the writer never
-had to learn about any of this.
+### 11.5.1 What makes the content plan now, step by step
 
-**What it does.** Takes the business areas you already confirmed, writes the
+This is the question worth being precise about, because the top half of the
+funnel changed and the bottom half did not.
+
+```
+  confirmed areas          (unchanged — you still confirm what you sell)
+        ↓
+  buyer questions          NEW: written per area, shown to you, edited by you
+        ↓
+  asked of ChatGPT
+  and Google AI Mode       NEW: the real consumer apps, via Cloro
+        ↓
+  who got named            NEW: absent / named-but-never-first / present
+        ↓
+  ═══════════ everything below this line is the ORIGINAL machinery ═══════════
+        ↓
+  one gap per lost
+  question                 same GapItem shape the Google harvest produced
+        ↓
+  collapse near-
+  duplicates into
+  articles                 collapseToArticles  (unchanged)
+        ↓
+  title them               titleArticles       (unchanged)
+        ↓
+  group into clusters      groupIntoClusters   (unchanged, still 8–15)
+        ↓
+  absorb orphans           absorbOrphanedUnits (unchanged)
+        ↓
+  name the clusters        nameClusters        (unchanged)
+        ↓
+  freeze article
+  contracts                freezeArticleContracts (unchanged)
+        ↓
+  save                     finalize_audit_run  (unchanged)
+```
+
+There is exactly one clusterer in this codebase and there always has to be one.
+A second one would drift from the first, and then the report and the plan would
+stop agreeing about what was sold.
+
+### 11.5.2 What died, and what only moved
+
+| Old step | Status now |
+|---|---|
+| Google Autocomplete (the biggest call count) | **Not used.** Demand is no longer proved by autocomplete — it is proved by an engine choosing to answer the question at all. |
+| Top-ranking-page questions (SERP) | **Not used.** |
+| Competitor headline harvest via Tavily | **Not used as a demand source.** "Competitors" now means whoever the AI actually named instead of you, which is a stronger claim than "they published a page about it". |
+| Demand re-validation (is this really searched?) | **Not used.** A question the engine answered is a question someone asks. |
+| Scope classification of harvested queries | **Not needed.** Each question is generated inside one confirmed area, so ownership is structural rather than assigned afterwards. |
+| Reading your site to see what you already cover | **Not done. This is the real loss — see below.** |
+| Clustering, titling, absorption, naming | **Unchanged, byte for byte.** |
+| Tavily research when an article is written | **Unchanged.** The writer still does a full contract-bound research pass at generation time. Tavily did not go away; it just isn't used to *find* the topics any more. |
+
+### 11.5.3 The one thing we gave up, said plainly
+
+The old audit read your site and subtracted what you already cover. The probe
+does not. It knows one thing — an answer engine didn't name you — and it says so
+honestly: internally every gap is marked "absent from the AI answer", which is a
+claim about the engine, not about your site.
+
+The practical consequence: **the plan can propose an article about something you
+have already written.** Not because it thinks the page is missing, but because
+it never looked.
+
+That is survivable and arguably even correct — if ChatGPT doesn't name you for a
+question you already have a page for, the page isn't doing its job and a better
+one is a reasonable answer. But it is a different promise from the old one, and
+nobody should sell "we found what's missing from your site" off this pipeline
+until the coverage scan is bolted back on. Bolting it back on is not hard: the
+scanner still exists and still works.
+
+### 11.5.4 What it does Takes the business areas you already confirmed, writes the
 kind of question a buyer actually types ("what's the best tool for turning a
 sketch into a working screen?"), and asks **the real ChatGPT and the real Google
 AI Mode** — the same thing a person sees, not a developer API. Then it counts:
@@ -452,6 +528,23 @@ things a buyer would actually type, raise it to about 40 and the plan appears.
 
 (Credit figures come from Cloro's pricing page, not from a bill. Check your
 first invoice.)
+
+### 11.5.5 Where all of this shows up in the app
+
+| Page | What it shows | State |
+|---|---|---|
+| `/visibility/[runId]` | The AI report: which questions you lose, who won them, which sources got cited, and the verbatim answer behind every claim. Onboarding ends here. | Works. **No link to it anywhere in the dashboard** — see below. |
+| `/evidence/ai-answer/[runId]/[promptId]` | One stored answer, word for word. Every gap row links here. | Works. |
+| `/audit` | The saved audit: clusters, articles, and one evidence row per gap. | Works — the probe fills the same tables. The page's own wording still says "observed search queries" and each evidence row's source column shows "source" instead of a website name, because an AI answer has no website. Cosmetic, but it reads like the old pipeline. |
+| `/content-plan` | The delivery schedule and cluster shipping. | Works, same tables. |
+| `/articles`, `/settings`, `/integrations`, `/subscribe`, `/account` | Unchanged. | Works. |
+
+**The gap: the visibility report is reachable exactly once.** The sidebar has
+Evidence Audit, Content Plan, Articles, Settings and Integrations — nothing for
+the AI report. A customer sees it at the end of onboarding, navigates away, and
+has no way back short of the original URL. There is also no index page listing
+past runs. This needs a sidebar entry pointing at the newest completed run
+before anyone outside the building uses it.
 
 ---
 
