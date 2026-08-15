@@ -6,7 +6,19 @@
  * audit can be verified by clicking through to the source.
  */
 
-export type QuerySource = "autocomplete" | "paa" | "competitor_sitemap"
+export type QuerySource =
+    | "autocomplete"
+    | "paa"
+    | "competitor_sitemap"
+    /**
+     * A buyer prompt an answer engine was asked, where the subject was absent
+     * from or outranked in the reply. Unlike the other three, this is not a
+     * string someone was observed typing — it is a question we constructed from
+     * the customer's confirmed scope and then measured the answer to. Its
+     * provenance is the stored verbatim answer in `ai_probe_results`, not a
+     * re-openable public URL. See `lib/visibility/gap-mapper.ts`.
+     */
+    | "ai_answer"
 
 export interface HarvestedQuery {
     /** The query exactly as observed */

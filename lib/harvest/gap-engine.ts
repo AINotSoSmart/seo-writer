@@ -69,6 +69,14 @@ const SOURCE_WEIGHT: Record<QuerySource, number> = {
     paa: 30,
     competitor_sitemap: 20,
     autocomplete: 10,
+    /**
+     * Weighted above a ranking page's PAA block because the evidence is one
+     * step shorter. `paa` says Google believed someone asks this; `ai_answer`
+     * says an engine was asked it and answered by naming somebody else. The
+     * demand is assumed rather than observed — that is the trade, and it is why
+     * this is not weighted far higher.
+     */
+    ai_answer: 35,
 }
 
 /**

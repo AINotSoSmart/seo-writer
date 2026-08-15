@@ -10,9 +10,16 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-14
+Last implementation update: 2026-08-15
 
-Status: **scope finder no longer times out into a blank keyword form.** Thin SPA
+Status: **AI-visibility probing added as a second, parallel gap source** (§8).
+Buyer prompts built from the confirmed families are asked of the answer engines;
+absence from an answer becomes a `GapItem` and feeds the existing clusterer
+unchanged. Nothing in the Google harvest path was altered — the two sources
+coexist and neither is yet the default. Not run against a live audit; no engine
+key is configured in this repo, so this is code-complete and unmeasured.
+
+Previously: **scope finder no longer times out into a blank keyword form.** Thin SPA
 crawls fall back to unpaid HTML snapshots (meta/JSON-LD/body) then titles;
 extraction is a small families-only Gemini call with a 90s timeout and lexical
 seed filter; grounding slices overflow instead of wiping; last resort is one
@@ -965,6 +972,73 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-15 - AI-visibility probing as a second gap source
+
+**Why.** The Google harvest answers "is this searched, and does your site cover
+it?" through a chain of proxies — autocomplete, SERP questions, competitor
+headlines, demand re-validation, scope classification. Most of this document is
+that chain being repaired. An answer engine that recommends three competitors
+and not the customer collapses the chain to one observation, and it is an
+observation the founder can put in a cold email.
+
+**What was built.** `lib/visibility/`, five modules, ~1,100 lines:
+
+| Module | Job |
+|---|---|
+| `prompt-builder.ts` | Buyer prompts from confirmed families. One model call per family, so ownership is structural rather than requested. Fixed intent mix, weighted to commercial. |
+| `engines.ts` | ChatGPT / Claude / Google AI / Perplexity, each one `fetch`. No SDKs, no scraper vendor. |
+| `answer-parser.ts` | Ported from Ansvisor (MIT, Empler AI Inc.). Mention counts on URL-stripped text, first-mention rank, own-domain citations. |
+| `gap-mapper.ts` | Verdicts and `GapItem[]`. |
+| `run-probe.ts` | Orchestration, persistence, and the call into the existing clusterer. |
+
+Plus `20260815_ai_visibility_probe.sql`, `POST /api/visibility/probe`,
+`/visibility/[runId]`, and `/evidence/ai-answer/[runId]/[promptId]`.
+
+**The design decision that matters.** A visibility gap is emitted as a `GapItem`
+— the exact shape `computeGaps` already returns. `collapseToArticles`,
+`groupIntoClusters`, `absorbOrphanedUnits`, `titleArticles` and `nameClusters`
+run byte-for-byte unchanged. There is one definition of a cluster in this repo
+and there must stay one; a second implementation would drift from the first and
+the plan and the report would stop agreeing about what was sold. A contract test
+asserts the reuse.
+
+**Three rules this respects, and how.**
+
+1. *Never hand-tune a threshold.* There is no visibility-score cut-off anywhere.
+   A prompt is `absent` (named in no answer), `outranked` (named, never first)
+   or `present` (named first at least once). All three are counts of stored
+   answers. Upstream's weighted 0-100 composite of mentions, citations, ratio
+   and sentiment was deliberately not ported: a customer cannot check it, and a
+   movement in it cannot be attributed to anything.
+2. *Provenance is mandatory.* Weakened honestly rather than faked. An AI answer
+   has no re-openable public URL — it is a private, non-reproducible generation.
+   So every answer is stored verbatim in `ai_probe_results` and `source_url`
+   points at `/evidence/ai-answer/…`, which renders it. The claim stays
+   falsifiable against our record. **This is genuinely weaker than a SERP URL**
+   and both the evidence page and the report footer say so.
+3. *A broken source must never look like an empty one.* Per-engine ledger; all
+   engines failing on every attempt throws `all_engines_failed` rather than
+   reporting the brand invisible. A missing API key reading as "you are absent
+   everywhere" is the most expensive way this product can be wrong.
+
+**What is deliberately NOT built.** No daily tracking, no trend line, no
+"visibility went 12% → 31%". A probe is a sample of a non-deterministic system;
+a delta between two samples is mostly noise, and attributing that delta to
+published articles is a causal claim the data cannot support. Sell the gap —
+which is stable — and treat movement as directional. Revisit only with repeated
+same-day sampling to establish the variance first.
+
+**Status: code-complete, unmeasured.** No engine key exists in this repo, so not
+one prompt has been asked. Nothing here is calibrated. Before this is shown to
+anyone: run it against two real sites, read fifty stored answers by hand, and
+check that the prompts are questions a buyer would plausibly type. If they are
+not, the gaps are noise no matter how clean the plumbing is.
+
+**Cost, unverified.** ~60 prompts × 4 engines = 240 web-search-grounded calls per
+probe. That is the first recurring per-customer variable cost in this product,
+against a ~$0.20 audit. Measure it on the first real run before pricing anything
+around it.
 
 ### 2026-08-14 - one-category collapse was a silent brand-card fallback
 
@@ -3157,3 +3231,86 @@ A three-panel strip above states what you buy (6 clusters), how many articles
 - Removed quota-refill duplicate generation and the old LLM planning chain.
 - Calibrated two-stage retrieval/evidence coverage against BringBack and
   PixReunion test sets.
+
+## 8. AI-visibility probe — how the loop runs
+
+The second gap source, added 2026-08-15. The Google harvest is unchanged and
+still the default; these two coexist and answer different questions.
+
+```
+  confirmed families  (audit_scope_families — the customer already approved these)
+        │
+        ▼
+  buyer prompts       prompt-builder.ts · one Gemini call per family
+        │             10 per family, weighted to commercial intent
+        │             never names any brand — that is what makes it a discovery test
+        ▼
+  answer engines      engines.ts · ChatGPT, Claude, Google AI, Perplexity
+        │             each is one fetch with the provider's own web-search tool
+        ▼
+  counted facts       answer-parser.ts · mentions, first-mention rank, citations
+        │             ported from Ansvisor, MIT, Empler AI Inc.
+        ▼
+  verdict             gap-mapper.ts · absent / outranked / present
+        │
+        ▼
+  GapItem[]           ← the join. Same shape computeGaps() returns.
+        │
+        ▼
+  clusters            lib/harvest/clusterer.ts · UNCHANGED
+```
+
+### The two definitions of "gap" are not the same claim
+
+| | Google harvest | AI probe |
+|---|---|---|
+| Question | Is this searched, and does your site answer it? | Does an engine name you when asked this? |
+| Demand evidence | Observed (someone typed it) | Assumed (we constructed the prompt) |
+| Coverage evidence | Your site was crawled and read | Not consulted at all |
+| Provenance | Re-openable public URL | Stored verbatim answer |
+| Reproducible | Largely | No |
+
+`userStatus: "gap"` on an `ai_answer` item means *absent from the AI answer*. It
+says nothing about whether the page exists on the customer's site. Do not
+conflate them — a customer sold an article for a page they already have will
+notice, and that is the credibility the audit trades on.
+
+The two sources compose well and that is worth building next: a prompt the
+engines don't name you for *and* your site doesn't answer is the strongest
+signal this product can produce. It is not implemented.
+
+### Running it
+
+```bash
+npm run dev
+curl -s -X POST http://127.0.0.1:3000/api/visibility/probe \
+  -H 'content-type: application/json' \
+  -d '{"auditId":"<audit-with-confirmed-scope>","maxPrompts":20}' | jq
+```
+
+Requires at least one of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+`PERPLEXITY_API_KEY`. With none set the route returns 503 rather than an empty
+report. Start at `maxPrompts: 20` — the first run is a sanity check on prompt
+quality, not a measurement.
+
+Then read `/visibility/<runId>`, and open at least ten evidence links from it.
+If the stored answers do not obviously support the verdicts, stop and fix that
+before anything else.
+
+### Rules for the next agent
+
+30. **A verdict is a count, never a score.** If you find yourself adding a
+    threshold to decide whether something is a gap, the method is wrong. Absence
+    is a fact; "visibility below 30" is an opinion with a number painted on it.
+31. **Never truncate `answer_text`.** It is the only provenance this source has.
+    A summarised answer is an unverifiable gap, which is precisely the claim
+    this product exists not to make.
+32. **A failed engine is not an absence.** Any new engine adapter must record
+    its failures in the ledger and must not return an empty answer on error.
+33. **Do not add a trend line without measuring variance first.** Probe the same
+    site three times in one day. Whatever spread you see is the noise floor, and
+    any "improvement" smaller than it is not an improvement. Ship the number
+    only after you can state that floor.
+34. **Do not let the probe silently become the audit.** It measures a different
+    thing (see the table above). If the two are ever merged into one report,
+    each gap must still say which source produced it.

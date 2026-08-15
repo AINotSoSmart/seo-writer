@@ -3636,3 +3636,73 @@ test("brand crawl is checkpointed so refresh does not re-extract", async () => {
     assert.match(brandOnboarding, /SCOPE_STARTED_KEY/)
     assert.doesNotMatch(brandOnboarding, /handleAnalyze\(\)/)
 })
+
+test("AI-answer gaps are evidential, not scored into existence", async () => {
+    // The pivot's risk is that "visibility" becomes a weighted composite nobody
+    // can check — which is the same failure as the absolute-threshold coverage
+    // that once reported 99% authority for a site covering almost nothing.
+    // Every verdict must be a counted fact about stored answers.
+    const [parser, mapper, probe, migration, evidencePage] = await Promise.all([
+        text("lib/visibility/answer-parser.ts"),
+        text("lib/visibility/gap-mapper.ts"),
+        text("lib/visibility/run-probe.ts"),
+        text("supabase/migrations/20260815_ai_visibility_probe.sql"),
+        text("app/evidence/ai-answer/[runId]/[promptId]/page.tsx"),
+    ])
+
+    // Verdicts are derived from counts, never from a tunable cut-off.
+    assert.match(mapper, /export function classifyPrompt/)
+    assert.match(mapper, /mentionCount > 0/)
+    assert.match(mapper, /mentionPosition === 1/)
+    // No score threshold may decide whether something is a gap.
+    assert.doesNotMatch(mapper, /visibilityScore\s*[<>]=?\s*\d/)
+
+    // Presence is a plain proportion, not upstream's weighted composite.
+    // Upstream folds sentiment into a 0-100 score at 15 points; that is an
+    // extra model call per answer feeding a number nobody can check. Assert the
+    // absence of the *field*, not of the word — the comment explaining why it
+    // is gone is the part most worth keeping.
+    assert.match(parser, /export function presenceRate/)
+    assert.doesNotMatch(parser, /^\s*sentiment[?]?:/m)
+    assert.doesNotMatch(parser, /sentiment ===/)
+
+    // Provenance: the verbatim answer is the evidence record and is stored
+    // whole. A truncated answer is an unverifiable gap.
+    assert.match(probe, /answer_text: answer\.text/)
+    assert.doesNotMatch(probe, /answer_text:[^\n]*slice\(/)
+    assert.match(migration, /answer_text TEXT NOT NULL/)
+    assert.match(migration, /Never truncate answer_text/)
+    assert.match(evidencePage, /row\.answer_text/)
+
+    // A broken engine must never read as an absence.
+    assert.match(probe, /all_engines_failed/)
+    assert.match(probe, /totalFailed === totalAttempted/)
+
+    // The gap source is declared in the shared union and weighted explicitly.
+    const [types, gapEngine] = await Promise.all([
+        text("lib/harvest/types.ts"),
+        text("lib/harvest/gap-engine.ts"),
+    ])
+    assert.match(types, /"ai_answer"/)
+    assert.match(gapEngine, /ai_answer:\s*\d+/)
+    assert.match(migration, /'autocomplete', 'paa', 'competitor_sitemap', 'ai_answer'/)
+})
+
+test("visibility gaps reuse the harvest clusterer rather than forking it", async () => {
+    // The entire argument for this design is that a gap is a gap: the clusterer
+    // does not care whether it came from a SERP or from ChatGPT declining to
+    // name you. A second clustering implementation would be two definitions of
+    // "cluster" drifting apart, which is how the plan and the report stop
+    // agreeing about what was sold.
+    const probe = await text("lib/visibility/run-probe.ts")
+
+    assert.match(probe, /from "@\/lib\/harvest\/clusterer"/)
+    assert.match(probe, /collapseToArticles/)
+    assert.match(probe, /groupIntoClusters/)
+    assert.match(probe, /absorbOrphanedUnits/)
+    assert.match(probe, /titleArticles/)
+    assert.match(probe, /nameClusters/)
+
+    // No local re-implementation of grouping.
+    assert.doesNotMatch(probe, /function (collapse|group)[A-Za-z]*\(/)
+})

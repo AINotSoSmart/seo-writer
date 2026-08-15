@@ -312,6 +312,54 @@ competitor with nicer copy.
 
 ---
 
+## 11.5 The new bit: asking the AI engines directly
+
+Added 2026-08-15. It runs beside everything above, not instead of it.
+
+**What it does.** Takes the business areas you already confirmed, writes the
+kind of question a buyer actually types ("what's the best tool for turning a
+sketch into a working screen?"), and asks ChatGPT, Claude, Google AI and
+Perplexity. Then it counts: did they name you, who did they name instead, and
+which pages did they cite.
+
+Anything you're absent from becomes a gap, and those gaps go into the *same*
+cluster machinery as everything else. The output is the same kind of plan —
+only the reason has changed:
+
+> Old: "17 articles, because Google autocomplete and competitor pages say these
+> topics have demand."
+>
+> New: "You were absent from 26 of 42 buyer questions. Competitors were named in
+> 19. These 17 articles target those 26."
+
+**Why bother.** The second one survives "why should I publish these?" The first
+one has been arguing with that question for six months.
+
+**What it does not do.** It does not track you daily, and it will not tell you
+"visibility went 12% to 31%". Ask an engine the same question twice and you can
+get two different answers — so a change between two runs is mostly noise, and
+saying your articles caused it would be a claim the data can't support. Sell
+the gap, which is solid. Don't sell the trend until we've measured how much it
+wobbles on its own.
+
+**What's honest about it, and what isn't.** Every answer is stored word for
+word, and every gap links to the answers that prove it — open them and check.
+But unlike a Google result, you can't go and see it for yourself independently:
+an AI answer is private and doesn't reproduce. The evidence is our recording of
+it. That's a real step down in proof strength, and both the report and the
+evidence page say so out loud rather than blurring it.
+
+**Status: built, never run.** There's no engine API key in the repo, so not one
+question has actually been asked yet. Before showing this to anyone: run it on
+two real sites and read fifty answers by hand. If the questions aren't ones a
+buyer would plausibly type, the whole thing is noise no matter how tidy the code
+is.
+
+**It costs real money per run,** unlike the audit (~$0.20). Roughly 240
+search-grounded calls per probe. Measure it on the first real run.
+
+---
+
 ## 12. How this differs from what we first discussed
 
 The direction changed, and mostly for the better. For the record:
