@@ -404,6 +404,14 @@ we ask for. There is no "global" option, because there is no global answer — a
 engine answers from somewhere whether or not you choose, and not choosing just
 silently picks the United States.
 
+There is no language option, and that is on purpose. Picking a language would
+pick it for the *whole* chain — the questions, the answers, the research, and
+the article written from them — and the writer only knows English (its one
+locale trick is British vs American spelling). Offering Spanish would give you
+Spanish questions, Spanish answers, Spanish research and an English article,
+with nothing in the system noticing. So: any market, English questions and
+articles, until the writer can genuinely do more.
+
 **Research country** (on the last screen) is where our *sources* come from —
 which pages we read when finding your rivals, and later when writing your
 articles. "Global" is a perfectly good answer here, and it is the default.

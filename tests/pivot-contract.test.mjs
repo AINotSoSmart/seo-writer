@@ -4182,11 +4182,28 @@ test("a probe measures the customer's market, not a default one", async () => {
         "market defaults must never rewrite the research locale",
     )
 
-    // Buyers ask in their own language, so the questions must be written in it —
-    // an English question measures the English answer.
+    // The prompt builder can write questions in any language it is given.
     assert.match(builder, /languageName\(language\)/)
-    // And prompt validation must accept the scripts that language list allows.
     assert.match(builder, /\\p\{L\}/)
+
+    // But the PRODUCT may only offer a language it can deliver end to end, and
+    // today that is English alone.
+    //
+    // Language is not a probe setting. It selects the language of the entire
+    // chain: questions, answers, gap queries, the frozen researchQuery, the
+    // Tavily sources — and then the article written from all of it. The writer
+    // has no language dimension at all; its only locale awareness is switching
+    // "organize" to "organise" for English-speaking markets. Offering Spanish
+    // would yield Spanish questions, Spanish answers, Spanish research and an
+    // English article, with every stage reporting success.
+    assert.match(market, /export const WRITER_SUPPORTED_LANGUAGES = \["en"\]/)
+    // resolveLanguage must gate on what the writer can deliver, so a stored
+    // "es" from a hand-edited row cannot leak into prompt generation.
+    assert.match(market, /SELECTABLE_LANGUAGES\.some/)
+    // No language selector while the list is one long — a dropdown with one
+    // safe option invites the second one to be added without the writer work.
+    assert.doesNotMatch(profile, /TARGET_LANGUAGES/)
+    assert.doesNotMatch(profile, /target_language/)
 })
 
 test("a probe resolves its rivals before it asks anything", async () => {

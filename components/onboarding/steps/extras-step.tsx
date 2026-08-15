@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PillInput } from "@/components/ui/pill-input"
 import type { BrandDetails } from "@/lib/schemas/brand"
-import { languageName, marketLabel, TARGET_MARKETS } from "@/lib/target-market"
+import { marketLabel, TARGET_MARKETS } from "@/lib/target-market"
 
 /**
  * The last screen before the probe: confirm who you compete with.
@@ -104,9 +104,8 @@ export function ExtrasStep({
                 <p className="mt-1 text-[11px] leading-relaxed text-stone-500">
                     Sources we look at when finding rivals and, later, when writing
                     your articles. Separate from the{" "}
-                    {marketLabel(brand.target_region || "US")} market in{" "}
-                    {languageName(brand.target_language || "en")} we measure — leave
-                    this on Global unless your sources have to be local.
+                    {marketLabel(brand.target_region || "US")} market we measure —
+                    leave this on Global unless your sources have to be local.
                 </p>
                 <div className="mt-2.5 grid grid-cols-2 gap-2">
                     <div>

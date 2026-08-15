@@ -11,12 +11,7 @@ import {
     type BrandPillField,
 } from "@/components/brand-details-editor"
 import type { BrandDetails } from "@/lib/schemas/brand"
-import {
-    resolveLanguage,
-    resolveRegion,
-    TARGET_LANGUAGES,
-    TARGET_MARKETS,
-} from "@/lib/target-market"
+import { resolveRegion, TARGET_MARKETS } from "@/lib/target-market"
 
 /**
  * Step 2 of onboarding. Confirm the three audit-critical fields, then optionally
@@ -89,63 +84,44 @@ export function ProfileStep({
                 </div>
             </div>
 
-            {/* Market. Asked here rather than on the last screen for two
-                reasons: the questions are written in this language, and they are
-                generated on the very next screen — and an answer engine always
-                answers from somewhere, so declining to choose does not mean
-                "global", it means the United States by default. */}
+            {/* Market, asked here rather than on the last screen because the
+                buyer questions are generated on the very next one — and because
+                an answer engine always answers from somewhere, so declining to
+                choose does not mean "global", it means the United States.
+
+                There is no language control, and that absence is deliberate.
+                Language is not a probe setting: it selects the language of the
+                whole chain, and the writer's only locale awareness is British vs
+                American spelling. Offering it would produce Spanish questions,
+                Spanish answers, Spanish research and an English article — with
+                every stage reporting success. See WRITER_SUPPORTED_LANGUAGES. */}
             <div className="rounded-lg border border-stone-200 p-3">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-stone-400">
-                    Who you sell to
-                </p>
+                <label
+                    htmlFor="target-region"
+                    className="block text-[10px] font-medium uppercase tracking-wide text-stone-400"
+                >
+                    Where your buyers are
+                </label>
                 <p className="mt-1 text-[11px] leading-relaxed text-stone-500">
-                    ChatGPT and Google answer differently in different countries and
-                    languages. We ask yours so the result is the one your buyers see.
+                    ChatGPT and Google answer the same question differently by country.
+                    We ask yours so the result is the one your buyers actually see.
                 </p>
-                <div className="mt-2.5 grid grid-cols-2 gap-2">
-                    <div>
-                        <label
-                            htmlFor="target-region"
-                            className="mb-1 block text-[10px] font-medium text-stone-400"
-                        >
-                            Market
-                        </label>
-                        <select
-                            id="target-region"
-                            className="h-9 w-full rounded-md border border-stone-200 bg-white px-2 text-sm text-stone-900"
-                            value={resolveRegion(brand.target_region)}
-                            onChange={(event) => onFieldChange("target_region", event.target.value)}
-                        >
-                            {TARGET_MARKETS.map((market) => (
-                                <option key={market.code} value={market.code}>
-                                    {market.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <label
-                            htmlFor="target-language"
-                            className="mb-1 block text-[10px] font-medium text-stone-400"
-                        >
-                            Language
-                        </label>
-                        <select
-                            id="target-language"
-                            className="h-9 w-full rounded-md border border-stone-200 bg-white px-2 text-sm text-stone-900"
-                            value={resolveLanguage(brand.target_language)}
-                            onChange={(event) =>
-                                onFieldChange("target_language", event.target.value)
-                            }
-                        >
-                            {TARGET_LANGUAGES.map((language) => (
-                                <option key={language.code} value={language.code}>
-                                    {language.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
+                <select
+                    id="target-region"
+                    className="mt-2.5 h-9 w-full rounded-md border border-stone-200 bg-white px-2 text-sm text-stone-900"
+                    value={resolveRegion(brand.target_region)}
+                    onChange={(event) => onFieldChange("target_region", event.target.value)}
+                >
+                    {TARGET_MARKETS.map((market) => (
+                        <option key={market.code} value={market.code}>
+                            {market.label}
+                        </option>
+                    ))}
+                </select>
+                <p className="mt-1.5 text-[10px] leading-relaxed text-stone-400">
+                    Questions and articles are written in English for now, whichever
+                    market you pick.
+                </p>
             </div>
 
             {!detailsOpen && brand.style_dna ? (

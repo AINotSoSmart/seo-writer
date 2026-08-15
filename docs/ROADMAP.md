@@ -259,18 +259,80 @@ every file you read; it only shows up as a wrong answer nobody can see.
 Now: `target_region` (ISO-3166 alpha-2) on the brand, asked on the profile
 screen, pre-filled from the domain's ccTLD, read by the probe route.
 
-**Still open — language on the answer engines.** `buildCloroPayload` accepts a
-country and no language field. Rather than invent a parameter the vendor may not
-accept, the chosen language steers **prompt generation** instead: the buyer
-questions are written in it, which is the half fully under our control. Sending
-a language to Cloro needs its API confirmed first.
+---
 
-**Also still open — non-space-delimited languages.** `isPlausiblePrompt` rejects
-anything under four whitespace-separated words, so Japanese and Chinese prompts
-would each count as one word and be discarded — the run would blame the model
-for producing nothing usable. `TARGET_LANGUAGES` is therefore restricted to
-space-delimited scripts. Adding CJK means making prompt validation script-aware
-first.
+## 7b. Blocked — non-English anything, until the writer can do it
+
+**Status:** blocked on the article writer. A language selector was built and
+removed the same day.
+
+### The conflict, in order
+
+Language is not a probe setting. It selects the language of the **entire chain**:
+
+```
+buyer questions written in it
+  → engines answer in it
+  → gap query text inherits it        (gap.query IS the prompt text)
+  → the frozen researchQuery carries it
+  → Tavily returns sources in it
+  → the writer produces the article from all of the above
+```
+
+**And the writer has no language dimension at all.** Its only locale awareness
+is a spelling switch: `generate-blog.ts` tests `search_country` against a list of
+English-speaking countries and instructs "organise" instead of "organize". The
+outline prompts, the section prompts, `titleArticles`, `nameClusters` and
+`AUTHENTIC_WRITING_RULES` are all English and assume English output.
+
+So choosing Spanish would have produced Spanish questions, Spanish answers,
+Spanish research — and an English article claiming to answer them. Nothing would
+have caught it: `articleQualityVerdict` blocks on word count, truncation,
+unlanded citations and unbacked claims. **None of those notice an article in the
+wrong language.** Every stage would report success.
+
+### What was done instead
+
+`WRITER_SUPPORTED_LANGUAGES = ["en"]` in `lib/target-market.ts`, and
+`resolveLanguage` gates on it rather than on the full list — so even a
+hand-edited brand row carrying `"es"` falls back to English rather than quietly
+generating Spanish questions. The selector is not rendered; the market dropdown
+says questions and articles are English for now. A contract test asserts the
+profile screen references neither `TARGET_LANGUAGES` nor `target_language`,
+because a dropdown with one safe option is an invitation to add a second one
+without doing the writer work.
+
+The plumbing stays: `prompt-builder` takes a language, the probe passes one,
+`TARGET_LANGUAGES` lists what the probe *could* ask in. Only the customer's
+choice is withheld.
+
+### Build trigger
+
+Someone wanting to sell in a non-English market. The work is entirely on the
+writer side: language into the prompt stack, cluster naming, and a completion
+check that can tell what language it actually got. Then add the code to
+`WRITER_SUPPORTED_LANGUAGES` — the probe side already works.
+
+### One more constraint waiting there
+
+`isPlausiblePrompt` rejects anything under four whitespace-separated words, so
+Japanese and Chinese prompts would each count as one word and be discarded — the
+run would blame the model for producing nothing usable. `TARGET_LANGUAGES` is
+restricted to space-delimited scripts for that reason. CJK needs script-aware
+prompt validation on top of the writer work.
+
+### Related, and the reason one earlier decision matters more than it looked
+
+`search_country` is what drives the writer's UK/US spelling switch. Had the
+market selector derived `search_country` from `target_region` (built, then
+reverted — §8.1b), choosing **India** as the market would have silently switched
+every article to British spelling. That is the concrete harm the separation
+avoids.
+
+**Still open — language to Cloro.** `buildCloroPayload` accepts a country and no
+language field. Even once the writer supports a language, asking the engines in
+it needs the vendor's API confirmed rather than a parameter invented to look
+complete.
 
 ---
 

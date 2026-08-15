@@ -1005,14 +1005,35 @@ founder challenge — it would have silently changed the sources every future
 article cites, and only the research locale has a valid "Global". Both are asked,
 labelled for their job, on different screens.
 
-**3. Language reaches prompt generation, not Cloro.** `buildCloroPayload` has no
-language field, and inventing a vendor parameter to look complete is how a paid
-integration breaks. So `target_language` steers `buildBuyerPrompts` — the buyer
-questions are written in the customer's language, which is the half fully under
-our control. Two consequences handled: `isPlausiblePrompt` counted `[a-z]`, so it
-would have rejected every accented or non-Latin prompt (now `\p{L}`), and its
-four-word minimum assumes a space-delimited script, so `TARGET_LANGUAGES` is
-restricted to those and says why.
+**3. A language selector was built and removed the same day.** Founder caught
+the conflict: language is not a probe setting, it selects the language of the
+whole chain — questions, answers, gap query text, the frozen `researchQuery`,
+the Tavily sources — and then the article written from all of it. **The writer
+has no language dimension.** Its only locale awareness is `generate-blog.ts`
+switching "organize" to "organise" for English-speaking markets; the outline
+prompts, section prompts, `titleArticles` and `nameClusters` are English
+throughout. Spanish would have produced Spanish questions, Spanish answers,
+Spanish research and an English article, and nothing would have caught it —
+`articleQualityVerdict` blocks on word count, truncation, citations and unbacked
+claims, none of which notices the wrong language.
+
+`WRITER_SUPPORTED_LANGUAGES = ["en"]`, and `resolveLanguage` gates on it rather
+than the full list, so a hand-edited `"es"` cannot leak into generation. The
+selector is not rendered and a contract test keeps it that way. The plumbing
+stays — `prompt-builder` takes a language, the probe passes one — because the
+probe side is correct and it is the writer that has to catch up. Full reasoning
+in [`ROADMAP.md`](ROADMAP.md) §7b.
+
+Two real bugs surfaced while it was briefly live and were kept fixed:
+`isPlausiblePrompt` counted `[a-z]`, so it would have rejected every accented or
+non-Latin prompt (now `\p{L}`), and its four-word minimum assumes a
+space-delimited script, so `TARGET_LANGUAGES` is restricted to those and says
+why.
+
+This also makes the §2 separation load-bearing rather than tidy: `search_country`
+is what drives the writer's UK/US spelling switch, so deriving it from the market
+would have meant choosing **India** as a market silently rewriting every article
+into British spelling.
 
 **4. The scope screen states its own arithmetic.** "Confirm your topics", with
 what confirming actually decides: up to `PROMPTS_PER_FAMILY` questions per topic,

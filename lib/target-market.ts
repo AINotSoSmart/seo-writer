@@ -89,11 +89,12 @@ export interface TargetLanguage {
 }
 
 /**
- * Space-delimited scripts only, and that is a real constraint rather than a
- * shortlist.
+ * Every language the *probe* could ask in. Not what the product offers — see
+ * `WRITER_SUPPORTED_LANGUAGES` below, which is currently a much shorter list.
  *
- * `isPlausiblePrompt` rejects anything under four "words", splitting on
- * whitespace. Japanese and Chinese do not put spaces between words, so every
+ * Space-delimited scripts only, and that is a real constraint rather than a
+ * shortlist. `isPlausiblePrompt` rejects anything under four "words", splitting
+ * on whitespace. Japanese and Chinese do not put spaces between words, so every
  * generated prompt would count as one word and be discarded — the run would
  * report that the model produced nothing usable, when the validator was the
  * thing that was wrong. Adding those languages means making prompt validation
@@ -115,15 +116,59 @@ export const TARGET_LANGUAGES: TargetLanguage[] = [
     { code: "hi", label: "हिन्दी", name: "Hindi" },
 ]
 
+/**
+ * Languages the product can actually deliver end to end.
+ *
+ * ## Why this is one entry long
+ *
+ * Choosing a language is not a probe setting — it selects the language of the
+ * whole chain. Buyer questions are written in it, the engines answer in it, the
+ * gap queries inherit it, the frozen `researchQuery` carries it, Tavily returns
+ * sources in it, and then the article is written from all of that.
+ *
+ * **The writer cannot do that.** Its entire locale model is a spelling variant:
+ * `generate-blog.ts` checks `search_country` against a list of English-speaking
+ * countries and switches "organize" to "organise". There is no language
+ * dimension anywhere else in the prompt stack, `titleArticles` and
+ * `nameClusters` are English prompts, and `articleQualityVerdict` checks word
+ * count, truncation, citations and fabrication — none of which notices an
+ * article written in the wrong language.
+ *
+ * So offering Spanish would produce Spanish questions, Spanish answers, Spanish
+ * research and an English article claiming to answer them. Every stage would
+ * report success. That is the most expensive kind of wrong this pipeline can
+ * be, and it is why the selector is not shown rather than shown and caveated.
+ *
+ * **To add one:** teach the writer the language — prompt stack, cluster naming,
+ * and a completion check that can tell what language it got — then add the code
+ * here. The probe side already works; nothing else needs to change.
+ */
+export const WRITER_SUPPORTED_LANGUAGES = ["en"] as const
+
+/** Languages a customer may pick today: askable AND writable. */
+export const SELECTABLE_LANGUAGES: TargetLanguage[] = TARGET_LANGUAGES.filter(
+    (language) =>
+        (WRITER_SUPPORTED_LANGUAGES as readonly string[]).includes(language.code),
+)
+
 /** Normalises anything stored on a brand into a market we can actually send. */
 export function resolveRegion(value: unknown): string {
     const code = typeof value === "string" ? value.trim().toUpperCase() : ""
     return TARGET_MARKETS.some((market) => market.code === code) ? code : DEFAULT_REGION
 }
 
+/**
+ * Normalises a stored language, refusing anything the writer cannot deliver.
+ *
+ * Deliberately checks `SELECTABLE_LANGUAGES`, not `TARGET_LANGUAGES`: a brand
+ * row carrying `"es"` — set before this rule existed, or by a hand-edited
+ * record — must not quietly produce Spanish questions for an English-only
+ * writer. It falls back to English, which is the language the article will be
+ * in either way.
+ */
 export function resolveLanguage(value: unknown): string {
     const code = typeof value === "string" ? value.trim().toLowerCase() : ""
-    return TARGET_LANGUAGES.some((language) => language.code === code)
+    return SELECTABLE_LANGUAGES.some((language) => language.code === code)
         ? code
         : DEFAULT_LANGUAGE
 }
