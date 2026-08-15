@@ -29,6 +29,7 @@ import Link from "next/link"
 import {
     AlertCircle,
     AlertTriangle,
+    ArrowRight,
     CheckCircle2,
     ChevronDown,
     ChevronRight,
@@ -38,6 +39,8 @@ import {
     Layers,
     PenLine,
     Radar,
+    ShieldCheck,
+    Sparkles,
 } from "lucide-react"
 
 import { AnswerEvidence } from "./answer-evidence"
@@ -118,6 +121,9 @@ export interface DashboardProps {
     clusters: DashboardCluster[]
     /** Per-engine presence, computed server-side from the stored answers. */
     perEngine: Array<{ engine: string; label: string; surface: string; total: number; present: number }>
+    auditId?: string | null
+    publicToken?: string | null
+    isAuthenticated?: boolean
 }
 
 const VERDICT_META = {
@@ -235,6 +241,9 @@ export function VisibilityDashboard(props: DashboardProps) {
         engines,
         clusters,
         perEngine,
+        auditId,
+        publicToken,
+        isAuthenticated,
     } = props
 
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -1038,6 +1047,64 @@ export function VisibilityDashboard(props: DashboardProps) {
                             </div>
                         ))}
                     </div>
+
+                    {clusters.length > 0 && (
+                        <div className="mt-8 rounded-xl border border-[var(--viz-series-1)]/30 bg-gradient-to-br from-[var(--viz-plane)] to-[var(--viz-surface)] p-6 shadow-sm">
+                            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="space-y-2">
+                                    <div className="inline-flex items-center gap-2 rounded-full bg-[var(--viz-series-1)]/10 px-3 py-1 text-xs font-semibold text-[var(--viz-series-1)]">
+                                        <Sparkles className="size-3.5" aria-hidden />
+                                        Evidence-Bound Solution
+                                    </div>
+                                    <h3 className="text-lg font-bold text-[var(--viz-ink)]">
+                                        Turn these visibility gaps into ranking content
+                                    </h3>
+                                    <p className="max-w-xl text-sm text-[var(--viz-ink-secondary)]">
+                                        Our article delivery engine synthesizes interlinked pillar and supporting articles directly bound to the verified questions measured above. Every article is grounded in real capability facts, with zero hallucinations.
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-[var(--viz-ink-muted)]">
+                                        <span className="inline-flex items-center gap-1">
+                                            <ShieldCheck className="size-3.5 text-emerald-500" aria-hidden />
+                                            Frozen Contract Engine
+                                        </span>
+                                        <span>•</span>
+                                        <span className="inline-flex items-center gap-1">
+                                            <CheckCircle2 className="size-3.5 text-emerald-500" aria-hidden />
+                                            Falsifiable AI Answer Provenance
+                                        </span>
+                                        <span>•</span>
+                                        <span className="inline-flex items-center gap-1">
+                                            <Layers className="size-3.5 text-emerald-500" aria-hidden />
+                                            Automated Topic Graph Interlinking
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                                    {isAuthenticated ? (
+                                        <Link
+                                            href={auditId ? `/content-plan` : `/onboarding`}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--viz-series-1)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-[0.99]"
+                                        >
+                                            View Delivery Program
+                                            <ArrowRight className="size-4" aria-hidden />
+                                        </Link>
+                                    ) : (
+                                        <Link
+                                            href={publicToken ? `/signup?claim=${publicToken}` : `/signup`}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--viz-series-1)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-[0.99]"
+                                        >
+                                            Claim Audit & Ship Articles
+                                            <ArrowRight className="size-4" aria-hidden />
+                                        </Link>
+                                    )}
+                                    <span className="text-xs text-[var(--viz-ink-muted)]">
+                                        {auditId ? "Deterministic 6-cluster delivery schedule" : "Free instant audit claim"}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {clusters.length === 0 && (
                         <p className="mt-4 rounded-lg border border-[var(--viz-hairline)] p-4 text-sm text-[var(--viz-ink-secondary)]">

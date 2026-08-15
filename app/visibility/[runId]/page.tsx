@@ -12,6 +12,7 @@ import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 
 import { createAdminClient } from "@/utils/supabase/admin"
+import { createClient } from "@/utils/supabase/server"
 import { ENGINE_SPECS, type AiEngine } from "@/lib/visibility/engines"
 import {
     VisibilityDashboard,
@@ -31,11 +32,15 @@ interface PageProps {
 export default async function VisibilityReportPage({ params }: PageProps) {
     const { runId } = await params
     const supabase = createAdminClient() as any
+    const userClient = await createClient()
+    const {
+        data: { user },
+    } = await userClient.auth.getUser()
 
     const { data: run } = await supabase
         .from("ai_probe_runs")
         .select(
-            "id, subject_name, subject_domains, status, failure_reason, phase, phase_detail, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at",
+            "id, subject_name, subject_domains, status, failure_reason, phase, phase_detail, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id, user_id, public_token",
         )
         .eq("id", runId)
         .single()
@@ -124,6 +129,9 @@ export default async function VisibilityReportPage({ params }: PageProps) {
             engines={ledger}
             clusters={run.clusters || []}
             perEngine={[...perEngineMap.values()]}
+            auditId={run.audit_id}
+            publicToken={run.public_token}
+            isAuthenticated={Boolean(user)}
         />
     )
 }

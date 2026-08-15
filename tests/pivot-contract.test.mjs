@@ -4079,3 +4079,21 @@ test("probe clusters freeze article contracts and finalize into relational deliv
     // 4. Migration allows 'ai_answer' in query_pool.source.
     assert.match(migration, /CHECK \(source IN \('autocomplete', 'paa', 'competitor_sitemap', 'ai_answer'\)\)/)
 })
+
+test("visibility dashboard renders actionable content program delivery CTA linking to content plan", async () => {
+    const [page, dashboard] = await Promise.all([
+        text("app/visibility/[runId]/page.tsx"),
+        text("components/visibility/visibility-dashboard.tsx"),
+    ])
+
+    // 1. Server page selects audit_id and checks user authentication.
+    assert.match(page, /audit_id,\s*user_id,\s*public_token/)
+    assert.match(page, /userClient\.auth\.getUser\(\)/)
+    assert.match(page, /auditId=\{run\.audit_id\}/)
+
+    // 2. Dashboard renders actionable delivery CTA with frozen contract guarantee.
+    assert.match(dashboard, /Turn these visibility gaps into ranking content/)
+    assert.match(dashboard, /View Delivery Program/)
+    assert.match(dashboard, /href=\{auditId \? `\/content-plan` : `\/onboarding`\}/)
+    assert.match(dashboard, /Claim Audit & Ship Articles/)
+})

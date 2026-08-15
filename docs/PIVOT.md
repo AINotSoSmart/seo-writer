@@ -976,6 +976,17 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (eighth pass) - content delivery action wired onto visibility dashboard
+
+Founder directive: wire the content plan and article delivery action card directly onto `/visibility/[runId]`.
+
+1. **Server Route Bridge:** [`app/visibility/[runId]/page.tsx`](app/visibility/[runId]/page.tsx) loads `audit_id`, `public_token`, and viewer authentication status, forwarding them to the client dashboard.
+2. **Delivery Action Banner:** [`components/visibility/visibility-dashboard.tsx`](components/visibility/visibility-dashboard.tsx) renders an Evidence-Bound Solution card in Section 6 (`What closes the gap`), summarizing the frozen contract engine, verifiable AI answer provenance, and automatic graph interlinking.
+3. **Smart Action Routing:**
+   - Authenticated users with an audit link navigate directly to `/content-plan` to review the 6-cluster delivery schedule and initiate cluster shipping.
+   - Unauthenticated or prospective users viewing a shared report receive a "Claim Audit & Ship Articles" CTA linking to `/signup` with claim metadata.
+4. **Contract Tests:** All 88 contract tests pass (`node tests/pivot-contract.test.mjs`), and `npx tsc --noEmit` is 100% clean.
+
 ### 2026-08-15 (seventh pass) - probe connected to article delivery engine
 
 Founder directive: connect the AI visibility probe directly to the article delivery pipeline, freeze article contracts, and persist into relational delivery tables.
