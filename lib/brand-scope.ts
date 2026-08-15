@@ -314,6 +314,10 @@ export function validateGroundedScope(
         }))
         const capabilityContract: CapabilityContract = {
             ...rawCapability,
+            // A contract that parsed and kept its own mechanics is the real
+            // thing. Preserved rather than overwritten so a salvaged contract
+            // arriving here stays marked as salvaged.
+            mechanicsSource: rawCapability.mechanicsSource ?? "extracted",
             facts: capabilityFacts,
             operations: rawCapability.operations.map((operation) => ({
                 ...operation,

@@ -260,7 +260,9 @@ function withFounderVisibleFields(
             ? description
             : current.action
     return withFounderConfirmedOperation(
-        { ...contract, deliveryMode },
+        // Typed by a human, so it is no longer a placeholder whatever it was a
+        // moment ago — and the warning above must stop showing.
+        { ...contract, deliveryMode, mechanicsSource: "founder" },
         familyId,
         0,
         { customerJob: description, action },
@@ -625,6 +627,14 @@ export function ScopeFamilyReview({
 
                             <div>
                                 <p className={fieldLabelClass}>Delivered as</p>
+                                {/* No warning banner here, deliberately. The value is
+                                    a placeholder for EVERY family — the scope prompt
+                                    is never asked for mechanics, so
+                                    `contractFromEvidence` manufactures all of them —
+                                    and a warning on every row is decoration, not
+                                    signal. The hint text does the work instead, and
+                                    `mechanicsSource` records the provenance for the
+                                    day extraction produces something real. */}
                                 <Input
                                     id={`scope-field-${familyKey}-deliveryMode`}
                                     value={contract.deliveryMode}
@@ -643,6 +653,10 @@ export function ScopeFamilyReview({
                                     placeholder="e.g. Browser software, done-for-you, app, API"
                                     className="mt-0.5 h-7 border-0 bg-transparent px-1.5 text-xs text-stone-500 shadow-none placeholder:text-stone-300"
                                 />
+                                <p className="px-1.5 text-[10px] leading-relaxed text-stone-400">
+                                    Worth correcting — this and the line above shape the
+                                    buyer questions we ask the AI engines.
+                                </p>
                             </div>
 
                             {family.evidence.length > 0 ? (

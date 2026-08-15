@@ -31,6 +31,25 @@ export const CapabilityContractSchema = z.object({
   deliveryMode: z.string().trim().min(2).max(160),
   operations: z.array(CapabilityOperationSchema).min(1).max(6),
   facts: z.array(CapabilityFactSchema).max(12).default([]),
+  /**
+   * How these mechanics were obtained — provenance, not content.
+   *
+   * `extracted` is the real thing: the model read the pages and described what
+   * the product does. `salvaged` means extraction failed and the contract was
+   * rebuilt from surviving page quotes, which sets `deliveryMode` to a
+   * placeholder and collapses the single operation into the family description
+   * repeated twice. `brand_card` means even that failed and the confirmed brand
+   * card filled the hole.
+   *
+   * Recorded because the last two are indistinguishable from the first on
+   * screen and in the database, while feeding the buyer-question prompt and the
+   * writer's frozen contract as though they were read off the site. Absent on
+   * rows written before this existed, which is why it is optional rather than
+   * defaulted — an old row is unknown provenance, not proven extraction.
+   */
+  mechanicsSource: z
+    .enum(["extracted", "derived", "brand_card", "founder"])
+    .optional(),
 })
 
 export const ScopeFamilySchema = z.object({

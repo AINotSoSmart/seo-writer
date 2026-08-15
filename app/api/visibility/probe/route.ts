@@ -124,15 +124,32 @@ async function openAuditForBrand(
         }
     }
 
-    const { data: brand } = await db
+    // Every column here is a real column — the persona lives in `brand_data`.
+    // The error is read rather than discarded for the reason documented at the
+    // second lookup: a swallowed PostgREST error reads as a missing brand.
+    const { data: brand, error: brandError } = await db
         .from("brand_details")
         .select("id, scope_confirmed_at, scope_contract_version, scope_hash")
         .eq("id", brandId)
         .eq("user_id", userId)
         .is("deleted_at", null)
         .maybeSingle()
+    if (brandError) {
+        console.error(`[Probe API] Could not read brand ${brandId}:`, brandError)
+        return {
+            ok: false,
+            status: 500,
+            body: {
+                error: `Your brand record could not be read: ${brandError.message}`,
+            },
+        }
+    }
     if (!brand) {
-        return { ok: false, status: 404, body: { error: "Brand not found" } }
+        return {
+            ok: false,
+            status: 404,
+            body: { error: "That brand no longer exists. Start again by adding a website." },
+        }
     }
 
     if (!brand.scope_confirmed_at || !brand.scope_hash) {
@@ -343,16 +360,49 @@ export async function POST(req: NextRequest) {
         )
     }
 
-    const { data: brand } = await admin
+    /**
+     * `brand_details` stores the persona inside `brand_data` (jsonb). It has no
+     * `product_name` or `product_identity` column, and this select used to ask
+     * for both — PostgREST rejected the whole query, the error was discarded,
+     * and `!brand` surfaced to the customer as "Brand not found" on a brand that
+     * was sitting in the table. The error is now read and logged, so the next
+     * schema mistake reports itself instead of impersonating a missing record.
+     */
+    const { data: brand, error: brandError } = await admin
         .from("brand_details")
-        .select(
-            "id, product_name, website_url, product_identity, discovered_competitors, brand_data",
-        )
+        .select("id, website_url, discovered_competitors, brand_data")
         .eq("id", audit.brand_id)
         .single()
-    if (!brand) {
-        return NextResponse.json({ error: "Brand not found" }, { status: 404 })
+    if (brandError || !brand) {
+        console.error(
+            `[Probe API] Could not load brand ${audit.brand_id}:`,
+            brandError,
+        )
+        if (openedAuditHere) {
+            await failAuditRun(
+                admin,
+                auditId,
+                "brand_unreadable",
+                `The brand record could not be read: ${brandError?.message ?? "no row returned"}`,
+            )
+        }
+        return NextResponse.json(
+            {
+                error: brandError
+                    ? `Your brand record could not be read: ${brandError.message}`
+                    : "Brand not found",
+            },
+            { status: brandError ? 500 : 404 },
+        )
     }
+
+    const brandData = (brand.brand_data ?? {}) as {
+        product_name?: string
+        product_identity?: { literally?: string }
+        target_region?: string
+        target_language?: string
+    }
+    const subjectName = brandData.product_name?.trim() || ""
 
     /**
      * The market the answers are asked from.
@@ -363,7 +413,7 @@ export async function POST(req: NextRequest) {
      * simply never set. Not to be confused with `search_country`, which is the
      * Tavily research locale and a different question.
      */
-    const countryCode = resolveRegion(brand.brand_data?.target_region)
+    const countryCode = resolveRegion(brandData.target_region)
 
     const { data: scopeRows } = await admin
         .from("audit_scope_families")
@@ -478,7 +528,7 @@ export async function POST(req: NextRequest) {
             user_id: user.id,
             brand_id: brand.id,
             audit_id: auditId,
-            subject_name: brand.product_name || subjectHost || "the brand",
+            subject_name: subjectName || subjectHost || "the brand",
             subject_domains: subjectHost ? [subjectHost] : [],
             competitors,
             engines,
@@ -509,14 +559,14 @@ export async function POST(req: NextRequest) {
             userId: user.id,
             brandId: brand.id,
             auditId,
-            subjectName: brand.product_name || subjectHost || "the brand",
+            subjectName: subjectName || subjectHost || "the brand",
             subjectDomains: subjectHost ? [subjectHost] : [],
-            subjectType: brand.product_identity?.literally || "Product or service",
+            subjectType: brandData.product_identity?.literally || "Product or service",
             competitors,
             families,
             engines,
             countryCode,
-            language: resolveLanguage(brand.brand_data?.target_language),
+            language: resolveLanguage(brandData.target_language),
             maxPrompts,
             prompts: confirmedPrompts,
         })

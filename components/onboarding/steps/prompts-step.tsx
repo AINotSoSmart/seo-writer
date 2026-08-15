@@ -221,7 +221,7 @@ export function PromptsStep({
                         return (
                             <div
                                 key={familyId}
-                                className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"
+                                className="overflow-hidden rounded-xl border border-stone-200 bg-white"
                             >
                                 {/* Family Header */}
                                 <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/70 px-3.5 py-2.5">

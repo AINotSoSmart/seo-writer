@@ -24,6 +24,14 @@ export type CapabilityContract = {
     deliveryMode: string
     operations: CapabilityOperation[]
     facts: CapabilityFact[]
+    /**
+     * How these mechanics were obtained. See CapabilityContractSchema in
+     * lib/schemas/brand.ts — `salvaged` and `brand_card` are placeholders that
+     * feed the buyer-question prompt and the writer as if they were read off
+     * the site. Optional: rows written before this existed are unknown
+     * provenance, which is not the same as proven extraction.
+     */
+    mechanicsSource?: "extracted" | "derived" | "brand_card" | "founder"
 }
 
 export type CapabilityFit = "explicit" | "mechanically_entailed" | "educational"
@@ -80,6 +88,11 @@ export function fallbackCapabilityContract(input: {
             evidenceRefs: [],
         }],
         facts: [],
+        // Provenance, not content. This contract was not read off the site —
+        // it is the family description wearing a contract's shape — and the
+        // buyer-question prompt and the writer both consume it as though it
+        // were. Callers that CAN do better overwrite this.
+        mechanicsSource: "brand_card",
     }
 }
 

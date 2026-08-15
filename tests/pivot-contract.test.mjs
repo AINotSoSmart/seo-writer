@@ -4165,8 +4165,19 @@ test("a probe measures the customer's market, not a default one", async () => {
     // an unset value is not "no preference" — it is a silent, wrong measurement
     // for every customer outside the US.
     assert.match(engines, /countryCode \|\| "US"/)
-    assert.match(probeRoute, /resolveRegion\(brand\.brand_data\?\.target_region\)/)
+    assert.match(probeRoute, /resolveRegion\(brandData\.target_region\)/)
     assert.match(probeRoute, /countryCode,/)
+    // brand_details has no `product_name` or `product_identity` COLUMN — the
+    // persona lives in `brand_data` jsonb. Selecting them made PostgREST reject
+    // the whole query, and the discarded error surfaced to a real customer as
+    // "Brand not found" for a brand that was sitting in the table.
+    assert.doesNotMatch(
+        probeRoute,
+        /select\("id, product_name/,
+        "brand_details has no product_name column",
+    )
+    assert.match(probeRoute, /brand\.brand_data \?\? \{\}/)
+    assert.match(probeRoute, /brandError/)
     assert.match(profile, /target_region/)
 
     // Measurement locale and research locale are DIFFERENT questions and must

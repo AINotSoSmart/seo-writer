@@ -443,6 +443,19 @@ function contractFromEvidence(
     if (facts.length === 0) return base
     return {
         ...base,
+        // NOT a fallback — this is the only path. The scope prompt asks for
+        // name, description, seed keywords and evidence; it is never asked for
+        // mechanics, so every "capability contract" in the product is
+        // manufactured here from the description plus page quotes. deliveryMode
+        // is therefore always this placeholder, `inputs`/`outputs`/`limits` are
+        // always empty, and the single operation is the description twice.
+        //
+        // That was survivable when the harvest's scope classifier was the main
+        // consumer. It matters now: `prompt-builder` builds every buyer question
+        // from `customerJob` and `action`, so the pivot's primary input is the
+        // family description restated rather than what the product actually
+        // does. See ROADMAP.md — extracting real mechanics is the open work.
+        mechanicsSource: "derived",
         deliveryMode: "Product or service described on the website",
         facts,
         operations: [{

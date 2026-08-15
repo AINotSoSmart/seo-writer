@@ -983,6 +983,40 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (eleventh pass) - "Brand not found" on a brand that was in the table
+
+**The bug, from the first real run.** Onboarding reached the probe step and
+failed with "Brand not found" for a brand the founder confirmed was saved.
+
+`brand_details` has **no `product_name` and no `product_identity` column** — the
+persona lives in `brand_data` (jsonb). The probe route selected both. PostgREST
+rejected the entire query, `const { data: brand } = ...` discarded the error, and
+`if (!brand)` reported a missing record. A column-name mistake wore the costume
+of a business condition, and it survived review because the route had never
+executed — exactly what "code-complete and unmeasured" buys you.
+
+Fixed: the select asks for real columns only and reads the persona out of
+`brand_data`; both brand lookups now read `error` and log it, and return a
+distinguishable message. A contract test pins `select("id, product_name` out of
+that file.
+
+**Second finding, from auditing whether the capability contract is still
+needed.** It is — `prompt-builder` generates every buyer question from
+`operations[].customerJob` and `.action` — but **nothing ever extracts it.**
+`lib/scope-extraction.ts:297` calls `contractFromEvidence` unconditionally, and
+the scope prompt is never asked for mechanics, so `deliveryMode` is always the
+literal placeholder, the one operation is the family description printed twice,
+and `inputs`/`outputs`/`limits` are always empty. Recorded as
+[`ROADMAP.md`](ROADMAP.md) §7c, the highest-value open item, with the reason it
+was survivable before the pivot and is not now.
+
+Added in the meantime: `mechanicsSource` provenance on the contract
+(`extracted` / `derived` / `brand_card` / `founder`). Deliberately **no** warning
+banner — the value is a placeholder for every family, and a warning on every row
+is decoration rather than signal. The confirm screen says plainly that those two
+fields shape the questions, because founder edits are the only real mechanics
+the system currently receives.
+
 ### 2026-08-15 (tenth pass) - onboarding rework, and the parameter nobody ever set
 
 Prompted by comparing our onboarding against the upstream project's live flow.

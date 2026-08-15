@@ -336,6 +336,79 @@ complete.
 
 ---
 
+## 7c. Open — no product mechanics are ever extracted
+
+**Status:** found 2026-08-15 while auditing whether the capability contract is
+still needed. Not fixed. **This is the highest-value open item.**
+
+### The finding
+
+`lib/scope-extraction.ts:297` calls `contractFromEvidence` for **every** family,
+unconditionally. The scope prompt asks the model for `name`, `description`,
+`seed_keywords` and `evidence` — **it is never asked for mechanics at all.**
+
+So every "capability contract" in the product is manufactured:
+
+| Field | Actual value, always |
+|---|---|
+| `deliveryMode` | the literal string `"Product or service described on the website"` |
+| `operations[0].customerJob` | the family description |
+| `operations[0].action` | the family description again |
+| `inputs` / `outputs` / `limits` | `[]` |
+
+This is why every row on the confirm screen reads "Product or service described
+on the website" — not an occasional fallback firing, the only path.
+
+### Why it did not matter before, and does now
+
+The richest consumer used to be `scope-classifier.ts`, which reads
+`inputs`/`outputs`/`limits` to decide whether a harvested query belongs to a
+family. That path is dead — nothing calls the Google harvest.
+
+The live consumer is now `prompt-builder.ts:124`:
+
+```
+- ${operation.customerJob}: ${operation.action}
+```
+
+**Every buyer question the pivot asks is generated from that line** — which is
+currently the family description, printed twice. The measurement is therefore
+built on a restatement of the description rather than on what the product
+actually does.
+
+### What was done in the meantime
+
+`mechanicsSource` on the contract (`extracted` / `derived` / `brand_card` /
+`founder`) so provenance is recorded rather than guessed, and it becomes
+meaningful the moment real extraction exists. No warning banner was added: the
+value is a placeholder for *every* family, and a warning on every row is
+decoration, not signal. The confirm screen instead says plainly that these two
+fields shape the questions, because founder edits are the only real mechanics
+the system currently gets.
+
+`inputs` / `outputs` / `limits` are dead weight — nothing writes them and only
+the retired classifier reads them. They were left in the schema because removing
+them touches stored rows for no behavioural gain; delete them when extraction is
+rewritten.
+
+### The fix
+
+Ask the scope model for mechanics: `deliveryMode` and one or two operations with
+a real `customerJob` and `action`, grounded in the same page quotes it already
+returns as evidence. The model is already reading the pages; this is a schema
+and prompt change, not new infrastructure.
+
+**Do it with care.** Scope extraction is the most-repaired component in this
+repo — see the 2026-08-14 and 2026-07-30 entries in `PIVOT.md` — and it is
+deliberately fail-open so an unreadable site cannot trap a founder. Any new
+required field must degrade to the current behaviour rather than blocking.
+
+### Build trigger
+
+Before the first paid run. It is upstream of everything the pivot measures.
+
+---
+
 ## 8. Built — onboarding rework
 
 **Status:** shipped 2026-08-15. Recorded here because the comparison is what
