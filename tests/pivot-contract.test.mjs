@@ -4272,7 +4272,33 @@ test("buyer prompts read like a person, not a blog title", async () => {
     //    prompt, or our own prompt text tops the leaderboard.
     assert.match(mapper, /namedInPrompt\(competitor\.name\)/)
 
-    // 6. RIVALS ARE CONFIRMED BEFORE THE QUESTIONS ARE WRITTEN. This is a data
+    // 6. ONLY TWO OF THE FIVE SHAPES MAY NAME A RIVAL.
+    //
+    //    When naming one was merely allowed, every shape used it — a rival name
+    //    is the cheapest way for a model to look concrete — and a live run came
+    //    back as ten variations of "X is too expensive, what else?" with every
+    //    problem-first question filtered out. The buyer who has a problem and
+    //    does not know what exists is the larger half of AI discovery and the
+    //    half where an engine names vendors from nothing.
+    assert.match(config, /namesIncumbent: true/)
+    assert.match(config, /namesIncumbent: false/)
+    assert.match(builder, /NAME NO TOOL AT ALL/)
+    assert.match(builder, /!shape\.namesIncumbent &&/)
+    assert.match(builder, /namesAnyIncumbent\(row\.text/)
+
+    //    And naming one must not buy realism: `readsLikeAPerson` accepting
+    //    "or it names an incumbent" is what biased survival toward exactly the
+    //    prompts that named a tool. First person is required of every shape.
+    assert.match(builder, /function readsLikeAPerson\(text: string\)/)
+    assert.doesNotMatch(builder, /readsLikeAPerson\(text: string, incumbents/)
+
+    // 7. The run cap must not decide which buyer situations get measured. Only
+    //    the first one or two prompts per family survive it, so the pool is
+    //    interleaved by intent rather than left in model emission order.
+    assert.match(builder, /function orderByIntentMix/)
+    assert.match(builder, /byFamily\.set\(family\.id, orderByIntentMix\(accepted\)\)/)
+
+    // 8. RIVALS ARE CONFIRMED BEFORE THE QUESTIONS ARE WRITTEN. This is a data
     //    dependency wearing the costume of a screen order: the questions are
     //    written against incumbent names, so generating them first — as this
     //    flow originally did — passed an empty list at the only moment it

@@ -987,6 +987,60 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (eighteenth pass) - every question became a switching question
+
+**What the fourteenth pass actually shipped.** A live generation for a photo
+restoration tool returned, for one family: two `alternatives` and two
+`comparison`, and nothing else. Across the whole run every question named a
+rival — "Myheritage is way too expensive…", "instead of Pixreunion…". The buyer
+who has a problem and does not yet know any product existed had vanished, and
+that buyer is the larger half of AI discovery and the half where an engine names
+vendors from nothing.
+
+**Three compounding faults, all introduced by that pass.**
+
+1. **The instruction made a rival name the cheapest anchor.** "Every prompt
+   carries at least one concrete anchor: *a named tool they already use*, a
+   stack, a number…" — naming a tool is the least effort of those, so the model
+   used it for all five shapes.
+
+2. **The filter rewarded it.** `readsLikeAPerson` passed a prompt that was first
+   person **or** named an incumbent. Comparative prompts therefore passed
+   automatically while problem-first prompts had to earn it, so rejection was
+   biased toward exactly the shapes that named nothing. Six of ten weights were
+   being filtered out before the cap ever saw them.
+
+3. **The run cap then chose the survivors.** Ten prompts across five confirmed
+   areas is two per area, taken in model emission order, so the cap — not the
+   design — decided which buyer situations got measured.
+
+**Fixes.**
+
+`PROMPT_INTENTS` gains `namesIncumbent`. Two shapes may name a rival because
+they are *about* having one; the other three may not, enforced in the filter
+rather than requested in the prose. The instruction now marks each shape
+`[NAME a tool]` or `[NAME NO TOOL AT ALL]`, lists incumbents as material for the
+former only, and carries a worked example of each kind.
+
+`readsLikeAPerson` requires first person of every shape. Naming a rival now buys
+nothing.
+
+`orderByIntentMix` interleaves each family's pool by intent before the
+round-robin, so what survives the cap spans the designed mix instead of whatever
+the model wrote first. Declaration order in `PROMPT_INTENTS` is therefore queue
+priority, and it alternates deliberately — `recommendation`, `alternatives`,
+`problem`, `comparison`, `howto` — so a ten-prompt run measures one problem-first
+and one switching question per area rather than two of the same kind.
+
+98 contract tests pass, `npx tsc --noEmit` clean, build clean. Verified by
+simulation that a 3/2/2/2/1 pool orders as
+`r0 a0 p0 c0 h0 r1 a1 p1 c1 r2` and preserves every prompt.
+
+**Unverified against a model.** Like the fourteenth pass this is a judgment
+change, and the fourteenth pass looked correct in review and failed in
+production. Read the generated set before trusting it: the test is whether most
+questions describe a situation and name nothing at all.
+
 ### 2026-08-15 (seventeenth pass) - the report joins the product it belongs to
 
 **Reachability.** `/visibility/[runId]` had no navigation entry and no index, so

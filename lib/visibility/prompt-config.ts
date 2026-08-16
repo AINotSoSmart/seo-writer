@@ -39,14 +39,40 @@
  * absent from a conversation no buyer was ever having.
  *
  * Real prompts are: who I am + what is going wrong + what I want. First person,
- * specific, often naming a tool the buyer already uses. So each brief below is
- * the literal structure to fill in, with an incumbent where the shape calls for
- * one — see `buildFamilyPrompt` for the rules that enforce it.
+ * specific, sometimes naming a tool the buyer already uses. So each brief below
+ * is the literal structure to fill in.
+ *
+ * ## `namesIncumbent` is a hard split, and it exists because of a failure
+ *
+ * Two of these five shapes are about a buyer who already has a tool and wants
+ * off it. The other three are about a buyer who has a problem and does not know
+ * what exists — which is the larger half of AI discovery and the half worth
+ * measuring, because it is where an engine names vendors from nothing.
+ *
+ * When incumbents were merely *allowed*, every shape used one: naming a tool was
+ * the cheapest way to satisfy "include a concrete anchor", so a real run came
+ * back as ten variations of "X is too expensive, what else is there?" and the
+ * problem-first questions vanished entirely. Six of ten weights produced nothing.
+ *
+ * So it is now structural. `false` means the prompt may not name any tracked
+ * rival at all; the anchor has to come from the buyer's own situation.
+ *
+ * ## Declaration order is queue priority, not cosmetics
+ *
+ * `orderByIntentMix` walks this array to decide which prompts sit at the front
+ * of a family's pool, and the run cap only ever takes the front. At the default
+ * ten prompts across five confirmed areas each area contributes two, so the
+ * first two entries here are what a first run actually measures. They alternate
+ * deliberately: a problem-first shape, then an incumbent shape, then another
+ * problem-first — so a small run spans both kinds of buyer instead of becoming
+ * all switching questions, which is exactly what a live run produced when the
+ * order was left to whatever the model emitted first.
  */
 export const PROMPT_INTENTS = [
     {
         key: "recommendation",
         weight: 3,
+        namesIncumbent: false,
         brief:
             "CONTEXT + PAIN + ASK. \"I'm [who I am] using [current stack]. I'm trying to [job], but [what is going wrong]. What tool handles this?\" The buyer states their situation before they ask.",
         articleType: "commercial" as const,
@@ -54,27 +80,31 @@ export const PROMPT_INTENTS = [
     {
         key: "alternatives",
         weight: 2,
+        namesIncumbent: true,
         brief:
             "FRUSTRATED SWITCHER. \"[Incumbent] is [too expensive / too heavy / missing X] for [my situation]. What is a simpler alternative that just does [core job]?\" Name a real incumbent — this is the phrasing that makes an engine list challengers.",
         articleType: "commercial" as const,
     },
     {
-        key: "comparison",
-        weight: 2,
-        brief:
-            "CONSENSUS CHECK. \"What are most [persona] using now for [job] instead of [legacy incumbent]?\" Asks what the community has moved to, which pushes the engine to synthesise recent discussion rather than recite old documentation.",
-        articleType: "commercial" as const,
-    },
-    {
         key: "problem",
         weight: 2,
+        namesIncumbent: false,
         brief:
             "FUNCTIONAL BRIDGE. \"Is there something that takes [input] and gives me [output] without [the step I hate]?\" Pure capability, described in the buyer's own mechanics — no product category named.",
         articleType: "informational" as const,
     },
     {
+        key: "comparison",
+        weight: 2,
+        namesIncumbent: true,
+        brief:
+            "CONSENSUS CHECK. \"What are most [persona] using now for [job] instead of [legacy incumbent]?\" Asks what the community has moved to, which pushes the engine to synthesise recent discussion rather than recite old documentation.",
+        articleType: "commercial" as const,
+    },
+    {
         key: "howto",
         weight: 1,
+        namesIncumbent: false,
         brief:
             "STUCK MID-JOB. \"I need to [specific task] — [constraint that makes it awkward]. How do people do this?\" A real task with a real obstacle, not a tutorial title.",
         articleType: "howto" as const,

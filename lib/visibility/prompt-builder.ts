@@ -74,6 +74,46 @@ const MAX_ATTEMPTS_PER_FAMILY = 2
 const RETRY_BASE_DELAY_MS = 1200
 
 /**
+ * Interleaves a family's prompts so every buyer situation is represented early.
+ *
+ * The run cap is a hard budget — ten prompts across every confirmed area — so
+ * only the first one or two from each family survive it. Taking them in the
+ * order the model happened to emit meant the cap, not the design, chose which
+ * buyer situations got measured. On a live run that produced four questions for
+ * one family that were two "alternatives" and two "comparison", and not a single
+ * problem-first question anywhere in the set.
+ *
+ * Ordering here is by the declared mix: one of each intent in `PROMPT_INTENTS`
+ * order, then the next of each, and so on. Weight still decides how many of each
+ * the model writes; this only decides who is at the front of the queue.
+ */
+function orderByIntentMix(prompts: BuyerPrompt[]): BuyerPrompt[] {
+    const byIntent = new Map<string, BuyerPrompt[]>()
+    for (const prompt of prompts) {
+        const bucket = byIntent.get(prompt.intent)
+        if (bucket) bucket.push(prompt)
+        else byIntent.set(prompt.intent, [prompt])
+    }
+
+    const ordered: BuyerPrompt[] = []
+    let round = 0
+    while (ordered.length < prompts.length) {
+        let placed = false
+        for (const intent of PROMPT_INTENTS) {
+            const bucket = byIntent.get(intent.key)
+            const candidate = bucket?.[round]
+            if (!candidate) continue
+            ordered.push(candidate)
+            placed = true
+        }
+        // Nothing left at this depth in any bucket — every prompt is placed.
+        if (!placed) break
+        round += 1
+    }
+    return ordered
+}
+
+/**
  * A prompt must read like something a person typed into a chat box.
  *
  * Mechanical sanitation only — no opinion about words or industries, matching
@@ -121,38 +161,42 @@ function namesSubject(text: string, subjectTokens: string[]): boolean {
     })
 }
 
+/** Does this text name any of the tracked rivals? */
+function namesAnyIncumbent(text: string, incumbents: string[]): boolean {
+    const flattened = text.toLowerCase().replace(/[^a-z0-9]/g, "")
+    return incumbents.some((name) => {
+        const needle = name.toLowerCase().replace(/[^a-z0-9]/g, "")
+        return needle.length >= 4 && flattened.includes(needle)
+    })
+}
+
 /**
  * True when the prompt is written from a person's situation rather than as a
  * topic.
  *
- * A positive structural test, not a banned-words list — this repo has twice
- * been burned by blocklists that caught the previous examples and missed the
- * next. It asks for evidence that a human is speaking: a first-person opener,
- * or a named tool they already use. Both are facts about the string.
+ * A positive structural test, not a banned-words list — this repo has twice been
+ * burned by blocklists that caught the previous examples and missed the next. It
+ * asks for evidence that a human is speaking, which is a fact about the string.
  *
- * The prompts that failed review had neither. "Can you recommend a platform
- * that helps me generate editable mobile UI screens and provides
- * developer-ready implementation context?" is a brochure sentence with a
- * question mark, and a formal category question makes an assistant retreat to
- * the safest possible listicle — so it measures a conversation no buyer had.
+ * **This used to accept "or it names an incumbent" as sufficient, and that was a
+ * bug with visible consequences.** Naming a rival is the cheapest way for a
+ * model to look concrete, so every shape used one; and because the filter then
+ * waved those through while holding the problem-first shapes to a real standard,
+ * survival was biased toward exactly the prompts that named a tool. A live run
+ * came back as ten variations of "X is too expensive, what else?" with the six
+ * weights' worth of problem-first questions filtered out entirely. First person
+ * is now required of every shape, and naming a rival buys nothing.
  */
-function readsLikeAPerson(text: string, incumbents: string[]): boolean {
+function readsLikeAPerson(text: string): boolean {
     const lower = text.toLowerCase()
     // Word boundaries are load-bearing: without them "i" matches inside
     // "editable" and every candidate passes, making this test decorative.
-    const firstPerson =
+    return (
         /\b(i|i'm|im|i've|ive|we|we're|were|my|our|us)\b/.test(lower) ||
         /\bwhat (are|is) (people|everyone|most|devs|developers|teams|founders)\b/.test(
             lower,
         )
-    const namesAnIncumbent = incumbents.some((name) => {
-        const needle = name.toLowerCase().replace(/[^a-z0-9]/g, "")
-        return (
-            needle.length >= 4 &&
-            lower.replace(/[^a-z0-9]/g, "").includes(needle)
-        )
-    })
-    return firstPerson || namesAnIncumbent
+    )
 }
 
 /** Everything about the business that makes a prompt sound like a person. */
@@ -212,9 +256,13 @@ ${intents}
 THE SHAPE OF A REAL PROMPT
   who I am / what I'm using  +  what is going wrong  +  what I want
 
-Real:  "I'm building an MVP and I've got a folder of app screenshots. Is there
-        something that turns them into editable Figma components so I don't
-        redraw everything by hand?"
+Real, naming nothing (this is the common case):
+       "I'm building an MVP and I've got a folder of app screenshots. Is there
+        something that turns them into editable components so I don't redraw
+        everything by hand?"
+Real, naming an incumbent (only the two marked shapes):
+       "Figma is overkill for what I'm doing — I just need to hand a developer
+        clean screens. What are people using instead?"
 Fake:  "What is the best tool to turn a static screenshot into an editable
         mobile UI design?"
 
@@ -224,9 +272,10 @@ assistant fall back to the safest possible listicle of whichever legacy tools
 have the most written about them.
 
 RULES
-- First person. Start from the buyer's situation: "I'm…", "I've got…", "I need…", "We're on…", or "What are people using…".
-- Every prompt carries at least one concrete anchor: a named tool they already use, a stack or platform, a number, a file format, a deadline, or a specific annoyance. A prompt with no anchor is not a real message.
-- You MAY name the tools listed above as incumbents. Do NOT name the customer's own product — these prompts test whether an assistant recommends it unprompted, and naming it gives away the answer.
+- First person, always, every shape. Start from the buyer's situation: "I'm…", "I've got…", "I need…", "We're on…", or "What are people using…".
+- Every prompt carries at least one concrete anchor: a stack or platform, a number, a file format, a deadline, the material they are working with, or a specific annoyance. A prompt with no anchor is not a real message.
+- **Most buyers naming no tool.** Only the two shapes marked [NAME a tool] may mention one — those are the buyer who already has something and wants off it. The three marked [NAME NO TOOL AT ALL] are the buyer who has a problem and does not know what exists yet, which is the larger half of how people actually ask. For those, the anchor must come from their situation, never from a brand.
+- Never name the customer's own product in any shape — these prompts test whether an assistant recommends it unprompted, and naming it gives away the answer.
 - BANNED openings, because they are SEO artifacts rather than things people type: "What is the best…", "What are the best…", "Top tools for…", "How to [x] without [y]".
 - BANNED words, because no one types them at a chatbot: streamlined, seamless, cutting-edge, robust, efficiently, leverage, solution that provides, developer-ready, best-in-class.
 - Stay strictly inside the business area above. An adjacent problem is worse than no prompt.
@@ -341,16 +390,30 @@ export async function buildBuyerPrompts(
                         text: String(row.text ?? "").trim(),
                         intent: String(row.intent ?? "").trim() as PromptIntentKey,
                     }))
-                    .filter(
-                        (row) =>
-                            isPlausiblePrompt(row.text) &&
-                            validIntents.has(row.intent) &&
-                            !namesSubject(row.text, options.subjectTokens) &&
-                            readsLikeAPerson(
-                                row.text,
-                                options.context?.incumbents || [],
-                            ),
-                    )
+                    .filter((row) => {
+                        if (!isPlausiblePrompt(row.text)) return false
+                        if (!validIntents.has(row.intent)) return false
+                        if (namesSubject(row.text, options.subjectTokens)) return false
+                        if (!readsLikeAPerson(row.text)) return false
+
+                        // A rival name belongs only in the two shapes that are
+                        // ABOUT having a rival. Everywhere else it is the model
+                        // reaching for the cheapest concrete detail, and it
+                        // turns a "buyer who does not know what exists" question
+                        // into a switching question — collapsing the run onto
+                        // one buyer situation out of five.
+                        const shape = PROMPT_INTENTS.find(
+                            (candidate) => candidate.key === row.intent,
+                        )
+                        if (
+                            shape &&
+                            !shape.namesIncumbent &&
+                            namesAnyIncumbent(row.text, options.context?.incumbents || [])
+                        ) {
+                            return false
+                        }
+                        return true
+                    })
                     .map((row) => {
                         const intent = PROMPT_INTENTS.find(
                             (candidate) => candidate.key === row.intent,
@@ -377,13 +440,17 @@ export async function buildBuyerPrompts(
             }
         }
 
-        if (accepted.length > 0) byFamily.set(family.id, accepted)
+        if (accepted.length > 0) byFamily.set(family.id, orderByIntentMix(accepted))
     }
 
     // Round-robin across families up to the cap, so a family that produced 10
     // prompts cannot crowd out one that produced 4. Same fairness rule the
     // harvest applies at `roundRobinCap`; a probe that spends its whole budget
     // on one confirmed area measures that area, not the business.
+    //
+    // Each family's pool is interleaved by intent first (see orderByIntentMix),
+    // so the prompts that survive the cap span the designed mix of buyer
+    // situations rather than whichever ones the model happened to write first.
     const seen = new Set<string>()
     const prompts: BuyerPrompt[] = []
     const cursors = new Map<string, number>()
