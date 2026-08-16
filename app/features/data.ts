@@ -17,69 +17,65 @@ export type FeatureTruth = {
  * engineering vocabulary is correct and stays in docs/PIVOT.md — it just does
  * not belong on a page whose whole job is to be understood in ten seconds.
  *
- * Counts stay dynamic: the audit decides how many batches there are, so no
- * string here may promise a fixed number.
+ * The launch contract is 40 tracked questions and up to eight selected actions
+ * per cycle. Eight is always a ceiling, never a filler quota.
  */
 export const features: Record<string, FeatureTruth> = {
     "evidence-backed-topical-audit": {
         slug: "evidence-backed-topical-audit",
-        name: "A gap audit you can fact-check",
+        name: "AI visibility evidence you can inspect",
         summary:
-            "We find the questions your market is searching that your site does not answer — and every single one carries a link to the page or search where we saw it.",
+            "We ask your confirmed buyer questions in ChatGPT and Google AI Mode, then retain the answers, mentions and citations behind every verdict.",
         promise:
-            "You can open any gap we show you and check it yourself. If we cannot trace a question back to somewhere real, it does not go in your report.",
-        inputs: ["Your public website", "The product areas you confirm", "Up to four competitors"],
+            "You can open each result and inspect what the engine returned. Unresolved evidence is labelled for review rather than quietly converted into production work.",
+        inputs: ["Your public website", "40 confirmed buyer questions", "Up to four competitors"],
         outputs: [
-            "Every missing question, with its source link",
-            "What your existing pages already cover",
-            "A snapshot that cannot be quietly edited later",
+            "Per-question presence or absence evidence",
+            "Observed competitors, mentions and citations",
+            "An immutable measurement-run snapshot",
         ],
         safeguards: [
             "No access to your Google account or analytics",
-            "A question with no traceable source is dropped, not guessed",
-            "Re-running an audit never rewrites work you already bought",
+            "Unresolved citation shapes stay out of automatic production",
+            "A later measurement never rewrites an earlier report",
         ],
     },
     "competitor-gap-evidence": {
         slug: "competitor-gap-evidence",
-        name: "See who is already answering it",
+        name: "See who AI answers mention instead",
         summary:
-            "For each question you are missing, see the competitor pages that answer it today and the closest thing you have published.",
+            "For each tracked question, inspect the brands and source pages the AI answer actually used.",
         promise:
             "We show you what we observed, not a forecast. No traffic estimates, no ranking predictions, no invented numbers.",
-        inputs: ["The questions we observed", "Public competitor pages", "Your own published pages"],
+        inputs: ["The confirmed questions", "Observed AI answers", "Stored citations"],
         outputs: [
-            "Questions you miss entirely, and ones you half-answer",
-            "The competitor pages currently answering them",
-            "Your nearest existing page, so you can judge overlap",
+            "Questions where your brand is absent, present or outranked",
+            "The cited sources behind each answer",
+            "Clear publish, earn, report-only or founder-review evidence",
         ],
         safeguards: [
-            "Four competitors maximum — a focused read, not a scrape",
-            "Every claim links to the page it came from",
-            "We never mark a topic covered just because your site is vaguely about it",
+            "Four named competitors maximum for focused comparison",
+            "Every citation remains attached to the observed answer",
+            "Unknown source types are never treated as article gaps",
         ],
     },
     "topic-cluster-delivery": {
         slug: "topic-cluster-delivery",
-        name: "Complete batches, never half-built",
+        name: "Selected cycle batches, never filler",
         summary:
-            "Articles arrive in themed batches of 8 to 15, each one a pillar article plus the supporting pieces around it, already linked to each other.",
+            "Each billing cycle selects up to eight prioritised create or refresh actions and releases all selected drafts together.",
         promise:
             "A batch only reaches you once every article in it is finished. If one fails, the batch waits rather than shipping you something to repair.",
-        inputs: [
-            "The batches your audit qualified",
-            "The delivery speed you chose",
-            "Your confirmed product areas",
-        ],
+        inputs: ["The latest measurement", "The durable opportunity backlog", "Explicit target-page decisions"],
         outputs: [
-            "Whole batches, ready to review",
-            "Articles written against the evidence we showed you",
-            "A running count of what is done and what is left",
+            "One complete cycle batch, ready to review",
+            "Create or refresh drafts tied to selected opportunities",
+            "A visible backlog of qualified work not selected yet",
         ],
         safeguards: [
-            "No partial batches, ever",
-            "Only the failed article is retried, not the whole batch",
-            "The scope is fixed before you pay and cannot grow afterwards",
+            "At most eight actions; fewer is an acceptable outcome",
+            "Only failed output is retried while the batch stays hidden",
+            "Report-only findings consume no production slot",
         ],
     },
     "frozen-internal-link-graph": {
@@ -118,21 +114,21 @@ export const features: Record<string, FeatureTruth> = {
     },
     "program-burn-down": {
         slug: "program-burn-down",
-        name: "A programme that ends",
+        name: "Recurring cycles you can cancel",
         summary:
-            "Watch what is written, what has been delivered and what you have published, tracked separately — and see exactly how much is left.",
+            "Watch each billing cycle move from measurement through selection, generation and complete-batch delivery.",
         promise:
-            "Once your last batch is delivered, we ask for the subscription to be cancelled at the end of that billing period. There is nothing for you to remember to switch off.",
-        inputs: ["Your agreed schedule", "Batch progress", "Your billing dates"],
+            "Cancel anytime to prevent future billing cycles. Completed reports and delivered drafts remain available.",
+        inputs: ["Your billing period", "Cycle progress", "Your cancellation choice"],
         outputs: [
-            "Written, delivered and published counts, kept apart",
-            "Dates that shift correctly if you pause",
-            "Confirmation that cancellation was requested",
+            "Cycle and selected-action states kept apart",
+            "Generated, delivered and published states kept apart",
+            "Period-end cancellation status",
         ],
         safeguards: [
             "A retry never charges you twice",
-            "Pausing shifts the schedule without changing the price",
-            "No work is generated after your scope is delivered",
+            "Pausing production does not masquerade as billing cancellation",
+            "Cancellation prevents future cycles without deleting history",
         ],
     },
 }

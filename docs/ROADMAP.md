@@ -402,10 +402,10 @@ complete.
 
 ---
 
-## 7c. Open — no product mechanics are ever extracted
+## 7c. Superseded — buyer questions do not consume product mechanics
 
-**Status:** found 2026-08-15 while auditing whether the capability contract is
-still needed. Not fixed. **This is the highest-value open item.**
+**Status:** resolved 2026-08-16 by tracing the current code and running the
+onboarding generator against FlipAEO itself.
 
 ### The finding
 
@@ -425,53 +425,145 @@ So every "capability contract" in the product is manufactured:
 This is why every row on the confirm screen reads "Product or service described
 on the website" — not an occasional fallback firing, the only path.
 
-### Why it did not matter before, and does now
+### Why the original conclusion became stale
 
 The richest consumer used to be `scope-classifier.ts`, which reads
 `inputs`/`outputs`/`limits` to decide whether a harvested query belongs to a
 family. That path is dead — nothing calls the Google harvest.
 
-The live consumer is now `prompt-builder.ts:124`:
+Commit `2cfaa33` removed capability mechanics from buyer-question generation
+before this roadmap item was implemented. The live generator now reads only the
+confirmed family name, description and seed phrases plus the confirmed brand
+category, features, audience and incumbents. Reintroducing `customerJob` and
+`action` would restore an obsolete dependency and give fabricated mechanics a
+second life in the measurement.
 
-```
-- ${operation.customerJob}: ${operation.action}
-```
+### What was implemented
 
-**Every buyer question the pivot asks is generated from that line** — which is
-currently the family description, printed twice. The measurement is therefore
-built on a restatement of the description rather than on what the product
-actually does.
+`prompt-template.ts` is now the pure production contract used by the Gemini
+caller and by tests. The generation route no longer manufactures a fallback
+capability contract from the family description. It still accepts stored scope
+rows that contain `capability_contract`, for compatibility, but ignores that
+field deliberately.
 
-### What was done in the meantime
+The first live FlipAEO sample produced ten understandable buyer questions and
+exposed the actual quality failures: overlapping confirmed topics produced
+near-duplicates, malformed rival suggestions contaminated prompt context, named
+rivals dominated too much of the set, and the model repeated one intent label.
+Those findings were treated as failures to fix, not caveats to defer.
 
-`mechanicsSource` on the contract (`extracted` / `derived` / `brand_card` /
-`founder`) so provenance is recorded rather than guessed, and it becomes
-meaningful the moment real extraction exists. No warning banner was added: the
-value is a placeholder for *every* family, and a warning on every row is
-decoration, not signal. The confirm screen instead says plainly that these two
-fields shape the questions, because founder edits are the only real mechanics
-the system currently gets.
+The final authenticated launch-size gate produced 40/40 exact-unique questions,
+zero production near-duplicate pairs, zero calendar-year questions, and three
+named-rival questions (7.5%, under the 15% limit). The shared runtime date/time
+context is passed to Gemini, intent is inferred from each finished question,
+and topic regeneration retains the overall count while excluding questions kept
+in other topics. Rival suggestions are reduced to validated hostnames, and the
+advisory scope-role model has a 45-second fail-open timeout so it cannot leave
+Continue disabled forever.
 
-`inputs` / `outputs` / `limits` are dead weight — nothing writes them and only
-the retired classifier reads them. They were left in the schema because removing
-them touches stored rows for no behavioural gain; delete them when extraction is
-rewritten.
+### What remains true about mechanics
 
-### The fix
+The writer capability contract still contains placeholder mechanics. That is a
+writer-grounding cleanup, not a buyer-question or subscription prerequisite.
+`inputs` / `outputs` / `limits` are dead weight outside the retired classifier;
+remove or replace them when the writer contract is revised, without coupling
+that migration back into prompt measurement.
 
-Ask the scope model for mechanics: `deliveryMode` and one or two operations with
-a real `customerJob` and `action`, grounded in the same page quotes it already
-returns as evidence. The model is already reading the pages; this is a schema
-and prompt change, not new infrastructure.
-
-**Do it with care.** Scope extraction is the most-repaired component in this
-repo — see the 2026-08-14 and 2026-07-30 entries in `PIVOT.md` — and it is
-deliberately fail-open so an unreadable site cannot trap a founder. Any new
-required field must degrade to the current behaviour rather than blocking.
+The first live run labeled all ten questions `alternatives`; trusting that model
+field was the defect. Intent remains downstream article metadata, but code now
+infers it from the finished question with tested precedence for recommendation,
+replacement, comparison, stated failure and how-to wording. Durable prompts make
+comparability come from re-running the same confirmed questions, not from
+regenerating a fixed mix.
 
 ### Build trigger
 
-Before the first paid run. It is upstream of everything the pivot measures.
+No longer a launch blocker. Revisit capability mechanics only with the writer
+contract work that consumes them.
+
+---
+
+## 7d. Fixed — uncategorised citations cannot silently become content work
+
+**Status:** Phase 0b completed 2026-08-16 against the stored evidence from the
+first complete Drawgle probe.
+
+The old classifier left 302 of 373 citations (81%) uncategorised. This was not
+primarily a missing-domain-list problem. The classifier already calculated the
+exact page's shape from its URL, but did not use that result to classify the
+source. Among the unfamiliar hosts were explicit best-of lists, comparisons,
+reviews and documentation pages whose actionability was present in the stored
+URL/title evidence.
+
+The classifier now has four production consequences:
+
+| Consequence | Source evidence | Automatic production? |
+|---|---|---|
+| publish | subject-owned or tracked-competitor page | eligible for later create/refresh triage |
+| earn | explicit recommendation/list/comparison/review page, community, marketplace, social or publisher | no owned article inferred |
+| report only | institutional or explicit third-party documentation/reference page | no |
+| founder review | URL/title remains ambiguous | no, until a person resolves it |
+
+Replaying the immutable run produced 4.3% publish, 42.9% earn, 11.0%
+report-only and 41.8% founder review. The unresolved share is still large and is
+reported as such. It was not erased by adding Drawgle-specific hosts to curated
+lists.
+
+Future summaries freeze an exact founder-review queue with URL, stored title,
+host and occurrence count. Historical summaries are not recalculated; the UI
+maps their old unclassified share to founder review and does not fabricate a
+queue. Durable founder decisions belong with the opportunity state introduced
+in subscription Phase 2. Until then, unresolved citations are quarantined and
+cannot enter production.
+
+---
+
+## 7e. Code-complete — buyer questions now have identity across runs
+
+**Status:** subscription Phase 1 implemented and hosted persistence-verified
+2026-08-16. The deployed Trigger/provider observation-link smoke test remains
+open as a release gate.
+
+Before this phase, the confirmation screen held the questions in browser state
+and sent them into one probe. `ai_probe_prompts` proved what one run asked but
+could not identify “the same question next month.” It also let a caller replace
+or resize the confirmed set in the probe request.
+
+The new boundary is:
+
+```
+Questions screen → tracked_prompts (stable) → ai_probe_prompts (one run's observation)
+```
+
+The database owns exactly 40 active questions per brand, stable normalized
+identity, order, confirmed scope ownership, tracking status and explicit target
+page state. Confirmation is atomic. The API rejects exact/near duplicates,
+calendar years and self-naming discovery questions. The probe accepts brand/run
+identity only, loads the active set server-side, rebinds each durable question
+to the audit snapshot and writes `tracked_prompt_id` into the observation.
+
+The schema deliberately leaves historical observation links nullable.
+Backfilling an old run would invent stable customer intent after the fact.
+
+The hosted migration is applied. The authenticated confirmation flow persisted
+exactly 40 active rows with 40 unique ids, 40 unique normalized questions and
+positions 0–39. The flow now stops at an explicit paid-measurement button; no
+provider credits were spent during this gate. After deployment, run one smoke
+measurement and verify 40 non-null observation links before enabling checkout.
+
+Subscription Phase 2 added `content_opportunities`, `subscription_cycles`,
+`cycle_actions`, `cycle_action_opportunities` and the unique
+`planned_articles.cycle_action_id` output link in
+`20260816_subscription_state_model.sql`; the hosted migration was applied
+successfully on 2026-08-16.
+
+Subscription Phase 3 is code-complete in
+`20260816_recurring_commercial_state.sql`. It makes the old purchase intents,
+cluster schedules and credit consumptions read-only legacy history, replaces
+their entitlement with one billing-period cycle, moves claiming/cost/link/batch
+delivery to cycle actions, and removes automatic end-of-scope cancellation.
+Checkout is deliberately closed. Apply the Phase 3 migration before building
+the reconciliation worker in Phase 4.
 
 ---
 

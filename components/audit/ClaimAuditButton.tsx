@@ -38,7 +38,7 @@ export function ClaimAuditButton({ token }: { token: string }) {
             >
                 {pending
                     ? "Claiming audit…"
-                    : "Claim this audit and choose your delivery speed"}
+                    : "Claim this audit and confirm your buyer questions"}
             </button>
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </div>

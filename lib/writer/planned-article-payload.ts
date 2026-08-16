@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- forward Phase 3 relations are absent from generated database types until migration. */
 /**
  * Loads the writer inputs a planned article would receive in production.
  *
  * Shared by `/api/writer/dry-run` and `/api/founder/test-article` so QA runs
- * exercise the same payload ship-cluster would trigger — without mutating
+ * exercise the same payload ship-cycle would trigger — without mutating
  * planned-article generation state.
  */
 
@@ -12,6 +13,7 @@ import type {
     CapabilityFact,
 } from "./article-contract"
 import { resolveCapabilityFacts } from "./article-contract"
+import type { ArticleType } from "@/lib/harvest/cluster-types"
 
 export interface PlannedWriterInputs {
     plannedArticleId: string
@@ -19,7 +21,7 @@ export interface PlannedWriterInputs {
     auditId: string
     title: string
     keyword: string
-    articleType: string
+    articleType: ArticleType
     supportingKeywords: string[]
     sourceQueries: string[]
     subNodeIntents: string[]
@@ -52,7 +54,7 @@ export async function loadPlannedWriterInputs(
         .from("planned_articles")
         .select(
             "id, title, main_keyword, supporting_keywords, article_type, brand_id, audit_id, cluster_id, " +
-                "source_query_ids, is_pillar, sub_node_intents, article_contract, contract_version",
+                "cycle_action_id, source_query_ids, is_pillar, sub_node_intents, article_contract, contract_version",
         )
         .eq("id", plannedArticleId)
         .maybeSingle()
@@ -115,10 +117,21 @@ export async function loadPlannedWriterInputs(
               .slice(0, 6)
         : []
 
-    const { data: linkRows } = await db
+    const { data: action } = planned.cycle_action_id
+        ? await db
+              .from("cycle_actions")
+              .select("cycle_id")
+              .eq("id", planned.cycle_action_id)
+              .maybeSingle()
+        : { data: null }
+
+    let linkQuery = db
         .from("planned_article_links")
         .select("target_url, anchor_text, relationship")
         .eq("source_article_id", planned.id)
+    if (action?.cycle_id) linkQuery = linkQuery.eq("cycle_id", action.cycle_id)
+    else linkQuery = linkQuery.is("cycle_id", null)
+    const { data: linkRows } = await linkQuery
 
     return {
         plannedArticleId: planned.id,

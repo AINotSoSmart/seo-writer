@@ -19,22 +19,20 @@ export interface SEOConfig {
  * reason: a landing page has to answer four questions in order, and only the
  * first one is the category.
  *
- *   1. What is this?      -> topical authority: complete, interlinked coverage
- *                            of a subject. This is the deliverable and the
- *                            reason the brand is called FlipAEO.
+ *   1. What is this?      -> recurring AI visibility measurement plus selected
+ *                            create/refresh delivery.
  *   2. Does it work?      -> the first-party BringBack case study.
- *   3. Versus what?       -> a $3,000-$15,000/month agency, or a $19 bulk
- *                            writer. This closes the sale; it does not define
- *                            the product.
+ *   3. Versus what?       -> an agency or a bulk writer. This closes the sale;
+ *                            it does not define the product.
  *   4. Why believe you?   -> source-linked gaps and evidence-bound writing.
  *
  * Keywords follow the same order: the deliverable leads, the answer-engine
  * terms carry the timing argument, the agency terms handle the comparison.
  */
 export const defaultSEO: SEOConfig = {
-  title: "FlipAEO — Build Topical Authority Google and AI Both Trust",
+  title: "FlipAEO — Measure AI Visibility and Close Content Gaps",
   description:
-    "Search engines and AI assistants favour sites that cover a subject completely. FlipAEO finds every question your market asks that your site misses, then writes and delivers them as complete, interlinked clusters — the work an agency bills $3,000-$15,000 a month for, from $249.",
+    "Track 40 buyer questions in ChatGPT and Google AI Mode, inspect the answers and citations, and receive up to eight prioritised create or refresh actions as one complete draft batch.",
   keywords: [
     "topical authority",
     "how to build topical authority",
@@ -88,13 +86,13 @@ export const pageSEO = {
   // founder-led B2B SaaS, and it must not drift between founders, agencies,
   // marketers and bloggers page to page.
   home: {
-    title: "Topical Authority for Founder-Led B2B SaaS",
+    title: "AI Visibility for Founder-Led B2B SaaS",
     description: defaultSEO.description,
     keywords: defaultSEO.keywords,
   },
   login: {
     title: "Sign in to FlipAEO",
-    description: "Sign in to review your audit and finite delivery program.",
+    description: "Sign in to review AI visibility reports and recurring delivery cycles.",
     keywords: ["FlipAEO login"],
   },
   dashboard: {
@@ -104,9 +102,9 @@ export const pageSEO = {
     robots: "noindex, nofollow",
   },
   pricing: {
-    title: "Pricing — One Agency Month, Your Whole Programme",
+    title: "Pricing — FlipAEO Founding Beta",
     description:
-      "From $249 a month, against the $3,000-$15,000 a B2B SaaS content agency charges. Your audit sets the size, the tier sets the speed, and billing ends when the work does.",
+      "One website, 40 tracked buyer questions, two AI engines, and up to eight selected content actions per billing cycle.",
     keywords: [
       "saas seo agency pricing",
       "b2b saas content marketing cost",
@@ -116,7 +114,7 @@ export const pageSEO = {
   },
   about: {
     title: "About FlipAEO",
-    description: "Why we sell a content programme that ends instead of a retainer that never does.",
+    description: "Why FlipAEO starts with measured buyer questions and never turns an action ceiling into filler.",
     keywords: ["about FlipAEO", "saas seo agency alternative"],
   },
   blog: {
@@ -131,18 +129,18 @@ export const pageSEO = {
   },
   terms: {
     title: "Terms of Service",
-    description: "Terms for finite FlipAEO audit and delivery programs.",
+    description: "Terms for FlipAEO recurring measurement and delivery cycles.",
     keywords: ["FlipAEO terms"],
   },
   refundPolicy: {
     title: "Refund Policy",
-    description: "Refund terms for FlipAEO finite delivery programs.",
+    description: "Refund terms for FlipAEO recurring delivery cycles.",
     keywords: ["FlipAEO refund"],
   },
   subscribe: {
-    title: "Choose program delivery speed",
+    title: "FlipAEO subscription",
     description:
-      "Confirm the frozen publication URL pattern and choose delivery speed for an eligible measured scope.",
+      "Review the founding beta contract and manage recurring measurement and delivery.",
     keywords: ["FlipAEO program"],
     robots: "noindex, nofollow",
   },
@@ -210,13 +208,13 @@ export const schemaTemplates = {
     applicationSubCategory: "Content Marketing Software",
     operatingSystem: "Web Browser",
     featureList: [
-      "Content gap audit with a source link on every finding",
-      "Competitor coverage comparison",
-      "Done-for-you SEO article writing",
-      "Internal links written and verified before delivery",
-      "Complete batch delivery, never partial",
+      "Forty durable buyer questions for one website",
+      "ChatGPT and Google AI Mode visibility measurement",
+      "Answer, mention and citation evidence",
+      "Up to eight prioritised create or refresh actions per cycle",
+      "Complete cycle-batch delivery, never partial",
       "WordPress publishing and export",
-      "Programme that cancels itself when the scope is delivered",
+      "Visible backlog and report-only findings",
     ],
     publisher: organizationSchema,
   },

@@ -39,7 +39,7 @@ export async function POST(
         .maybeSingle()
     if (!article?.planned_article_id) {
         return NextResponse.json(
-            { error: "This article is not part of a finite program." },
+            { error: "This article is not part of a delivered subscription batch." },
             { status: 404 },
         )
     }

@@ -365,22 +365,22 @@ const FEATURES = [
   },
   {
     id: '02',
-    title: 'Coverage measured, not assumed',
-    description: "We do not mark a topic covered because your site is vaguely about that subject. We check that a specific page actually addresses it, using the words that make the question that question. Being roughly related is not coverage.",
+    title: 'AI visibility measured, not guessed',
+    description: "We ask the confirmed buyer questions in ChatGPT and Google AI Mode, then retain the answers, mentions and citations behind every verdict. Unknown evidence stays unknown instead of becoming a confident content recommendation.",
     visual: CriticVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '03',
-    title: 'Nothing we find gets thrown away',
-    description: "Small pockets of demand used to be dropped for being too thin to carry their own article. Now each one either becomes an article or a named section inside a related one. What we never do is pad an article with filler to reach a number.",
+    title: 'The backlog stays visible',
+    description: "A cycle selects at most eight high-priority create or refresh actions. Qualified work that does not fit carries forward, while report-only findings remain evidence. The allowance never becomes a reason to invent filler.",
     visual: SniperVisual,
     colSpan: 'col-span-1'
   },
   {
     id: '04',
     title: 'Batches arrive whole',
-    description: "Articles in a batch link to each other, so a half-delivered batch is a broken web of dead links. If one article fails, the whole batch waits. You never receive something you have to go and repair.",
+    description: "Every selected draft in a billing cycle is checked before release. If one fails, the batch waits rather than exposing a half-finished delivery. You receive the complete cycle output together.",
     visual: SemanticLinkingVisual,
     colSpan: 'col-span-1'
   },
@@ -393,8 +393,8 @@ const FEATURES = [
   },
   {
     id: '06',
-    title: 'A scope that ends, and work you keep',
-    description: "When your last batch lands, the subscription cancels itself rather than billing you for rewrites of articles you already own. Drafts arrive with headings, tables and images — publish straight to WordPress or export them anywhere. No lock-in, no plugin on your server.",
+    title: 'Cancel future cycles, keep delivered work',
+    description: "Cancel anytime to prevent future billing cycles. Completed reports and delivered drafts remain available. Export the batch or optionally send it to WordPress drafts; there is no plugin on your server and no content lock-in.",
     visual: CMSVisual,
     colSpan: 'col-span-1'
   }

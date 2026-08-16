@@ -48,7 +48,7 @@ import {
 } from "@/lib/visibility/engines"
 import {
     DEFAULT_PROMPTS_PER_RUN,
-    MAX_PROMPTS_PER_RUN,
+    type BuyerPrompt,
 } from "@/lib/visibility/prompt-builder"
 import { bindPromptsToAuditScope } from "@/lib/visibility/prompt-binding"
 import { resolveLanguage, resolveRegion } from "@/lib/target-market"
@@ -76,9 +76,6 @@ interface ProbeRequest {
     /** Open a fresh audit from the brand's confirmed scope, then probe it. */
     brandId?: string
     engines?: AiEngine[]
-    maxPrompts?: number
-    /** User-confirmed buyer prompts. If omitted, prompts will be built from scope families. */
-    prompts?: import("@/lib/visibility/prompt-builder").BuyerPrompt[]
     /**
      * Opt in to the provider APIs when no Cloro key exists. Off by default:
      * the API surface diverges from the consumer app by up to 32 points, so
@@ -86,6 +83,17 @@ interface ProbeRequest {
      * customer is paying for with a materially different one.
      */
     allowApiSurface?: boolean
+}
+
+interface ActiveTrackedPromptRow {
+    id: string
+    scope_family_id: string
+    prompt: string
+    prompt_norm: string
+    intent: BuyerPrompt["intent"]
+    article_type: BuyerPrompt["articleType"]
+    source_seed: string
+    position: number
 }
 
 function hostOf(url: string): string | null {
@@ -290,15 +298,18 @@ export async function POST(req: NextRequest) {
             { status: 400 },
         )
     }
-    // An omitted `prompts` means "build them from the confirmed scope"; an empty
-    // array means the caller confirmed nothing, and quietly generating a set
-    // nobody reviewed is the exact substitution this endpoint exists to stop.
-    if (Array.isArray(body.prompts) && body.prompts.length === 0) {
+    // Phase 1 moved question ownership out of browser state. Accepting a prompt
+    // array here would let a caller measure a different set from the one the
+    // customer confirmed, destroying month-to-month identity.
+    if (
+        Object.prototype.hasOwnProperty.call(body, "prompts") ||
+        Object.prototype.hasOwnProperty.call(body, "maxPrompts")
+    ) {
         return NextResponse.json(
             {
                 error:
-                    "Confirm at least one buyer question before probing. An empty confirmation cannot be replaced with questions nobody reviewed.",
-                reason: "no_prompts",
+                    "The probe only measures the brand's saved tracked questions. Confirm the 40-question set before starting it.",
+                reason: "client_prompts_forbidden",
             },
             { status: 400 },
         )
@@ -453,45 +464,79 @@ export async function POST(req: NextRequest) {
         capabilityContract: row.capability_contract as CapabilityContract,
     }))
 
-    /**
-     * Confirmed prompts arrive carrying whatever id the onboarding screen had —
-     * a brand family uuid, a `family-1` placeholder, or the family's name — and
-     * none of those is the `audit_scope_families.id` the persistence path
-     * requires. Rebinding here is what makes the confirmed questions reach the
-     * delivery tables; without it every gap is rejected by `finalize_audit_run`
-     * inside a catch, and the run reports success having written nothing.
-     */
-    let confirmedPrompts = body.prompts
-    if (confirmedPrompts?.length) {
-        const { bound, unbound } = bindPromptsToAuditScope(
-            confirmedPrompts,
-            scopeRows.map((row: any) => ({
-                id: row.id,
-                brandScopeFamilyId: row.brand_scope_family_id ?? null,
-                name: row.name,
-                seedKeywords: Array.isArray(row.seed_keywords) ? row.seed_keywords : [],
-            })),
+    const { data: trackedRows, error: trackedError } = await admin
+        .from("tracked_prompts")
+        .select(
+            "id, scope_family_id, prompt, prompt_norm, intent, article_type, source_seed, position",
         )
-        if (unbound.length > 0) {
-            if (openedAuditHere) {
-                await failAuditRun(
-                    admin,
-                    auditId,
-                    "prompts_unbound",
-                    "Confirmed questions could not be matched to the confirmed product areas.",
-                )
-            }
-            return NextResponse.json(
-                {
-                    error:
-                        `${unbound.length} confirmed question${unbound.length === 1 ? "" : "s"} could not be matched to a confirmed product area, so the run was not started. Regenerate the questions for those areas and try again.`,
-                    reason: "unbound_prompts",
-                    unboundPrompts: unbound.map((prompt) => prompt.text),
-                },
-                { status: 409 },
+        .eq("brand_id", brand.id)
+        .eq("user_id", user.id)
+        .eq("tracking_status", "active")
+        .order("position", { ascending: true })
+
+    if (trackedError || trackedRows?.length !== DEFAULT_PROMPTS_PER_RUN) {
+        if (openedAuditHere) {
+            await failAuditRun(
+                admin,
+                auditId,
+                "tracked_prompts_incomplete",
+                `Expected ${DEFAULT_PROMPTS_PER_RUN} active tracked questions; found ${trackedRows?.length ?? 0}.`,
             )
         }
-        confirmedPrompts = bound
+        console.error("[Probe API] Could not load the durable tracked set:", trackedError)
+        return NextResponse.json(
+            {
+                error:
+                    `Confirm exactly ${DEFAULT_PROMPTS_PER_RUN} tracked buyer questions before starting the measurement.`,
+                reason: "tracked_prompts_incomplete",
+            },
+            { status: 409 },
+        )
+    }
+
+    /**
+     * Durable questions reference brand scope. Each run observes the same
+     * question against its immutable audit-scope snapshot, so only the family
+     * id changes; trackedPromptId remains stable across every cycle.
+     */
+    const durablePrompts: BuyerPrompt[] = (trackedRows as ActiveTrackedPromptRow[]).map(
+        (row) => ({
+            trackedPromptId: row.id,
+            text: row.prompt,
+            textNorm: row.prompt_norm,
+            scopeFamilyId: row.scope_family_id,
+            intent: row.intent,
+            articleType: row.article_type,
+            sourceSeed: row.source_seed,
+        }),
+    )
+    const { bound: confirmedPrompts, unbound } = bindPromptsToAuditScope(
+        durablePrompts,
+        scopeRows.map((row: any) => ({
+            id: row.id,
+            brandScopeFamilyId: row.brand_scope_family_id ?? null,
+            name: row.name,
+            seedKeywords: Array.isArray(row.seed_keywords) ? row.seed_keywords : [],
+        })),
+    )
+    if (unbound.length > 0) {
+        if (openedAuditHere) {
+            await failAuditRun(
+                admin,
+                auditId,
+                "prompts_unbound",
+                "Tracked questions could not be matched to the audit's confirmed product areas.",
+            )
+        }
+        return NextResponse.json(
+            {
+                error:
+                    `${unbound.length} tracked question${unbound.length === 1 ? "" : "s"} no longer matches the confirmed product areas, so the run was not started. Review the tracked questions and try again.`,
+                reason: "unbound_prompts",
+                unboundPrompts: unbound.map((prompt) => prompt.text),
+            },
+            { status: 409 },
+        )
     }
 
     // Competitors come from the audit's own working set — the ones that
@@ -522,14 +567,6 @@ export async function POST(req: NextRequest) {
         .filter((competitor) => competitor.name.length > 0)
 
     const subjectHost = hostOf(brand.website_url || "")
-    // Default small, ceiling high: a caller can ask for more once the questions
-    // have been eyeballed, but an omitted field never spends 60 prompts' worth
-    // of credits by accident.
-    const maxPrompts = Math.min(
-        body.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
-        MAX_PROMPTS_PER_RUN,
-    )
-
     const { data: run, error: runError } = await admin
         .from("ai_probe_runs")
         .insert({
@@ -576,7 +613,7 @@ export async function POST(req: NextRequest) {
             engines,
             countryCode,
             language: resolveLanguage(brandData.target_language),
-            maxPrompts,
+            maxPrompts: confirmedPrompts.length,
             prompts: confirmedPrompts,
         })
 
@@ -596,10 +633,10 @@ export async function POST(req: NextRequest) {
                     surface: ENGINE_SPECS[engine].surface,
                 })),
                 estimatedCredits: estimateCredits(
-                    confirmedPrompts?.length || maxPrompts,
+                    confirmedPrompts.length,
                     engines,
                 ),
-                maxPrompts,
+                maxPrompts: confirmedPrompts.length,
             },
             { status: 202 },
         )

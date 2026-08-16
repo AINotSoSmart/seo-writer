@@ -10,7 +10,7 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-15
+Last implementation update: 2026-08-16
 
 Status: **the AI-visibility probe is now the audit that runs after onboarding.**
 The confirmed buyer prompts are asked of the real consumer surfaces — ChatGPT
@@ -20,13 +20,189 @@ produce an audit record. Every gap the probe finds is finalized into
 `query_pool`, `audit_clusters` and `planned_articles` through the same
 `finalize_audit_run`, so `/audit` and `/content-plan` read a visibility audit
 exactly as they read a harvest one. The Google harvest is untouched and still
-reachable at `POST /api/topical-audit`; it simply has no UI caller. **Still not
-run against a live audit** — but a `CLORO_API_KEY` now exists in the local
-environment, so the gate is no longer "get a key", it is "run it and read the
-answers by hand". Every claim in this document about probe behaviour remains
-unconfirmed against a completed run. Note the probe executes on Trigger.dev: with
-a **dev** Trigger key a local worker (`npx trigger.dev@latest dev`) must be
-running, or the run row is created and never picked up.
+reachable at `POST /api/topical-audit`; it simply has no UI caller. A completed
+live Drawgle run now provides 20 stored answers and 373 stored citations for
+replay and classifier validation. The probe executes on Trigger.dev: with a
+**dev** Trigger key a local worker (`npx trigger.dev@latest dev`) must be
+running, or the run row is created and never picked up. Saving confirmed
+questions never starts that paid work: a new probe now requires an explicit
+**Start visibility measurement** click.
+
+## 2026-08-16 — subscription Phase 3, recurring commercial lifecycle (code-complete)
+
+Added the forward-only `20260816_recurring_commercial_state.sql` migration and
+rewired the active product from a finite audit purchase to one long-lived
+website subscription.
+
+Implemented:
+
+- finite purchase intents, cluster schedules and per-article credit
+  consumptions are preserved as read-only `legacy_*` history rather than used
+  by new code;
+- fixed audit ownership, velocity tier, scope completion and article-count
+  fields are explicitly historical; a live program now has one launch plan,
+  40 tracked questions and an action ceiling of eight;
+- duplicate payment events idempotently authorise one `subscription_cycle` for
+  one billing period instead of granting generic article credits;
+- `claim_cycle_action` owns concurrency, generation leases and at most three
+  attempts; abandoned leases become retryable rather than staying stuck;
+- costs and frozen links carry cycle/action ownership, and
+  `deliver_subscription_cycle` reveals every selected draft atomically only
+  after the whole batch is ready;
+- the webhook no longer depends on purchase intent metadata, tier velocity,
+  fixed audit scope, or automatic completion cancellation;
+- the only lifecycle scheduler is `ship-cycle.ts`; `ship-cluster.ts`, the old
+  checkout component and purchase-intent helper were removed;
+- public pricing, subscription, terms and machine-readable product copy now
+  state the one-plan recurring contract. Checkout fails closed with 503 until
+  the Phase 8 sandbox test.
+
+All 102 pivot contracts pass. TypeScript has no new errors; its seven remaining
+errors are the same stale generated database types in billing and the legacy
+blog trigger. Apply the Phase 3 migration before Phase 4 reconciliation writes
+cycle state.
+
+## 2026-08-16 — subscription Phase 2, recurring state model (deployed)
+
+Added the forward-only `20260816_subscription_state_model.sql` migration. It
+separates the recurring product into durable question opportunities, paid-period
+cycles, selected create/refresh actions and generated outputs.
+
+Implemented:
+
+- `content_opportunities`: one reopenable lifecycle row per brand/tracked
+  question, with current resolution type and first/latest measurement links;
+- `subscription_cycles`: one idempotent row per program billing period, with a
+  unique billing grant, unique measurement run and frozen allowance up to eight;
+- `cycle_actions`: ranked create/refresh units with a serialized database guard
+  that prevents concurrent writes from exceeding the cycle allowance;
+- `cycle_action_opportunities`: many measured findings may map to one honest
+  production action, but one finding cannot consume two slots in the same cycle;
+- refresh actions may combine findings only when their explicit target URL is
+  the same;
+- cross-table user/brand ownership guards and read-only customer RLS;
+- one authoritative output relationship:
+  `planned_articles.cycle_action_id` is unique, with no reverse
+  `cycle_actions.planned_article_id` source of truth.
+
+The migration deliberately does not remove or adapt the finite-program billing,
+cost, graph, claim or delivery machinery. Those hard dependants move together in
+Phase 3. The hosted migration was applied successfully on 2026-08-16.
+
+## 2026-08-16 — subscription Phase 1, durable questions (implemented and persistence-verified)
+
+The 40 questions previously crossed the only important boundary as browser
+JSON: onboarding passed them directly to `POST /api/visibility/probe`, and the
+worker inserted run-owned `ai_probe_prompts`. The next month had no stable row
+meaning “this is the same question,” and any caller could replace or resize the
+set for one run.
+
+Implemented:
+
+- forward migration `20260816_subscription_tracked_prompts.sql` with brand and
+  scope ownership, stable normalized identity, position,
+  active/inactive/retired status, explicit coverage state, target URL
+  constraints and a 40-active-row database guard;
+- atomic `confirm_tracked_prompts` RPC: retries reactivate the same normalized
+  rows, removed active questions retire rather than disappear, and exactly 40
+  rows commit or none do;
+- a confirmation endpoint that derives normalization, intent and article type
+  server-side and rejects exact duplicates, near duplicates, calendar years and
+  questions naming the subject;
+- an exact-40 UI gate. Editing or adding a question recomputes its normalization
+  and intent rather than preserving stale model metadata;
+- a probe boundary that refuses client `prompts`/`maxPrompts`, reads only the
+  40 active durable rows, rebinds them to the run's audit-scope snapshot and
+  persists `tracked_prompt_id` on every new run observation;
+- nullable historical compatibility: pre-Phase-1 observations are not
+  retroactively assigned an identity they never had.
+
+The hosted migration was applied and the authenticated Questions screen
+committed exactly 40 active rows: 40 unique ids, 40 unique normalized questions
+and positions 0–39. The next screen stopped behind the explicit paid-measurement
+button; no Trigger task was queued and no Cloro credits were spent.
+
+The remaining release smoke test is one deployed run verifying 40 non-null
+`ai_probe_prompts.tracked_prompt_id` values. Local Trigger/provider configuration
+is incomplete, so the test is deferred rather than fabricating observations or
+spending credits on a run that cannot finish. All 103 pivot contracts pass.
+TypeScript reports only the same seven existing stale generated-DB-type errors
+in billing and the legacy blog trigger.
+
+## 2026-08-16 — subscription Phase 0b, citation evidence became production-safe
+
+The first completed report exposed the prerequisite for selecting content work:
+302 of 373 citations (81%) were uncategorised. The classifier had already
+computed whether each URL looked like a list, comparison, review or docs page,
+but only used domain ownership and short curated host lists to assign a source
+type. The evidence existed and the decision ignored it.
+
+Implemented:
+
+- use the stored citation URL and title as narrow structural evidence;
+- classify explicit best-of/list/comparison/review pages as
+  `recommendation_page` with `earn` actionability;
+- classify explicit docs/help/reference pages as `documentation` with
+  report-only (`none`) actionability;
+- make the honest default `unclassified` + `review`, never publish or earn;
+- freeze up to 25 exact unresolved pages in each future run summary so founder
+  review begins from the same evidence the customer saw;
+- render publish, earn, report-only and founder-review shares separately, with
+  unresolved pages visibly prohibited from automatic production;
+- preserve immutable historical reports by mapping their old unclassified share
+  to founder review at render time without pretending a retroactive queue exists.
+
+Replay of the same 373 citations: 16 publish (4.3%), 160 earn (42.9%), 41
+report-only (11.0%), and 156 founder review (41.8%). The 160 earned citations
+include 121 structurally identified recommendation pages. No customer-specific
+hosts were added to make the numbers look better. The remaining 41.8% is a
+limit, not a hidden success metric, and it cannot feed production until a person
+resolves it. All 101 pivot contract tests pass; targeted lint has zero errors.
+
+## 2026-08-16 — subscription Phase 0a, tested through the real funnel
+
+The subscription build started with the dependency that decides whether every
+later measurement is meaningful: the buyer questions. The earlier roadmap said
+question generation consumed `capability_contract.operations[].customerJob`
+and `.action`, and therefore required real mechanics extraction. That statement
+was stale. Commit `2cfaa33` had already removed mechanics from the generator;
+the route was still manufacturing a fake contract which nothing read.
+
+Implemented:
+
+- extracted the exact production instruction and response schema into the pure
+  `lib/visibility/prompt-template.ts`, while `prompt-builder.ts` retains Gemini,
+  validation, retries and family ownership;
+- reduced the generation request to the family fields it actually consumes and
+  deleted the manufactured capability fallback;
+- sanitized model-suggested rivals to validated hostnames after a live result
+  returned `https://jasper.ai/" target=...` plus an HTML/JSON fragment;
+- put a 45-second fail-open ceiling around advisory scope-role refinement after
+  the streamed call delivered topics but did not close, leaving Continue
+  disabled until reload;
+- added contract coverage for the pure template, absence of fake mechanics,
+  rival sanitization and the refinement timeout;
+- expanded the durable set to 40, with enough candidates even when a business
+  has only one confirmed topic;
+- added cross-topic and regeneration-aware near-duplicate rejection, a 15%
+  named-rival ceiling, and deterministic intent inference from the finished
+  question;
+- supplied Gemini the shared runtime date/time context and rejected calendar
+  years from durable questions so a correct answer cannot silently become last
+  year's prompt;
+- made per-topic regeneration preserve its existing count and exclude every
+  retained question. All 100 pivot contracts pass.
+
+The authenticated live run used `flipaeo.com` and stopped before the paid
+visibility probe. Brand extraction was coherent. Topic refinement converged on
+AI Search Optimization, Topical Authority Engine and Topic Cluster Content
+Service. The first ten-question generation exposed three failures: three Jasper
+mentions, one repeated `alternatives` label, and near-duplicates across the two
+overlapping topical-authority areas. Those were fixed before closing the phase.
+The final authenticated 40-question gate produced 40 exact uniques, zero
+near-duplicate pairs, zero calendar years, and three named-rival questions
+(7.5%). Mechanics extraction is not a launch blocker. See
+`SUBSCRIPTION_PIVOT.md` Phase 0a and `ROADMAP.md` §7c.
 
 Previously: **AI-visibility probing added as a second, parallel gap source**
 (§8), measuring the real consumer surfaces rather than the provider APIs.

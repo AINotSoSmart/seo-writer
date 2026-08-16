@@ -10,9 +10,10 @@
  *
  * Two rules inherited from the audit console, for the same reasons:
  *
- * 1. **A run only auto-starts when none exists.** Every probe spends real Cloro
- *    credits, so a failure surfaces and waits for a deliberate click. A page
- *    refresh must never buy a second measurement.
+ * 1. **A new run only starts after an explicit click.** Every probe spends real
+ *    provider credits. Saving the confirmed questions and buying their first
+ *    measurement are therefore separate user actions, and a page refresh must
+ *    never buy a second measurement.
  * 2. **The failure state owns the whole surface.** It explains what happened and
  *    offers one next step, rather than bouncing the customer back to re-enter a
  *    brand that was never the problem.
@@ -22,13 +23,11 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { AlertTriangle, RefreshCw, Sparkles } from "lucide-react"
 
-import type { BuyerPrompt } from "@/lib/visibility/prompt-builder"
+import { DEFAULT_PROMPTS_PER_RUN } from "@/lib/visibility/prompt-config"
 import { cn } from "@/lib/utils"
 
 interface ProbeConsoleProps {
     brandId: string
-    /** The questions the customer confirmed on the prompts screen. */
-    prompts: BuyerPrompt[]
     /** A run already in flight — restored from storage after a refresh. */
     existingRunId?: string | null
     /** Called as soon as a run id exists, so the caller can persist it. */
@@ -122,7 +121,6 @@ const POLL_INTERVAL = 4000
 
 export function ProbeConsole({
     brandId,
-    prompts,
     existingRunId,
     onRunStarted,
     onComplete,
@@ -260,20 +258,8 @@ export function ProbeConsole({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     brandId,
-                    // The exact questions the customer reviewed. Omitting them
-                    // would silently regenerate a different set, which is the
-                    // bug this whole screen exists to close.
-                    prompts: prompts.map(
-                        ({ text, textNorm, scopeFamilyId, intent, articleType, sourceSeed }) => ({
-                            text,
-                            textNorm,
-                            scopeFamilyId,
-                            intent,
-                            articleType,
-                            sourceSeed,
-                        }),
-                    ),
-                    maxPrompts: prompts.length || undefined,
+                    // Questions are deliberately not sent from browser state.
+                    // The server loads the brand's durable active set.
                 }),
             })
             const body = await response.json().catch(() => null)
@@ -308,26 +294,19 @@ export function ProbeConsole({
         } finally {
             setIsStarting(false)
         }
-    }, [advanceTo, beginPolling, brandId, onRunStarted, prompts])
+    }, [advanceTo, beginPolling, brandId, onRunStarted])
 
     useEffect(() => {
         if (hasStartedRef.current) return
         hasStartedRef.current = true
 
-        const recoverOrStart = async () => {
-            // A run restored from storage is adopted, never restarted. Starting
-            // a second one would ask every question twice and bill for both.
-            if (runIdRef.current) {
-                await pollStatus()
-                beginPolling()
-                return
-            }
-            await startProbe()
+        // A run restored from storage is adopted, never restarted. A brand-new
+        // run waits for the explicit button below because it spends credits.
+        if (runIdRef.current) {
+            void pollStatus().then(beginPolling)
         }
-
-        void recoverOrStart()
         return stopPolling
-    }, [beginPolling, pollStatus, startProbe, stopPolling])
+    }, [beginPolling, pollStatus, stopPolling])
 
     // Tick the cooldown down locally so the retry becomes available at the
     // moment the server would actually accept it.
@@ -345,6 +324,42 @@ export function ProbeConsole({
 
     const currentPhase = PHASE_ORDER.find((phase) => phases[phase].status === "active")
     const isComplete = phases.clustering.status === "complete"
+
+    if (!runIdRef.current && !isRunning && !isStarting && !failure) {
+        return (
+            <div className="mx-auto w-full max-w-2xl py-8 text-center">
+                <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-stone-200 bg-white shadow-xs">
+                    <Sparkles className="h-7 w-7 text-stone-800" strokeWidth={1.5} />
+                </div>
+                <h3 className="font-serif text-3xl tracking-tight text-stone-900">
+                    Your questions are saved
+                </h3>
+                <p className="mx-auto mt-3 max-w-lg text-base leading-relaxed text-stone-500">
+                    We&apos;ll ask all {DEFAULT_PROMPTS_PER_RUN} confirmed buyer questions in
+                    ChatGPT and Google AI Mode, then save every answer behind your report.
+                </p>
+
+                <div className="mx-auto mt-8 max-w-lg rounded-xl border border-stone-200 bg-stone-50/60 p-5 text-left">
+                    <p className="text-sm font-medium text-stone-900">
+                        Start only when you&apos;re ready
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-stone-600">
+                        This begins a real paid measurement. Leaving or refreshing this page
+                        will not start it automatically.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => void startProbe()}
+                    className="mt-7 inline-flex items-center justify-center gap-2 rounded-md bg-stone-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-stone-800"
+                >
+                    <Sparkles size={16} strokeWidth={1.8} />
+                    Start visibility measurement
+                </button>
+            </div>
+        )
+    }
 
     if (failure) {
         const waiting = failure.retryAfterSeconds > 0
@@ -542,9 +557,9 @@ export function ProbeConsole({
             </ol>
 
             <p className="mx-auto mt-10 max-w-sm border-t border-stone-100 pt-6 text-center text-xs leading-relaxed text-stone-400">
-                {prompts.length} confirmed question{prompts.length === 1 ? "" : "s"} are being
-                asked of the real consumer apps. This usually takes a few minutes — you can
-                leave this page open.
+                Your {DEFAULT_PROMPTS_PER_RUN} confirmed questions are being asked of the real
+                consumer apps. This usually takes a few minutes — you can leave this page
+                open.
             </p>
         </div>
     )

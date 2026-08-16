@@ -16,24 +16,35 @@
  *    call is scoped to one family and the family id is attached by code, not
  *    chosen by the model.
  *
- * 2. **The intent mix is deterministic.** Commercial intents (alternatives,
- *    best-of, comparison) are where AI answers actually name vendors, and they
- *    are the prompts worth losing. The mix is fixed in code so two runs of the
- *    same audit ask structurally comparable questions, and a shift in the
- *    results cannot be an artefact of the model having felt differently about
- *    what to ask.
+ * 2. **Intent is a label, not a quota.** The model labels the situation after
+ *    writing each question; code uses that label for downstream article type.
+ *    Comparability comes from persisting and re-running the same confirmed
+ *    questions, not from regenerating a fixed sentence mix every cycle.
  */
 
-import { getGeminiClient } from "@/utils/gemini/geminiClient"
-import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import { normalizeQuery } from "@/lib/harvest/types"
-import { DEFAULT_LANGUAGE, languageName } from "@/lib/target-market"
+import { DEFAULT_LANGUAGE } from "@/lib/target-market"
+import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import {
     DEFAULT_PROMPTS_PER_RUN,
     PROMPT_INTENTS,
     PROMPTS_PER_FAMILY,
     type PromptIntentKey,
 } from "./prompt-config"
+import {
+    BUYER_PROMPT_RESPONSE_SCHEMA,
+    buildFamilyPrompt,
+    type BuyerPromptFamily,
+    type PromptBrandContext,
+} from "./prompt-template"
+import {
+    MAX_INCUMBENT_PROMPT_SHARE,
+    containsCalendarYear,
+    incumbentNeedles,
+    inferPromptIntent,
+    mentionsIncumbent,
+    promptsAreNearDuplicates,
+} from "./prompt-selection"
 
 // Re-exported so existing importers keep one obvious entry point; the values
 // themselves live in the import-free config module so they stay assertable.
@@ -45,9 +56,9 @@ export {
     type PromptIntentKey,
 } from "./prompt-config"
 
-
 export interface BuyerPrompt {
-    /** Stable id assigned by the caller when persisted. */
+    /** Durable subscription identity. Present once the confirmed set is saved. */
+    trackedPromptId?: string
     text: string
     textNorm: string
     scopeFamilyId: string
@@ -68,7 +79,6 @@ export interface PromptBuildResult {
     prompts: BuyerPrompt[]
     report: PromptBuildReport
 }
-
 
 const MAX_ATTEMPTS_PER_FAMILY = 2
 const RETRY_BASE_DELAY_MS = 1200
@@ -122,110 +132,6 @@ function namesSubject(text: string, subjectTokens: string[]): boolean {
 }
 
 /**
- * What the model is told about the business. **Context, never form.**
- *
- * That distinction is the whole lesson of this file's history. `audience` and
- * `incumbents` were here before, and the questions came back written by "family
- * archivists" complaining that a named rival was too expensive — but the cause
- * was the sentence template they were plugged into (`"I'm [who I am] using
- * [current stack]"`) and a list captioned "you MAY name these", not the facts
- * themselves. Removing the facts as well cost the model everything it needed to
- * write from a real person's situation, and removed the alternatives-seeking
- * buyer from the measurement entirely.
- */
-export interface PromptBrandContext {
-    /** Plain description of the product — "browser tool that restores old photos". */
-    subjectType: string
-    /** The category the customer confirmed, in their words. */
-    category?: string
-    /** What it actually does, a few concrete capabilities. */
-    coreFeatures?: string[]
-    /** Who buys it. Background on whose situation to write from — never a label to quote. */
-    audience?: string
-    /**
-     * Tools these buyers already use.
-     *
-     * Present so a couple of questions out of twenty can be the genuinely
-     * comparative ones people really ask, and absent from the rest. The
-     * measurement is protected either way: `summarisePrompt` excludes a
-     * competitor named in a prompt from that prompt's rival counts, so asking
-     * "alternatives to X" can never inflate X on the leaderboard.
-     */
-    incumbents?: string[]
-}
-
-/**
- * Asks for the questions a buyer would really type, and nothing about how.
- *
- * Everything prescriptive was removed from here in one pass, because the
- * prescription was the defect. This previously carried five named sentence
- * shapes with fill-in slots, a required count of each, a list of rival names,
- * banned openings, banned words and two worked examples — and it produced
- * questions from "family archivists" and "genealogists" complaining that a
- * named competitor was "too expensive". Dictating a form guarantees output with
- * that form. The founder got better questions out of a plain model call given
- * only the brand, its features and its category, which is the whole argument.
- *
- * What is left is context plus a goal. The three constraints that remain are
- * not style rules:
- *
- * - **one family per call** — ownership is structural, not requested
- * - **never name the customer's brand** — measurement validity; naming them
- *   hands the engine the answer to the question being asked
- * - **stay inside the confirmed area** — a prompt about an adjacent market
- *   measures a business the customer did not confirm
- */
-function buildFamilyPrompt(
-    family: AuditScopeFamily,
-    context: PromptBrandContext,
-    language: string,
-): string {
-    const features = (context.coreFeatures || []).filter(Boolean).slice(0, 8)
-    const incumbents = (context.incumbents || []).filter(Boolean).slice(0, 6)
-    const intents = PROMPT_INTENTS.map(
-        (intent) => `- ${intent.key}: ${intent.label}`,
-    ).join("\n")
-
-    return `Below is a real product. Write the questions real people actually type into ChatGPT when they have the problem it solves — before they know this product, or any product, exists. The real users use messy, direct, functional language. Users search relative to dominant market leaders they already use.
-
-THE PRODUCT
-It is: ${context.subjectType}
-${context.category ? `Category: ${context.category}\n` : ""}This part of it: ${family.name} — ${family.description}
-The customer's own words for it: ${family.seedKeywords.join(", ")}
-${features.length ? `What it does:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `Who has this problem: ${context.audience}\n` : ""}${incumbents.length ? `Tools some of them already use: ${incumbents.join(", ")}\n` : ""}
-Write ${PROMPTS_PER_FAMILY} questions someone would type about the problem this part solves.
-
-Background, not instructions: the last two lines are there so you know whose situation to write from and what they might already have tried. People describe what they are working on, not what category of person they are — so do not have anyone announce themselves. And most of these questions should name no product at all; ask about a named tool only where that is genuinely how someone would put it, which is the exception rather than the rule.
-
-Two rules, both about measurement rather than style:
-- Never name this product or its website. These questions test whether an assistant recommends it unprompted, and naming it hands over the answer.
-- Stay inside the part described above. A question about an adjacent problem measures a business this is not.
-
-Label each question with the situation it comes from:
-${intents}
-
-Write them in ${languageName(language)}.`
-}
-
-const RESPONSE_SCHEMA = {
-    type: "OBJECT" as const,
-    properties: {
-        prompts: {
-            type: "ARRAY" as const,
-            items: {
-                type: "OBJECT" as const,
-                properties: {
-                    text: { type: "STRING" as const },
-                    intent: { type: "STRING" as const },
-                },
-                required: ["text", "intent"],
-            },
-        },
-    },
-    required: ["prompts"],
-}
-
-/**
  * Generates buyer prompts for every confirmed family.
  *
  * One model call per family — scoping each call to a single family is what
@@ -235,7 +141,7 @@ const RESPONSE_SCHEMA = {
  * measure the wrong area and attribute the result to this one.
  */
 export async function buildBuyerPrompts(
-    families: AuditScopeFamily[],
+    families: BuyerPromptFamily[],
     options: {
         subjectType: string
         /**
@@ -252,6 +158,8 @@ export async function buildBuyerPrompts(
         /** What the product is, who buys it, and what they use today. */
         context?: Omit<PromptBrandContext, "subjectType">
         maxPrompts?: number
+        /** Existing prompts retained while one family is regenerated. */
+        questionsToAvoid?: string[]
     },
 ): Promise<PromptBuildResult> {
     const client = getGeminiClient()
@@ -259,18 +167,29 @@ export async function buildBuyerPrompts(
     const errors: string[] = []
     let callsAttempted = 0
     let callsSucceeded = 0
+    const incumbentTokens = incumbentNeedles(options.context?.incumbents || [])
+    const externalQuestions = (options.questionsToAvoid || [])
+        .map((question) => question.trim())
+        .filter(Boolean)
+    const desiredPerFamily = Math.min(
+        PROMPTS_PER_FAMILY,
+        Math.ceil(cap / Math.max(1, families.length)),
+    )
 
     const byFamily = new Map<string, BuyerPrompt[]>()
 
     for (const family of families) {
-        let accepted: BuyerPrompt[] = []
+        const accepted: BuyerPrompt[] = []
+        const priorQuestions = [
+            ...externalQuestions,
+            ...[...byFamily.values()].flat().map((prompt) => prompt.text),
+        ]
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_FAMILY; attempt++) {
             callsAttempted++
             if (attempt > 1) {
                 const delay =
-                    RETRY_BASE_DELAY_MS * 2 ** (attempt - 2) +
-                    Math.random() * RETRY_BASE_DELAY_MS
+                    RETRY_BASE_DELAY_MS * 2 ** (attempt - 2) + Math.random() * RETRY_BASE_DELAY_MS
                 await new Promise((resolve) => setTimeout(resolve, delay))
             }
 
@@ -289,6 +208,10 @@ export async function buildBuyerPrompts(
                                             subjectType: options.subjectType,
                                         },
                                         options.language ?? DEFAULT_LANGUAGE,
+                                        [
+                                            ...priorQuestions,
+                                            ...accepted.map((prompt) => prompt.text),
+                                        ],
                                     ),
                                 },
                             ],
@@ -297,54 +220,67 @@ export async function buildBuyerPrompts(
                     config: {
                         temperature: 0.4,
                         responseMimeType: "application/json",
-                        responseSchema: RESPONSE_SCHEMA,
+                        responseSchema: BUYER_PROMPT_RESPONSE_SCHEMA,
                     },
                 })
 
                 const parsed = JSON.parse(response.text || "{}")
-                const rows: Array<{ text?: unknown; intent?: unknown }> =
-                    Array.isArray(parsed.prompts) ? parsed.prompts : []
-
-                const validIntents = new Set<string>(
-                    PROMPT_INTENTS.map((intent) => intent.key),
+                const rows: Array<{ text?: unknown; intent?: unknown }> = Array.isArray(
+                    parsed.prompts,
                 )
-                accepted = rows
+                    ? parsed.prompts
+                    : []
+
+                const validIntents = new Set<string>(PROMPT_INTENTS.map((intent) => intent.key))
+                const candidates = rows
                     .map((row) => ({
                         text: String(row.text ?? "").trim(),
                         intent: String(row.intent ?? "").trim() as PromptIntentKey,
                     }))
-                    // Three checks, and deliberately no more. Everything that
-                    // used to live here judged STYLE — first-person openers,
-                    // rival names in the wrong shape — and a style filter can
-                    // only delete, never improve. It shrank a set of ten to six
-                    // and skewed what remained toward exactly the questions it
-                    // was meant to balance. Generation is the place to fix
-                    // generation.
+                    // These three checks decide whether a row is valid at all.
+                    // Diversity and rival share are handled later as batch
+                    // selection constraints; they do not ban a speaking style.
                     .filter(
                         (row) =>
                             isPlausiblePrompt(row.text) &&
                             validIntents.has(row.intent) &&
-                            !namesSubject(row.text, options.subjectTokens),
+                            !namesSubject(row.text, options.subjectTokens) &&
+                            !containsCalendarYear(row.text),
                     )
                     .map((row) => {
+                        const resolvedIntent = inferPromptIntent(row.text, row.intent)
                         const intent = PROMPT_INTENTS.find(
-                            (candidate) => candidate.key === row.intent,
+                            (candidate) => candidate.key === resolvedIntent,
                         )!
                         return {
                             text: row.text,
                             textNorm: normalizeQuery(row.text),
                             scopeFamilyId: family.id,
-                            intent: row.intent,
+                            intent: resolvedIntent,
                             articleType: intent.articleType,
                             sourceSeed: family.seedKeywords[0] ?? family.name,
                         }
                     })
 
-                if (accepted.length > 0) {
-                    callsSucceeded++
-                    break
+                for (const candidate of candidates) {
+                    const existing = [...priorQuestions, ...accepted.map((prompt) => prompt.text)]
+                    if (
+                        existing.some((question) =>
+                            promptsAreNearDuplicates(question, candidate.text),
+                        )
+                    ) {
+                        continue
+                    }
+                    accepted.push(candidate)
                 }
-                errors.push(`${family.name}: model returned no usable prompts`)
+
+                if (candidates.length > 0) {
+                    callsSucceeded++
+                }
+                if (accepted.length >= desiredPerFamily) break
+                if (candidates.length === 0) {
+                    errors.push(`${family.name}: model returned no usable prompts`)
+                }
             } catch (error) {
                 errors.push(
                     `${family.name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -356,13 +292,18 @@ export async function buildBuyerPrompts(
     }
 
     // Round-robin across families up to the cap, so a family that produced 10
-    // prompts cannot crowd out one that produced 4. Same fairness rule the
+    // prompts cannot crowd out one that produced 4. The incumbent cap is also
+    // enforced here rather than as a generation filter: natural comparative
+    // questions survive, but cannot take over the measurement. Same fairness rule the
     // harvest applies at `roundRobinCap`; a probe that spends its whole budget
     // on one confirmed area measures that area, not the business.
 
     const seen = new Set<string>()
     const prompts: BuyerPrompt[] = []
     const cursors = new Map<string, number>()
+    const incumbentCap =
+        incumbentTokens.length > 0 ? Math.max(1, Math.floor(cap * MAX_INCUMBENT_PROMPT_SHARE)) : 0
+    let incumbentPromptCount = 0
     let exhausted = false
 
     while (prompts.length < cap && !exhausted) {
@@ -377,8 +318,17 @@ export async function buildBuyerPrompts(
 
             const candidate = pool[cursor]
             if (seen.has(candidate.textNorm)) continue
+            if (
+                mentionsIncumbent(candidate.text, incumbentTokens) &&
+                incumbentPromptCount >= incumbentCap
+            ) {
+                continue
+            }
             seen.add(candidate.textNorm)
             prompts.push(candidate)
+            if (mentionsIncumbent(candidate.text, incumbentTokens)) {
+                incumbentPromptCount++
+            }
             if (prompts.length >= cap) break
         }
     }

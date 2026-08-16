@@ -100,7 +100,7 @@ const PHASE_COPY: Record<AuditPhase, {
         description: "Removing overlap and grouping articles that should ship together.",
     },
     persisting: {
-        label: "Saving your finite scope",
+        label: "Saving your evidence snapshot",
         description: "Writing the evidence, clusters, and planned articles to your account.",
     },
 }
@@ -438,7 +438,7 @@ export function AuditConsole({
                             {currentPhase
                                 ? PHASE_COPY[currentPhase].description
                                 : isComplete
-                                    ? "Your finite content scope and its source evidence are ready."
+                                    ? "Your content evidence snapshot is ready."
                                     : "Preparing the closed-pool audit."}
                         </motion.p>
                     </AnimatePresence>

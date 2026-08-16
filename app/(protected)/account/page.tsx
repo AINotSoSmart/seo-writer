@@ -81,7 +81,7 @@ export default async function AccountPage() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Account</h1>
           <p className="text-muted-foreground mt-2">
-            Manage your profile, finite program billing, and invoice history
+            Manage your profile, recurring subscription, and invoice history
           </p>
         </div>
 
@@ -98,5 +98,5 @@ export default async function AccountPage() {
 
 export const metadata = {
   title: 'Account',
-  description: 'Manage your account, finite program billing, and invoice history',
+  description: 'Manage your account, recurring subscription, and invoice history',
 }

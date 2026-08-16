@@ -3,7 +3,6 @@
 import { createClient } from "@/utils/supabase/server"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import {
-    auditCheckoutFreshness,
     selectQualifiedProgramScope,
 } from "@/lib/harvest/program-contract"
 
@@ -29,7 +28,6 @@ export interface AuditScope {
     clusters: ClusterSummary[]
     recommendedClusterIds: string[]
     recommendedArticleCount: number
-    velocity: { tier: string; clustersPerMonth: number; months: number }[]
     checkoutEligible: boolean
     eligibilityReason: string | null
     /** A program has already been purchased from this audit. */
@@ -77,12 +75,7 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
     const audit = await currentOwnedAudit(supabase as any, user.id, brandId)
     if (!audit || audit.run_status !== "completed") return null
 
-    const [
-        { data: clusterRows, error },
-        { data: soldRows },
-        { data: scopeRows },
-        { data: activeProgram },
-    ] =
+    const [{ data: clusterRows, error }, { data: scopeRows }, { data: activeProgram }] =
         await Promise.all([
             (supabase as any)
                 .from("audit_clusters")
@@ -92,21 +85,15 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
                 .eq("audit_id", audit.id)
                 .order("priority", { ascending: true }),
             (supabase as any)
-                .from("program_clusters")
-                .select("audit_cluster_id, programs!inner(user_id, audit_id)")
-                .eq("programs.user_id", user.id)
-                .eq("programs.audit_id", audit.id),
-            (supabase as any)
                 .from("audit_scope_families")
                 .select("id, name, priority")
                 .eq("audit_id", audit.id),
-            // The program the customer already bought from THIS audit, if any.
             (supabase as any)
                 .from("programs")
-                .select("id, clusters_included, total_articles")
+                .select("id")
                 .eq("user_id", user.id)
-                .eq("audit_id", audit.id)
-                .in("status", ["active", "paused"])
+                .eq("brand_id", brandId)
+                .in("status", ["pending", "active", "paused"])
                 .limit(1)
                 .maybeSingle(),
         ])
@@ -142,12 +129,11 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
 
     const selection = selectQualifiedProgramScope(
         clusters,
-        (soldRows || []).map((row: any) => row.audit_cluster_id),
+        [],
         Boolean(audit.requires_reaudit),
     )
-    const freshness = auditCheckoutFreshness(audit.completed_at)
-    const checkoutEligible = selection.eligible && freshness.fresh
-    const eligibilityReason = selection.reason || freshness.reason
+    const checkoutEligible = false
+    const eligibilityReason = "Legacy audit reports are evidence only; subscriptions start from confirmed tracked questions."
 
     /**
      * Once a program is bought, every cluster in it is "sold", so
@@ -164,30 +150,9 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
      * ...directly above the 58 articles they had just paid for. The purchased
      * scope is the right thing to show them, so it takes precedence here.
      */
-    const purchasedClusterIds: string[] = Array.isArray(activeProgram?.clusters_included)
-        ? activeProgram.clusters_included
-        : []
-    const hasActiveProgram = purchasedClusterIds.length > 0
-    const displayClusterIds = hasActiveProgram
-        ? purchasedClusterIds
-        : selection.selected.map((cluster) => cluster.id)
-    const displayArticleCount = hasActiveProgram
-        ? Number(activeProgram.total_articles || 0) ||
-          clusters
-              .filter((cluster) => purchasedClusterIds.includes(cluster.id))
-              .reduce((sum, cluster) => sum + cluster.articleCount, 0)
-        : selection.selectedArticleCount
-
-    const velocity = [
-        { tier: "close", clustersPerMonth: 1 },
-        { tier: "accelerate", clustersPerMonth: 2 },
-        { tier: "dominate", clustersPerMonth: 3 },
-    ].map(({ tier, clustersPerMonth }) => ({
-        tier,
-        clustersPerMonth,
-        // Derived from what this audit actually measured, not a fixed six.
-        months: Math.max(1, Math.ceil(displayClusterIds.length / clustersPerMonth)),
-    }))
+    const hasActiveProgram = Boolean(activeProgram)
+    const displayClusterIds = selection.selected.map((cluster) => cluster.id)
+    const displayArticleCount = selection.selectedArticleCount
 
     return {
         auditId: audit.id,
@@ -200,7 +165,6 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
         clusters,
         recommendedClusterIds: displayClusterIds,
         recommendedArticleCount: displayArticleCount,
-        velocity,
         checkoutEligible,
         eligibilityReason,
         /** True when this audit already has a bought program. */
@@ -215,20 +179,14 @@ export async function getAuditScope(brandId: string): Promise<AuditScope | null>
 
 export interface ProgramProgress {
     programId: string
-    tier: string
-    clustersPerMonth: number
-    totalArticles: number
-    completedCount: number
-    generatedCount: number
-    deliveredCount: number
-    publishedCount: number
-    percentComplete: number
-    clustersRemaining: number
-    monthsRemaining: number
+    planId: string
     status: string
-    scopeStatus: string
-    cancellationStatus: string
-    additionalQualifiedClustersAvailable: boolean
+    totalCycles: number
+    currentCycleState: string | null
+    selectedActions: number
+    readyActions: number
+    deliveredActions: number
+    percentComplete: number
 }
 
 export async function getProgramProgress(brandId: string): Promise<ProgramProgress | null> {
@@ -240,9 +198,7 @@ export async function getProgramProgress(brandId: string): Promise<ProgramProgre
 
     const { data: program } = await (supabase as any)
         .from("programs")
-        .select(
-            "id, audit_id, tier, clusters_per_month, total_articles, status, scope_status, cancellation_status",
-        )
+        .select("id, plan_id, status")
         .eq("brand_id", brandId)
         .eq("user_id", user.id)
         .order("started_at", { ascending: false })
@@ -250,66 +206,37 @@ export async function getProgramProgress(brandId: string): Promise<ProgramProgre
         .maybeSingle()
     if (!program) return null
 
-    const { data: programClusterRows } = await (supabase as any)
-        .from("program_clusters")
-        .select("audit_cluster_id, state")
+    const { data: cycles } = await (supabase as any)
+        .from("subscription_cycles")
+        .select("id, state, period_start, cycle_actions(id, state)")
         .eq("program_id", program.id)
-    const clusterIds = (programClusterRows || []).map(
-        (row: any) => row.audit_cluster_id,
-    )
+        .order("period_start", { ascending: false })
 
-    const [{ data: articleRows }, { count: qualifiedCount }] = await Promise.all([
-            clusterIds.length > 0
-                ? (supabase as any)
-                      .from("planned_articles")
-                      .select(
-                          "generation_status, delivery_status, publication_status, cluster_id",
-                      )
-                      .eq("audit_id", program.audit_id)
-                      .in("cluster_id", clusterIds)
-                : Promise.resolve({ data: [] }),
-            (supabase as any)
-                .from("audit_clusters")
-                .select("id", { count: "exact", head: true })
-                .eq("audit_id", program.audit_id)
-                .gte("article_count", HARVEST_POLICY.minQualifiedClusterArticles)
-                .lte("article_count", HARVEST_POLICY.maxClusterArticles),
-        ])
-
-    const articles = articleRows || []
-    const generatedCount = articles.filter(
-        (article: any) => article.generation_status === "generated",
+    const cycleRows = cycles || []
+    const actions = cycleRows.flatMap((cycle: any) => cycle.cycle_actions || [])
+    const readyActions = actions.filter((action: any) =>
+        ["ready", "delivered"].includes(action.state),
     ).length
-    const deliveredCount = articles.filter(
-        (article: any) => article.delivery_status === "delivered",
+    const deliveredActions = actions.filter(
+        (action: any) => action.state === "delivered",
     ).length
-    const publishedCount = articles.filter(
-        (article: any) => article.publication_status === "published",
-    ).length
-    const clustersRemaining = (programClusterRows || []).filter(
-        (cluster: any) => cluster.state !== "delivered",
-    ).length
-    const total = Number(program.total_articles || articles.length)
+    const currentCycle = cycleRows.find((cycle: any) => cycle.state !== "delivered") || cycleRows[0]
 
     return {
         programId: program.id,
-        tier: program.tier,
-        clustersPerMonth: program.clusters_per_month,
-        totalArticles: total,
-        completedCount: deliveredCount,
-        generatedCount,
-        deliveredCount,
-        publishedCount,
-        percentComplete: total > 0 ? Math.round((deliveredCount / total) * 100) : 0,
-        clustersRemaining,
-        monthsRemaining: Math.ceil(
-            clustersRemaining / Math.max(1, program.clusters_per_month),
-        ),
+        planId: program.plan_id,
         status: program.status,
-        scopeStatus: program.scope_status,
-        cancellationStatus: program.cancellation_status,
-        additionalQualifiedClustersAvailable:
-            Number(qualifiedCount || 0) > HARVEST_POLICY.recommendedClusterCount,
+        totalCycles: cycleRows.length,
+        currentCycleState: currentCycle?.state || null,
+        selectedActions: actions.length,
+        readyActions,
+        deliveredActions,
+        percentComplete:
+            actions.length > 0
+                ? Math.round((deliveredActions / actions.length) * 100)
+                : currentCycle?.state === "delivered"
+                  ? 100
+                  : 0,
     }
 }
 

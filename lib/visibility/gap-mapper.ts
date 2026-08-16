@@ -174,7 +174,11 @@ export function summarisePrompt(
     for (const answer of prompt.answers) {
         const named = answer.parsed.mentionCount > 0
         for (const citation of citationsByEngine.get(answer.engine) || []) {
-            const classified = classifyCitation(citation.url, context)
+            const classified = classifyCitation(
+                citation.url,
+                context,
+                citation.title ?? "",
+            )
             citations.push({
                 ...classified,
                 title: citation.title ?? "",
@@ -386,6 +390,17 @@ export interface RunSummary {
     /** Citations grouped by what kind of source they are. */
     citationBreakdown: CitationBreakdown
     /**
+     * Unresolved citation pages requiring a person before production.
+     * Frozen with the run so founder review starts from the exact evidence the
+     * customer saw, never a later reclassification of an immutable report.
+     */
+    citationReviewQueue: Array<{
+        url: string
+        title: string
+        host: string
+        count: number
+    }>
+    /**
      * The sub-queries the engines actually ran. Observed behaviour on the AI
      * surface — never a volume estimate. See `fan-out.ts`.
      */
@@ -430,6 +445,10 @@ export function summariseRun(
             answersNaming: number
         }
     >()
+    const reviewPages = new Map<
+        string,
+        { url: string; title: string; host: string; count: number }
+    >()
     const allCitations: ClassifiedCitation[] = []
 
     for (const outcome of outcomes) {
@@ -451,6 +470,18 @@ export function summariseRun(
             host.count++
             if (citation.namedInCitingAnswer) host.answersNaming++
             hosts.set(citation.host, host)
+
+            if (citation.actionability === "review") {
+                const review = reviewPages.get(citation.url) ?? {
+                    url: citation.url,
+                    title: citation.title,
+                    host: citation.host,
+                    count: 0,
+                }
+                review.count++
+                if (!review.title && citation.title) review.title = citation.title
+                reviewPages.set(citation.url, review)
+            }
 
             // Only shaped pages are worth listing individually — a homepage
             // cited once is noise, a "best X" page cited across six answers is
@@ -503,6 +534,9 @@ export function summariseRun(
             .sort((a, b) => b.count - a.count)
             .slice(0, 20),
         citationBreakdown: summariseCitations(allCitations),
+        citationReviewQueue: [...reviewPages.values()]
+            .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host))
+            .slice(0, 25),
         fanOut: summariseFanOut(
             prompts.map((prompt) => ({
                 promptId: prompt.id,

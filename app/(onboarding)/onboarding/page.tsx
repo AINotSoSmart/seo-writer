@@ -25,6 +25,7 @@ import { ScopeResults } from "@/components/audit/scope-results"
 import { findScopeBlockers } from "@/components/onboarding/scope-family-review"
 import { trimFamiliesToSearchCap } from "@/lib/scope-search-cap"
 import { applyMarketDefaults } from "@/lib/target-market"
+import { DEFAULT_PROMPTS_PER_RUN } from "@/lib/visibility/prompt-config"
 import {
     ANALYZE_PHASE_COPY,
     consumeAnalyzeBrandStream,
@@ -32,10 +33,7 @@ import {
     type AnalyzeBrandPhase,
     type AnalyzedPage,
 } from "@/lib/analyze-brand/stream"
-import {
-    persistCrawlPages,
-    restoreCrawlPages,
-} from "@/lib/brand-analyze-corpus"
+import { persistCrawlPages, restoreCrawlPages } from "@/lib/brand-analyze-corpus"
 // One screen per file. The route owns the state machine, the data calls and the
 // recovery effects; each screen owns its own markup. See the onboardingSurface()
 // helper in the contract suite for why copy assertions read this directory
@@ -47,24 +45,29 @@ import { ScopeStep } from "@/components/onboarding/steps/scope-step"
 import { PromptsStep, type PromptItem } from "@/components/onboarding/steps/prompts-step"
 import { ExtrasStep } from "@/components/onboarding/steps/extras-step"
 
+interface GeneratePromptsResponse {
+    prompts?: Array<Omit<PromptItem, "id">>
+    error?: string
+}
+
 const STORAGE_KEYS = {
-    STEP: 'onboarding_step',
-    BRAND_URL: 'onboarding_brand_url',
-    BRAND_DATA: 'onboarding_brand_data',
-    BRAND_ID: 'onboarding_brand_id',
-    COMPETITORS: 'onboarding_competitors',
-    SCOPE_ANALYSIS_ISSUES: 'onboarding_scope_analysis_issues',
-    TARGET_SEEDS: 'onboarding_target_seeds',
-    PROMPTS: 'onboarding_prompts',
+    STEP: "onboarding_step",
+    BRAND_URL: "onboarding_brand_url",
+    BRAND_DATA: "onboarding_brand_data",
+    BRAND_ID: "onboarding_brand_id",
+    COMPETITORS: "onboarding_competitors",
+    SCOPE_ANALYSIS_ISSUES: "onboarding_scope_analysis_issues",
+    TARGET_SEEDS: "onboarding_target_seeds",
+    PROMPTS: "onboarding_prompts",
     /**
      * The live probe run. Persisted the moment the run id exists, so a refresh
      * mid-probe adopts the run in flight instead of buying a second one — every
      * probe spends real answer-engine credits.
      */
-    PROBE_RUN_ID: 'onboarding_probe_run_id',
-    ANALYZING_STARTED_AT: 'onboarding_analyzing_started_at',
-    SCOPE_STARTED_AT: 'onboarding_scope_started_at',
-    CRAWL_PAGES: 'onboarding_crawl_pages',
+    PROBE_RUN_ID: "onboarding_probe_run_id",
+    ANALYZING_STARTED_AT: "onboarding_analyzing_started_at",
+    SCOPE_STARTED_AT: "onboarding_scope_started_at",
+    CRAWL_PAGES: "onboarding_crawl_pages",
 } as const
 
 /**
@@ -97,7 +100,7 @@ export default function OnboardingPage() {
 
     useEffect(() => {
         async function checkOnboardingAccess() {
-            const urlStep = searchParams.get('step')
+            const urlStep = searchParams.get("step")
             const { allowed, redirectTo } = await canAccessOnboarding(urlStep || undefined)
             if (!allowed && redirectTo) {
                 router.replace(redirectTo)
@@ -170,7 +173,7 @@ export default function OnboardingPage() {
     )
 
     const clearOnboardingStorage = useCallback(() => {
-        Object.values(STORAGE_KEYS).forEach(key => {
+        Object.values(STORAGE_KEYS).forEach((key) => {
             localStorage.removeItem(key)
         })
     }, [])
@@ -212,26 +215,20 @@ export default function OnboardingPage() {
     )
 
     useEffect(() => {
-        if (typeof window === 'undefined') return
+        if (typeof window === "undefined") return
 
-        const urlStep = searchParams.get('step')
-        const urlBrandId = searchParams.get('brandId')
+        const urlStep = searchParams.get("step")
+        const urlBrandId = searchParams.get("brandId")
 
         // Restore saved data from localStorage
         const savedUrl = localStorage.getItem(STORAGE_KEYS.BRAND_URL)
         const savedBrandData = localStorage.getItem(STORAGE_KEYS.BRAND_DATA)
         const savedBrandId = urlBrandId || localStorage.getItem(STORAGE_KEYS.BRAND_ID)
         const savedCompetitors = localStorage.getItem(STORAGE_KEYS.COMPETITORS)
-        const savedScopeIssues = localStorage.getItem(
-            STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES,
-        )
+        const savedScopeIssues = localStorage.getItem(STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES)
         const savedTargetSeeds = localStorage.getItem(STORAGE_KEYS.TARGET_SEEDS)
-        const analyzingStartedAt = localStorage.getItem(
-            STORAGE_KEYS.ANALYZING_STARTED_AT,
-        )
-        const scopeStartedAt = localStorage.getItem(
-            STORAGE_KEYS.SCOPE_STARTED_AT,
-        )
+        const analyzingStartedAt = localStorage.getItem(STORAGE_KEYS.ANALYZING_STARTED_AT)
+        const scopeStartedAt = localStorage.getItem(STORAGE_KEYS.SCOPE_STARTED_AT)
         const restoredPages = restoreCrawlPages(STORAGE_KEYS.CRAWL_PAGES)
         if (restoredPages.length > 0) setCrawledPages(restoredPages)
 
@@ -250,15 +247,13 @@ export default function OnboardingPage() {
         }
 
         // Restore URL (strip protocol if present from old data)
-        if (savedUrl) setUrl(savedUrl.replace(/^https?:\/\//i, ''))
+        if (savedUrl) setUrl(savedUrl.replace(/^https?:\/\//i, ""))
 
         // Restore brand data if exists (saves API costs on refresh!)
         if (savedBrandData) {
             try {
                 const parsed = JSON.parse(savedBrandData)
-                const restoredFamilies = trimFamiliesToSearchCap(
-                    parsed.scope_families || [],
-                )
+                const restoredFamilies = trimFamiliesToSearchCap(parsed.scope_families || [])
                 setBrandData({ ...parsed, scope_families: restoredFamilies })
                 /**
                  * Continue requires categories, not just a product name.
@@ -280,7 +275,7 @@ export default function OnboardingPage() {
                     setScopeAnalysisIssues([])
                     localStorage.removeItem(STORAGE_KEYS.SCOPE_ANALYSIS_ISSUES)
                 }
-            } catch { }
+            } catch {}
         }
         if (savedTargetSeeds) {
             try {
@@ -409,11 +404,11 @@ export default function OnboardingPage() {
         if (!isHydrated) return
         localStorage.setItem(STORAGE_KEYS.STEP, step)
         const params = new URLSearchParams()
-        params.set('step', step)
-        if (brandId) params.set('brandId', brandId)
+        params.set("step", step)
+        if (brandId) params.set("brandId", brandId)
 
         // Use replaceState to avoid adding to browser history for every change
-        window.history.replaceState(null, '', `?${params.toString()}`)
+        window.history.replaceState(null, "", `?${params.toString()}`)
     }, [step, brandId, isHydrated])
 
     // Persist brand data to localStorage
@@ -479,10 +474,7 @@ export default function OnboardingPage() {
         setScopeAnalysisIssues([])
         setSeedsWithoutDemand([])
         setError("")
-        localStorage.setItem(
-            STORAGE_KEYS.ANALYZING_STARTED_AT,
-            String(Date.now()),
-        )
+        localStorage.setItem(STORAGE_KEYS.ANALYZING_STARTED_AT, String(Date.now()))
         let completed = false
         try {
             const res = await fetch("/api/analyze-brand", {
@@ -511,10 +503,7 @@ export default function OnboardingPage() {
 
                 if (event.phase === "brand_ready" && event.brand) {
                     setBrandData((current) => ({
-                        ...emptyBrandShell(
-                            current?.scope_families || [],
-                            targetSeeds,
-                        ),
+                        ...emptyBrandShell(current?.scope_families || [], targetSeeds),
                         ...current,
                         ...event.brand,
                         scope_families: current?.scope_families || [],
@@ -551,9 +540,7 @@ export default function OnboardingPage() {
             // Guess the market from the domain before the founder sees the
             // screen. A `.de` site defaulting to United States is a wrong
             // measurement nobody would think to check.
-            setBrandData((current) =>
-                current ? applyMarketDefaults(current, url) : current,
-            )
+            setBrandData((current) => (current ? applyMarketDefaults(current, url) : current))
             setStep("profile")
         } catch (e: any) {
             setError(e.message || "An error occurred")
@@ -586,10 +573,7 @@ export default function OnboardingPage() {
         setScopeReady(false)
         setPhasesSeen(new Set())
         setError("")
-        localStorage.setItem(
-            STORAGE_KEYS.SCOPE_STARTED_AT,
-            String(Date.now()),
-        )
+        localStorage.setItem(STORAGE_KEYS.SCOPE_STARTED_AT, String(Date.now()))
         try {
             const res = await fetch("/api/analyze-brand/scope", {
                 method: "POST",
@@ -633,7 +617,11 @@ export default function OnboardingPage() {
                     )
                     setBrandData((current) =>
                         current
-                            ? { ...current, scope_families: families, target_seed_keywords: seeds }
+                            ? {
+                                  ...current,
+                                  scope_families: families,
+                                  target_seed_keywords: seeds,
+                              }
                             : emptyBrandShell(families, seeds),
                     )
 
@@ -680,7 +668,9 @@ export default function OnboardingPage() {
         const hasAllFamilies =
             activeFamilies.length > 0 &&
             activeFamilies.every((f) =>
-                prompts.some((p) => p.scopeFamilyId === (f.id || f.name) || p.sourceSeed === f.name),
+                prompts.some(
+                    (p) => p.scopeFamilyId === (f.id || f.name) || p.sourceSeed === f.name,
+                ),
             )
 
         if (prompts.length > 0 && hasAllFamilies) {
@@ -707,24 +697,32 @@ export default function OnboardingPage() {
                     coreFeatures: brandData?.core_features,
                     audience: brandData?.audience?.primary,
                     competitors,
+                    maxPrompts: DEFAULT_PROMPTS_PER_RUN,
                 }),
             })
 
-            const data = await res.json()
+            const data = (await res.json()) as GeneratePromptsResponse
             if (!res.ok) {
                 throw new Error(data.error || "Failed to generate candidate buyer questions")
             }
 
-            const items: PromptItem[] = (data.prompts || []).map((p: any, idx: number) => ({
+            const items: PromptItem[] = (data.prompts || []).map((p, idx) => ({
                 ...p,
                 id: `prompt-${idx}-${Date.now()}`,
             }))
 
+            if (items.length !== DEFAULT_PROMPTS_PER_RUN) {
+                throw new Error(
+                    `Generated ${items.length} unique questions instead of ${DEFAULT_PROMPTS_PER_RUN}. Please try again.`,
+                )
+            }
+
             setPrompts(items)
             localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(items))
-        } catch (err: any) {
+        } catch (err: unknown) {
             setPromptsError(
-                err.message || "Could not generate buyer questions. You can add them manually.",
+                (err instanceof Error ? err.message : "") ||
+                    "Could not generate buyer questions. You can add them manually.",
             )
         } finally {
             setPromptsLoading(false)
@@ -736,6 +734,14 @@ export default function OnboardingPage() {
         const activeFamilies = (brandData?.scope_families || []).filter((f) => f.enabled !== false)
         const target = activeFamilies.find((f) => (f.id || f.name) === familyId)
         if (!target) return
+
+        const remaining = prompts.filter(
+            (prompt) => prompt.scopeFamilyId !== familyId && prompt.sourceSeed !== target.name,
+        )
+        const existingFamilyCount = prompts.length - remaining.length
+        const targetPromptCount =
+            existingFamilyCount ||
+            Math.ceil(DEFAULT_PROMPTS_PER_RUN / Math.max(1, activeFamilies.length))
 
         setRegeneratingFamilyId(familyId)
         setPromptsError("")
@@ -759,27 +765,35 @@ export default function OnboardingPage() {
                     coreFeatures: brandData?.core_features,
                     audience: brandData?.audience?.primary,
                     competitors,
+                    maxPrompts: targetPromptCount,
+                    excludeQuestions: remaining.map((prompt) => prompt.text),
                 }),
             })
 
-            const data = await res.json()
+            const data = (await res.json()) as GeneratePromptsResponse
             if (!res.ok) {
                 throw new Error(data.error || "Failed to regenerate questions for this area")
             }
 
-            const newItems: PromptItem[] = (data.prompts || []).map((p: any, idx: number) => ({
+            const newItems: PromptItem[] = (data.prompts || []).map((p, idx) => ({
                 ...p,
                 id: `prompt-${familyId}-${idx}-${Date.now()}`,
             }))
 
-            const remaining = prompts.filter(
-                (p) => p.scopeFamilyId !== familyId && p.sourceSeed !== target.name,
-            )
-            const updated = [...remaining, ...newItems]
+            if (newItems.length < targetPromptCount) {
+                throw new Error(
+                    `Generated only ${newItems.length} of ${targetPromptCount} unique replacement questions. Your existing questions were kept.`,
+                )
+            }
+
+            const updated = [...remaining, ...newItems.slice(0, targetPromptCount)]
             setPrompts(updated)
             localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(updated))
-        } catch (err: any) {
-            setPromptsError(err.message || "Failed to regenerate questions for this area")
+        } catch (err: unknown) {
+            setPromptsError(
+                (err instanceof Error ? err.message : "") ||
+                    "Failed to regenerate questions for this area",
+            )
         } finally {
             setRegeneratingFamilyId(null)
         }
@@ -788,12 +802,12 @@ export default function OnboardingPage() {
     // Helper to clean array data
     const cleanArray = (arr: string[] | undefined) => {
         if (!arr) return []
-        return arr.map(item => item.trim()).filter(item => item !== "")
+        return arr.map((item) => item.trim()).filter((item) => item !== "")
     }
 
     const handleSaveBrand = async () => {
         if (!brandData) return
-        if (!url || url.trim() === '') {
+        if (!url || url.trim() === "") {
             setError("Website URL is required. Please enter your website domain.")
             return
         }
@@ -822,18 +836,49 @@ export default function OnboardingPage() {
 
         setSavingBrand(true)
         setError("")
+        setPromptsError("")
         try {
             // Save brand data (style_dna is already included in brandData)
             const fullUrl = `https://${url.trim()}`
-            const res = await saveBrandAction(fullUrl, cleanData, competitors.length > 0 ? competitors : undefined)
+            const res = await saveBrandAction(
+                fullUrl,
+                cleanData,
+                competitors.length > 0 ? competitors : undefined,
+            )
             if (!res.success) {
-                throw new Error('error' in res ? res.error : "Failed to save brand")
+                throw new Error("error" in res ? res.error : "Failed to save brand")
             }
             if (!res.brandId) {
                 throw new Error("Failed to save brand - no brandId returned")
             }
             const savedBrandId = res.brandId
             setBrandId(savedBrandId)
+
+            // The questions are now subscription state, not payload carried
+            // from this browser into one run. Commit the exact reviewed forty
+            // before opening the probe screen; the probe will read them back
+            // from the server and refuses client-supplied substitutes.
+            const promptResponse = await fetch("/api/visibility/prompts/confirm", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    brandId: savedBrandId,
+                    prompts: prompts.map(
+                        ({ text, scopeFamilyId, intent, sourceSeed }) => ({
+                            text,
+                            scopeFamilyId,
+                            intent,
+                            sourceSeed,
+                        }),
+                    ),
+                }),
+            })
+            const promptResult = await promptResponse.json().catch(() => null)
+            if (!promptResponse.ok) {
+                throw new Error(
+                    promptResult?.error || "Failed to save the confirmed buyer questions",
+                )
+            }
 
             // A fresh save is a fresh measurement. Any run id left over from an
             // earlier attempt would be adopted by the console and reported as
@@ -845,9 +890,10 @@ export default function OnboardingPage() {
             // is everything the probe needs to open its own audit. Next screen
             // asks the confirmed questions.
             setStep("audit")
-
         } catch (e: any) {
-            setError(e.message || "Failed to save brand details")
+            const message = e.message || "Failed to save brand details"
+            setError(message)
+            setPromptsError(message)
         } finally {
             setSavingBrand(false)
         }
@@ -901,9 +947,7 @@ export default function OnboardingPage() {
                 if (found.length === 0) return
                 // Still never clobbers a founder who typed while we searched.
                 setCompetitors((current) =>
-                    current.length > 0
-                        ? current
-                        : Array.from(new Set(found)).slice(0, 4),
+                    current.length > 0 ? current : Array.from(new Set(found)).slice(0, 4),
                 )
             })
             .catch(() => {
@@ -946,7 +990,6 @@ export default function OnboardingPage() {
         [clearOnboardingStorage, router],
     )
 
-
     // The immutable harvest is already the plan. Never mirror it into the
     // legacy content_plans table or run a second paid harvest.
     const handleOpenSavedAudit = () => {
@@ -956,7 +999,8 @@ export default function OnboardingPage() {
 
     // Load the closed-pool read model after completion and on refresh.
     useEffect(() => {
-        if (!isHydrated || !brandId || step !== 'audit-results' || auditScope || isLoadingScope) return
+        if (!isHydrated || !brandId || step !== "audit-results" || auditScope || isLoadingScope)
+            return
 
         const fetchScope = async () => {
             setIsLoadingScope(true)
@@ -966,7 +1010,7 @@ export default function OnboardingPage() {
                 })
                 const status = statusResponse.ok ? await statusResponse.json() : null
                 if (status?.status === "running") {
-                    setStep('audit')
+                    setStep("audit")
                     return
                 }
 
@@ -992,7 +1036,9 @@ export default function OnboardingPage() {
                         )
                         return
                     }
-                    throw new Error("The audit finished, but its scope could not be loaded. Please run it again.")
+                    throw new Error(
+                        "The audit finished, but its scope could not be loaded. Please run it again.",
+                    )
                 }
 
                 setAuditScope(scope)
@@ -1015,8 +1061,8 @@ export default function OnboardingPage() {
     const updateField = (path: string, value: any) => {
         if (!brandData) return
         const newData = { ...brandData }
-        if (path.includes('.')) {
-            const [parent, child] = path.split('.')
+        if (path.includes(".")) {
+            const [parent, child] = path.split(".")
             // @ts-ignore
             newData[parent] = { ...newData[parent], [child]: value }
         } else {
@@ -1029,12 +1075,14 @@ export default function OnboardingPage() {
     // Updated helper: NO FILTERING on change to allow newlines
     const updateArray = (field: keyof BrandDetails, value: string) => {
         // Just split by newlines, preserving empty ones for editing
-        const arr = value.split('\n')
-        setBrandData(prev => prev ? ({ ...prev, [field]: arr }) : null)
+        const arr = value.split("\n")
+        setBrandData((prev) => (prev ? { ...prev, [field]: arr } : null))
     }
 
     return (
-        <div className={`flex min-h-[calc(100vh-5rem)] flex-col px-4 py-6 font-sans sm:px-6 ${brandData && step === "brand" ? "items-stretch sm:items-center" : "items-center justify-center"}`}>
+        <div
+            className={`flex min-h-[calc(100vh-5rem)] flex-col px-4 py-6 font-sans sm:px-6 ${brandData && step === "brand" ? "items-stretch sm:items-center" : "items-center justify-center"}`}
+        >
             {/* Show loading while checking access */}
             {isCheckingAccess ? (
                 <div className="flex flex-col items-center gap-3 text-stone-500">
@@ -1042,8 +1090,6 @@ export default function OnboardingPage() {
                 </div>
             ) : (
                 <>
-
-
                     {/* Island Container */}
                     <motion.div
                         layout
@@ -1058,16 +1104,20 @@ export default function OnboardingPage() {
                     >
                         {/* Top Notch */}
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-6 z-20 flex justify-center pointer-events-none">
-                            <div className={`w-8 h-4 rounded-b-lg border-b border-x bg-stone-100 border-stone-200/50 flex items-center justify-center`}>
+                            <div
+                                className={`w-8 h-4 rounded-b-lg border-b border-x bg-stone-100 border-stone-200/50 flex items-center justify-center`}
+                            >
                                 <ChevronUp className={`w-3 h-3 text-stone-400`} />
                             </div>
                         </div>
 
                         {/* Inner Card */}
-                        <div className={`
+                        <div
+                            className={`
           relative border overflow-hidden transition-all rounded-[16px]
           bg-white border-stone-200
-        `}>
+        `}
+                        >
                             {/* Where am I, and what is left.
                                 Steps 1 and 2 are the same route and swap on a
                                 ternary, so without this the screen simply changed
@@ -1076,14 +1126,43 @@ export default function OnboardingPage() {
                             {step !== "audit-results" && (
                                 <ol className="flex justify-center items-center gap-1 border-b border-stone-100 px-4 py-3 text-[10px] sm:px-6">
                                     {[
-                                        { key: "site", label: "Website", done: step !== "brand", active: step === "brand" },
-                                        { key: "profile", label: "Your brand", done: ["scope", "prompts", "extras", "audit"].includes(step), active: step === "profile" },
-                                        { key: "scope", label: "Topics", done: ["extras", "prompts", "audit"].includes(step), active: step === "scope" },
-                                        { key: "extras", label: "Rivals", done: ["prompts", "audit"].includes(step), active: step === "extras" },
-                                        { key: "prompts", label: "Questions", done: step === "audit", active: step === "prompts" },
+                                        {
+                                            key: "site",
+                                            label: "Website",
+                                            done: step !== "brand",
+                                            active: step === "brand",
+                                        },
+                                        {
+                                            key: "profile",
+                                            label: "Your brand",
+                                            done: ["scope", "prompts", "extras", "audit"].includes(
+                                                step,
+                                            ),
+                                            active: step === "profile",
+                                        },
+                                        {
+                                            key: "scope",
+                                            label: "Topics",
+                                            done: ["extras", "prompts", "audit"].includes(step),
+                                            active: step === "scope",
+                                        },
+                                        {
+                                            key: "extras",
+                                            label: "Rivals",
+                                            done: ["prompts", "audit"].includes(step),
+                                            active: step === "extras",
+                                        },
+                                        {
+                                            key: "prompts",
+                                            label: "Questions",
+                                            done: step === "audit",
+                                            active: step === "prompts",
+                                        },
                                     ].map((entry, entryIndex) => (
                                         <li key={entry.key} className="flex items-center gap-1">
-                                            {entryIndex > 0 ? <span className="text-stone-300">·</span> : null}
+                                            {entryIndex > 0 ? (
+                                                <span className="text-stone-300">·</span>
+                                            ) : null}
                                             <span
                                                 className={
                                                     entry.active
@@ -1168,7 +1247,9 @@ export default function OnboardingPage() {
                                             error={error}
                                             onFamiliesChange={(scope_families) =>
                                                 setBrandData((current) =>
-                                                    current ? { ...current, scope_families } : current,
+                                                    current
+                                                        ? { ...current, scope_families }
+                                                        : current,
                                                 )
                                             }
                                             onTargetSeedsChange={(seeds) => {
@@ -1177,7 +1258,10 @@ export default function OnboardingPage() {
                                                 setTargetSeeds(seeds)
                                                 setBrandData((current) =>
                                                     current
-                                                        ? { ...current, target_seed_keywords: seeds }
+                                                        ? {
+                                                              ...current,
+                                                              target_seed_keywords: seeds,
+                                                          }
                                                         : current,
                                                 )
                                             }}
@@ -1224,7 +1308,10 @@ export default function OnboardingPage() {
                                             error={promptsError}
                                             onPromptsChange={(newPrompts) => {
                                                 setPrompts(newPrompts)
-                                                localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(newPrompts))
+                                                localStorage.setItem(
+                                                    STORAGE_KEYS.PROMPTS,
+                                                    JSON.stringify(newPrompts),
+                                                )
                                             }}
                                             onRegenerateFamily={handleRegenerateFamily}
                                             saving={savingBrand}
@@ -1244,7 +1331,6 @@ export default function OnboardingPage() {
                                     >
                                         <ProbeConsole
                                             brandId={brandId}
-                                            prompts={prompts}
                                             existingRunId={probeRunId}
                                             onRunStarted={handleProbeStarted}
                                             onComplete={handleProbeComplete}
@@ -1260,19 +1346,22 @@ export default function OnboardingPage() {
                                         exit={{ opacity: 0, x: 20 }}
                                         className="p-6"
                                     >
-                                                {auditScope ? (
+                                        {auditScope ? (
                                             <div className="space-y-8">
                                                 <ScopeResults
                                                     scope={auditScope}
                                                     gaps={gapEvidence}
                                                     articles={plannedArticles}
-                                                    brandName={brandData?.product_name || "Your Site"}
+                                                    brandName={
+                                                        brandData?.product_name || "Your Site"
+                                                    }
                                                     progress={programProgress}
                                                 />
                                                 <div className="flex flex-col items-center gap-3 border-t border-stone-200 pt-7 text-center">
                                                     <p className="max-w-xl text-sm text-stone-500">
-                                                        This audit is saved permanently in your dashboard. You can
-                                                        return to every cluster, article, and source before purchasing.
+                                                        This audit is saved permanently in your
+                                                        dashboard. You can return to every cluster,
+                                                        article, and source before purchasing.
                                                     </p>
                                                     <Button
                                                         onClick={handleOpenSavedAudit}
@@ -1290,10 +1379,18 @@ export default function OnboardingPage() {
                                                     step loader, which is the only waiting treatment here. */}
                                                 <motion.p
                                                     className="text-stone-500 text-sm"
-                                                    animate={isLoadingScope ? { opacity: [1, 0.55, 1] } : { opacity: 1 }}
+                                                    animate={
+                                                        isLoadingScope
+                                                            ? { opacity: [1, 0.55, 1] }
+                                                            : { opacity: 1 }
+                                                    }
                                                     transition={
                                                         isLoadingScope
-                                                            ? { duration: 2.4, repeat: Infinity, ease: "easeInOut" }
+                                                            ? {
+                                                                  duration: 2.4,
+                                                                  repeat: Infinity,
+                                                                  ease: "easeInOut",
+                                                              }
                                                             : { duration: 0.2 }
                                                     }
                                                 >
@@ -1305,7 +1402,6 @@ export default function OnboardingPage() {
                                         )}
                                     </motion.div>
                                 )}
-
                             </AnimatePresence>
                         </div>
                     </motion.div>
@@ -1313,7 +1409,9 @@ export default function OnboardingPage() {
                     {/* Error Display */}
                     {error && (
                         <div className="mt-6 max-w-xl w-full">
-                            <div className={`p-4 rounded-xl text-sm border bg-red-50 text-red-600 border-red-100`}>
+                            <div
+                                className={`p-4 rounded-xl text-sm border bg-red-50 text-red-600 border-red-100`}
+                            >
                                 {error}
                             </div>
                         </div>

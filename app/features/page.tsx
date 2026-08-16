@@ -10,7 +10,7 @@ import { features } from "./data"
 export const metadata: Metadata = {
     title: "How it works — done-for-you SEO content for B2B SaaS | FlipAEO",
     description:
-        "What you actually get: a gap audit you can fact-check, articles written against evidence, internal links that work on arrival, and a programme that ends.",
+        "What you actually get: recurring AI visibility evidence, prioritised create or refresh work, and selected drafts released together as one complete cycle batch.",
     alternates: { canonical: `${defaultSEO.siteUrl}/features` },
 }
 

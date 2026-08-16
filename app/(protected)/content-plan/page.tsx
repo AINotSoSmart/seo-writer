@@ -1,18 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- forward Phase 3 relations are absent from generated database types until migration. */
 import Link from "next/link"
-import {
-    CalendarDays,
-    CheckCircle2,
-    CircleDashed,
-    ExternalLink,
-    FileCheck2,
-    FileText,
-} from "lucide-react"
+import { CheckCircle2, CircleDashed, FileText } from "lucide-react"
 
-import {
-    getAuditScope,
-    getGapEvidence,
-    getPlannedArticles,
-} from "@/actions/harvest"
+import { getAuditScope, getGapEvidence, getPlannedArticles } from "@/actions/harvest"
 import { ScopeResults } from "@/components/audit/scope-results"
 import { ProgramDeliveryControls } from "@/components/program/ProgramDeliveryControls"
 import { createClient } from "@/utils/supabase/server"
@@ -26,7 +16,7 @@ export default async function ContentPlanPage() {
 
     const { data: brand } = await supabase
         .from("brand_details")
-        .select("id, current_audit_id, brand_data")
+        .select("id, brand_data")
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle()
@@ -34,9 +24,7 @@ export default async function ContentPlanPage() {
 
     const { data: program } = await (supabase as any)
         .from("programs")
-        .select(
-            "id, audit_id, tier, clusters_per_month, total_articles, scope_status, cancellation_status, publication_url_pattern, started_at",
-        )
+        .select("id, plan_id, status, action_allowance, started_at")
         .eq("user_id", user.id)
         .eq("brand_id", brand.id)
         .order("started_at", { ascending: false })
@@ -53,20 +41,14 @@ export default async function ContentPlanPage() {
 
         return (
             <main className="mx-auto w-full max-w-6xl py-6">
-                <header className="mb-7 flex flex-col gap-4 border-b border-stone-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
+                <header className="mb-7 flex items-start justify-between border-b border-stone-200 pb-6">
                     <div>
-                    <h1 className="font-serif text-3xl text-stone-900">
-                        Proposed content program
-                    </h1>
-                    <p className="mt-2 text-sm text-stone-600">
-                        Nothing has been purchased or frozen. Inspect every cluster, article,
-                        and supporting source below before deciding.
-                    </p>
+                        <h1 className="font-serif text-3xl text-stone-900">Proposed content work</h1>
+                        <p className="mt-2 text-sm text-stone-600">
+                            This is audit evidence, not a purchased or scheduled batch.
+                        </p>
                     </div>
-                    <Link
-                        href="/audit"
-                        className="inline-flex shrink-0 rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800"
-                    >
+                    <Link href="/audit" className="rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800">
                         Open permanent audit
                     </Link>
                 </header>
@@ -80,237 +62,128 @@ export default async function ContentPlanPage() {
         )
     }
 
-    const { data: clusterRows } = await (supabase as any)
-        .from("program_clusters")
+    const { data: cycles } = await (supabase as any)
+        .from("subscription_cycles")
         .select(
-            "id, audit_cluster_id, sequence, scheduled_for, state, ready_at, delivered_at, failure_code, audit_clusters(name, article_count)",
+            "id, period_start, period_end, state, action_allowance, delivered_at, failure_code, " +
+                "cycle_actions(id, rank, resolution_type, state, target_url, selection_reason, " +
+                "planned_articles(id, title, target_url, generation_status, delivery_status, publication_status, publication_url))",
         )
         .eq("program_id", program.id)
-        .order("sequence", { ascending: true })
-    const clusterIds = (clusterRows || []).map((row: any) => row.audit_cluster_id)
-    const { data: articleRows } = clusterIds.length
-        ? await (supabase as any)
-              .from("planned_articles")
-              .select(
-                  "id, cluster_id, title, target_url, generation_status, delivery_status, publication_status, publication_url",
-              )
-              .eq("audit_id", program.audit_id)
-              .in("cluster_id", clusterIds)
-              .order("is_pillar", { ascending: false })
-        : { data: [] }
+        .order("period_start", { ascending: false })
 
-    const articles = articleRows || []
-    const generated = articles.filter(
-        (article: any) => article.generation_status === "generated",
+    const allActions = (cycles || []).flatMap((cycle: any) => cycle.cycle_actions || [])
+    const ready = allActions.filter((action: any) =>
+        ["ready", "delivered"].includes(action.state),
     ).length
-    const delivered = articles.filter(
-        (article: any) => article.delivery_status === "delivered",
-    ).length
-    const published = articles.filter(
-        (article: any) => article.publication_status === "published",
-    ).length
-    const total = Number(program.total_articles || articles.length)
-    const deliveredPercent = total ? Math.round((delivered / total) * 100) : 0
+    const delivered = allActions.filter((action: any) => action.state === "delivered").length
 
     return (
         <main className="mx-auto w-full max-w-6xl py-6">
-            <header className="flex flex-col gap-5 border-b border-stone-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
+            <header className="flex items-start justify-between border-b border-stone-200 pb-6">
                 <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-                        {program.tier} · {program.clusters_per_month} cluster
-                        {program.clusters_per_month === 1 ? "" : "s"} per month
+                        Founding beta · up to {program.action_allowance} actions per cycle
                     </p>
-                    <h1 className="mt-1 font-serif text-3xl text-stone-900">
-                        {program.scope_status === "scope_delivered"
-                            ? "Program scope delivered"
-                            : "Six-cluster delivery program"}
-                    </h1>
+                    <h1 className="mt-1 font-serif text-3xl text-stone-900">Recurring delivery cycles</h1>
                     <p className="mt-2 text-sm text-stone-600">
-                        Generated work stays withheld until every article in its cluster is ready.
+                        Every cycle keeps its measurement, selected work and complete batch together.
                     </p>
                 </div>
-                <ProgramDeliveryControls
-                    programId={program.id}
-                    scopeStatus={program.scope_status}
-                    publicationUrlPattern={program.publication_url_pattern}
-                />
+                <ProgramDeliveryControls programId={program.id} status={program.status} />
             </header>
 
             <section className="grid gap-3 py-6 sm:grid-cols-3">
-                <ProgressCard
-                    icon={FileText}
-                    label="Generated"
-                    value={`${generated}/${total}`}
-                />
-                <ProgressCard
-                    icon={FileCheck2}
-                    label="Delivered"
-                    value={`${delivered}/${total}`}
-                />
-                <ProgressCard
-                    icon={CheckCircle2}
-                    label="Published"
-                    value={`${published}/${total}`}
-                    detail="Optional customer progress"
-                />
-            </section>
-
-            <section className="mb-8 rounded-xl border border-stone-200 bg-white p-5">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-medium text-stone-900">Delivery burn-down</span>
-                    <span className="text-stone-500">{deliveredPercent}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-stone-100">
-                    <div
-                        className="h-full bg-stone-900"
-                        style={{ width: `${deliveredPercent}%` }}
-                    />
-                </div>
-                <p className="mt-3 text-xs text-stone-500">
-                    Cancellation: {humanize(program.cancellation_status)}. Access remains
-                    available through the paid billing period.
-                </p>
+                <ProgressCard label="Cycles" value={String((cycles || []).length)} />
+                <ProgressCard label="Outputs ready" value={`${ready}/${allActions.length}`} />
+                <ProgressCard label="Outputs delivered" value={`${delivered}/${allActions.length}`} />
             </section>
 
             <section className="space-y-4">
-                {(clusterRows || []).map((cluster: any) => {
-                    const members = articles.filter(
-                        (article: any) => article.cluster_id === cluster.audit_cluster_id,
-                    )
-                    return (
-                        <article
-                            key={cluster.id}
-                            className="overflow-hidden rounded-xl border border-stone-200 bg-white"
-                        >
-                            <header className="flex flex-col gap-3 border-b border-stone-100 bg-stone-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-stone-400">
-                                            {String(cluster.sequence).padStart(2, "0")}
-                                        </span>
-                                        <h2 className="font-medium text-stone-900">
-                                            {cluster.audit_clusters?.name || "Topic cluster"}
-                                        </h2>
-                                    </div>
-                                    <div className="mt-1 flex items-center gap-1 text-xs text-stone-500">
-                                        <CalendarDays className="h-3.5 w-3.5" />
-                                        {formatDate(cluster.scheduled_for)}
-                                    </div>
-                                </div>
-                                <StatePill state={cluster.state} />
-                            </header>
-                            <div className="divide-y divide-stone-100">
-                                {members.map((article: any) => (
-                                    <div
-                                        key={article.id}
-                                        className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-[1fr_auto_auto_auto]"
-                                    >
-                                        <div>
-                                            <div className="text-stone-900">{article.title}</div>
-                                            <div className="mt-0.5 truncate font-mono text-[11px] text-stone-400">
-                                                {article.target_url}
-                                            </div>
-                                        </div>
-                                        <ArticleState
-                                            label="Generated"
-                                            active={article.generation_status === "generated"}
-                                        />
-                                        <ArticleState
-                                            label="Delivered"
-                                            active={article.delivery_status === "delivered"}
-                                        />
-                                        <div className="flex items-center justify-end gap-2">
-                                            <ArticleState
-                                                label={humanize(article.publication_status)}
-                                                active={article.publication_status === "published"}
-                                            />
-                                            {article.publication_url && (
-                                                <a
-                                                    href={article.publication_url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    aria-label="Open published article"
-                                                >
-                                                    <ExternalLink className="h-3.5 w-3.5" />
-                                                </a>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
+                {(cycles || []).map((cycle: any) => (
+                    <article key={cycle.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+                        <header className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
+                            <div>
+                                <h2 className="font-medium text-stone-900">
+                                    {formatPeriod(cycle.period_start, cycle.period_end)}
+                                </h2>
+                                <p className="mt-1 text-xs text-stone-500">
+                                    {(cycle.cycle_actions || []).length}/{cycle.action_allowance} selected actions
+                                </p>
                             </div>
-                        </article>
-                    )
-                })}
+                            <StatePill state={cycle.state} />
+                        </header>
+                        {(cycle.cycle_actions || []).length ? (
+                            <div className="divide-y divide-stone-100">
+                                {(cycle.cycle_actions || [])
+                                    .sort((a: any, b: any) => a.rank - b.rank)
+                                    .map((action: any) => {
+                                        const output = Array.isArray(action.planned_articles)
+                                            ? action.planned_articles[0]
+                                            : action.planned_articles
+                                        return (
+                                            <div key={action.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[2rem_1fr_auto]">
+                                                <span className="font-mono text-xs text-stone-400">{String(action.rank).padStart(2, "0")}</span>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="rounded border border-stone-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-stone-500">
+                                                            {action.resolution_type}
+                                                        </span>
+                                                        <span className="text-sm font-medium text-stone-900">
+                                                            {output?.title || action.target_url || "Selected content action"}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-1 text-xs text-stone-500">{action.selection_reason}</p>
+                                                </div>
+                                                <StatePill state={action.state} />
+                                            </div>
+                                        )
+                                    })}
+                            </div>
+                        ) : (
+                            <p className="px-5 py-6 text-sm text-stone-500">
+                                Measurement may honestly produce a report-only cycle with no content actions.
+                            </p>
+                        )}
+                    </article>
+                ))}
             </section>
         </main>
     )
 }
 
-function ProgressCard({
-    icon: Icon,
-    label,
-    value,
-    detail,
-}: {
-    icon: React.ElementType
-    label: string
-    value: string
-    detail?: string
-}) {
+function ProgressCard({ label, value }: { label: string; value: string }) {
     return (
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-                <Icon className="h-4 w-4" /> {label}
+        <div className="rounded-xl border border-stone-200 bg-white p-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
+                <FileText className="h-4 w-4" /> {label}
             </div>
-            <div className="mt-3 font-serif text-3xl text-stone-900">{value}</div>
-            {detail && <p className="mt-1 text-xs text-stone-500">{detail}</p>}
+            <div className="mt-2 text-2xl font-semibold text-stone-900">{value}</div>
         </div>
     )
 }
 
 function StatePill({ state }: { state: string }) {
-    const delivered = state === "delivered"
+    const done = state === "delivered"
     return (
-        <span
-            className={cnState(
-                delivered ? "bg-emerald-50 text-emerald-700" : "bg-stone-200 text-stone-700",
-            )}
-        >
-            {delivered ? <CheckCircle2 className="h-3.5 w-3.5" /> : <CircleDashed className="h-3.5 w-3.5" />}
-            {humanize(state)}
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs text-stone-600">
+            {done ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <CircleDashed className="h-3.5 w-3.5" />}
+            {state.replaceAll("_", " ")}
         </span>
     )
 }
 
-function ArticleState({ label, active }: { label: string; active: boolean }) {
-    return (
-        <span className={active ? "text-emerald-700" : "text-stone-400"}>
-            {active ? "✓" : "○"} {label}
-        </span>
-    )
+function formatPeriod(start: string, end: string) {
+    const formatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" })
+    return `${formatter.format(new Date(start))} – ${formatter.format(new Date(end))}`
 }
 
 function NoProgram() {
     return (
-        <main className="mx-auto max-w-3xl py-16 text-center">
-            <h1 className="font-serif text-3xl">Start with an evidence-backed audit</h1>
-            <Link href="/onboarding" className="mt-5 inline-block underline">
-                Open audit
-            </Link>
+        <main className="mx-auto max-w-2xl py-20 text-center">
+            <h1 className="font-serif text-3xl text-stone-900">No content plan yet</h1>
+            <p className="mt-3 text-sm text-stone-600">Complete onboarding to confirm the buyer questions your subscription will track.</p>
+            <Link href="/onboarding" className="mt-6 inline-flex rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white">Continue onboarding</Link>
         </main>
     )
-}
-
-function humanize(value: string) {
-    return String(value || "").replaceAll("_", " ")
-}
-
-function formatDate(value: string) {
-    return new Intl.DateTimeFormat("en", {
-        dateStyle: "medium",
-    }).format(new Date(value))
-}
-
-function cnState(className: string) {
-    return `inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${className}`
 }

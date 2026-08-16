@@ -136,6 +136,7 @@ Create `tracked_prompts`, owned by a brand:
 | `scope_family_id` | confirmed product area |
 | `prompt`, `prompt_norm` | stable question and dedupe form |
 | `intent`, `article_type`, `source_seed` | generation provenance |
+| `position` | stable order inside the confirmed 40-question set |
 | `tracking_status` (`active` / `inactive` / `retired`) | entitlement and customer choice |
 | `coverage_state` (`unknown` / `no_page` / `has_page`) | explicit customer answer, never inferred |
 | `target_url` | optional existing page supplied after a losing result |
@@ -148,7 +149,8 @@ stopped tracking the question.
 `ai_probe_prompts` remains the per-run observation and gains
 `tracked_prompt_id`. Its verdict, counts and answers remain run-scoped. The
 confirm-questions screen writes the durable set once; every probe reads the
-active set instead of regenerating it.
+active set instead of regenerating it or accepting a replacement set from the
+browser.
 
 ### 3.2 Persistent findings, not backlog-shaped articles
 
@@ -202,14 +204,18 @@ deduplication:
 | `state` (`selected` / `generating` / `ready` / `delivered` / `failed`) | production lifecycle |
 | `rank`, `selection_reason` | why this action entered the batch |
 | `target_url` | existing URL for refresh, proposed URL for create |
-| `planned_article_id` | generated output, when created |
+| `created_at`, `updated_at`, lifecycle timestamps | action history |
 
 Create `cycle_action_opportunities` as the junction between one selected action
 and the one or more tracked-question opportunities it resolves.
 
 `planned_articles` remains a generation and delivery record. It is created only
-for a selected create/refresh action and gains `cycle_action_id`. It is not the
-opportunity backlog and does not represent report-only work.
+for a selected create/refresh action and gains a unique `cycle_action_id`. That
+column is the single authoritative action/output link; do not also store a
+`planned_article_id` on `cycle_actions`, because two directional foreign keys
+can disagree. The action resolves its output through the unique relation. A
+planned article is not the opportunity backlog and does not represent
+report-only work.
 
 `programs` becomes the long-lived subscription for one brand. Its single
 `audit_id` is no longer authoritative; each cycle points to its own immutable
@@ -429,10 +435,30 @@ A losing question is not automatically solved by an owned article. Answers may
 depend on Reddit, review marketplaces, journalist roundups, directories or other
 surfaces the customer cannot publish into directly.
 
-`lib/visibility/citation-classifier.ts` already attempts to separate publishable
-and earned sources, but the last live run reported 81% of citations as
-uncategorised. Diagnose the returned citation shapes before automating this
-decision.
+`lib/visibility/citation-classifier.ts` separates publishable, earned,
+report-only and unresolved evidence. The Phase 0b replay used all 373 citations
+from the completed Drawgle run. The old host-list classifier left 302/373 (81%)
+uncategorised. It was already computing the exact cited page's URL shape, but
+never used that evidence to decide the source type.
+
+The conservative structural classifier now uses the stored URL and citation
+title. It recognises explicit best-of/list/comparison/review pages as earned
+placements and explicit documentation/help/reference pages as report-only. It
+does not infer a category from an unfamiliar hostname and does not fetch or
+guess the page's contents. On the same immutable evidence it produced:
+
+- 16 citations (4.3%) that imply owned publishing work
+- 160 citations (42.9%) that imply earned-placement work, including 121
+  structurally identified recommendation pages
+- 41 citations (11.0%) that are report-only documentation/reference evidence
+- 156 citations (41.8%) still unresolved and requiring founder review
+
+That residual 41.8% is visible, not relabelled as a confident catch-all. Future
+run summaries freeze the exact unresolved URLs in a founder-review queue and
+the dashboard says explicitly that they cannot enter production automatically.
+Historical completed summaries remain immutable; their old unclassified share
+is displayed as founder-review work, but no review queue is fabricated after
+the fact.
 
 For the founding beta, ambiguous findings may be founder-reviewed. Unknown or
 unreviewed findings remain report-only/unknown and never enter production merely
@@ -540,13 +566,101 @@ identifying the stage that actually failed.
 
 Each migration is new and forward-only. Do not edit applied migrations.
 
+### Phase status
+
+**0a completed 2026-08-16.** The buyer-question generator was exercised through
+the real authenticated onboarding flow against FlipAEO at the launch contract
+of 40 questions. The final live gate returned 40/40 exact-unique questions, zero
+near-duplicate pairs under the production selector, zero calendar-year prompts,
+and three named-rival questions (7.5%, below the 15% ceiling). Intent labels were
+reviewed question by question after deterministic classification replaced the
+model's unreliable batch labels.
+
+Implementation: the exact production instruction now lives in a pure
+`prompt-template.ts`; the prompt route no longer manufactures fake mechanics;
+competitor suggestions are reduced to validated hostnames before entering the
+prompt; the shared live date/time context is supplied to Gemini while durable
+questions reject calendar years; per-family regeneration preserves the 40-item
+total and excludes retained questions; and advisory scope-role refinement fails
+open after 45 seconds instead of trapping the founder on Topics. Contract
+coverage was 100/100 at phase close. The live test was stopped on the Questions screen, before
+any paid visibility probe.
+
+**0b completed 2026-08-16.** All 373 stored citations from the completed Drawgle
+run were replayed through the classifier. Structural URL/title evidence reduced
+the unresolved share from 81.0% to 41.8% without growing the curated domain
+lists: 4.3% publish, 42.9% earn, 11.0% report-only and 41.8% founder review.
+Recommendation pages and third-party documentation are now distinct source
+types; unresolved evidence has explicit `review` actionability, is frozen into
+the run summary's review queue, and is prohibited from automatic production.
+The dashboard and methodology panel expose the four-way split and the exact
+review pages. Historical summaries degrade safely without being recomputed.
+Contract coverage is now 101/101.
+
+**Phase 1 implementation completed 2026-08-16; deployed-run smoke test open.** The forward-only
+`20260816_subscription_tracked_prompts.sql` migration creates durable
+`tracked_prompts`, the active-question allowance, coverage/retirement states,
+stable ordering, RLS, atomic confirmation, and
+`ai_probe_prompts.tracked_prompt_id`. The confirmation screen now requires
+exactly 40 questions and commits them only after the brand and confirmed scope
+exist. The server recalculates normalization, intent and article type, and
+rejects duplicate, near-duplicate, dated and self-naming questions before the
+atomic database call.
+
+The probe endpoint no longer accepts `prompts` or `maxPrompts` from the browser.
+It loads the brand's 40 active durable rows, rebinds their brand-scope family to
+the immutable audit-scope snapshot, passes `trackedPromptId` through Trigger,
+and writes it on every new `ai_probe_prompts` observation. Historical prompt
+observations remain nullable and unchanged.
+
+The hosted migration was applied successfully. The authenticated Questions
+screen then committed the FlipAEO set without starting a probe: the database
+contained exactly 40 active rows, 40 unique ids, 40 unique normalized questions
+and the complete position range 0–39. No Cloro tasks were queued and no credits
+were spent.
+
+Saving questions and spending measurement credits are now separate actions.
+The audit screen resumes an existing run automatically but a new run waits for
+an explicit **Start visibility measurement** click. This prevents a Continue or
+page refresh from silently purchasing 80 consumer-app requests.
+
+All 102 pivot contracts pass and the Phase 1/2/3 files introduce no TypeScript
+errors. TypeScript still reports the same seven pre-existing generated-DB-type
+errors in billing and the legacy blog trigger. The remaining release smoke test
+is one deployed run verifying 40 non-null
+`ai_probe_prompts.tracked_prompt_id` links. It is intentionally deferred until
+Trigger.dev and the external-provider keys are deployed; do not fabricate a
+successful local run or spend credits merely to unblock schema work.
+
+**Phase 2 deployed 2026-08-16.** The forward-only
+`20260816_subscription_state_model.sql` migration adds durable opportunities,
+billing-period cycles, selected create/refresh actions and their many-to-one
+opportunity junction. It enforces one opportunity per tracked question, one
+cycle per program period, one action per opportunity per cycle, a frozen maximum
+of eight actions, same-target refresh grouping, cross-table ownership and RLS.
+Generated outputs gain the single authoritative unique `cycle_action_id` link.
+The hosted migration was applied successfully before Phase 3 began.
+
+**Phase 3 code-complete 2026-08-16; migration gate open.** The forward-only
+`20260816_recurring_commercial_state.sql` migration retires the finite
+commercial state without deleting its history. Purchase intents, cluster
+schedules and article-credit consumptions become read-only `legacy_*` tables;
+fixed-audit, tier, velocity and completion fields become explicitly historical.
+One live `founding_beta` program owns a website, a paid period idempotently
+creates one `subscription_cycle`, selected actions are claimed with a
+three-attempt lease, costs and frozen links carry cycle/action ownership, and
+all selected outputs become visible in one atomic batch. The webhook no longer
+provisions from a purchase intent or automatically cancels completed work.
+Checkout returns 503 until the Phase 8 sandbox gate. Apply this migration before
+starting Phase 4 reconciliation.
+
 | # | Step | Why here |
 |---|---|---|
-| 0a | Fix buyer-question generation and verify it by hand on several real businesses | Persisting weak prompts makes weak prompts durable. `ROADMAP.md` §7c shows mechanics are currently manufactured from repeated descriptions |
-| 0b | Inspect the uncategorised citation shapes and define a conservative classifier plus founder-review fallback | Production must not be selected from evidence nobody understands |
-| 1 | Add `tracked_prompts`; make onboarding write them and the probe observe them through `tracked_prompt_id` | Stable identity is required for every recurring comparison |
-| 2 | Add `content_opportunities`, `subscription_cycles`, `cycle_actions` and their junction; link generated outputs to actions | Establish the recurring state model before adapting delivery |
-| 3 | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | The old commercial state machine cannot renew safely, and deleting only its top-level tables would break the writer |
+| 0a ✅ | Verify the actual buyer-question contract in the live funnel; remove fake mechanics input and harden topic/rival prerequisites | Completed 2026-08-16. `ROADMAP.md` §7c records why mechanics were a stale dependency and what the live run found |
+| 0b ✅ | Inspect the uncategorised citation shapes and define a conservative classifier plus founder-review fallback | Completed 2026-08-16 against 373 stored citations; unresolved evidence is visible and production-ineligible |
+| 1 ✅ | Add `tracked_prompts`; make onboarding write them and the probe observe them through `tracked_prompt_id` | Migration applied and authenticated 40-row persistence gate passed 2026-08-16; deployed observation-link smoke test remains a release gate |
+| 2 ✅ | Add `content_opportunities`, `subscription_cycles`, `cycle_actions` and their junction; link generated outputs to actions | Migration applied successfully 2026-08-16 |
+| 3 ◐ | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | Code-complete and 102 contracts green; apply `20260816_recurring_commercial_state.sql` before Phase 4 |
 | 4 | Implement per-cycle reconciliation and contract tests | Prevent duplicate backlog and false “closed” claims |
 | 5 | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Never infer create versus refresh from an incomplete crawl |
 | 6 | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Prevent links to undelivered backlog work |

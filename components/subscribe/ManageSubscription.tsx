@@ -41,16 +41,6 @@ interface ManageSubscriptionProps {
     subscription: SubscriptionSummary
     plans: PlanRow[]
     userEmail?: string | null
-    finiteScopeDelivered?: boolean
-}
-
-function formatCurrency(amount: number, currency: string = 'USD') {
-    try {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
-    } catch {
-        // Fallback
-        return `$${(amount || 0).toFixed(2)}`
-    }
 }
 
 function currencySymbol(code?: string | null): string {
@@ -68,18 +58,9 @@ function currencySymbol(code?: string | null): string {
     }
 }
 
-function daysUntil(dateIso?: string): number {
-    if (!dateIso) return 0
-    const now = new Date()
-    const d = new Date(dateIso)
-    const diff = Math.max(0, d.getTime() - now.getTime())
-    return Math.ceil(diff / (1000 * 60 * 60 * 24))
-}
-
 export default function ManageSubscription({
     subscription,
     plans,
-    finiteScopeDelivered = false,
 }: ManageSubscriptionProps) {
     const [busy, setBusy] = useState(false)
     const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
@@ -96,11 +77,9 @@ export default function ManageSubscription({
         return (
             `This will schedule your subscription to cancel at the end of the current billing period.` +
             (cancelGuardDate ? ` You will retain access until ${new Date(cancelGuardDate).toLocaleString()}.` : '') +
-            (finiteScopeDelivered
-                ? ` This completed finite program cannot be renewed; a future program requires a new checkout.`
-                : ` You can restore anytime before that date.`)
+            ` You can restore anytime before that date.`
         )
-    }, [cancelGuardDate, finiteScopeDelivered])
+    }, [cancelGuardDate])
 
     // Map pricing plans to BillingSDK Plan type
     const billingPlans = useMemo<BSDKPlan[]>(() => {
@@ -113,11 +92,11 @@ export default function ManageSubscription({
             yearlyPrice: String((p.price ?? 0) * 12),
             buttonText: 'Select',
             features: [
-                { name: 'Six qualified priority clusters', icon: 'check' },
-                { name: 'Frozen URLs and internal-link graph', icon: 'check' },
-                { name: 'Complete cluster-batch delivery', icon: 'check' },
-                { name: 'WordPress-ready or manual delivery', icon: 'check' },
-                { name: 'Automatic end-of-scope cancellation', icon: 'check' },
+                { name: '40 tracked buyer questions', icon: 'check' },
+                { name: 'ChatGPT and Google AI Mode measurement', icon: 'check' },
+                { name: 'Up to eight create or refresh actions per cycle', icon: 'check' },
+                { name: 'One complete draft batch', icon: 'check' },
+                { name: 'Visible findings and backlog', icon: 'check' },
             ],
         }))
     }, [plans])
@@ -177,7 +156,7 @@ export default function ManageSubscription({
             paymentMethod: 'Card on file',
             status,
         }
-    }, [currentPlanDisplay, subscription.status, nextBillingDateStr, planEndsDateStr, localCancelAtPeriodEnd, subscription.plan_name])
+    }, [currentPlanDisplay, subscription.status, subscription.price_snapshot, subscription.currency_snapshot, nextBillingDateStr, planEndsDateStr, localCancelAtPeriodEnd, subscription.plan_name])
 
     const onCancel = useCallback(async () => {
         if (!subscription.subscription_id) return
@@ -321,7 +300,7 @@ export default function ManageSubscription({
                                 Cancel at period end
                             </Button>
                         )}
-                        {subscription.status === 'active' && localCancelAtPeriodEnd && !finiteScopeDelivered && (
+                        {subscription.status === 'active' && localCancelAtPeriodEnd && (
                             <Button
                                 variant="default"
                                 onClick={() => setConfirmRestoreOpen(true)}
@@ -357,7 +336,7 @@ export default function ManageSubscription({
             />
 
             <ConfirmationDialog
-                isOpen={confirmRestoreOpen && !finiteScopeDelivered}
+                isOpen={confirmRestoreOpen}
                 onClose={() => setConfirmRestoreOpen(false)}
                 onConfirm={async () => {
                     try {

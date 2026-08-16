@@ -9,6 +9,78 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      tracked_prompts: {
+        Row: {
+          id: string
+          user_id: string
+          brand_id: string
+          scope_family_id: string
+          prompt: string
+          prompt_norm: string
+          intent: "recommendation" | "alternatives" | "comparison" | "problem" | "howto"
+          article_type: "commercial" | "informational" | "howto"
+          source_seed: string
+          position: number
+          tracking_status: "active" | "inactive" | "retired"
+          coverage_state: "unknown" | "no_page" | "has_page"
+          target_url: string | null
+          created_at: string
+          updated_at: string
+          retired_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          brand_id: string
+          scope_family_id: string
+          prompt: string
+          prompt_norm: string
+          intent: "recommendation" | "alternatives" | "comparison" | "problem" | "howto"
+          article_type: "commercial" | "informational" | "howto"
+          source_seed: string
+          position: number
+          tracking_status?: "active" | "inactive" | "retired"
+          coverage_state?: "unknown" | "no_page" | "has_page"
+          target_url?: string | null
+          created_at?: string
+          updated_at?: string
+          retired_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          brand_id?: string
+          scope_family_id?: string
+          prompt?: string
+          prompt_norm?: string
+          intent?: "recommendation" | "alternatives" | "comparison" | "problem" | "howto"
+          article_type?: "commercial" | "informational" | "howto"
+          source_seed?: string
+          position?: number
+          tracking_status?: "active" | "inactive" | "retired"
+          coverage_state?: "unknown" | "no_page" | "has_page"
+          target_url?: string | null
+          created_at?: string
+          updated_at?: string
+          retired_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracked_prompts_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brand_details"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tracked_prompts_scope_family_fkey"
+            columns: ["scope_family_id"]
+            isOneToOne: false
+            referencedRelation: "brand_scope_families"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       brand_details: {
         Row: {
           id: string
@@ -554,6 +626,14 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
+      confirm_tracked_prompts: {
+        Args: { p_brand_id: string; p_prompts: Json }
+        Returns: number
+      }
+      normalize_tracked_prompt: {
+        Args: { p_text: string }
+        Returns: string
+      }
       deduct_credits: {
         Args: { user_id: string; amount: number }
         Returns: void

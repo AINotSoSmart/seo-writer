@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- provider SDK payloads and forward Phase 3 relations are not generated types yet. */
 type CostRate = {
     inputPerMillion?: number
     outputPerMillion?: number
@@ -70,17 +71,21 @@ export class ProgramCostCollector {
 
         const { data: planned } = await supabase
             .from("planned_articles")
-            .select("cluster_id")
+            .select("cycle_action_id")
             .eq("id", plannedArticleId)
             .maybeSingle()
-        if (!planned?.cluster_id) return
+        if (!planned?.cycle_action_id) return
 
-        const { data: programCluster } = await supabase
-            .from("program_clusters")
-            .select("id, program_id")
-            .eq("audit_cluster_id", planned.cluster_id)
+        const { data: action } = await supabase
+            .from("cycle_actions")
+            .select("id, cycle_id, subscription_cycles!inner(program_id)")
+            .eq("id", planned.cycle_action_id)
             .maybeSingle()
-        if (!programCluster) return
+        const cycle = Array.isArray(action?.subscription_cycles)
+            ? action.subscription_cycles[0]
+            : action?.subscription_cycles
+        const programId = cycle?.program_id
+        if (!action?.cycle_id || !programId) return
 
         const rates = configuredRates()
         const rows = this.events.map((event) => {
@@ -97,8 +102,9 @@ export class ProgramCostCollector {
                         Number(rate.outputPerMillion || 0) +
                     event.requestCount * Number(rate.perRequest || 0))
             return {
-                program_id: programCluster.program_id,
-                program_cluster_id: programCluster.id,
+                program_id: programId,
+                cycle_id: action.cycle_id,
+                cycle_action_id: action.id,
                 planned_article_id: plannedArticleId,
                 article_id: articleId,
                 provider: event.provider,

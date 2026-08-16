@@ -219,12 +219,13 @@ export function MethodPanel({
                                     </li>
                                     <li>
                                         <strong className="font-medium text-[var(--viz-ink)]">
-                                            Structure
+                                            Stored page evidence
                                         </strong>{" "}
-                                        — <code>.edu</code>/<code>.gov</code>, and the shape of the
-                                        URL itself (a path containing <code>best-</code>,{" "}
-                                        <code>-vs-</code> or <code>alternatives</code>). These work
-                                        on sites nobody has catalogued.
+                                        — <code>.edu</code>/<code>.gov</code>, plus recommendation
+                                        and documentation shapes in the citation URL or title.
+                                        These work on sites nobody has catalogued: recommendation
+                                        pages are earned placements; third-party docs are report
+                                        only.
                                     </li>
                                     <li>
                                         <strong className="font-medium text-[var(--viz-ink)]">
@@ -234,9 +235,10 @@ export function MethodPanel({
                                     </li>
                                     <li>
                                         <strong className="font-medium text-[var(--viz-ink)]">
-                                            Everything else stays uncategorised.
+                                            Everything else requires founder review.
                                         </strong>{" "}
-                                        We do not guess at the nearest-looking category.
+                                        We do not guess at the nearest-looking category, and an
+                                        unresolved source cannot enter article production.
                                     </li>
                                 </ol>
                                 <p
@@ -251,8 +253,8 @@ export function MethodPanel({
                                         uncategorised.
                                     </strong>{" "}
                                     {unclassifiedShare >= 33
-                                        ? "That is high enough that the category breakdown describes the limits of our lists more than it describes your market. Read the source list directly instead."
-                                        : "The breakdown below covers the rest."}
+                                        ? "That is high enough to require reading the frozen founder-review queue before making a production decision."
+                                        : "The unresolved rows remain visible for founder review."}
                                 </p>
                             </Section>
 

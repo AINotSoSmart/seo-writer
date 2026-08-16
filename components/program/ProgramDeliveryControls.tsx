@@ -6,17 +6,15 @@ import { useRouter } from "next/navigation"
 
 export function ProgramDeliveryControls({
     programId,
-    scopeStatus,
-    publicationUrlPattern,
+    status,
 }: {
     programId: string
-    scopeStatus: string
-    publicationUrlPattern: string | null
+    status: string
 }) {
     const router = useRouter()
     const [pending, setPending] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const paused = scopeStatus === "paused"
+    const paused = status === "paused"
 
     async function change() {
         setPending(true)
@@ -37,20 +35,7 @@ export function ProgramDeliveryControls({
         }
     }
 
-    if (!["active", "paused"].includes(scopeStatus)) return null
-    if (paused && !publicationUrlPattern) {
-        return (
-            <div className="max-w-xs text-right">
-                <p className="text-sm font-medium text-amber-800">
-                    Deliveries remain paused
-                </p>
-                <p className="mt-1 text-xs text-stone-500">
-                    This earlier program needs a confirmed publication URL pattern
-                    and frozen link graph before it can resume.
-                </p>
-            </div>
-        )
-    }
+    if (!["active", "paused"].includes(status)) return null
 
     return (
         <div className="text-right">

@@ -4,6 +4,7 @@ import { tavily } from "@tavily/core"
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { jsonrepair } from "jsonrepair"
 import { buildTavilySearchOptions, TavilySearchPrefs } from "@/lib/tavily-search"
+import { competitorDomain } from "@/lib/visibility/competitor-domain"
 
 export const maxDuration = 300 // 5 minute timeout
 
@@ -347,8 +348,37 @@ Examples:
         let competitorBrands = extracted.competitorBrands || []
 
         // Sanitize LLM output
+        const seenCompetitorDomains = new Set<string>()
         competitorBrands = competitorBrands
-            .filter((c: any) => c && c.name && c.name.length < 30)
+            .map((candidate: unknown) => {
+                const row =
+                    candidate && typeof candidate === "object"
+                        ? (candidate as Record<string, unknown>)
+                        : {}
+                const candidateDomain = competitorDomain(
+                    row.domain || row.url,
+                )
+                if (
+                    !candidateDomain ||
+                    candidateDomain === domain ||
+                    seenCompetitorDomains.has(candidateDomain)
+                ) {
+                    return null
+                }
+                seenCompetitorDomains.add(candidateDomain)
+                const name = String(row.name || candidateDomain)
+                    .replace(/[<>"{}]/g, "")
+                    .trim()
+                    .slice(0, 60)
+                if (!name) return null
+                return {
+                    name,
+                    url: `https://${candidateDomain}`,
+                    domain: candidateDomain,
+                    reason: String(row.reason || "").trim().slice(0, 240),
+                }
+            })
+            .filter(Boolean)
             .slice(0, 10)
 
 

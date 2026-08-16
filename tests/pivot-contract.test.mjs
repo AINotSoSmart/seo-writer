@@ -14,10 +14,7 @@ import {
     auditCheckoutFreshness,
     selectQualifiedProgramScope,
 } from "../lib/harvest/program-contract.ts"
-import {
-    roundRobinCap,
-    selectSerpSeeds,
-} from "../lib/harvest/scope-cap.ts"
+import { roundRobinCap, selectSerpSeeds } from "../lib/harvest/scope-cap.ts"
 import {
     capabilityFactIdsForOperation,
     selectIntentSizedLength,
@@ -34,8 +31,7 @@ import {
 import { isEvidenceQuoteSupported, isKnownCompetitorUrl } from "../lib/writer/research-evidence.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const text = (relativePath) =>
-    readFile(path.join(root, relativePath), "utf8")
+const text = (relativePath) => readFile(path.join(root, relativePath), "utf8")
 
 const ONBOARDING_ROUTE = "app/(onboarding)/onboarding/page.tsx"
 const ONBOARDING_STEPS_DIR = "components/onboarding/steps"
@@ -91,7 +87,10 @@ test("brand analysis selects a bounded, diverse product corpus", () => {
     const ecommerce = selectRepresentativeBrandUrls(
         "https://shop.example",
         [
-            ...Array.from({ length: 100 }, (_, index) => `https://shop.example/products/item-${index}`),
+            ...Array.from(
+                { length: 100 },
+                (_, index) => `https://shop.example/products/item-${index}`,
+            ),
             "https://shop.example/pricing",
             "https://shop.example/solutions/wholesale",
             "https://shop.example/docs/api",
@@ -107,16 +106,28 @@ test("brand analysis selects a bounded, diverse product corpus", () => {
 
 test("section packets own every intent once and bind only matching evidence", () => {
     const intent = (queryId, factId) => ({
-        queryId, query: queryId, sourceUrl: "https://source.example", sourceContext: queryId,
-        operationKey: "op", capabilityFit: "explicit", capabilityFactIds: [factId],
+        queryId,
+        query: queryId,
+        sourceUrl: "https://source.example",
+        sourceContext: queryId,
+        operationKey: "op",
+        capabilityFit: "explicit",
+        capabilityFactIds: [factId],
     })
     const contract = {
         version: "article-contract-v1",
-        entity: { name: "Example", entityType: "software", deliveryMode: "browser software" },
+        entity: {
+            name: "Example",
+            entityType: "software",
+            deliveryMode: "browser software",
+        },
         primaryIntent: intent("intent-a", "fact-a"),
         requiredIntents: [intent("intent-b", "fact-b")],
-        scopeFamilyId: "family", solutionMode: "product_led",
-        capabilityFactIds: ["fact-a", "fact-b"], researchQuery: "example", articleLength: "medium",
+        scopeFamilyId: "family",
+        solutionMode: "product_led",
+        capabilityFactIds: ["fact-a", "fact-b"],
+        researchQuery: "example",
+        articleLength: "medium",
     }
     const outline = {
         intro: { instruction_note: "Direct answer", keywords_to_include: [] },
@@ -134,13 +145,27 @@ test("section packets own every intent once and bind only matching evidence", ()
             { id: "fact-b", url: "https://brand.example/b", quote: "B" },
         ],
         [
-            { id: "research-a", url: "https://research.example/a", supportsIntentIds: ["intent-a"] },
-            { id: "research-b", url: "https://research.example/b", supportsIntentIds: ["intent-b"] },
+            {
+                id: "research-a",
+                url: "https://research.example/a",
+                supportsIntentIds: ["intent-a"],
+            },
+            {
+                id: "research-b",
+                url: "https://research.example/b",
+                supportsIntentIds: ["intent-b"],
+            },
         ],
     )
-    assert.deepEqual(normalized.sections.flatMap((section) => section.intent_ids).sort(), ["intent-a", "intent-b"])
+    assert.deepEqual(normalized.sections.flatMap((section) => section.intent_ids).sort(), [
+        "intent-a",
+        "intent-b",
+    ])
     assert.deepEqual(normalized.sections[0].capability_fact_ids.sort(), ["fact-a", "fact-b"])
-    assert.deepEqual(normalized.sections[0].research_evidence_ids.sort(), ["research-a", "research-b"])
+    assert.deepEqual(normalized.sections[0].research_evidence_ids.sort(), [
+        "research-a",
+        "research-b",
+    ])
     assert.equal(normalized.sections.filter((section) => section.needs_image).length, 1)
     assert.equal(normalized.sections[0].word_budget, Math.floor((1900 - 200) / 3))
 
@@ -178,7 +203,8 @@ test("draft quality tests catch truncation, thin sections and unbacked claims", 
     // Images, comment placeholders and table rules are not prose.
     assert.equal(countProseWords("![alt](https://x.example/a.webp)\n\nTwo real words here."), 4)
 
-    const draft = "BringBack uses latent diffusion. Choose a photo taken in daylight. We match the grain."
+    const draft =
+        "BringBack uses latent diffusion. Choose a photo taken in daylight. We match the grain."
     const candidates = firstPartyClaimCandidates(draft, "BringBack")
     assert.ok(candidates.some((sentence) => sentence.includes("latent diffusion")))
     assert.ok(candidates.some((sentence) => sentence.startsWith("We match")))
@@ -190,11 +216,19 @@ test("draft quality tests catch truncation, thin sections and unbacked claims", 
 
     // A broken response must never be recorded as successful work.
     assert.deepEqual(
-        articleQualityVerdict({ wordCount: 176, articleLength: "medium", defects: [] }).ok,
+        articleQualityVerdict({
+            wordCount: 176,
+            articleLength: "medium",
+            defects: [],
+        }).ok,
         false,
     )
     assert.equal(
-        articleQualityVerdict({ wordCount: 1900, articleLength: "medium", defects: [] }).ok,
+        articleQualityVerdict({
+            wordCount: 1900,
+            articleLength: "medium",
+            defects: [],
+        }).ok,
         true,
     )
     assert.equal(
@@ -234,7 +268,10 @@ test("the writer proves each section finished before completing an article", asy
     assert.doesNotMatch(writer, /maxOutputTokens: 700/)
     assert.doesNotMatch(writer, /word_budget \|\| 300\) \* 1\.8/)
     assert.match(writer, /thinkingConfig: \{ thinkingLevel: "LOW" \}/)
-    assert.match(writer, /Math\.min\(16_000, Math\.ceil\(input\.wordBudget \* 5 \* multiplier\) \+ 3_000\)/)
+    assert.match(
+        writer,
+        /Math\.min\(16_000, Math\.ceil\(input\.wordBudget \* 5 \* multiplier\) \+ 3_000\)/,
+    )
 
     // Every writing call must read the finish reason and act on it.
     assert.match(writer, /candidates\?\.\[0\]\?\.finishReason/)
@@ -258,10 +295,15 @@ test("the writer proves each section finished before completing an article", asy
 
 test("research evidence rejects fabricated quotes and identifies competitor subdomains", () => {
     const source = "The API accepts a trace ID and returns a trace timeline."
-    assert.equal(isEvidenceQuoteSupported(source, "accepts a trace ID and returns a trace timeline"), true)
+    assert.equal(
+        isEvidenceQuoteSupported(source, "accepts a trace ID and returns a trace timeline"),
+        true,
+    )
     assert.equal(isEvidenceQuoteSupported(source, "returns results in under two seconds"), false)
     assert.equal(
-        isKnownCompetitorUrl("https://docs.competitor.example/guide", ["https://competitor.example"]),
+        isKnownCompetitorUrl("https://docs.competitor.example/guide", [
+            "https://competitor.example",
+        ]),
         true,
     )
     assert.equal(
@@ -315,11 +357,7 @@ test("publication URL patterns are absolute, HTTPS, same-host, and single-placeh
         "https://example.com/?article={slug}",
     ]) {
         assert.throws(
-            () =>
-                validatePublicationUrlPattern(
-                    pattern,
-                    "https://example.com",
-                ),
+            () => validatePublicationUrlPattern(pattern, "https://example.com"),
             LinkGraphError,
         )
     }
@@ -353,11 +391,7 @@ test("frozen graph contains the complete deterministic pillar/leaf/sibling contr
         graph.articles.find((item) => item.id === "cluster-1-pillar").slug,
         "complete-guide-cluster-1-2",
     )
-    assert.ok(
-        graph.edges.every(
-            (edge) => new URL(edge.targetUrl).hostname === "example.com",
-        ),
-    )
+    assert.ok(graph.edges.every((edge) => new URL(edge.targetUrl).hostname === "example.com"))
     for (const article of graph.articles) {
         const anchors = graph.edges
             .filter((edge) => edge.sourceArticleId === article.id)
@@ -370,23 +404,19 @@ test("frozen graph contains the complete deterministic pillar/leaf/sibling contr
     const firstLeaf = articles.find((article) => !article.isPillar)
     tampered.edges = tampered.edges.filter(
         (edge) =>
-            !(
-                edge.sourceArticleId === firstLeaf.id &&
-                edge.relationship === "leaf_to_pillar"
-            ),
+            !(edge.sourceArticleId === firstLeaf.id && edge.relationship === "leaf_to_pillar"),
     )
     assert.throws(() => validateFrozenGraph(tampered), LinkGraphError)
 })
 
 test("parent scope family links persist and steer absorption", async () => {
-    const [migration, absorption, brandScope, assembly, runHarvest] =
-        await Promise.all([
-            text("supabase/migrations/20260804_parent_scope_family.sql"),
-            text("lib/harvest/absorption.ts"),
-            text("lib/brand-scope.ts"),
-            text("lib/harvest/assembly.ts"),
-            text("lib/harvest/run-harvest.ts"),
-        ])
+    const [migration, absorption, brandScope, assembly, runHarvest] = await Promise.all([
+        text("supabase/migrations/20260804_parent_scope_family.sql"),
+        text("lib/harvest/absorption.ts"),
+        text("lib/brand-scope.ts"),
+        text("lib/harvest/assembly.ts"),
+        text("lib/harvest/run-harvest.ts"),
+    ])
 
     assert.match(migration, /parent_scope_family_id/)
     assert.match(migration, /confirm_brand_scope/)
@@ -400,11 +430,12 @@ test("parent scope family links persist and steer absorption", async () => {
 })
 
 test("absorbed sub-node intents survive all the way to the writer", async () => {
-    const [runHarvest, migration, shipCluster, writer, dryRun, extraction, review] =
+    const [runHarvest, migration, shipCycle, payloadLoader, writer, dryRun, extraction, review] =
         await Promise.all([
             text("lib/harvest/run-harvest.ts"),
             text("supabase/migrations/20260803_sub_nodes_and_origin_family.sql"),
-            text("trigger/ship-cluster.ts"),
+            text("trigger/ship-cycle.ts"),
+            text("lib/writer/planned-article-payload.ts"),
             text("trigger/generate-blog.ts"),
             text("app/api/writer/dry-run/route.ts"),
             text("lib/scope-extraction.ts"),
@@ -421,19 +452,16 @@ test("absorbed sub-node intents survive all the way to the writer", async () => 
     assert.match(runHarvest, /origin_scope_family_id: article\.originScopeFamilyId/)
 
     // 2. persistence columns + the finalize_audit_run patch
-    for (const column of [
-        "sub_node_intents",
-        "sub_node_query_ids",
-        "origin_scope_family_id",
-    ]) {
+    for (const column of ["sub_node_intents", "sub_node_query_ids", "origin_scope_family_id"]) {
         assert.ok(migration.includes(column), `migration must add ${column}`)
     }
     // The patch must fail loudly rather than leave sub-nodes unpersisted.
     assert.match(migration, /Could not patch finalize_audit_run/)
 
-    // 3. ship-cluster -> writer payload
-    assert.match(shipCluster, /sub_node_intents/)
-    assert.match(shipCluster, /subNodeIntents:/)
+    // 3. selected-cycle output -> shared loader -> writer payload
+    assert.match(payloadLoader, /sub_node_intents/)
+    assert.match(payloadLoader, /subNodeIntents:/)
+    assert.match(shipCycle, /subNodeIntents:\s*inputs\.subNodeIntents/)
 
     // 4. writer accepts and RENDERS them as required sections
     assert.match(writer, /subNodeIntents\?: string\[\]/)
@@ -464,10 +492,7 @@ test("finalize accepts absorbed and parent-rolled query ownership", async () => 
         "supabase/migrations/20260806_fix_finalize_absorbed_query_scope.sql",
     )
     assert.match(migration, /pa\.origin_scope_family_id IS NOT NULL/)
-    assert.match(
-        migration,
-        /child_family\.parent_scope_family_id = pa\.scope_family_id/,
-    )
+    assert.match(migration, /child_family\.parent_scope_family_id = pa\.scope_family_id/)
     assert.match(migration, /AND qp\.scope_family_id = pa\.scope_family_id/)
     assert.match(migration, /already accepts absorbed\/parent-rolled/)
 })
@@ -494,9 +519,8 @@ test("a family with enough collapsed units still qualifies when themes split", a
 test("no measured query can be silently destroyed by clustering", async () => {
     // From absorption.ts, not clusterer.ts: the clusterer imports "@/..."
     // aliases that plain node cannot resolve.
-    const { absorbOrphanedUnits, STANDALONE_MIN_BACKING_QUERIES } = await import(
-        "../lib/harvest/absorption.ts"
-    )
+    const { absorbOrphanedUnits, STANDALONE_MIN_BACKING_QUERIES } =
+        await import("../lib/harvest/absorption.ts")
 
     const unit = (id, familyId, backing, embedding) => ({
         scopeFamilyId: familyId,
@@ -518,9 +542,7 @@ test("no measured query can be silently destroyed by clustering", async () => {
         name: "Host",
         priority: 1,
         competitorUrls: [],
-        articles: Array.from({ length: 8 }, (_, i) =>
-            unit(`host-${i}`, "host", 2, [1, 0.1 * i]),
-        ),
+        articles: Array.from({ length: 8 }, (_, i) => unit(`host-${i}`, "host", 2, [1, 0.1 * i])),
     }
     const orphans = [
         unit("thin-strong-a", "thin", 3, [0.9, 0.2]),
@@ -694,7 +716,11 @@ test("scope is whatever the audit measured — no fixed cluster count", () => {
     assert.equal(narrow.reason, null)
 
     // The only remaining rejections are "unusable" and "nothing left to sell".
-    const nothing = selectQualifiedProgramScope([{ id: "thin", priority: 1, articleCount: 2 }], [], false)
+    const nothing = selectQualifiedProgramScope(
+        [{ id: "thin", priority: 1, articleCount: 2 }],
+        [],
+        false,
+    )
     assert.equal(nothing.eligible, false)
     assert.match(nothing.reason, /no qualified clusters/i)
     assert.doesNotMatch(nothing.reason, /six/i)
@@ -713,15 +739,13 @@ test("selection represents confirmed business families before taking depth", () 
             scopeFamilyId: "restoration",
             scopeFamilyPriority: 0,
         })),
-        ...["animation", "portrait", "add-person", "hug", "memory-book"].map(
-            (family, index) => ({
-                id: `${family}-1`,
-                priority: 20 + index,
-                articleCount: 8,
-                scopeFamilyId: family,
-                scopeFamilyPriority: index + 1,
-            }),
-        ),
+        ...["animation", "portrait", "add-person", "hug", "memory-book"].map((family, index) => ({
+            id: `${family}-1`,
+            priority: 20 + index,
+            articleCount: 8,
+            scopeFamilyId: family,
+            scopeFamilyPriority: index + 1,
+        })),
     ]
     const selection = selectQualifiedProgramScope(clusters, [], false)
     assert.equal(selection.eligible, true)
@@ -730,14 +754,7 @@ test("selection represents confirmed business families before taking depth", () 
     // so the verbose family's remaining 6 clusters follow rather than vanish.
     assert.deepEqual(
         selection.selected.slice(0, 6).map((cluster) => cluster.scopeFamilyId),
-        [
-            "restoration",
-            "animation",
-            "portrait",
-            "add-person",
-            "hug",
-            "memory-book",
-        ],
+        ["restoration", "animation", "portrait", "add-person", "hug", "memory-book"],
     )
     assert.equal(selection.selected.length, 12, "no qualified cluster may be dropped")
     assert.equal(
@@ -757,20 +774,10 @@ test("query and SERP caps preserve smaller confirmed families", () => {
         { id: "memory-0", group: "memory" },
     ]
     assert.deepEqual(
-        roundRobinCap(
-            rows,
-            6,
+        roundRobinCap(rows, 6, (row) => row.group, ["restoration", "animation", "memory"]).map(
             (row) => row.group,
-            ["restoration", "animation", "memory"],
-        ).map((row) => row.group),
-        [
-            "restoration",
-            "animation",
-            "memory",
-            "restoration",
-            "restoration",
-            "restoration",
-        ],
+        ),
+        ["restoration", "animation", "memory", "restoration", "restoration", "restoration"],
     )
 
     assert.deepEqual(
@@ -782,22 +789,13 @@ test("query and SERP caps preserve smaller confirmed families", () => {
             ],
             5,
         ),
-        [
-            "restore photos",
-            "animate photos",
-            "memory book",
-            "repair photos",
-            "photo motion",
-        ],
+        ["restore photos", "animate photos", "memory book", "repair photos", "photo motion"],
     )
 })
 
 test("checkout eligibility expires 30 days after audit completion", () => {
     const now = Date.parse("2026-07-29T00:00:00.000Z")
-    assert.equal(
-        auditCheckoutFreshness("2026-07-01T00:00:00.000Z", now).fresh,
-        true,
-    )
+    assert.equal(auditCheckoutFreshness("2026-07-01T00:00:00.000Z", now).fresh, true)
     const stale = auditCheckoutFreshness("2026-06-01T00:00:00.000Z", now)
     assert.equal(stale.fresh, false)
     assert.match(stale.reason, /30 days/i)
@@ -810,10 +808,7 @@ test("prospect audit retries keep the immutable run open until terminal failure"
     assert.match(source, /generation_phase:\s*"retrying"/)
     assert.match(source, /source_call_ledger:\s*progress\.sourceCallLedger/)
     const runBody = source.slice(source.indexOf("run: async"))
-    assert.doesNotMatch(
-        runBody,
-        /catch \(error\)[\s\S]{0,500}run_status:\s*"failed"/,
-    )
+    assert.doesNotMatch(runBody, /catch \(error\)[\s\S]{0,500}run_status:\s*"failed"/)
 })
 
 test("verify and production use the same authoritative assembly function", async () => {
@@ -846,10 +841,7 @@ test("verify and production use the same authoritative assembly function", async
     // 150 subject + 4x80 competitor coverage + 120 corpus = 590 page fetches.
     assert.match(policy, /maxCoveragePages:\s*150/)
     assert.match(policy, /maxCompetitorCoveragePages:\s*80/)
-    assert.match(
-        await text("lib/harvest/assembly.ts"),
-        /scanCoverage\([\s\S]{0,120}"competitor",/,
-    )
+    assert.match(await text("lib/harvest/assembly.ts"), /scanCoverage\([\s\S]{0,120}"competitor",/)
     assert.match(policy, /maxSitemapFiles:\s*20/)
     assert.match(policy, /maxSitemapUrls:\s*5000/)
     assert.match(policy, /maxClusterArticles:\s*15/)
@@ -904,7 +896,10 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
     // "not_found" and the console auto-started a brand new expensive audit on
     // every single page refresh.
     assert.match(route, /run_status", "failed"/)
-    assert.match(route, /const auditId = running\?\.id \|\| brand\?\.current_audit_id \|\| failed\?\.id/)
+    assert.match(
+        route,
+        /const auditId = running\?\.id \|\| brand\?\.current_audit_id \|\| failed\?\.id/,
+    )
 
     // POST must refuse to re-run inside the cooldown, and stop entirely after
     // repeated failures.
@@ -930,10 +925,7 @@ test("a failed audit cannot be restarted by refreshing the page", async () => {
     // two copies of a cooldown drift, and the one that drifts lets a customer
     // pay twice.
     assert.match(guards, /export async function auditRetryState/)
-    assert.equal(
-        (route.match(/auditRetryState\(db, user\.id, brandId\)/g) || []).length,
-        2,
-    )
+    assert.equal((route.match(/auditRetryState\(db, user\.id, brandId\)/g) || []).length, 2)
 
     // An abandoned `running` row must self-heal into a retryable failure.
     // Without this a stuck row blocked POST ("Audit already running") and made
@@ -1029,7 +1021,10 @@ test("onboarding asks one question, and scope generates itself", async () => {
     // branch — yet both sat on the first screen, in front of any value. The
     // destructure is the contract: if a third field appears here, the first
     // screen has grown a field it does not need.
-    assert.match(analyze, /const \{ url, targetSeeds: rawTargetSeeds = \[\] \} = await req\.json\(\)/)
+    assert.match(
+        analyze,
+        /const \{ url, targetSeeds: rawTargetSeeds = \[\] \} = await req\.json\(\)/,
+    )
     assert.doesNotMatch(analyze, /competitors/)
 
     // Competitors and the research locale live on their own screen, after the
@@ -1067,9 +1062,8 @@ test("onboarding asks one question, and scope generates itself", async () => {
 })
 
 test("the confirm gate is one rule, and the UI can always satisfy it", async () => {
-    const { mechanicsGaps, isPlaceholderAction, MECHANICS_GAP_COPY } = await import(
-        "../lib/scope-mechanics.ts"
-    )
+    const { mechanicsGaps, isPlaceholderAction, MECHANICS_GAP_COPY } =
+        await import("../lib/scope-mechanics.ts")
     const { validateConfirmedScope } = await import("../lib/brand-scope.ts")
 
     // The server must delegate, not keep a second copy. Two implementations of
@@ -1091,11 +1085,24 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
     const contract = (patch) => ({
         version: "capability-v1",
         deliveryMode: "browser software",
-        operations: [{
-            key: "op1", customerJob: "Repair a damaged photo", inputs: [], action: "Restore an old photo",
-            outputs: [], limits: [], evidenceRefs: ["f1"],
-        }],
-        facts: [{ id: "f1", url: "founder-confirmed:onboarding", quote: "Action: Restore an old photo." }],
+        operations: [
+            {
+                key: "op1",
+                customerJob: "Repair a damaged photo",
+                inputs: [],
+                action: "Restore an old photo",
+                outputs: [],
+                limits: [],
+                evidenceRefs: ["f1"],
+            },
+        ],
+        facts: [
+            {
+                id: "f1",
+                url: "founder-confirmed:onboarding",
+                quote: "Action: Restore an old photo.",
+            },
+        ],
         ...patch,
     })
     assert.deepEqual(mechanicsGaps(contract()), [])
@@ -1123,7 +1130,10 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
             seed_keywords: ["restore old photos"],
             evidence: [],
             capability_contract: contract(patch),
-            source: "user", verified: true, priority: 0, enabled: true,
+            source: "user",
+            verified: true,
+            priority: 0,
+            enabled: true,
         }
         // The invariant is directional: anything the client flags, the server
         // must refuse. Not message-equality — an empty deliveryMode fails
@@ -1174,7 +1184,12 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
 test("a founder target search can never be silently dropped from scope", async () => {
     const { validateGroundedScope, verifyQuote } = await import("../lib/brand-scope.ts")
 
-    const pages = [{ url: "https://drawgle.com/", content: "Turn a prompt into a mobile screen." }]
+    const pages = [
+        {
+            url: "https://drawgle.com/",
+            content: "Turn a prompt into a mobile screen.",
+        },
+    ]
 
     // The extractor returns one narrow family that ignores what the founder
     // said they sell. Previously the founder's searches simply came back as an
@@ -1185,7 +1200,12 @@ test("a founder target search can never be silently dropped from scope", async (
                 name: "Design Handoff and Implementation",
                 description: "Converting design concepts into developer-ready assets.",
                 seed_keywords: ["design handoff"],
-                evidence: [{ url: "https://drawgle.com/", quote: "Turn a prompt into a mobile screen." }],
+                evidence: [
+                    {
+                        url: "https://drawgle.com/",
+                        quote: "Turn a prompt into a mobile screen.",
+                    },
+                ],
                 source: "extracted",
             },
         ],
@@ -1240,11 +1260,13 @@ test("a founder target search can never be silently dropped from scope", async (
                 action: "Generate mobile app screens from a text prompt",
                 evidenceRefs: [`${family.id}:founder-${operation.key}`],
             })),
-            facts: [{
-                id: `${family.id}:founder-op1`,
-                url: "founder-confirmed:onboarding",
-                quote: "Action: Generate mobile app screens from a text prompt.",
-            }],
+            facts: [
+                {
+                    id: `${family.id}:founder-op1`,
+                    url: "founder-confirmed:onboarding",
+                    quote: "Action: Generate mobile app screens from a text prompt.",
+                },
+            ],
         },
     }))
     assert.deepEqual(
@@ -1265,7 +1287,12 @@ test("a founder target search can never be silently dropped from scope", async (
                 name: "Invented Area",
                 description: "A capability the site never mentions anywhere.",
                 seed_keywords: ["invented area"],
-                evidence: [{ url: "https://drawgle.com/", quote: "we also sell industrial beehives" }],
+                evidence: [
+                    {
+                        url: "https://drawgle.com/",
+                        quote: "we also sell industrial beehives",
+                    },
+                ],
                 source: "extracted",
             },
         ],
@@ -1312,7 +1339,9 @@ test("a founder target search can never be silently dropped from scope", async (
     const { familyFromConfirmedBrand } = await import("../lib/brand-scope.ts")
     const fromBrand = familyFromConfirmedBrand({
         product_name: "Drawgle",
-        product_identity: { literally: "AI that turns a prompt into a mobile app screen." },
+        product_identity: {
+            literally: "AI that turns a prompt into a mobile app screen.",
+        },
         category: "AI Mobile App UI Design",
     })
     assert.ok(fromBrand)
@@ -1321,34 +1350,45 @@ test("a founder target search can never be silently dropped from scope", async (
 
     // Quote verification must survive paraphrase but still reject invention.
     const page = "turn any text prompt into a production ready mobile ui screen"
-    assert.equal(verifyQuote("turn any text prompt into a production ready mobile ui screen", page), true)
-    assert.equal(verifyQuote("turn any text prompt into a production-ready mobile UI screen today", page), true)
-    assert.equal(verifyQuote("we manufacture industrial beehives for commercial apiaries", page), false)
+    assert.equal(
+        verifyQuote("turn any text prompt into a production ready mobile ui screen", page),
+        true,
+    )
+    assert.equal(
+        verifyQuote("turn any text prompt into a production-ready mobile UI screen today", page),
+        true,
+    )
+    assert.equal(
+        verifyQuote("we manufacture industrial beehives for commercial apiaries", page),
+        false,
+    )
 })
 
 test("scope role refinement folds delivery mechanics out of harvest seeds", async () => {
     const { applyScopeRoleRefinement } = await import("../lib/scope-role-refine.ts")
-    const { CAPABILITY_CONTRACT_VERSION } = await import(
-        "../lib/writer/article-contract.ts"
-    )
+    const { CAPABILITY_CONTRACT_VERSION } = await import("../lib/writer/article-contract.ts")
 
     const contract = (action) => ({
         version: CAPABILITY_CONTRACT_VERSION,
         deliveryMode: "browser software",
-        operations: [{
-            key: "op1",
-            customerJob: action,
-            inputs: ["prompt"],
-            action,
-            outputs: ["screen"],
-            limits: [],
-            evidenceRefs: ["f1"],
-        }],
-        facts: [{
-            id: "f1",
-            url: "https://drawgle.com/",
-            quote: "Generate editable mobile screens from a prompt.",
-        }],
+        operations: [
+            {
+                key: "op1",
+                customerJob: action,
+                inputs: ["prompt"],
+                action,
+                outputs: ["screen"],
+                limits: [],
+                evidenceRefs: ["f1"],
+            },
+        ],
+        facts: [
+            {
+                id: "f1",
+                url: "https://drawgle.com/",
+                quote: "Generate editable mobile screens from a prompt.",
+            },
+        ],
     })
 
     const family = (patch) => ({
@@ -1356,7 +1396,12 @@ test("scope role refinement folds delivery mechanics out of harvest seeds", asyn
         name: patch.name,
         description: patch.description,
         seed_keywords: patch.seed_keywords,
-        evidence: [{ url: "https://drawgle.com/", quote: "Generate editable mobile screens from a prompt." }],
+        evidence: [
+            {
+                url: "https://drawgle.com/",
+                quote: "Generate editable mobile screens from a prompt.",
+            },
+        ],
         capability_contract: contract(patch.description),
         parent_hint: patch.parent_hint ?? null,
         source: "extracted",
@@ -1425,7 +1470,11 @@ test("scope role refinement folds delivery mechanics out of harvest seeds", asyn
     assert.equal(drawgle.families[0].name, "AI Mobile UI Design")
     assert.deepEqual(
         drawgle.families[0].seed_keywords.sort(),
-        ["ai mobile app ui designer", "ai mobile ui generator", "prompt to mobile app design"].sort(),
+        [
+            "ai mobile app ui designer",
+            "ai mobile ui generator",
+            "prompt to mobile app design",
+        ].sort(),
     )
     assert.ok(
         drawgle.issues.some((issue) => /Folded "AI Design to Code Handoff"/i.test(issue.message)),
@@ -1484,15 +1533,17 @@ test("scope role refinement folds delivery mechanics out of harvest seeds", asyn
             }),
         ],
         {
-            families: [{
-                name: "AI Mobile UI Design",
-                role: "acquisition_job",
-                fold_into: null,
-                seeds: [
-                    { seed: "ai mobile ui generator", role: "acquisition_job" },
-                    { seed: "zip handoff pack", role: "delivery_artifact" },
-                ],
-            }],
+            families: [
+                {
+                    name: "AI Mobile UI Design",
+                    role: "acquisition_job",
+                    fold_into: null,
+                    seeds: [
+                        { seed: "ai mobile ui generator", role: "acquisition_job" },
+                        { seed: "zip handoff pack", role: "delivery_artifact" },
+                    ],
+                },
+            ],
         },
         [],
     )
@@ -1510,15 +1561,17 @@ test("scope role refinement folds delivery mechanics out of harvest seeds", asyn
             }),
         ],
         {
-            families: [{
-                name: "AI Mobile UI Design",
-                role: "acquisition_job",
-                fold_into: null,
-                seeds: [
-                    { seed: "ai mobile ui generator", role: "acquisition_job" },
-                    { seed: "text to mobile ui design", role: "delivery_artifact" },
-                ],
-            }],
+            families: [
+                {
+                    name: "AI Mobile UI Design",
+                    role: "acquisition_job",
+                    fold_into: null,
+                    seeds: [
+                        { seed: "ai mobile ui generator", role: "acquisition_job" },
+                        { seed: "text to mobile ui design", role: "delivery_artifact" },
+                    ],
+                },
+            ],
         },
         ["text to mobile ui design"],
     )
@@ -1582,25 +1635,13 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     assert.match(extraction, /fallbackCapabilityContract/)
     assert.match(extraction, /jsonrepair/)
     assert.doesNotMatch(extraction, /thinkingConfig/)
-    assert.doesNotMatch(
-        extraction,
-        /A single-product business returns exactly one family/,
-    )
-    assert.doesNotMatch(
-        extraction,
-        /required:\s*\[[^\]]*capability_contract/,
-    )
+    assert.doesNotMatch(extraction, /A single-product business returns exactly one family/)
+    assert.doesNotMatch(extraction, /required:\s*\[[^\]]*capability_contract/)
     assert.match(extraction, /Discover omitted site capabilities/)
-    assert.match(
-        extraction,
-        /even when\s+the founder did not name it/,
-    )
+    assert.match(extraction, /even when\s+the founder did not name it/)
 
     // Pricing must extract real plan lines, not a vague billing model label.
-    assert.doesNotMatch(
-        route,
-        /High-level model \(Subscription, One-time, Free tier\)/,
-    )
+    assert.doesNotMatch(route, /High-level model \(Subscription, One-time, Free tier\)/)
     assert.match(route, /Do NOT summarize as only "Subscription"/)
     assert.match(route, /Plan name — \$price \/ period/)
 })
@@ -1641,11 +1682,7 @@ test("brand analyze streams real phases and unlocks scope before persona finishe
             /brandProfileReady/,
             `${file}: Continue gated until validated complete payload`,
         )
-        assert.match(
-            source,
-            /Usually 1–3 minutes/,
-            `${file}: honest ETA (not under half a minute)`,
-        )
+        assert.match(source, /Usually 1–3 minutes/, `${file}: honest ETA (not under half a minute)`)
         assert.match(
             source,
             /Last analysis was interrupted/,
@@ -1656,11 +1693,7 @@ test("brand analyze streams real phases and unlocks scope before persona finishe
             /LiveAnalysisConsole/,
             `${file}: must not reuse AI terminal console chrome`,
         )
-        assert.doesNotMatch(
-            source,
-            /under half a minute/,
-            `${file}: retired optimistic ETA`,
-        )
+        assert.doesNotMatch(source, /under half a minute/, `${file}: retired optimistic ETA`)
     }
     // "Brand voice still loading…" used to be pinned here. It was an apology for
     // persona and scope racing into one screen. Onboarding is now sequential —
@@ -1685,10 +1718,7 @@ test("brand analyze streams real phases and unlocks scope before persona finishe
     assert.match(brandOnboarding, /ANALYZING_STARTED_KEY/)
     // Demand check stays out of the analyze critical path.
     assert.match(onboardingRoute, /analyze-brand\/demand-check/)
-    assert.doesNotMatch(
-        await text("app/api/analyze-brand/route.ts"),
-        /findSeedsWithoutDemand/,
-    )
+    assert.doesNotMatch(await text("app/api/analyze-brand/route.ts"), /findSeedsWithoutDemand/)
 })
 
 test("onboarding profile can edit full brand DNA before the audit", async () => {
@@ -1709,16 +1739,20 @@ test("onboarding profile can edit full brand DNA before the audit", async () => 
     assert.doesNotMatch(surface, /you can review it later in Settings/)
 
     // Shared editor owns the writer-facing fields both surfaces must expose.
-    for (const field of ["mission", "style_dna", "core_features", "audience.primary", "how_it_works"]) {
+    for (const field of [
+        "mission",
+        "style_dna",
+        "core_features",
+        "audience.primary",
+        "how_it_works",
+    ]) {
         assert.match(editor, new RegExp(field.replace(".", "\\.")), `editor must expose ${field}`)
     }
     assert.match(brandOnboarding, /BrandDetailsEditor/)
 })
 
 test("user-supplied competitors top up via discovery instead of freezing the list", async () => {
-    const { mergeUserFirstCompetitors } = await import(
-        "../lib/audit/merge-competitors.ts"
-    )
+    const { mergeUserFirstCompetitors } = await import("../lib/audit/merge-competitors.ts")
     const [runAudit, policy, assembly] = await Promise.all([
         text("trigger/run-audit.ts"),
         text("lib/harvest/policy.ts"),
@@ -1843,9 +1877,7 @@ test("every brand field the writer reads exists on BrandDetailsSchema", async ()
 
     // Strip comments first: prose explaining the bug names the very fields it
     // warns about, and a comment is not an access.
-    const writerCode = writer
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "")
+    const writerCode = writer.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
 
     const accessed = new Set(
         [...writerCode.matchAll(/brandDetails\??\.([a-z_]+)/g)].map((match) => match[1]),
@@ -1857,8 +1889,8 @@ test("every brand field the writer reads exists on BrandDetailsSchema", async ()
         unknown,
         [],
         `trigger/generate-blog.ts reads brand fields that BrandDetailsSchema does not declare: ` +
-        `${unknown.join(", ")}. brandDetails is typed \`any\` there, so these return undefined ` +
-        `silently and reach the model as the string "undefined".`,
+            `${unknown.join(", ")}. brandDetails is typed \`any\` there, so these return undefined ` +
+            `silently and reach the model as the string "undefined".`,
     )
 
     // A missing brand fact must read as missing, never as "undefined" or blank.
@@ -1918,8 +1950,14 @@ test("purging a brand cannot silently orphan a live subscription", async () => {
         cursor = at
     }
 
-    assert.match(purge, /GRANT EXECUTE ON FUNCTION public\.purge_brand\(UUID, BOOLEAN\) TO service_role/)
-    assert.match(purge, /REVOKE ALL ON FUNCTION public\.purge_brand\(UUID, BOOLEAN\) FROM PUBLIC, anon, authenticated/)
+    assert.match(
+        purge,
+        /GRANT EXECUTE ON FUNCTION public\.purge_brand\(UUID, BOOLEAN\) TO service_role/,
+    )
+    assert.match(
+        purge,
+        /REVOKE ALL ON FUNCTION public\.purge_brand\(UUID, BOOLEAN\) FROM PUBLIC, anon, authenticated/,
+    )
 })
 
 test("a deleted brand cannot strand onboarding", async () => {
@@ -1985,11 +2023,7 @@ test("founder-only surfaces are gated in two independent layers", async () => {
         ["test-article", testPage],
         ["prospect-audits", prospectPage],
     ]) {
-        assert.match(
-            page,
-            /isFounderUser\(user\.id\)/,
-            `${name} page must check FOUNDER_USER_IDS`,
-        )
+        assert.match(page, /isFounderUser\(user\.id\)/, `${name} page must check FOUNDER_USER_IDS`)
         assert.match(page, /notFound\(\)/, `${name} page must 404 for non-founders`)
     }
 
@@ -2000,9 +2034,7 @@ test("founder-only surfaces are gated in two independent layers", async () => {
 
 test("single-article test generation stays outside the program pipeline", async () => {
     const route = await text("app/api/founder/test-article/route.ts")
-    const routeCode = route
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "")
+    const routeCode = route.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
 
     assert.match(route, /isFounderUser\(user\.id\)/)
     assert.match(route, /status: 404/)
@@ -2031,19 +2063,15 @@ test("single-article test generation stays outside the program pipeline", async 
     assert.match(route, /\.delete\(\)\.eq\("id", article\.id\)/)
 })
 
-test("a purchased audit is never shown as ineligible", async () => {
+test("legacy audits remain evidence and never become recurring order forms", async () => {
     const [scopeAction, scopeResults, publicPage] = await Promise.all([
         text("actions/harvest.ts"),
         text("components/audit/scope-results.tsx"),
         text("app/audit/[token]/page.tsx"),
     ])
 
-    // selectQualifiedProgramScope filters out SOLD clusters — it answers "can
-    // they buy another program", not "is this audit any good". After a purchase
-    // every cluster is sold, so it returns zero. Rendering that raw told a
-    // paying customer "Not eligible for a program yet. 0 unsold qualified
-    // clusters" and "The selected six contain 0 articles" — directly above the
-    // 58 articles they had just paid for.
+    // Historical audits stay inspectable, but Phase 3 cannot sell their cluster
+    // selection or imply it is the recurring subscription scope.
     for (const [file, source] of [
         ["actions/harvest.ts", scopeAction],
         ["app/audit/[token]/page.tsx", publicPage],
@@ -2054,47 +2082,32 @@ test("a purchased audit is never shown as ineligible", async () => {
             /belowViableThreshold: !checkoutEligible && !hasActiveProgram/,
             `${file}: "below viable threshold" must never mean "already sold"`,
         )
-        // The displayed scope must come from the purchased program, not from a
-        // fresh selection that has nothing left to select.
         assert.match(source, /displayClusterIds/, `${file}: must show the purchased clusters`)
-        assert.match(source, /displayArticleCount/, `${file}: must show the purchased article count`)
+        assert.match(
+            source,
+            /displayArticleCount/,
+            `${file}: must show the purchased article count`,
+        )
     }
 
-    // The ineligibility banner must be suppressed on all three signals.
+    // A legacy report is labelled as evidence, not an eligibility failure.
     assert.match(
         scopeResults,
         /!scope\.checkoutEligible && !scope\.hasActiveProgram && !progress &&/,
-        "the not-eligible banner must never render to someone who already bought",
+        "the historical notice must never render over a live recurring program",
     )
-
-    // Ineligible audits must not keep the happy-path program copy.
-    assert.match(
-        scopeResults,
-        /Measured clusters \(not yet a program\)/,
-        "ineligible audits must title measured clusters honestly",
-    )
-    // Counts are always derived from what the audit measured. A hard-coded
-    // "six" told a business with 4 real clusters that its site was ineligible.
-    assert.match(scopeResults, /\$\{recommended\.length\}-cluster program/)
+    assert.match(scopeResults, /Historical audit evidence/)
+    assert.match(scopeResults, /Evidence-bound editorial groups/)
+    assert.match(scopeResults, /not purchased recurring-cycle actions/)
     assert.doesNotMatch(
         scopeResults,
-        /six-cluster program|The selected six|requires six/,
-        "no fixed cluster count may remain in audit copy",
+        /Not eligible for a program|cluster program|choose a delivery speed/,
+        "legacy report copy must not behave like a retired checkout",
     )
-    // The ineligible branch must explain depth, not a magic number.
-    assert.match(scopeResults, /every\s*\n?\s*cluster needs 8–15 articles/)
 })
 
-test("qualified clusters are 8-15 unique articles; thin clusters are never program rows", async () => {
-    const [
-        productTruth,
-        policy,
-        clusterer,
-        assembly,
-        pricing,
-        linkGraph,
-    ] = await Promise.all([
-        text("config/product-truth.ts"),
+test("editorial clusters stay evidence-bound but are no longer the commercial quota", async () => {
+    const [policy, clusterer, assembly, pricing, linkGraph] = await Promise.all([
         text("lib/harvest/policy.ts"),
         text("lib/harvest/clusterer.ts"),
         text("lib/harvest/assembly.ts"),
@@ -2102,21 +2115,18 @@ test("qualified clusters are 8-15 unique articles; thin clusters are never progr
         text("lib/harvest/link-graph.ts"),
     ])
 
-    assert.match(productTruth, /minClusterArticles:\s*8/)
-    assert.match(productTruth, /maxClusterArticles:\s*15/)
     assert.match(policy, /minQualifiedClusterArticles:\s*8/)
     assert.match(policy, /version:\s*"evidence-bound-writer-v5\.0\.0"/)
-    assert.match(pricing, /Between 8 and 15 per cluster/)
+    assert.match(pricing, /Up to 8 actions/)
+    assert.match(pricing, /never filler/)
+    assert.doesNotMatch(pricing, /8.{0,3}15 per cluster|qualified clusters/i)
 
     // The undersized escape that forced one 1–7 article cluster is gone.
     assert.doesNotMatch(
         clusterer,
         /No group reached the minimum size, so everything merges into one/,
     )
-    assert.match(
-        clusterer,
-        /TARGET_CLUSTER_MIN = HARVEST_POLICY\.minQualifiedClusterArticles/,
-    )
+    assert.match(clusterer, /TARGET_CLUSTER_MIN = HARVEST_POLICY\.minQualifiedClusterArticles/)
 
     // A thin domain still never becomes a program row — but its units are now
     // RETURNED for absorption instead of being filtered into a counter and
@@ -2180,7 +2190,10 @@ test("no two articles in a cluster get the same intro shape", async () => {
     // templates and is the most recognisable tell. It must not come back.
     const informational = selectIntroPattern("informational", 0, "c").brief
     assert.match(informational, /Do not write one/)
-    assert.match(informational, /never use the phrase "by the end of this guide"|by the end of this guide/i)
+    assert.match(
+        informational,
+        /never use the phrase "by the end of this guide"|by the end of this guide/i,
+    )
 
     // Rules decomposed out of INTRO_TEMPLATES must still exist somewhere.
     const writer = await text("trigger/generate-blog.ts")
@@ -2201,11 +2214,7 @@ test("the two protocol blocks stay distinct and headings are unique", async () =
     // These govern completely different things and were only ever confusable
     // because they shared the "ANTI-FLUFF" name. Merging them would destroy
     // both. The citation block is renamed; neither block's rules change.
-    for (const citationRule of [
-        "NEVER CITE COMPETITORS",
-        "SUPER-AUTHORITIES",
-        "FIRST-PARTY",
-    ]) {
+    for (const citationRule of ["NEVER CITE COMPETITORS", "SUPER-AUTHORITIES", "FIRST-PARTY"]) {
         assert.ok(writer.includes(citationRule), `citation policy rule lost: ${citationRule}`)
     }
     for (const verbosityRule of ["THE STOP RULE", "DENSITY > LENGTH"]) {
@@ -2232,14 +2241,17 @@ test("required links are retried in place, never appended as a callout", async (
     assert.deepEqual(
         requiredLinksMissingFrom(
             "…as [industry data](https://www.statista.com/photo-restoration) shows, and " +
-            "[scanning flat](https://bringback.pro/blog/scanning) avoids glare.",
+                "[scanning flat](https://bringback.pro/blog/scanning) avoids glare.",
             section,
         ),
         [],
     )
     // Only the destination is checked — the anchor is deliberately the writer's
     // choice so the link reads naturally.
-    assert.deepEqual(requiredLinksMissingFrom("x", { external_link: null, internal_link: null }), [])
+    assert.deepEqual(
+        requiredLinksMissingFrom("x", { external_link: null, internal_link: null }),
+        [],
+    )
 
     const writer = await text("trigger/generate-blog.ts")
     assert.match(writer, /REWRITE — REQUIRED LINK WAS OMITTED/)
@@ -2281,7 +2293,10 @@ test("program sections receive only their referenced evidence packet", async () 
     // Must render through brandList so an empty field cannot print "undefined".
     assert.match(writer, /brandList\(brandDetails\[aspect\]\)/)
     // And must stay silent when the outline did not ask for it.
-    assert.match(writer, /if \(!brandDetails \|\| !currentSection\?\.needs_product_detail\) return ""/)
+    assert.match(
+        writer,
+        /if \(!brandDetails \|\| !currentSection\?\.needs_product_detail\) return ""/,
+    )
     // New program articles receive only explicit fact IDs for the section.
     assert.match(outlineSchema, /capability_fact_ids/)
     assert.match(outlineSchema, /research_evidence_ids/)
@@ -2293,8 +2308,9 @@ test("program sections receive only their referenced evidence packet", async () 
 })
 
 test("audit evidence reaches the writer and degrades safely without it", async () => {
-    const [shipCluster, writer, dryRun] = await Promise.all([
-        text("trigger/ship-cluster.ts"),
+    const [shipCycle, payloadLoader, writer, dryRun] = await Promise.all([
+        text("trigger/ship-cycle.ts"),
+        text("lib/writer/planned-article-payload.ts"),
         text("trigger/generate-blog.ts"),
         text("app/api/writer/dry-run/route.ts"),
     ])
@@ -2303,24 +2319,17 @@ test("audit evidence reaches the writer and degrades safely without it", async (
     // was wired the writer never saw one: it received a title and keyword, then
     // re-researched the topic with a generic Tavily search, so the evidence the
     // customer paid for stopped at the plan.
-    assert.match(shipCluster, /source_query_ids/)
-    assert.match(shipCluster, /async function loadClusterEvidence/)
+    assert.match(payloadLoader, /source_query_ids/)
+    assert.match(payloadLoader, /loadPlannedWriterInputs/)
     for (const field of ["cluster:", "sourceQueries:", "clusterCompetitorUrls:", "isPillar:"]) {
         assert.ok(
-            shipCluster.includes(field),
-            `ship-cluster must forward ${field} in the generate-blog payload`,
+            shipCycle.includes(field),
+            `ship-cycle must forward ${field} in the generate-blog payload`,
         )
     }
 
-    // Batched: two queries per cluster, not per article.
-    assert.match(shipCluster, /\.in\("id", wantedIds\)/)
-
-    // Losing enrichment must never block a paid cluster that is ready to run.
-    assert.match(
-        shipCluster,
-        /catch \(evidenceError\)[\s\S]{0,220}return empty/,
-        "loadClusterEvidence must degrade to empty rather than throw",
-    )
+    assert.match(payloadLoader, /\.in\("id", planned\.source_query_ids\)/)
+    assert.match(payloadLoader, /sourceRows \|\| \[\]/)
 
     // Writer accepts them, and they are optional so a run without them behaves
     // exactly as before.
@@ -2354,9 +2363,7 @@ test("the writer's other input surfaces fail loudly, not silently", async () => 
         text("trigger/generate-blog.ts"),
         text("lib/schemas/outline.ts"),
     ])
-    const writerCode = writer
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "")
+    const writerCode = writer.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
 
     // 1. THE OUTLINE is Zod-validated, so a renamed key throws instead of
     //    quietly producing empty sections. Every field the writer reads off it
@@ -2371,9 +2378,9 @@ test("the writer's other input surfaces fail loudly, not silently", async () => 
     const readOffSection = new Set(
         [...writerCode.matchAll(/\bsection\??\.([a-z_]+)/g)].map((match) => match[1]),
     )
-    const unknownSection = [...readOffSection].filter(
-        (field) => !declared.has(field) && field !== "length",
-    ).sort()
+    const unknownSection = [...readOffSection]
+        .filter((field) => !declared.has(field) && field !== "length")
+        .sort()
     assert.deepEqual(
         unknownSection,
         [],
@@ -2391,10 +2398,10 @@ test("the writer's other input surfaces fail loudly, not silently", async () => 
         /frozenLinks\.length > 0\s*\?\s*ensureFrozenLinksInMarkdown\(currentDraft, frozenLinks\)/,
         "the frozen-link safety net must remain wired into the final markdown path",
     )
-    // ship-cluster sends { title: anchor_text }, and the anchor is derived from
+    // The shared cycle payload sends { title: anchor_text }, and the anchor is derived from
     // `title`. If either side is renamed the contract breaks silently.
     assert.match(writer, /anchor: link\.title\.replace/)
-    const shipCluster = await text("trigger/ship-cluster.ts")
+    const shipCluster = await text("lib/writer/planned-article-payload.ts")
     assert.match(shipCluster, /title: row\.anchor_text/)
 
     // 3. Program articles no longer pay for or depend on a separate angle call.
@@ -2516,7 +2523,10 @@ test("scope classification rejects undeliverable topics, not just irrelevant one
     // to them as a gap. A real BringBack plan contained four of their own
     // product-page FAQs as planned articles. The host must be checked too.
     const { isSameHost } = await import("../lib/harvest/types.ts")
-    assert.equal(isSameHost("https://bringback.pro/ai-family-portrait", "https://bringback.pro"), true)
+    assert.equal(
+        isSameHost("https://bringback.pro/ai-family-portrait", "https://bringback.pro"),
+        true,
+    )
     assert.equal(isSameHost("https://www.bringback.pro/compare", "https://bringback.pro"), true)
     assert.equal(isSameHost("https://blog.bringback.pro/post", "https://bringback.pro"), true)
     assert.equal(isSameHost("https://competitor.example/faq", "https://bringback.pro"), false)
@@ -2542,10 +2552,7 @@ test("scope classification rejects undeliverable topics, not just irrelevant one
         /direct, family_id=f1/,
         "worked examples must show family_id aliases, not bare 'direct'",
     )
-    assert.match(
-        classifier,
-        /Non-direct: an unknown\/mangled family_id must not/,
-    )
+    assert.match(classifier, /Non-direct: an unknown\/mangled family_id must not/)
 
     assert.ok(thirdPartyBranded.length === 4 && publisherSpecific.length === 6)
 })
@@ -2569,7 +2576,7 @@ test("the demand check never blocks the brand-analysis response", async () => {
         analyzeBrandRoute,
         /findSeedsWithoutDemand\(|import\s*\{[^}]*findSeedsWithoutDemand/,
         "app/api/analyze-brand/route.ts must not call the demand check inline — " +
-        "it belongs in the separate, non-blocking /demand-check endpoint",
+            "it belongs in the separate, non-blocking /demand-check endpoint",
     )
 
     // Bounded concurrency and a hard input cap so a burst can never recur,
@@ -2589,7 +2596,10 @@ test("the demand check never blocks the brand-analysis response", async () => {
     assert.match(demandCheckRoute, /seedsWithoutDemand:\s*\[\]/)
 
     for (const [file, client] of [
-        ["app/(onboarding)/onboarding/page.tsx", await text("app/(onboarding)/onboarding/page.tsx")],
+        [
+            "app/(onboarding)/onboarding/page.tsx",
+            await text("app/(onboarding)/onboarding/page.tsx"),
+        ],
         ["components/brand-onboarding.tsx", await text("components/brand-onboarding.tsx")],
     ]) {
         assert.match(
@@ -2643,7 +2653,11 @@ test("guard_audit_snapshot_row's effective search_path resolves pgvector", async
         for (const match of sql.matchAll(
             /CREATE OR REPLACE FUNCTION public\.guard_audit_snapshot_row\(\)[\s\S]*?SET search_path\s*=\s*([^\n]+)\nAS \$\$/g,
         )) {
-            events.push({ index: match.index, kind: "create", searchPath: match[1].trim() })
+            events.push({
+                index: match.index,
+                kind: "create",
+                searchPath: match[1].trim(),
+            })
         }
         for (const match of sql.matchAll(
             /ALTER FUNCTION public\.guard_audit_snapshot_row\(\)\s+SET search_path/g,
@@ -2666,8 +2680,8 @@ test("guard_audit_snapshot_row's effective search_path resolves pgvector", async
             lastEvent.searchPath.replace(/\s+/g, ""),
             "public",
             `${lastEvent.file}: guard_audit_snapshot_row was (re-)declared with a bare "public" ` +
-            `search_path and nothing after it restores the pgvector schema — this exact ` +
-            `regression broke every audit in production`,
+                `search_path and nothing after it restores the pgvector schema — this exact ` +
+                `regression broke every audit in production`,
         )
     }
 })
@@ -2715,94 +2729,21 @@ test("every pivot migration survives being re-run", async () => {
     }
 })
 
-test("any cluster count prices coherently without a new billing product", async () => {
-    const { programPricing, availableTiers, PRODUCT_TRUTH } = await import(
-        "../config/product-truth.ts"
-    )
+test("the launch contract has one recurring plan and a non-filler action ceiling", async () => {
+    const { PRODUCT_TRUTH } = await import("../config/product-truth.ts")
+    assert.equal(PRODUCT_TRUTH.planId, "founding_beta")
+    assert.equal(PRODUCT_TRUTH.sites, 1)
+    assert.equal(PRODUCT_TRUTH.trackedPromptAllowance, 40)
+    assert.equal(PRODUCT_TRUTH.actionAllowance, 8)
+    assert.deepEqual([...PRODUCT_TRUTH.engines], ["ChatGPT", "Google AI Mode"])
+    assert.equal(PRODUCT_TRUTH.introductoryPrice, 99)
+    assert.equal(PRODUCT_TRUTH.introductoryPeriods, 3)
+    assert.equal(PRODUCT_TRUTH.continuingPrice, 189)
 
-    // A fixed six meant a narrower business simply could not buy. Scope is now
-    // whatever the audit measured, and the three existing velocity products
-    // already price per cluster correctly — only the period count varies.
-    // 8 is included deliberately: it is where Dominate ($224.63) crept above
-    // Accelerate ($224.50) under the earlier baseline-only rule.
-    for (const clusters of [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12]) {
-        // Only tiers the scope can actually fill. A 2-cluster scope cannot be
-        // sold at "3 clusters per period" — the customer would pay a full
-        // period for two clusters, making the fastest tier the worst value.
-        const offerable = availableTiers(clusters)
-        assert.ok(offerable.length >= 1, `no tier offerable at ${clusters} clusters`)
-        // Close is always offerable and always the baseline price per cluster.
-        assert.ok(offerable.includes("close"), "Close must always be offerable")
-
-        const quotes = offerable.map((tier) => programPricing(clusters, tier))
-        for (const quote of quotes) {
-            assert.equal(quote.clusters, clusters)
-            assert.ok(
-                Number.isInteger(quote.billingPeriods) && quote.billingPeriods >= 1,
-                "billing periods must be a whole number so cancellation lands on a boundary",
-            )
-            // A period may be partial in clusters, never in price.
-            assert.equal(
-                quote.total,
-                quote.billingPeriods * quote.pricePerPeriod,
-                "total must be whole periods at the tier price",
-            )
-            assert.ok(
-                quote.billingPeriods * quote.clustersPerMonth >= clusters,
-                "the schedule must cover every purchased cluster",
-            )
-        }
-        // Faster delivery stays cheaper per cluster — an ordinary volume
-        // discount, and what makes any count defensible without new products.
-        for (let i = 1; i < quotes.length; i++) {
-            assert.ok(
-                quotes[i].perCluster <= quotes[i - 1].perCluster,
-                `per-cluster price must not rise with velocity at ${clusters} clusters: ` +
-                    quotes.map((q) => q.perCluster.toFixed(2)).join(" / "),
-            )
-        }
-    }
-
-    // Zero clusters must not divide by zero or invent a charge.
-    const none = programPricing(0, "close")
-    assert.equal(none.billingPeriods, 0)
-    assert.equal(none.total, 0)
-    assert.equal(none.perCluster, 0)
-    assert.equal(none.available, false)
-    assert.deepEqual(availableTiers(0), [])
-
-    // The retired invariant must not creep back as a hard gate.
-    const productTruth = await text("config/product-truth.ts")
-    assert.doesNotMatch(productTruth, /MUST DIVIDE .*EXACTLY/)
-    assert.match(productTruth, /SCOPE IS DYNAMIC/)
-    assert.ok(PRODUCT_TRUTH.tiers.close.clustersPerMonth === 1)
-})
-
-test("tier metadata still describes whole periods for the default scope", async () => {
-    // The invariant is documented at the top of config/product-truth.ts but was
-    // never enforced, and it has already been violated once in production copy:
-    // Dominate shipped 4 clusters/month, leaving a half-empty second period that
-    // charged a full month for two clusters and made the fastest tier the most
-    // expensive overall. A comment did not stop that; a test does.
     const source = await text("config/product-truth.ts")
-
-    const total = Number(source.match(/programClusters:\s*(\d+)/)?.[1])
-    assert.ok(total > 0, "programClusters not found")
-
-    const tiers = [
-        ...source.matchAll(
-            /(\w+):\s*\{[^}]*?clustersPerMonth:\s*(\d+)[^}]*?billingPeriods:\s*(\d+)/gs,
-        ),
-    ]
-    assert.equal(tiers.length, 3, "expected three tiers")
-
-    for (const [, name, perMonth, periods] of tiers) {
-        assert.equal(
-            Number(perMonth) * Number(periods),
-            total,
-            `${name}: ${perMonth}/month x ${periods} periods must equal ${total} clusters`,
-        )
-    }
+    assert.doesNotMatch(source, /tiers|clustersPerMonth|billingPeriods|programPricing/)
+    assert.match(source, /Up to eight prioritised create or refresh actions/)
+    assert.match(source, /Cancellation prevents future billing cycles/)
 })
 
 test("every base closed-pool column has a reconciling ALTER", async () => {
@@ -2818,15 +2759,26 @@ test("every base closed-pool column has a reconciling ALTER", async () => {
     assert.match(base, /DO NOT EDIT THIS FILE/)
 
     const structural = new Set([
-        "id", "user_id", "brand_id", "query", "query_norm", "source",
-        "title", "main_keyword", "cluster_id", "name", "status",
-        "created_at", "updated_at", "started_at", "embedding", "article_id",
+        "id",
+        "user_id",
+        "brand_id",
+        "query",
+        "query_norm",
+        "source",
+        "title",
+        "main_keyword",
+        "cluster_id",
+        "name",
+        "status",
+        "created_at",
+        "updated_at",
+        "started_at",
+        "embedding",
+        "article_id",
     ])
 
     const missing = []
-    for (const match of base.matchAll(
-        /CREATE TABLE IF NOT EXISTS (\w+) \(([\s\S]*?)\n\);/g,
-    )) {
+    for (const match of base.matchAll(/CREATE TABLE IF NOT EXISTS (\w+) \(([\s\S]*?)\n\);/g)) {
         const [, table, body] = match
         for (const line of body.split("\n")) {
             const column = line.trim().match(/^([a-z_]+)\s+[A-Z]/)
@@ -2878,9 +2830,7 @@ test("near-duplicate articles are rejected directly, not via the collapse ratio"
         text("lib/harvest/scope-classifier.ts"),
         text("lib/harvest/types.ts"),
     ])
-    await assert.rejects(
-        access(path.join(root, "lib/harvest/language-filter.ts")),
-    )
+    await assert.rejects(access(path.join(root, "lib/harvest/language-filter.ts")))
     assert.doesNotMatch(assemblySource, /filterByLanguage/)
     assert.match(assemblySource, /filterToSearchedQueries\(deduped/)
     assert.match(assemblySource, /classifyQueriesToScope/)
@@ -2903,10 +2853,7 @@ test("near-duplicate articles are rejected directly, not via the collapse ratio"
     assert.doesNotMatch(policy, /collapseMin:|collapseMax:/)
     assert.match(assembly, /collapseRatio > HARVEST_POLICY\.collapseCeiling/)
     // The expected band may only warn.
-    assert.match(
-        assembly,
-        /collapseExpectedMin[\s\S]{0,400}?console\.warn/,
-    )
+    assert.match(assembly, /collapseExpectedMin[\s\S]{0,400}?console\.warn/)
 })
 
 test("confirmed business scope is the only production relevance contract", async () => {
@@ -2963,31 +2910,17 @@ test("confirmed business scope is the only production relevance contract", async
     assert.match(review, /Add a keyword, Enter/)
     assert.doesNotMatch(review, /Google searches|search chips|Customer job/)
     // The cap is applied where scope is now produced — the scope endpoint.
-    assert.match(
-        await text("app/api/analyze-brand/scope/route.ts"),
-        /trimFamiliesToSearchCap/,
-    )
-    assert.match(
-        await text("lib/scope-search-cap.ts"),
-        /export function trimFamiliesToSearchCap/,
-    )
-    assert.match(
-        await text("lib/scope-search-cap.ts"),
-        /MAX_SEARCH_DIRECTIONS = 12/,
-    )
+    assert.match(await text("app/api/analyze-brand/scope/route.ts"), /trimFamiliesToSearchCap/)
+    assert.match(await text("lib/scope-search-cap.ts"), /export function trimFamiliesToSearchCap/)
+    assert.match(await text("lib/scope-search-cap.ts"), /MAX_SEARCH_DIRECTIONS = 12/)
 
-    const snapshotWrite = auditRoute.indexOf(
-        '"create_customer_audit_with_scope"',
-    )
+    const snapshotWrite = auditRoute.indexOf('"create_customer_audit_with_scope"')
     const queue = auditRoute.indexOf("tasks.trigger")
     assert.ok(snapshotWrite >= 0 && snapshotWrite < queue)
     assert.match(assembly, /scopeFamilies:\s*AuditScopeFamily\[\]/)
     assert.match(assembly, /classifyQueriesToScope/)
     assert.doesNotMatch(assembly, /\bbrandContext\b|\bexcludeContext\b/)
-    assert.doesNotMatch(
-        assembly,
-        /input\.competitors[\s\S]{0,80}?\.slice\(/,
-    )
+    assert.doesNotMatch(assembly, /input\.competitors[\s\S]{0,80}?\.slice\(/)
     assert.doesNotMatch(production, /deriveSeeds/)
     assert.doesNotMatch(queryTypes, /NON_QUERY_PATTERNS|CONTENTLESS_WORDS/)
     for (const retiredFilter of [
@@ -3020,21 +2953,13 @@ test("confirmed business scope is the only production relevance contract", async
     assert.match(migration, /save_onboarding_brand_with_scope/)
     assert.match(migration, /ta\.subject_url IS DISTINCT FROM p_website_url/)
     assert.match(migration, /ta\.input_competitors/)
-    assert.match(
-        brandActions,
-        /\.rpc\(\s*"save_onboarding_brand_with_scope"/,
-    )
-    assert.doesNotMatch(
-        prospectRoute,
-        /rawFamilies[\s\S]{0,120}?\.slice\(/,
-    )
+    assert.match(brandActions, /\.rpc\(\s*"save_onboarding_brand_with_scope"/)
+    assert.doesNotMatch(prospectRoute, /rawFamilies[\s\S]{0,120}?\.slice\(/)
     assert.match(demandFilter, /\\p\{L\}\\p\{N\}/)
 })
 
 test("database migration encodes immutable audit, graph, billing, claim, and delivery invariants", async () => {
-    const migration = await text(
-        "supabase/migrations/20260730_closed_pool_v2.sql",
-    )
+    const migration = await text("supabase/migrations/20260730_closed_pool_v2.sql")
     const required = [
         "query_pool_audit_query_norm_key",
         "guard_completed_audit_run",
@@ -3063,44 +2988,48 @@ test("database migration encodes immutable audit, graph, billing, claim, and del
         'DROP POLICY IF EXISTS "Users can update own articles"',
     ]
     for (const invariant of required) {
-        assert.ok(
-            migration.includes(invariant),
-            `migration is missing ${invariant}`,
-        )
+        assert.ok(migration.includes(invariant), `migration is missing ${invariant}`)
     }
 })
 
-test("webhook and scheduler preserve finite lifecycle semantics", async () => {
-    const [webhook, scheduler, billing, restore] = await Promise.all([
+test("webhook and scheduler preserve recurring cycle lifecycle semantics", async () => {
+    const [webhook, scheduler, billing, migration] = await Promise.all([
         text("app/api/dodopayments/webhook/route.ts"),
-        text("trigger/ship-cluster.ts"),
+        text("trigger/ship-cycle.ts"),
         text("lib/harvest/billing-lifecycle.ts"),
-        text("app/api/dodopayments/subscription/restore/route.ts"),
+        text("supabase/migrations/20260816_recurring_commercial_state.sql"),
     ])
     const updatedBlock = webhook.slice(webhook.indexOf("subscription.updated"))
-    assert.doesNotMatch(updatedBlock, /grantBillingPeriodOnce/)
+    assert.doesNotMatch(updatedBlock, /ensureBillingCycle/)
     assert.doesNotMatch(updatedBlock, /scheduled_for/)
-    assert.match(webhook, /program\?\.scope_status !== 'scope_delivered'/)
-    assert.match(webhook, /Payment may arrive before subscription\.activated/)
-    assert.match(webhook, /\.in\('status', \['checkout_created', 'provisioned'\]\)/)
+    assert.match(webhook, /ensureProgramForSubscription/)
+    assert.match(webhook, /ensureBillingCycle/)
+    assert.doesNotMatch(webhook, /purchase_intent|scope_status|pending_tier/)
     assert.match(scheduler, /cron:\s*"0 \* \* \* \*"/)
     assert.match(scheduler, /queue:\s*\{\s*concurrencyLimit:\s*1\s*\}/)
-    assert.match(scheduler, /idempotencyKey:\s*`\$\{planned\.id\}:\$\{nextRetryCount\}`/)
-    assert.match(scheduler, /scope_status === "paused"/)
-    assert.match(scheduler, /\["active", "error", "request_pending"\]/)
-    assert.match(scheduler, /consume_program_credit/)
-    assert.match(scheduler, /deliver_program_cluster/)
-    assert.match(billing, /cancel_at_next_billing_date:\s*true/)
-    assert.match(billing, /Remain request_pending until a Dodo webhook confirms/)
-    assert.match(
-        await text("supabase/migrations/20260730_closed_pool_v2.sql"),
-        /v_clusters_remaining = 0[\s\S]*scope_status = 'scope_delivered'/,
-    )
-    assert.match(
-        await text("supabase/migrations/20260730_closed_pool_v2.sql"),
-        /Confirm the publication URL pattern and frozen link graph before resuming/,
-    )
-    assert.match(restore, /scope_status', 'scope_delivered'/)
+    assert.match(scheduler, /claim_cycle_action/)
+    assert.match(scheduler, /deliver_subscription_cycle/)
+    assert.match(scheduler, /idempotencyKey:\s*`\$\{cycleId\}:\$\{actionId\}:\$\{retryCount\}`/)
+    assert.match(scheduler, /generation_lease_expired/)
+    assert.doesNotMatch(scheduler, /consume_program_credit|program_clusters|deliver_program_cluster/)
+    assert.match(billing, /grant_subscription_period/)
+    assert.doesNotMatch(billing, /cancel_at_next_billing_date|autoCancel|DodoPayments/)
+
+    for (const invariant of [
+        "legacy_program_purchase_intents",
+        "legacy_program_clusters",
+        "legacy_subscription_credit_consumptions",
+        "ensure_recurring_program",
+        "subscription_cycles",
+        "claim_cycle_action",
+        "deliver_subscription_cycle",
+        "programs_one_live_recurring_brand_key",
+    ]) {
+        assert.ok(migration.includes(invariant), `recurring migration is missing ${invariant}`)
+    }
+    assert.match(migration, /action_allowance INTEGER NOT NULL DEFAULT 8/)
+    assert.match(migration, /Every selected action must be ready before batch delivery/)
+    assert.doesNotMatch(migration, /cancel_at_next_billing_date:\s*true/)
 })
 
 test("retired jobs and unsupported public surfaces cannot remain active", async () => {
@@ -3126,12 +3055,9 @@ test("retired jobs and unsupported public surfaces cannot remain active", async 
     ]) {
         await assert.rejects(access(path.join(root, removedFile)))
     }
-    const lifecycle = await text("trigger/ship-cluster.ts")
+    const lifecycle = await text("trigger/ship-cycle.ts")
     assert.equal((lifecycle.match(/schedules\.task/g) || []).length, 1)
-    assert.match(
-        await text("app/sitemap.ts"),
-        /boost-ecommerce-ai-search-visibility/,
-    )
+    assert.match(await text("app/sitemap.ts"), /boost-ecommerce-ai-search-visibility/)
 
     for (const retiredApi of [
         "app/api/content-plan/sync-links/route.ts",
@@ -3152,6 +3078,9 @@ test("active product copy has no retired contract claims", async () => {
         "app/page.tsx",
         "app/about/page.tsx",
         "app/pricing/page.tsx",
+        "app/terms/page.tsx",
+        "app/refund-policy/page.tsx",
+        "app/privacy-policy/page.tsx",
         "app/features/page.tsx",
         "app/features/data.ts",
         "app/llms.txt/route.ts",
@@ -3163,6 +3092,7 @@ test("active product copy has no retired contract claims", async () => {
         "components/landing/AICitations.tsx",
         "components/landing/CTASection.tsx",
         "components/landing/FeaturesSection.tsx",
+        "components/landing/FAQSection.tsx",
         "components/landing/FounderNote.tsx",
         "components/landing/Hero.tsx",
         "components/landing/HowItWorksSection.tsx",
@@ -3170,7 +3100,6 @@ test("active product copy has no retired contract claims", async () => {
         "components/landing/PricingSection.tsx",
         "components/landing/Footer.tsx",
         "components/audit/scope-results.tsx",
-        "components/subscribe/ProgramCheckout.tsx",
     ]
     const forbidden = [
         /\$79\b/i,
@@ -3189,6 +3118,11 @@ test("active product copy has no retired contract claims", async () => {
         /\btopic is genuinely yours\b/i,
         /\bShopify\b/i,
         /\bWebflow\b/i,
+        /cancels itself/i,
+        /billing stops (?:with|when)/i,
+        /clusters? per (?:month|billing period)/i,
+        /delivery speed/i,
+        /from \$249/i,
     ]
     for (const file of activeFiles) {
         const source = await text(file)
@@ -3209,14 +3143,18 @@ test("the public buyer is founder-led B2B SaaS and signup credits are retired", 
     ])
 
     assert.match(hero, /FOR FOUNDER-LED B2B SAAS/)
-    assert.match(founderNote, /full evidence audit is on me/i)
+    assert.match(founderNote, /track 40 questions/i)
+    assert.match(founderNote, /Filler is not/i)
 
     // The case study may report what happened on our own property; it may never
     // convert that record into a promise to a customer. Three passes over this
     // page drifted, so the disclaimer is pinned rather than trusted.
     const citations = await text("components/landing/AICitations.tsx")
     assert.match(citations, /not because we can promise you the same/i)
-    assert.match(citations, /cannot honestly guarantee rankings|Nobody can honestly guarantee rankings/i)
+    assert.match(
+        citations,
+        /cannot honestly guarantee rankings|Nobody can honestly guarantee rankings/i,
+    )
     assert.doesNotMatch(citations, /\byou will (?:rank|get cited|be cited)\b/i)
     // Only AFFIRMATIVE guarantees are forbidden. The disclaimer itself has to be
     // able to say nobody can guarantee rankings, so a blanket ban on the word
@@ -3250,10 +3188,7 @@ test("audit schema drift fails before an expensive task is queued", async () => 
     assert.match(migration, /ALTER FUNCTION public\.finalize_audit_run/)
     assert.match(migration, /SET search_path = public, %I/)
     assert.match(migration, /query_pool\.embedding is not pgvector/)
-    assert.match(
-        migration,
-        /GRANT EXECUTE ON FUNCTION public\.assert_harvest_schema_ready\(\)/,
-    )
+    assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.assert_harvest_schema_ready\(\)/)
 })
 
 test("brandless authenticated users cannot open the dashboard shell", async () => {
@@ -3274,10 +3209,7 @@ test("brandless authenticated users cannot open the dashboard shell", async () =
         "/account",
         "/subscribe",
     ]) {
-        assert.ok(
-            gate.includes(`"${prefix}"`),
-            `brand gate must include ${prefix}`,
-        )
+        assert.ok(gate.includes(`"${prefix}"`), `brand gate must include ${prefix}`)
     }
 
     assert.match(proxy, /pathRequiresBrand\(pathname\)/)
@@ -3289,9 +3221,7 @@ test("brandless authenticated users cannot open the dashboard shell", async () =
 })
 
 test("onboarding uses a focused authenticated shell outside the dashboard sidebar", async () => {
-    await assert.rejects(
-        access(path.join(root, "app/(protected)/onboarding/page.tsx")),
-    )
+    await assert.rejects(access(path.join(root, "app/(protected)/onboarding/page.tsx")))
     const [layout, page, consent] = await Promise.all([
         text("app/(onboarding)/layout.tsx"),
         text("app/(onboarding)/onboarding/page.tsx"),
@@ -3312,23 +3242,16 @@ test("onboarding uses a focused authenticated shell outside the dashboard sideba
 })
 
 test("the completed audit remains inspectable before purchase", async () => {
-    const [
-        accessAction,
-        auditPage,
-        contentPlan,
-        scopeResults,
-        publicAudit,
-        sidebar,
-        subscribe,
-    ] = await Promise.all([
-        text("actions/onboarding.ts"),
-        text("app/(protected)/audit/page.tsx"),
-        text("app/(protected)/content-plan/page.tsx"),
-        text("components/audit/scope-results.tsx"),
-        text("app/audit/[token]/page.tsx"),
-        text("components/dashboard/app-sidebar.tsx"),
-        text("app/(protected)/subscribe/page.tsx"),
-    ])
+    const [accessAction, auditPage, contentPlan, scopeResults, publicAudit, sidebar, subscribe] =
+        await Promise.all([
+            text("actions/onboarding.ts"),
+            text("app/(protected)/audit/page.tsx"),
+            text("app/(protected)/content-plan/page.tsx"),
+            text("components/audit/scope-results.tsx"),
+            text("app/audit/[token]/page.tsx"),
+            text("components/dashboard/app-sidebar.tsx"),
+            text("app/(protected)/subscribe/page.tsx"),
+        ])
 
     assert.match(accessAction, /currentStep === "audit"/)
     assert.match(accessAction, /currentStep === "audit-results"/)
@@ -3342,8 +3265,8 @@ test("the completed audit remains inspectable before purchase", async () => {
         assert.match(source, /articles=\{articles\}/)
     }
 
-    // Title reflects the measured count, not a fixed six.
-    assert.match(scopeResults, /Your \$\{recommended\.length\}-cluster program/)
+    assert.match(scopeResults, /Evidence-bound editorial groups/)
+    assert.match(scopeResults, /not purchased recurring-cycle actions/)
     assert.match(scopeResults, /Expand all articles/)
     assert.match(scopeResults, /sourceQueryIds/)
     assert.match(scopeResults, /source-linked/)
@@ -3352,7 +3275,8 @@ test("the completed audit remains inspectable before purchase", async () => {
     assert.match(publicAudit, /articles=\{data\.articles\}/)
     assert.match(sidebar, /title: "Evidence Audit"/)
     assert.match(sidebar, /url: "\/audit"/)
-    assert.match(subscribe, /href="\/audit"/)
+    assert.match(subscribe, /Founding beta/)
+    assert.match(subscribe, /40 tracked buyer questions/)
 })
 
 test("checkout remains disabled by default and consent gates optional analytics", async () => {
@@ -3361,19 +3285,15 @@ test("checkout remains disabled by default and consent gates optional analytics"
         text("components/CookieConsent.tsx"),
         text("app/layout.tsx"),
     ])
-    assert.match(
-        checkout,
-        /process\.env\.CLOSED_POOL_CHECKOUT_ENABLED !== "true"/,
-    )
+    assert.match(checkout, /recurring_checkout_not_ready/)
+    assert.match(checkout, /status:\s*503/)
+    assert.doesNotMatch(checkout, /purchase_intent|program_cluster|DodoPayments/)
     assert.match(consent, /analytics/)
     assert.match(consent, /support/)
     assert.match(consent, /localStorage/)
     assert.doesNotMatch(layout, /GoogleAnalytics/)
     assert.doesNotMatch(layout, /clarity\.start/)
-    assert.match(
-        await text("lib/harvest/purchase-intent.ts"),
-        /plan price does not match the product contract/,
-    )
+    await assert.rejects(access(path.join(root, "lib/harvest/purchase-intent.ts")))
 })
 
 test("WordPress publication fails closed on a missing or changed frozen permalink", async () => {
@@ -3394,10 +3314,7 @@ test("program generation records provider usage for the manual margin gate", asy
     assert.match(writer, /costCollector\.persist/)
     assert.match(writer, /onFailure:/)
     assert.match(writer, /generation_task_failed/)
-    assert.match(
-        writer,
-        /markdown\.includes\(`\[\$\{link\.anchor\}\]\(<\$\{link\.url\}>\)`\)/,
-    )
+    assert.match(writer, /markdown\.includes\(`\[\$\{link\.anchor\}\]\(<\$\{link\.url\}>\)`\)/)
     assert.match(accounting, /PROGRAM_COST_RATES_JSON/)
     assert.match(accounting, /input_units/)
     assert.match(accounting, /output_units/)
@@ -3449,7 +3366,11 @@ test("intent-sized program lengths use the frozen short, medium and long ranges"
     )
 
     const lengths = await text("lib/prompts/article-length.ts")
-    for (const [minimum, maximum] of [["1,200", "1,800"], ["1,600", "2,200"], ["2,400", "3,200"]]) {
+    for (const [minimum, maximum] of [
+        ["1,200", "1,800"],
+        ["1,600", "2,200"],
+        ["2,400", "3,200"],
+    ]) {
         assert.match(lengths, new RegExp(`${minimum}[^0-9]+${maximum}`))
     }
 })
@@ -3467,32 +3388,35 @@ test("capability facts stay operation-bound across unrelated industries", () => 
         const contract = {
             version: "capability-v1",
             deliveryMode: industry,
-            operations: [{
-                key: operationKey,
-                customerJob: action,
-                inputs: [input],
-                action,
-                outputs: [action],
-                limits: [],
-                evidenceRefs: [`${industry}-fact`],
-            }],
-            facts: [{
-                id: `${industry}-fact`,
-                url: `https://example.com/${industry}`,
-                quote: `${input}. ${action}.`,
-            }],
+            operations: [
+                {
+                    key: operationKey,
+                    customerJob: action,
+                    inputs: [input],
+                    action,
+                    outputs: [action],
+                    limits: [],
+                    evidenceRefs: [`${industry}-fact`],
+                },
+            ],
+            facts: [
+                {
+                    id: `${industry}-fact`,
+                    url: `https://example.com/${industry}`,
+                    quote: `${input}. ${action}.`,
+                },
+            ],
         }
-        assert.deepEqual(
-            capabilityFactIdsForOperation(contract, operationKey),
-            [`${industry}-fact`],
-        )
+        assert.deepEqual(capabilityFactIdsForOperation(contract, operationKey), [
+            `${industry}-fact`,
+        ])
         assert.deepEqual(capabilityFactIdsForOperation(contract, "other"), [])
     }
 })
 
 test("the writer contract blocks the BringBack semantic-drift failure upstream", async () => {
-    const [classifier, clusterer, assembly, writer, schema, migration, payload] =
-        await Promise.all([
+    const [classifier, clusterer, assembly, writer, schema, migration, payload] = await Promise.all(
+        [
             text("lib/harvest/scope-classifier.ts"),
             text("lib/harvest/clusterer.ts"),
             text("lib/harvest/assembly.ts"),
@@ -3500,13 +3424,20 @@ test("the writer contract blocks the BringBack semantic-drift failure upstream",
             text("lib/schemas/outline.ts"),
             text("supabase/migrations/20260807_writer_intent_contracts.sql"),
             text("lib/writer/planned-article-payload.ts"),
-        ])
+        ],
+    )
 
     assert.match(classifier, /mechanically_entailed/)
     assert.match(classifier, /delivery=/)
     assert.match(classifier, /source_context=/)
-    assert.match(clusterer, /candidate\.intentBinding\.operationKey !== gap\.intentBinding\.operationKey/)
-    assert.match(clusterer, /candidate\.intentBinding\.solutionMode !== gap\.intentBinding\.solutionMode/)
+    assert.match(
+        clusterer,
+        /candidate\.intentBinding\.operationKey !== gap\.intentBinding\.operationKey/,
+    )
+    assert.match(
+        clusterer,
+        /candidate\.intentBinding\.solutionMode !== gap\.intentBinding\.solutionMode/,
+    )
     assert.match(assembly, /capabilityFactIdsForOperation/)
     assert.match(assembly, /sourceContext: query\.source_context/)
     assert.match(assembly, /articleContract/)
@@ -3561,9 +3492,9 @@ test("contract research is bounded by frozen intents and exact source quotes", a
 })
 
 test("program writing uses bounded packets and skips legacy enrichment", async () => {
-    const [writer, purchaseIntent, founderTest] = await Promise.all([
+    const [writer, payloadLoader, founderTest] = await Promise.all([
         text("trigger/generate-blog.ts"),
-        text("lib/harvest/purchase-intent.ts"),
+        text("lib/writer/planned-article-payload.ts"),
         text("app/api/founder/test-article/route.ts"),
     ])
     assert.match(writer, /const effectiveArticleLength = articleContract/)
@@ -3578,9 +3509,12 @@ test("program writing uses bounded packets and skips legacy enrichment", async (
     assert.doesNotMatch(writer, /Continue naturally from this final prose context only/)
     assert.match(writer, /do NOT continue or complete its sentence/)
     // instruction_note is the only per-section brief the contract writer gets.
-    assert.match(writer, /brief: isIntro \? outline\.intro\?\.instruction_note : currentSection\.instruction_note/)
-    assert.match(purchaseIntent, /harvest_policy_version/)
-    assert.match(purchaseIntent, /audit_policy_stale/)
+    assert.match(
+        writer,
+        /brief: isIntro \? outline\.intro\?\.instruction_note : currentSection\.instruction_note/,
+    )
+    assert.match(payloadLoader, /harvest_policy_version/)
+    assert.match(payloadLoader, /auditPolicyVersion/)
     assert.doesNotMatch(founderTest, /plannedArticleId:\s*hydrated/)
     assert.match(founderTest, /founderLengthOverride/)
     assert.match(founderTest, /articleLength:\s*founderLengthOverride/)
@@ -3591,21 +3525,16 @@ test("program writing uses bounded packets and skips legacy enrichment", async (
 })
 
 test("brand crawl is checkpointed so refresh does not re-extract", async () => {
-    const [
-        analyze,
-        scope,
-        corpus,
-        migration,
-        onboardingRoute,
-        brandOnboarding,
-    ] = await Promise.all([
-        text("app/api/analyze-brand/route.ts"),
-        text("app/api/analyze-brand/scope/route.ts"),
-        text("lib/brand-analyze-corpus.ts"),
-        text("supabase/migrations/20260813_brand_analyze_corpus.sql"),
-        text(ONBOARDING_ROUTE),
-        text("components/brand-onboarding.tsx"),
-    ])
+    const [analyze, scope, corpus, migration, onboardingRoute, brandOnboarding] = await Promise.all(
+        [
+            text("app/api/analyze-brand/route.ts"),
+            text("app/api/analyze-brand/scope/route.ts"),
+            text("lib/brand-analyze-corpus.ts"),
+            text("supabase/migrations/20260813_brand_analyze_corpus.sql"),
+            text(ONBOARDING_ROUTE),
+            text("components/brand-onboarding.tsx"),
+        ],
+    )
 
     assert.match(analyze, /maxDuration = 300/)
     assert.match(scope, /maxDuration = 300/)
@@ -3618,10 +3547,7 @@ test("brand crawl is checkpointed so refresh does not re-extract", async () => {
 
     assert.match(analyze, /emitCrawlDone/)
     assert.match(analyze, /trimCorpusPages/)
-    assert.doesNotMatch(
-        analyze,
-        /\.map\(\(page\) => \(\{\s*url: page\.url\s*\}\)\)/,
-    )
+    assert.doesNotMatch(analyze, /\.map\(\(page\) => \(\{\s*url: page\.url\s*\}\)\)/)
     assert.match(analyze, /beginCorpusRun/)
     assert.match(analyze, /kind === "blocked"/)
     assert.match(analyze, /saveCorpusPages/)
@@ -3648,14 +3574,8 @@ test("brand crawl is checkpointed so refresh does not re-extract", async () => {
     assert.match(onboardingRoute, /restoreCrawlPages/)
     assert.match(onboardingRoute, /SCOPE_STARTED_AT/)
     assert.match(onboardingRoute, /Look again/)
-    assert.doesNotMatch(
-        onboardingRoute,
-        /if \(analyzingStartedAt[\s\S]{0,400}handleAnalyzeBrand\(/,
-    )
-    assert.doesNotMatch(
-        onboardingRoute,
-        /if \(scopeStartedAt[\s\S]{0,400}handleFindScope\(/,
-    )
+    assert.doesNotMatch(onboardingRoute, /if \(analyzingStartedAt[\s\S]{0,400}handleAnalyzeBrand\(/)
+    assert.doesNotMatch(onboardingRoute, /if \(scopeStartedAt[\s\S]{0,400}handleFindScope\(/)
 
     assert.match(brandOnboarding, /CRAWL_PAGES_KEY/)
     assert.match(brandOnboarding, /persistCrawlPages/)
@@ -3836,9 +3756,16 @@ test("the citation classifier ages by structure, not by a growing domain list", 
     // So the ordering is load-bearing: facts, then structure, then a short list,
     // then an honest "unclassified".
     const classifier = await text("lib/visibility/citation-classifier.ts")
+    const { classifyCitation, summariseCitations } = await import(
+        "../lib/visibility/citation-classifier.ts"
+    )
+    const emptyContext = { subjectDomains: [], competitorDomains: [] }
 
     // Facts from the audit come first and are not list-driven.
-    assert.match(classifier, /if \(isSameOrSubdomain\(host, context\.subjectDomains\)\) return "owned"/)
+    assert.match(
+        classifier,
+        /if \(isSameOrSubdomain\(host, context\.subjectDomains\)\) return "owned"/,
+    )
     assert.match(
         classifier,
         /if \(isSameOrSubdomain\(host, context\.competitorDomains\)\) return "competitor"/,
@@ -3852,6 +3779,64 @@ test("the citation classifier ages by structure, not by a growing domain list", 
     // The honest default is a real category, and its share is reported.
     assert.match(classifier, /return "unclassified"/)
     assert.match(classifier, /unclassifiedShare/)
+
+    // The real Drawgle run exposed why URL shape cannot be calculated and then
+    // ignored: niche recommendation pages made up a large part of its 81%
+    // unclassified bucket. URL and stored title evidence can resolve those
+    // without teaching the classifier a list of design-tool hosts.
+    const listicle = classifyCitation(
+        "https://tapui.app/blog/best-ai-design-tool-ios",
+        emptyContext,
+        "The Best AI Design Tools for iOS App UI",
+    )
+    assert.equal(listicle.sourceType, "recommendation_page")
+    assert.equal(listicle.actionability, "earn")
+
+    const titleOnlyList = classifyCitation(
+        "https://aidesigner.ai/blog/mobile-app-design-tools",
+        emptyContext,
+        "12 Best AI Mobile App Design Tools",
+    )
+    assert.equal(titleOnlyList.sourceType, "recommendation_page")
+
+    const documentation = classifyCitation(
+        "https://help.figma.com/hc/en-us/articles/360041003114",
+        emptyContext,
+        "Import files — Figma Help Center",
+    )
+    assert.equal(documentation.sourceType, "documentation")
+    assert.equal(documentation.actionability, "none")
+
+    // A vendor/product page with no supported structural signal stays in the
+    // founder queue. It must never become a publish action by analogy.
+    const unresolved = classifyCitation(
+        "https://figma.com/solutions/ai-app-builder",
+        emptyContext,
+        "Free AI App Builder",
+    )
+    assert.equal(unresolved.sourceType, "unclassified")
+    assert.equal(unresolved.actionability, "review")
+
+    // Audit facts still outrank shape. A tracked rival's best-of page is an
+    // owned-content publishing signal, not an earned third-party placement.
+    const knownRival = classifyCitation(
+        "https://figma.com/blog/best-ai-design-tools",
+        { subjectDomains: [], competitorDomains: ["figma.com"] },
+        "12 Best AI Design Tools",
+    )
+    assert.equal(knownRival.sourceType, "competitor")
+    assert.equal(knownRival.actionability, "publish")
+
+    const breakdown = summariseCitations([
+        listicle,
+        documentation,
+        unresolved,
+        knownRival,
+    ])
+    assert.equal(breakdown.publishShare, 25)
+    assert.equal(breakdown.earnShare, 25)
+    assert.equal(breakdown.reportOnlyShare, 25)
+    assert.equal(breakdown.reviewShare, 25)
 
     // Curated lists stay small. A list that grows past this is the signal that
     // the rule is wrong, not that the list is short.
@@ -3873,6 +3858,21 @@ test("the citation classifier ages by structure, not by a growing domain list", 
     // Every category carries an action. A count with no next step is trivia.
     assert.match(classifier, /SOURCE_TYPE_ACTIONS/)
     assert.match(classifier, /export function actionabilityOf/)
+})
+
+test("unresolved citations are frozen into a founder-review queue", async () => {
+    const [mapper, dashboard, panel] = await Promise.all([
+        text("lib/visibility/gap-mapper.ts"),
+        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/method-panel.tsx"),
+    ])
+
+    assert.match(mapper, /citationReviewQueue/)
+    assert.match(mapper, /citation\.actionability === "review"/)
+    assert.match(mapper, /\.slice\(0, 25\)/)
+    assert.match(dashboard, /Sources awaiting founder review/)
+    assert.match(dashboard, /excluded from production until a\s+person reviews them/)
+    assert.match(panel, /unresolved source cannot enter article production/)
 })
 
 test("cited sources report co-occurrence, never a claim about the page", async () => {
@@ -3962,7 +3962,11 @@ test("query fan-out counts what the engines did, and never implies volume", asyn
         {
             promptId: "p3",
             answers: [
-                { engine: "google-aimode", namedBrand: false, searchQueries: ["sketch to ui"] },
+                {
+                    engine: "google-aimode",
+                    namedBrand: false,
+                    searchQueries: ["sketch to ui"],
+                },
             ],
         },
     ])
@@ -4027,29 +4031,34 @@ test("fan-out is never presented as search volume", async () => {
     }
 })
 
-test("run size defaults small and the ceiling is a separate rail", async () => {
-    // Every prompt costs real Cloro credits on every engine. An omitted
-    // `maxPrompts` must never spend a full-size run's worth by accident — but
-    // the cheap default and the safety ceiling are different decisions and must
-    // not be the same constant, or raising one silently raises the other.
-    const { DEFAULT_PROMPTS_PER_RUN, MAX_PROMPTS_PER_RUN } = await import(
-        "../lib/visibility/prompt-config.ts"
-    )
+test("the subscription defaults to forty durable questions below its safety rail", async () => {
+    // Forty is the product contract, not a cheap temporary sample. The ceiling
+    // remains separate so an explicit diagnostic run cannot grow without a
+    // deliberate safety change.
+    const { DEFAULT_PROMPTS_PER_RUN, MAX_PROMPTS_PER_RUN, PROMPTS_PER_FAMILY } =
+        await import("../lib/visibility/prompt-config.ts")
 
     assert.ok(
         DEFAULT_PROMPTS_PER_RUN < MAX_PROMPTS_PER_RUN,
         "the default must be cheaper than the ceiling, not equal to it",
     )
+    assert.equal(
+        DEFAULT_PROMPTS_PER_RUN,
+        40,
+        "the subscription measures one durable forty-question set",
+    )
     assert.ok(
-        DEFAULT_PROMPTS_PER_RUN <= 20,
-        "the default is a spend decision — keep it small until runs are calibrated",
+        PROMPTS_PER_FAMILY >= DEFAULT_PROMPTS_PER_RUN,
+        "one confirmed area must still be able to produce all forty questions",
     )
 
     const route = await text("app/api/visibility/probe/route.ts")
-    // An omitted field falls back to the default; an explicit one is clamped to
-    // the ceiling rather than to the default.
-    assert.match(route, /body\.maxPrompts \?\? DEFAULT_PROMPTS_PER_RUN/)
-    assert.match(route, /MAX_PROMPTS_PER_RUN,\s*\)/)
+    // A production probe reads the complete durable set. A browser cannot
+    // lower, raise or replace it per run.
+    assert.match(route, /from\("tracked_prompts"\)/)
+    assert.match(route, /trackedRows\?\.length !== DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(route, /client_prompts_forbidden/)
+    assert.doesNotMatch(route, /body\.maxPrompts \?\? DEFAULT_PROMPTS_PER_RUN/)
 
     // And the panel reports what the run actually asked, not the per-area
     // candidate count — those are different numbers now that a cap applies.
@@ -4063,17 +4072,19 @@ test("run size defaults small and the ceiling is a separate rail", async () => {
 })
 
 test("onboarding lets the user confirm, edit, and prune buyer prompts before probing", async () => {
-    const [page, promptsStep, generateRoute, probeRoute, probeRunner] = await Promise.all([
+    const [page, promptsStep, generateRoute, confirmRoute, probeRoute, probeRunner] =
+        await Promise.all([
         onboardingSurface(),
         text("components/onboarding/steps/prompts-step.tsx"),
         text("app/api/visibility/prompts/generate/route.ts"),
+        text("app/api/visibility/prompts/confirm/route.ts"),
         text("app/api/visibility/probe/route.ts"),
         text("lib/visibility/run-probe.ts"),
-    ])
+        ])
 
     // 1. Prompts step is a distinct screen rendered in the onboarding surface.
     assert.match(page, /Confirm the questions buyers ask AI/)
-    assert.match(page, /Why are brands not named in these questions\?/)
+    assert.match(promptsStep, /Why is your brand not named in these questions\?/)
     assert.match(promptsStep, /onRegenerateFamily/)
     assert.match(promptsStep, /checkBrandMention/)
 
@@ -4081,20 +4092,26 @@ test("onboarding lets the user confirm, edit, and prune buyer prompts before pro
     assert.match(generateRoute, /buildBuyerPrompts/)
     assert.match(generateRoute, /normalizeScopeFamilies/)
     assert.match(generateRoute, /POST/)
+    assert.match(generateRoute, /questionsToAvoid:/)
+    assert.match(page, /maxPrompts: DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(page, /excludeQuestions: remaining\.map/)
+    assert.match(page, /items\.length !== DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(page, /newItems\.length < targetPromptCount/)
 
-    // 3. The probe route and worker accept user-confirmed prompts. The route
-    //    forwards the REBOUND set (see the scope-binding test below), never the
-    //    raw body — the ids the onboarding screen had are not the ids the audit
-    //    uses.
-    assert.match(probeRoute, /prompts\?: import\("@\/lib\/visibility\/prompt-builder"\)\.BuyerPrompt\[\]/)
+    // 3. Confirmation commits exactly forty durable questions. The probe then
+    //    loads and rebinds that stored set; it never accepts a browser-owned
+    //    substitute for one run.
+    assert.match(page, /fetch\("\/api\/visibility\/prompts\/confirm"/)
+    assert.match(confirmRoute, /body\.prompts\.length !== DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(confirmRoute, /confirm_tracked_prompts/)
+    assert.match(promptsStep, /totalPrompts !== DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(probeRoute, /from\("tracked_prompts"\)/)
     assert.match(probeRoute, /prompts:\s*confirmedPrompts/)
     assert.match(probeRunner, /options\.prompts && options\.prompts\.length > 0/)
 
-    // 4. An empty confirmation is refused rather than quietly replaced with
-    //    generated questions nobody reviewed — the exact substitution this
-    //    screen exists to prevent.
-    assert.match(probeRoute, /Array\.isArray\(body\.prompts\) && body\.prompts\.length === 0/)
-    assert.match(probeRoute, /reason: "no_prompts"/)
+    // 4. Incomplete durable state and client prompt payloads both fail closed.
+    assert.match(probeRoute, /reason: "tracked_prompts_incomplete"/)
+    assert.match(probeRoute, /reason: "client_prompts_forbidden"/)
 })
 
 test("onboarding probes the confirmed prompts instead of running the Google harvest", async () => {
@@ -4113,30 +4130,95 @@ test("onboarding probes the confirmed prompts instead of running the Google harv
         "onboarding must not start the Google harvest",
     )
     assert.match(route, /<ProbeConsole\b/)
-    assert.match(route, /prompts=\{prompts\}/)
+    assert.doesNotMatch(route, /<ProbeConsole[\s\S]{0,300}prompts=/)
 
-    // The confirmed prompts reach the probe, and the run id is persisted before
-    // anything else so a refresh adopts the run rather than buying a second one.
+    // The run carries only brand identity. The server reads the confirmed set,
+    // and the run id is persisted before anything else so a refresh adopts the
+    // run rather than buying a second one.
     assert.match(console_, /fetch\("\/api\/visibility\/probe"/)
     assert.match(console_, /brandId,/)
-    assert.match(console_, /prompts: prompts\.map/)
+    assert.doesNotMatch(console_, /prompts: prompts\.map/)
+    assert.match(probeRoute, /trackedPromptId: row\.id/)
     assert.match(route, /PROBE_RUN_ID/)
     assert.match(console_, /if \(runIdRef\.current\) \{/)
 
-    // Exactly one auto-start, and only when no run exists — every probe spends
-    // real answer-engine credits.
-    const recover = console_.slice(console_.indexOf("const recoverOrStart"))
-    assert.equal(
-        (recover.match(/await startProbe\(\)/g) || []).length,
-        1,
-        "recoverOrStart must start a probe once, and only when none is in flight",
-    )
+    // Persisting the questions is not permission to spend answer-engine
+    // credits. Existing runs resume automatically; a new run requires the
+    // customer's explicit button click.
+    const recovery = console_.slice(console_.indexOf("useEffect(() => {"))
+    assert.match(recovery, /if \(runIdRef\.current\) \{/)
+    assert.doesNotMatch(recovery, /await startProbe\(\)/)
+    assert.match(console_, /Start visibility measurement/)
+    assert.match(console_, /onClick=\{\(\) => void startProbe\(\)\}/)
 
     // Onboarding no longer needs the harvest to produce an audit record: the
     // probe route opens one from the confirmed brand scope and the probe
     // finalizes it.
     assert.match(probeRoute, /create_customer_audit_with_scope/)
     assert.match(probeRoute, /brandId\?: string/)
+})
+
+test("tracked questions have stable identity and every new observation links back", async () => {
+    const [migration, confirmRoute, probeRoute, runner] = await Promise.all([
+        text("supabase/migrations/20260816_subscription_tracked_prompts.sql"),
+        text("app/api/visibility/prompts/confirm/route.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("lib/visibility/run-probe.ts"),
+    ])
+
+    assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.tracked_prompts/)
+    assert.match(migration, /tracking_status IN \('active', 'inactive', 'retired'\)/)
+    assert.match(migration, /coverage_state IN \('unknown', 'no_page', 'has_page'\)/)
+    assert.match(migration, /UNIQUE \(brand_id, prompt_norm\)/)
+    assert.match(migration, /A brand may track at most 40 active buyer questions/)
+    assert.match(migration, /ADD COLUMN IF NOT EXISTS tracked_prompt_id UUID/)
+    assert.match(migration, /ai_probe_prompts\(run_id, tracked_prompt_id\)/)
+    assert.match(migration, /ON CONFLICT \(brand_id, prompt_norm\) DO UPDATE/)
+
+    assert.match(confirmRoute, /containsCalendarYear/)
+    assert.match(confirmRoute, /promptsAreNearDuplicates/)
+    assert.match(probeRoute, /tracking_status", "active"/)
+    assert.match(probeRoute, /trackedPromptId: row\.id/)
+    assert.match(runner, /tracked_prompt_id: prompt\.trackedPromptId \?\? null/)
+})
+
+test("recurring findings, cycles and selected actions have separate durable identities", async () => {
+    const migration = await text(
+        "supabase/migrations/20260816_subscription_state_model.sql",
+    )
+
+    for (const table of [
+        "content_opportunities",
+        "subscription_cycles",
+        "cycle_actions",
+        "cycle_action_opportunities",
+    ]) {
+        assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table}`))
+        assert.match(migration, new RegExp(`ALTER TABLE public\\.${table} ENABLE ROW LEVEL SECURITY`))
+    }
+
+    // One question reopens one opportunity; one billing period opens one cycle.
+    assert.match(migration, /UNIQUE \(brand_id, tracked_prompt_id\)/)
+    assert.match(migration, /UNIQUE \(program_id, period_start\)/)
+    assert.match(migration, /action_allowance BETWEEN 0 AND 8/)
+
+    // A finding cannot consume two production slots in one cycle, and the
+    // serialized guard enforces the frozen allowance under concurrent writes.
+    assert.match(migration, /UNIQUE \(cycle_id, opportunity_id\)/)
+    assert.match(migration, /FOR UPDATE;/)
+    assert.match(migration, /Cycle action allowance is already full/)
+    assert.match(migration, /same resolution type/)
+    assert.match(migration, /same target URL/)
+
+    // Output ownership is represented once, from the generated output to the
+    // selected action. A reverse FK would be a second source of truth.
+    assert.match(migration, /planned_articles[\s\S]*ADD COLUMN IF NOT EXISTS cycle_action_id UUID/)
+    assert.match(migration, /planned_articles_cycle_action_key/)
+    const actionTable = migration.slice(
+        migration.indexOf("CREATE TABLE IF NOT EXISTS public.cycle_actions"),
+        migration.indexOf("CREATE INDEX IF NOT EXISTS cycle_actions_cycle_state_idx"),
+    )
+    assert.doesNotMatch(actionTable, /planned_article_id/)
 })
 
 test("confirmed prompts are rebound to the audit's own scope family ids", async () => {
@@ -4225,20 +4307,20 @@ test("a rival named as a word is still a rival", async () => {
     // "Outranked" requires having been named at all, so it is zero by
     // arithmetic when the brand is absent everywhere. Rendering that as
     // "0 questions where a rival is named ahead of you" inverts the finding.
-    assert.match(
-        dashboard,
-        /summary\.presentPromptCount \+ summary\.outrankedPromptCount === 0/,
-    )
+    assert.match(dashboard, /summary\.presentPromptCount \+ summary\.outrankedPromptCount === 0/)
     assert.match(dashboard, /rivals named in answers you never appear in/)
 })
 
 test("prompt generation is given context and a goal, never a form", async () => {
-    const [config, builder, runner, mapper] = await Promise.all([
+    const [config, builder, template, route, runner, mapper] = await Promise.all([
         text("lib/visibility/prompt-config.ts"),
         text("lib/visibility/prompt-builder.ts"),
+        text("lib/visibility/prompt-template.ts"),
+        text("app/api/visibility/prompts/generate/route.ts"),
         text("lib/visibility/run-probe.ts"),
         text("lib/visibility/gap-mapper.ts"),
     ])
+    const promptSurface = `${builder}\n${template}`
 
     // TWO LIVE RUNS FAILED HERE, IN OPPOSITE DIRECTIONS, FOR THE SAME REASON.
     //
@@ -4266,18 +4348,21 @@ test("prompt generation is given context and a goal, never a form", async () => 
     // cannot write from a real situation, and without tools they already use the
     // alternatives-seeking buyer is never measured at all. The defect was the
     // template slot they were plugged into, not the facts.
-    assert.match(builder, /audience\?: string/)
-    assert.match(builder, /incumbents\?: string\[\]/)
-    assert.match(builder, /category\?: string/)
-    assert.match(builder, /coreFeatures\?: string\[\]/)
+    assert.match(promptSurface, /audience\?: string/)
+    assert.match(promptSurface, /incumbents\?: string\[\]/)
+    assert.match(promptSurface, /category\?: string/)
+    assert.match(promptSurface, /coreFeatures\?: string\[\]/)
     assert.match(runner, /audience: persona\.audience\?\.primary/)
     assert.match(runner, /incumbents: competitors\.map/)
 
     // But labelled as background, with the two failure modes named: nobody
     // announces their job title, and naming a tool is the exception.
-    assert.match(builder, /Background, not instructions/)
-    assert.match(builder, /do not have anyone announce themselves/)
-    assert.match(builder, /most of these questions should name no product at all/)
+    assert.match(template, /Background, not instructions/)
+    assert.match(template, /do not have anyone announce themselves/)
+    assert.match(
+        template,
+        /At least \$\{minUnnamed\} of the \$\{PROMPTS_PER_FAMILY\} questions must name no product at all/,
+    )
 
     // And the circularity is closed downstream: asking "alternatives to X"
     // cannot inflate X on the rival leaderboard.
@@ -4288,7 +4373,7 @@ test("prompt generation is given context and a goal, never a form", async () => 
     // frozen contract.
     assert.match(config, /articleType: "commercial" as const/)
     assert.match(builder, /articleType: intent\.articleType/)
-    assert.match(builder, /Label each question with the situation it comes from/)
+    assert.match(template, /Label each question with the situation it comes from/)
 
     // Three checks survive, and none of them judges style. A style filter can
     // only delete: the last one shrank a set of ten to six and skewed what
@@ -4300,7 +4385,7 @@ test("prompt generation is given context and a goal, never a form", async () => 
     // Naming the customer's own brand stays banned — measurement validity, not
     // taste. Naming them hands the engine the answer it is being tested on.
     assert.match(builder, /function namesSubject/)
-    assert.match(builder, /Never name this product or its website/)
+    assert.match(template, /Never name this product or its website/)
 
     // Ownership stays structural: one call per family, id attached by code.
     assert.match(builder, /scopeFamilyId: family\.id/)
@@ -4308,6 +4393,233 @@ test("prompt generation is given context and a goal, never a form", async () => 
     // A competitor the prompt itself named still cannot count as a rival for
     // that prompt. Prompts may mention one when the model judges it natural.
     assert.match(mapper, /namedInPrompt\(competitor\.name\)/)
+
+    // The route used to manufacture a fake capability contract from the family
+    // description and then pass that object to a generator which no longer read
+    // it. Keep the input contract honest: writer mechanics are neither required
+    // nor silently fabricated for buyer questions.
+    assert.doesNotMatch(route, /fallbackContract/)
+    assert.doesNotMatch(route, /fallbackCapabilityContract/)
+    assert.doesNotMatch(template, /capabilityContract|customerJob|operation\.action/)
+
+    // The pure template is the exact production instruction, so tests and live
+    // verification cannot drift onto a hand-copied approximation.
+    const { buildFamilyPrompt } = await import("../lib/visibility/prompt-template.ts")
+    const rendered = buildFamilyPrompt(
+        {
+            id: "restoration",
+            name: "Old photo restoration",
+            description: "repair damaged family photographs",
+            seedKeywords: ["restore old photos"],
+        },
+        {
+            subjectType: "browser-based photo restoration software",
+            category: "AI photo tools",
+            audience: "people preserving damaged family photographs",
+            incumbents: ["MyHeritage"],
+        },
+        "en",
+    )
+    assert.match(rendered, /repair damaged family photographs/)
+    assert.match(rendered, /MyHeritage/)
+    assert.doesNotMatch(rendered, /restoration.*customerJob/)
+})
+
+test("buyer-question selection fixes the three failures observed in the live FlipAEO run", async () => {
+    const [builder, template, selection, review] = await Promise.all([
+        text("lib/visibility/prompt-builder.ts"),
+        text("lib/visibility/prompt-template.ts"),
+        text("lib/visibility/prompt-selection.ts"),
+        text("components/onboarding/steps/prompts-step.tsx"),
+    ])
+    const {
+        MAX_INCUMBENT_PROMPT_SHARE,
+        containsCalendarYear,
+        incumbentNeedles,
+        inferPromptIntent,
+        mentionsIncumbent,
+        promptsAreNearDuplicates,
+    } = await import("../lib/visibility/prompt-selection.ts")
+
+    // The two actual cross-topic paraphrases are rejected, while two questions
+    // sharing a generic opener but asking different jobs remain distinct.
+    assert.equal(
+        promptsAreNearDuplicates(
+            "How do I build topical authority for a new B2B SaaS blog without just guessing what keywords to target?",
+            "How do I build topical authority for my SaaS blog without spending weeks manually researching and linking articles?",
+        ),
+        true,
+    )
+    assert.equal(
+        promptsAreNearDuplicates(
+            "What is the best way to map out a content cluster strategy to rank for competitive industry terms?",
+            "What is the best way to structure a topic cluster strategy so Google sees my site as an expert in my niche?",
+        ),
+        true,
+    )
+    assert.equal(
+        promptsAreNearDuplicates(
+            "What is the best tool for checking AI citations?",
+            "What is the best way to build internal links across a SaaS blog?",
+        ),
+        false,
+    )
+    assert.match(template, /Questions already kept for other parts of this product/)
+    assert.match(builder, /priorQuestions/)
+
+    // The model receives the actual runtime date, but durable prompts carry no
+    // year at all: even a correct current year would become stale next cycle.
+    const { getCurrentDateContext } = await import("../lib/utils/date-context.ts")
+    assert.equal(
+        getCurrentDateContext(new Date("2026-08-16T10:20:30.000Z")),
+        "[Current date and time: 2026-08-16T10:20:30.000Z; current calendar year: 2026]",
+    )
+    assert.match(template, /getCurrentDateContext\(\)/)
+    assert.match(template, /Do not put a calendar year in a question/)
+    assert.equal(containsCalendarYear("What are the best practices for AEO in 2024?"), true)
+    assert.equal(containsCalendarYear("What are current AEO best practices?"), false)
+    assert.match(builder, /!containsCalendarYear\(row\.text\)/)
+
+    // A URL-shaped rival suggestion still detects the brand name buyers type,
+    // and selection enforces two named rivals in a ten-question batch at most.
+    const needles = incumbentNeedles(["https://www.jasper.ai/"])
+    assert.equal(mentionsIncumbent("My Jasper posts are not ranking", needles), true)
+    assert.equal(mentionsIncumbent("How do I improve my blog?", needles), false)
+    assert.equal(MAX_INCUMBENT_PROMPT_SHARE, 0.15)
+    assert.match(builder, /incumbentPromptCount >= incumbentCap/)
+
+    // The labels from the same live run must follow the finished question, not
+    // the model's repeated `alternatives` fallback.
+    assert.equal(
+        inferPromptIntent(
+            "How do I get my website content to show up as a source in Perplexity answers?",
+            "alternatives",
+        ),
+        "howto",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "What are the best tools to optimize my blog posts for AI search engines instead of just Google?",
+            "alternatives",
+        ),
+        "recommendation",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "Which software is best for tracking citations in ChatGPT?",
+            "alternatives",
+        ),
+        "recommendation",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "My Jasper content isn't ranking in AI overviews, what am I doing wrong?",
+            "alternatives",
+        ),
+        "problem",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "Jasper is great for one-off posts, but how do I build a cohesive topical authority map with it?",
+            "comparison",
+        ),
+        "howto",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "What is the best way to identify missing content clusters compared to my competitors?",
+            "problem",
+        ),
+        "comparison",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "Is there a way to make my B2B SaaS content more visible in AI search summaries?",
+            "problem",
+        ),
+        "howto",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "Why is ChatGPT citing my competitors instead of my own blog posts?",
+            "alternatives",
+        ),
+        "problem",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "Are there tools that provide a dashboard to track completed versus pending topics?",
+            "comparison",
+        ),
+        "recommendation",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "How do I perform a competitor gap analysis that generates the content I am missing?",
+            "problem",
+        ),
+        "howto",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "Are there platforms that specialize in optimizing content for generative AI search?",
+            "alternatives",
+        ),
+        "recommendation",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "How does optimizing for AI search differ from traditional keyword optimization?",
+            "problem",
+        ),
+        "comparison",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "Jasper is okay for social media, but what should I use to build actual domain authority?",
+            "comparison",
+        ),
+        "alternatives",
+    )
+    assert.equal(
+        inferPromptIntent(
+            "How can I audit my site to see which niche topics I am failing to cover?",
+            "problem",
+        ),
+        "howto",
+    )
+    assert.match(selection, /return "comparison"/)
+
+    // The review UI must render the current PromptIntentKey vocabulary. It
+    // previously carried retired keys and displayed every unknown current key
+    // through the `alternatives` fallback even when storage was correct.
+    for (const key of ["recommendation", "alternatives", "comparison", "problem", "howto"]) {
+        assert.match(review, new RegExp(`${key}: \\{`))
+    }
+    assert.doesNotMatch(review, /best_of:|workflow:|definition:/)
+    assert.doesNotMatch(review, /INTENT_BADGES\.alternatives/)
+    assert.match(review, /label: "Informational"/)
+})
+
+test("onboarding sanitises rival suggestions and cannot hang on role refinement", async () => {
+    const [competitors, roles] = await Promise.all([
+        text("app/api/analyze-competitors/route.ts"),
+        text("lib/scope-role-refine.ts"),
+    ])
+    const { competitorDomain } = await import("../lib/visibility/competitor-domain.ts")
+
+    assert.equal(
+        competitorDomain('https://www.jasper.ai/" target="_blank", "reason": "writer"'),
+        "jasper.ai",
+    )
+    assert.equal(competitorDomain("writesonic.com"), "writesonic.com")
+    assert.equal(competitorDomain("not a domain"), null)
+    assert.match(competitors, /domain: candidateDomain/)
+
+    assert.match(roles, /SCOPE_ROLE_TIMEOUT_MS = 45_000/)
+    assert.match(roles, /Promise\.race/)
+    assert.match(roles, /Scope role refinement timed out/)
+    assert.match(roles, /refinement failed open/)
 })
 
 test("a delivery artifact can never become a search market", async () => {
@@ -4361,12 +4673,13 @@ test("a delivery artifact can never become a search market", async () => {
 })
 
 test("a probe measures the customer's market, not a default one", async () => {
-    const [engines, probeRoute, market, profile, builder, extras] = await Promise.all([
+    const [engines, probeRoute, market, profile, builder, template, extras] = await Promise.all([
         text("lib/visibility/engines.ts"),
         text("app/api/visibility/probe/route.ts"),
         text("lib/target-market.ts"),
         text("components/onboarding/steps/profile-step.tsx"),
         text("lib/visibility/prompt-builder.ts"),
+        text("lib/visibility/prompt-template.ts"),
         text("components/onboarding/steps/extras-step.tsx"),
     ])
 
@@ -4403,7 +4716,7 @@ test("a probe measures the customer's market, not a default one", async () => {
     )
 
     // The prompt builder can write questions in any language it is given.
-    assert.match(builder, /languageName\(language\)/)
+    assert.match(template, /languageName\(language\)/)
     assert.match(builder, /\\p\{L\}/)
 
     // But the PRODUCT may only offer a language it can deliver end to end, and
@@ -4556,16 +4869,25 @@ test("probe clusters freeze article contracts and finalize into relational deliv
     assert.match(assembly, /export function freezeArticleContracts/)
 
     // 2. runVisibilityProbe calls freezeArticleContracts on clustered gaps.
-    assert.match(probeRunner, /import \{ freezeArticleContracts \} from "@\/lib\/harvest\/assembly"/)
+    assert.match(
+        probeRunner,
+        /import \{ freezeArticleContracts \} from "@\/lib\/harvest\/assembly"/,
+    )
     assert.match(probeRunner, /freezeArticleContracts\(named, families, evidenceById/)
 
     // 3. Probe finalization persists into topical_audits, query_pool, audit_clusters, and planned_articles.
     assert.match(probeRunner, /supabase\.rpc\("finalize_audit_run"/)
     assert.match(probeRunner, /source:\s*"ai_answer"/)
-    assert.match(probeRunner, /contract_version:\s*article\.articleContract\?\.version \|\| "article-contract-v1"/)
+    assert.match(
+        probeRunner,
+        /contract_version:\s*article\.articleContract\?\.version \|\| "article-contract-v1"/,
+    )
 
     // 4. Migration allows 'ai_answer' in query_pool.source.
-    assert.match(migration, /CHECK \(source IN \('autocomplete', 'paa', 'competitor_sitemap', 'ai_answer'\)\)/)
+    assert.match(
+        migration,
+        /CHECK \(source IN \('autocomplete', 'paa', 'competitor_sitemap', 'ai_answer'\)\)/,
+    )
 })
 
 test("visibility dashboard renders actionable content program delivery CTA linking to content plan", async () => {

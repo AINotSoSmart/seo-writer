@@ -1,149 +1,60 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { Check, LockKeyhole } from "lucide-react"
 
-import { Footer } from "@/components/landing/Footer"
-import { Navbar } from "@/components/landing/Navbar"
-import { PRODUCT_TRUTH, type ProductTier } from "@/config/product-truth"
-import { generateMetadata as generateSeoMetadata } from "@/lib/seo"
-import { createAdminClient } from "@/utils/supabase/admin"
+import { PRODUCT_TRUTH } from "@/config/product-truth"
 
-export const metadata: Metadata = generateSeoMetadata({
-    title: "Pricing — One Agency Month, Your Whole Programme",
-    description:
-        "From $249 a month, against the $3,000-$15,000 a B2B SaaS content agency charges. Your audit sets the size, the tier sets the speed, and billing ends when the work does.",
-    keywords: [
-        "saas seo agency pricing",
-        "b2b saas content marketing cost",
-        "seo agency alternative pricing",
-        "content program pricing",
-    ],
-    canonical: "/pricing",
-})
-
-async function activePlans() {
-    try {
-        const supabase = createAdminClient() as any
-        const { data } = await supabase
-            .from("dodo_pricing_plans")
-            .select("id, name, price, currency")
-            .eq("is_active", true)
-            .order("price")
-        return (data || [])
-            .map((row: any) => {
-                const tier = String(row.name).toLowerCase() as ProductTier
-                const truth = PRODUCT_TRUTH.tiers[tier]
-                return truth &&
-                    Number(row.price) === truth.price &&
-                    String(row.currency || "USD").toUpperCase() === truth.currency
-                    ? { ...row, tier, truth }
-                    : null
-            })
-            .filter(Boolean)
-    } catch {
-        return []
-    }
+export const metadata: Metadata = {
+    title: "Pricing — FlipAEO",
+    description: "Founding beta pricing for recurring AI visibility measurement and content delivery.",
 }
 
-export default async function PricingPage() {
-    const plans = await activePlans()
-    const checkoutEnabled = process.env.CLOSED_POOL_CHECKOUT_ENABLED === "true"
-
+export default function PricingPage() {
     return (
-        <div className="min-h-screen bg-stone-50 text-stone-900">
-            <Navbar />
-            <main className="mx-auto max-w-6xl px-6 pb-24 pt-36">
-                <header className="mx-auto max-w-3xl text-center">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-                        The agency alternative
-                    </p>
-                    <h1 className="mt-4 font-serif text-5xl md:text-7xl">
-                        One agency month. Your whole programme.
-                    </h1>
-                    <p className="mt-6 text-lg leading-8 text-stone-600">
-                        A B2B SaaS content agency runs $3,000 to $15,000 a month, indefinitely.
-                        This is the same work — research, planning, writing, internal linking,
-                        delivery — priced as software and scoped to end. Your free audit decides
-                        how big the job is. The plan below only decides how fast it arrives.
-                    </p>
-                    <p className="mt-4 text-sm leading-6 text-stone-500">
-                        A <strong className="font-medium text-stone-700">cluster</strong> is one
-                        pillar article plus the 8 to 15 supporting pieces around it, all linked
-                        to each other. Your audit decides how many you get.
-                    </p>
-                </header>
+        <main className="mx-auto max-w-5xl px-6 py-20 text-stone-900">
+            <header className="mx-auto max-w-3xl text-center">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-stone-500">One launch plan</p>
+                <h1 className="mt-3 font-serif text-5xl tracking-tight">Measure the questions. Close the gaps.</h1>
+                <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-stone-600">
+                    One site and 40 buyer questions measured in ChatGPT and Google AI Mode.
+                    Each billing cycle delivers the report plus up to eight prioritised create
+                    or refresh actions in one complete draft batch.
+                </p>
+            </header>
 
-                {!checkoutEnabled && (
-                    <div className="mx-auto mt-10 flex max-w-2xl items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                        <LockKeyhole className="h-4 w-4" />
-                        Public checkout remains disabled until the staging delivery test passes.
-                    </div>
-                )}
-
-                <section className="mt-12 grid gap-4 md:grid-cols-3">
-                    {plans.map((plan: any) => (
-                        <article key={plan.id} className="flex flex-col rounded-2xl border border-stone-200 bg-white p-7">
-                            <h2 className="font-serif text-3xl">{plan.truth.label}</h2>
-                            <div className="mt-5 text-4xl font-bold">
-                                {new Intl.NumberFormat("en-US", {
-                                    style: "currency",
-                                    currency: plan.truth.currency,
-                                }).format(plan.truth.price)}
-                                <span className="text-sm font-normal text-stone-400"> / month</span>
-                            </div>
-                            <p className="mt-3 min-h-12 text-sm font-medium text-stone-700">
-                                {plan.truth.cadence}
-                            </p>
-                            <ul className="my-7 flex-1 space-y-3">
-                                {[
-                                    "The same scope, whichever plan",
-                                    "Internal links that work on arrival",
-                                    "Clusters arrive whole, never half-built",
-                                    "Cancels itself when the work is done",
-                                ].map((item) => (
-                                    <li key={item} className="flex gap-2 text-sm text-stone-600">
-                                        <Check className="mt-0.5 h-4 w-4 shrink-0" /> {item}
-                                    </li>
-                                ))}
-                            </ul>
-                            <Link
-                                href="/login?next=/onboarding"
-                                className="rounded-lg bg-stone-950 px-4 py-3 text-center text-sm font-semibold text-white"
-                            >
-                                Show me what I&rsquo;m missing
-                            </Link>
-                        </article>
-                    ))}
-                </section>
-
-                {plans.length === 0 && (
-                    <p className="mt-12 text-center text-sm text-stone-500">
-                        Delivery plans are not currently configured for sale.
-                    </p>
-                )}
-
-                <section className="mx-auto mt-16 grid max-w-4xl gap-4 md:grid-cols-2">
-                    <div className="rounded-2xl border border-stone-200 bg-white p-7">
-                        <h2 className="font-serif text-2xl">How your total is worked out</h2>
-                        <p className="mt-3 text-sm leading-6 text-stone-600">
-                            Count the clusters your audit found, divide by how many arrive each
-                            month, round up. That is how many monthly payments you make, and then
-                            it stops. Nine clusters on Accelerate is five months. Four clusters on
-                            Close is four months. You see the exact figure before you pay anything.
+            <section className="mx-auto mt-12 max-w-2xl rounded-2xl border border-stone-300 bg-white p-8 shadow-sm">
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 className="font-serif text-3xl">{PRODUCT_TRUTH.label}</h2>
+                        <p className="mt-2 text-sm text-stone-600">
+                            Founders receive the same measurement and production contract—there
+                            are no velocity tiers or article-credit bundles.
                         </p>
                     </div>
-                    <div className="rounded-2xl border border-stone-200 bg-white p-7">
-                        <h2 className="font-serif text-2xl">If nothing qualifies, we say so</h2>
-                        <p className="mt-3 text-sm leading-6 text-stone-600">
-                            A smaller site is simply a smaller programme — there is no minimum you
-                            have to clear. But if your audit turns up nothing worth building, you
-                            get the evidence and no checkout. We would rather lose the sale than
-                            invent filler to reach a price.
-                        </p>
+                    <div className="shrink-0 text-left sm:text-right">
+                        <div className="text-4xl font-semibold">${PRODUCT_TRUTH.introductoryPrice}</div>
+                        <div className="text-xs text-stone-500">per month for the first three billing periods</div>
                     </div>
-                </section>
-            </main>
-            <Footer />
-        </div>
+                </div>
+
+                <ul className="mt-8 grid gap-3 text-sm text-stone-700 sm:grid-cols-2">
+                    <li>One website</li>
+                    <li>{PRODUCT_TRUTH.trackedPromptAllowance} tracked buyer questions</li>
+                    <li>ChatGPT + Google AI Mode</li>
+                    <li>Up to {PRODUCT_TRUTH.actionAllowance} create/refresh actions per cycle</li>
+                    <li>Visible findings and backlog</li>
+                    <li>One complete, exportable draft batch</li>
+                </ul>
+
+                <div className="mt-8 rounded-xl bg-stone-50 p-4 text-sm leading-relaxed text-stone-600">
+                    The planned continuing price is ${PRODUCT_TRUTH.continuingPrice}/month from
+                    billing period four, disclosed before checkout. Checkout remains disabled
+                    until that price phase and the full payment-to-batch path pass sandbox tests.
+                </div>
+
+                <Link href="/onboarding" className="mt-7 inline-flex rounded-lg bg-stone-900 px-5 py-3 text-sm font-semibold text-white">
+                    Confirm your buyer questions
+                </Link>
+            </section>
+        </main>
     )
 }

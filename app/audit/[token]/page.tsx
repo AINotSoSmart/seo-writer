@@ -11,7 +11,6 @@ import type {
 import { ScopeResults } from "@/components/audit/scope-results"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import {
-    auditCheckoutFreshness,
     selectQualifiedProgramScope,
 } from "@/lib/harvest/program-contract"
 import { createAdminClient } from "@/utils/supabase/admin"
@@ -47,7 +46,6 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
         { data: articleRows },
         { data: scopeRows },
         { data: brand },
-        { data: soldRows },
     ] =
         await Promise.all([
             supabase
@@ -82,10 +80,6 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
                       .eq("id", audit.brand_id)
                       .maybeSingle()
                 : Promise.resolve({ data: null }),
-            supabase
-                .from("program_clusters")
-                .select("audit_cluster_id, programs!inner(audit_id)")
-                .eq("programs.audit_id", audit.id),
         ])
 
     const scopeById = new Map(
@@ -113,28 +107,18 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
     })
     const selection = selectQualifiedProgramScope(
         clusters,
-        (soldRows || []).map((row: any) => row.audit_cluster_id),
+        [],
         Boolean(audit.requires_reaudit),
     )
-    const freshness = auditCheckoutFreshness(audit.completed_at)
-    const checkoutEligible = selection.eligible && freshness.fresh
+    const checkoutEligible = false
 
     // Every cluster being sold means this audit was BOUGHT, not that it is too
     // small to sell. Without this, a shared public report flipped to "not
     // eligible for a program" the moment the customer paid — on the exact link
     // used for outreach. See the matching guard in actions/harvest.ts.
-    const soldClusterIds: string[] = (soldRows || []).map(
-        (row: any) => row.audit_cluster_id,
-    )
-    const hasActiveProgram = soldClusterIds.length > 0
-    const displayClusterIds = hasActiveProgram
-        ? soldClusterIds
-        : selection.selected.map((cluster) => cluster.id)
-    const displayArticleCount = hasActiveProgram
-        ? clusters
-              .filter((cluster) => soldClusterIds.includes(cluster.id))
-              .reduce((sum, cluster) => sum + cluster.articleCount, 0)
-        : selection.selectedArticleCount
+    const hasActiveProgram = false
+    const displayClusterIds = selection.selected.map((cluster) => cluster.id)
+    const displayArticleCount = selection.selectedArticleCount
 
     return {
         scope: {
@@ -146,13 +130,8 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
             clusters,
             recommendedClusterIds: displayClusterIds,
             recommendedArticleCount: displayArticleCount,
-            velocity: [
-                { tier: "close", clustersPerMonth: 1, months: 6 },
-                { tier: "accelerate", clustersPerMonth: 2, months: 3 },
-                { tier: "dominate", clustersPerMonth: 3, months: 2 },
-            ],
             checkoutEligible,
-            eligibilityReason: selection.reason || freshness.reason,
+            eligibilityReason: "Legacy audit reports are evidence only; subscriptions start from confirmed tracked questions.",
             hasActiveProgram,
             belowViableThreshold: !checkoutEligible && !hasActiveProgram,
             publicToken: token,

@@ -50,15 +50,15 @@ export default function Hero() {
 
       {/* Main Headline */}
       <h1 className="font-serif text-4xl md:text-7xl lg:text-8xl text-stone-900 leading-[1.1] mb-6 tracking-tight">
-        Own the whole topic, <br />
-        <span className="italic font-light">not just one keyword </span>
+        Know where AI overlooks you. <br />
+        <span className="italic font-light">Fix the gaps that matter.</span>
       </h1>
 
       {/* Subheadline */}
       <p className="font-sans text-lg md:text-xl text-stone-500 max-w-2xl leading-snug mb-6 px-2">
-        Google and AI assistants both lean on sites that cover a subject completely, not sites that publish near it.
-        <strong className="text-black font-normal">{" "}We find every question your market asks that your site does not answer — each traced to where we found it — then write and deliver them as complete, interlinked clusters.</strong>{" "}
-        The work an agency bills $3,000&ndash;$15,000 a month for, from $249, finished and finite.
+        Confirm 40 questions real buyers ask, then see how ChatGPT and Google AI Mode answer them.
+        <strong className="text-black font-normal">{" "}FlipAEO shows where your brand is absent or outranked, keeps the evidence visible, and turns the highest-priority gaps into create or refresh work.</strong>{" "}
+        Selected drafts arrive together as one complete batch.
       </p>
 
       {/* CTA Button Container */}
@@ -70,7 +70,7 @@ export default function Hero() {
         </Link>
 
         <p className="mt-4 text-[11px] text-stone-400 tracking-wide">
-          Free audit &middot; no credit card &middot; every gap links to its source
+          Confirm questions first &middot; measurement starts only when you choose
         </p>
       </div>
 

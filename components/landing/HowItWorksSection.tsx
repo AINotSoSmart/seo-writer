@@ -192,7 +192,7 @@ const HowItWorksSection: React.FC = () => {
           </div>
           <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
             <p className="font-sans text-stone-500 text-lg leading-relaxed">
-              Audit, strategy, production, delivery — the sequence a good agency charges four figures a month for. The difference is that you can check every claim it makes, you approve the scope before you spend anything, and it finishes.
+              Confirm, measure, prioritise, deliver. You can inspect the evidence behind the report, and the production allowance stays a ceiling instead of becoming a reason to invent work.
             </p>
           </div>
         </div>
@@ -240,10 +240,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                We collect real questions
+                You confirm 40 buyer questions
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                Questions people actually search, plus the ones your competitors already answer. Each one is stored with a link to where we saw it, so you can check any claim we make.              </p>
+                The durable question set belongs to your website and is reused each cycle. You can edit it before the first paid measurement instead of accepting a hidden model-generated list.              </p>
             </div>
           </div>
 
@@ -257,10 +257,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                You see the scope and price
+                We measure and prioritise
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                The gaps are grouped into themed batches of 8 to 15 articles. You see every batch your site justifies — it might be three, it might be twelve — and what each delivery speed costs.
+                ChatGPT and Google AI Mode answer the confirmed questions. The report shows the evidence, separates report-only findings, and selects up to eight create or refresh actions without filling a quota.
               </p>
             </div>
           </div>
@@ -275,10 +275,10 @@ const HowItWorksSection: React.FC = () => {
                 </div>
               </div>
               <h3 className="font-serif text-xl text-stone-900 leading-tight">
-                We deliver complete batches
+                One complete cycle batch
               </h3>
               <p className="font-sans text-stone-500 text-[13px] leading-relaxed">
-                A batch arrives whole, with its internal links already working. If one article fails its checks, the batch waits rather than shipping you a half-built set. After the last batch, billing stops.
+                Every selected draft arrives together after the complete batch passes its checks. Additional qualified work stays in the visible backlog for a later billing cycle. Cancel anytime to stop future cycles.
               </p>
             </div>
           </div>

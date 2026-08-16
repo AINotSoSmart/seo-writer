@@ -37,9 +37,11 @@
  * that form, and the filters added afterwards could only delete the escapees —
  * which shrank the set and skewed it further toward the two comparative shapes.
  *
- * So the model is now given context and a goal, and labels each question it
- * writes with one of these keys. The label is used downstream: `articleType`
- * flows into the article contract and decides how the writer treats the piece.
+ * So the model is now given context and a goal. It proposes one of these keys,
+ * then `inferPromptIntent` checks the finished question for explicit signals.
+ * The live FlipAEO run labeled all ten distinct questions `alternatives`; model
+ * labels are useful fallbacks, not a trustworthy taxonomy. The resolved label
+ * flows into `articleType` and decides how the writer treats the piece.
  *
  * ## Why dropping the fixed mix is safe now
  *
@@ -67,7 +69,7 @@ export const PROMPT_INTENTS = [
     },
     {
         key: "problem",
-        label: "describing a problem and asking how to solve it",
+        label: "understanding a problem or concept and how to address it",
         articleType: "informational" as const,
     },
     {
@@ -81,30 +83,22 @@ export type PromptIntentKey = (typeof PROMPT_INTENTS)[number]["key"]
 
 /**
  * Candidate questions requested per confirmed area, before the run's budget
- * applies. A plain number now — it was previously the sum of the per-shape
- * weights, which no longer exist.
+ * applies. A business may have only one confirmed area, so that one model call
+ * must still be capable of filling the complete forty-question durable set.
+ * Multiple areas provide additional headroom before the global selector keeps
+ * the best forty.
  */
-export const PROMPTS_PER_FAMILY = 10
+export const PROMPTS_PER_FAMILY = 40
 
 /**
  * How many prompts a run asks when the caller doesn't say.
  *
- * Deliberately small. Every prompt costs real Cloro credits on every engine
- * (~9 for the default ChatGPT + Google AI Mode pair), and until a run has
- * actually happened nobody knows whether the generated questions are ones a
- * buyer would type. Ten is enough to answer that — which is the only question
- * worth answering first — for roughly 90 credits, about four cents.
- *
- * **A 10-prompt run will usually produce no cluster plan.** A qualified cluster
- * needs 8-15 articles, and ten prompts cannot collapse into that. The report
- * still shows presence, rivals, sources and fan-out; the plan section says the
- * scope was too thin rather than showing an empty list. That is the expected
- * outcome of a sanity run, not a fault.
- *
- * Raise it per request via `maxPrompts` once the questions look right — no
- * redeploy needed, up to `MAX_PROMPTS_PER_RUN`.
+ * This is the subscription's durable measurement set, not a temporary sanity
+ * sample. Forty questions are confirmed once, persisted, and re-run each cycle;
+ * comparability comes from stable identity. At the current two-engine Cloro
+ * estimate this is roughly 360 credits, about sixteen cents per cycle.
  */
-export const DEFAULT_PROMPTS_PER_RUN = 10
+export const DEFAULT_PROMPTS_PER_RUN = 40
 
 /**
  * Hard ceiling on one probe run, protecting spend and wall-clock.

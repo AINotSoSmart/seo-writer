@@ -301,8 +301,8 @@ export async function POST(req: NextRequest) {
          - If the site only states a model with no dollar amounts, use one item like
            "Subscription — price not listed on crawled pages".
          - Worked examples:
-           "Close — $249 / month — one complete cluster per billing period"
-           "Accelerate — $449 / month — two complete clusters per billing period"
+           "Starter — $49 / month — one workspace; five team members"
+           "Business — $149 / month — unlimited projects; priority support"
       9. **Brand Keywords:** Generate 4-5 SHORT search keywords (2-4 words each) that represent what a user would type into Google to find this type of product. NOT the brand name, NOT full sentences — just the search terms. Example: for a photo restoration app, keywords might be: "ai photo restoration", "restore old photos", "fix damaged photos", "old photo animation", "family photo repair".
       10. **Style DNA (ROBUST LINGUISTIC GUIDE):**
          Create a SINGLE paragraph that defines the LINGUISTIC STYLE. 

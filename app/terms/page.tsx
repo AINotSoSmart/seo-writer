@@ -4,44 +4,47 @@ import { LegalPage, LegalSection } from "@/components/legal/LegalPage"
 
 export const metadata: Metadata = {
     title: "Terms of Service | FlipAEO",
-    description: "Terms for FlipAEO immutable audits and finite cluster delivery programs.",
+    description: "Terms for FlipAEO recurring AI visibility measurement and draft delivery.",
 }
 
 export default function TermsPage() {
     return (
         <LegalPage
             title="Terms of Service"
-            summary="FlipAEO provides measured audit evidence and finite content delivery. It does not sell a ranking or citation outcome."
+            summary="FlipAEO provides recurring measurement evidence and selected content actions. It does not sell a ranking or citation outcome."
         >
             <LegalSection title="The service">
                 <p>
-                    A completed audit is an immutable snapshot of observed public evidence.
-                    An eligible paid program contains six selected clusters, each with 8–15
-                    planned articles and at least 25 articles across the selected scope.
+                    One subscription covers one website and up to 40 confirmed buyer
+                    questions. Each paid billing cycle measures those questions and may
+                    select up to eight prioritised create or refresh actions. The allowance
+                    is a ceiling, not a guaranteed article quota; report-only findings and
+                    qualified backlog remain visible without manufacturing filler.
                 </p>
             </LegalSection>
             <LegalSection title="URL confirmation and links">
                 <p>
-                    Before checkout, you must confirm an HTTPS publication URL pattern on the
-                    audited host containing exactly one {"{slug}"} placeholder. That pattern,
-                    article slugs, and internal-link graph are frozen for the program. You are
-                    responsible for preserving those permalinks on your publishing system.
+                    URLs and the internal-link graph for selected create actions are frozen
+                    before generation. Refresh actions identify the existing target page.
+                    You are responsible for preserving confirmed permalinks in your
+                    publishing system.
                 </p>
             </LegalSection>
             <LegalSection title="Generation, delivery, and publication">
                 <p>
-                    Generated means writing completed. Delivered means every article in the
-                    cluster passed the batch release gate. Published means a real WordPress or
-                    confirmed manual publication action occurred. Delivery does not depend on
-                    whether you publish the content.
+                    Generated means writing completed. Delivered means every selected output
+                    in that billing cycle passed the batch release gate and was made visible
+                    together. Published requires a real publishing action. Delivery does not
+                    depend on whether you publish the content.
                 </p>
             </LegalSection>
             <LegalSection title="Billing and program end">
                 <p>
-                    The selected subscription determines delivery cadence, not scope. Pausing
-                    stops new deliveries but billing continues. Once every cluster is
-                    delivered, FlipAEO requests cancellation at the end of the paid billing
-                    period. A later program requires a new checkout.
+                    Billing authorises one measurement-and-delivery cycle at a time. Pausing
+                    production does not itself cancel billing. Customer-requested cancellation
+                    prevents future billing periods according to the payment provider’s
+                    confirmed period-end state. Completed reports and delivered drafts are
+                    retained.
                 </p>
             </LegalSection>
             <LegalSection title="No outcome guarantee">

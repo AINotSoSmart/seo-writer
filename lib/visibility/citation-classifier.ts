@@ -21,9 +21,10 @@
  *
  *   1. FACTS         — is this host the subject's, or a tracked competitor's?
  *                      Answered from the audit, not from a list. Never wrong.
- *   2. STRUCTURE     — `.edu`, `.gov`, and URL path shape (`/best-…`,
- *                      `/…-vs-…`, `/…-alternatives`). Derived from the URL
- *                      itself, so it works on a domain nobody has ever seen.
+ *   2. STRUCTURE     — `.edu`, `.gov`, and explicit page shape in the stored
+ *                      URL/title (`/best-…`, `/…-vs-…`, "12 best tools"). It
+ *                      works on a domain nobody has ever seen without guessing
+ *                      what that domain generally publishes.
  *   3. CURATED LISTS — deliberately small, and only for categories where a
  *                      handful of hosts genuinely dominate every market
  *                      (Reddit, YouTube, G2).
@@ -49,11 +50,13 @@ export type SourceType =
     | "community"
     | "social_video"
     | "institutional"
+    | "recommendation_page"
+    | "documentation"
     | "publisher"
     | "unclassified"
 
 /**
- * What kind of page it is, from the URL's own shape.
+ * What kind of page it is, from the stored URL and citation title.
  *
  * This is the signal that turns a citation into a content decision.
  * `listicle` and `comparison` pages are how an engine assembles a
@@ -63,7 +66,7 @@ export type SourceType =
 export type PageShape = "listicle" | "comparison" | "review" | "docs" | "unshaped"
 
 /** Can you publish this yourself, or must someone else publish it about you? */
-export type Actionability = "publish" | "earn" | "none"
+export type Actionability = "publish" | "earn" | "none" | "review"
 
 export interface ClassifiedCitation {
     url: string
@@ -80,8 +83,10 @@ export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
     community: "Community & forums",
     social_video: "Social & video",
     institutional: "Institutional",
+    recommendation_page: "Lists, comparisons & reviews",
+    documentation: "Third-party documentation",
     publisher: "Publishers & press",
-    unclassified: "Everything else",
+    unclassified: "Needs founder review",
 }
 
 /**
@@ -95,8 +100,10 @@ export const SOURCE_TYPE_ACTIONS: Record<SourceType, string> = {
     community: "Cannot be published into. Earned by being genuinely recommended.",
     social_video: "Earned. Usually the slowest to move.",
     institutional: "Rarely actionable — cite-worthy background, not a placement.",
+    recommendation_page: "Earn inclusion on the page; publishing another owned article is not the direct remedy.",
+    documentation: "Report only. This is third-party reference material, not a page you control.",
     publisher: "Earned through coverage or a contributed piece.",
-    unclassified: "Open a few and see what they are before drawing conclusions.",
+    unclassified: "Founder review required. It cannot enter production until a person classifies it.",
 }
 
 export const PAGE_SHAPE_LABELS: Record<PageShape, string> = {
@@ -181,7 +188,18 @@ const INSTITUTIONAL_CC = /\.(ac|edu|gov)\.[a-z]{2}$/i
 const LISTICLE_PATH = /(^|[/-])(best|top|top-?\d+|\d+-best|leading|greatest)([/-]|$)/i
 const COMPARISON_PATH = /(^|[/-])(vs|versus|compare|comparison|alternatives?|competitors?)([/-]|$)/i
 const REVIEW_PATH = /(^|[/-])(review|reviews|hands-on|tested)([/-]|$)/i
-const DOCS_PATH = /(^|[/-])(docs?|documentation|guide|reference|api|tutorial|help|support)([/-]|$)/i
+const DOCS_PATH = /(^|[/-])(docs?|documentation|reference|api|help|support|hc)([/-]|$)/i
+const DOCS_HOST = /^(docs?|developer|developers|help|support|learn)\./i
+
+// Titles are part of the stored citation payload returned by the engine. They
+// are evidence we already have, not fetched-page inference. Keep these rules
+// structural and narrow: a product calling itself "best" is not automatically
+// a list, while "12 best tools" is.
+const LISTICLE_TITLE =
+    /\b(?:\d+\+?\s+(?:best|top)|(?:best|top)\s+\d+\+?)\b|\b(?:best|top)\b.{0,50}\b(?:tools|alternatives|platforms|software|services|apps|products)\b/i
+const COMPARISON_TITLE = /\b(vs\.?|versus|compared|comparison|alternatives?)\b/i
+const REVIEW_TITLE = /\b(review|reviews|hands-on|tested|ranked)\b/i
+const DOCS_TITLE = /\b(documentation|developer docs?|api reference|help center|quickstart)\b/i
 
 export function extractHost(rawUrl: string): string | null {
     if (!rawUrl) return null
@@ -206,26 +224,31 @@ function isSameOrSubdomain(host: string, domains: string[]): boolean {
 }
 
 /**
- * Shape of the page, from its path alone.
+ * Shape of the page, from its stored URL and title.
  *
  * Order matters: a page at `/best-crm-alternatives` is primarily a list, and
  * calling it a comparison would understate what it is doing. Docs are checked
  * last because `/guide` appears inside plenty of listicle paths.
  */
-export function classifyPageShape(rawUrl: string): PageShape {
+export function classifyPageShape(rawUrl: string, title = ""): PageShape {
     let path = ""
+    let host = ""
     try {
         const url = new URL(rawUrl)
         path = `${url.pathname}${url.search}`
+        host = url.hostname.toLowerCase().replace(/^www\./, "")
     } catch {
         path = rawUrl
     }
-    if (!path || path === "/") return "unshaped"
 
     if (LISTICLE_PATH.test(path)) return "listicle"
     if (COMPARISON_PATH.test(path)) return "comparison"
     if (REVIEW_PATH.test(path)) return "review"
-    if (DOCS_PATH.test(path)) return "docs"
+    if (DOCS_PATH.test(path) || DOCS_HOST.test(host)) return "docs"
+    if (LISTICLE_TITLE.test(title)) return "listicle"
+    if (COMPARISON_TITLE.test(title)) return "comparison"
+    if (REVIEW_TITLE.test(title)) return "review"
+    if (DOCS_TITLE.test(title)) return "docs"
     return "unshaped"
 }
 
@@ -246,9 +269,10 @@ export interface ClassifyContext {
 export function classifyCitation(
     rawUrl: string,
     context: ClassifyContext,
+    title = "",
 ): ClassifiedCitation {
     const host = extractHost(rawUrl) ?? ""
-    const pageShape = classifyPageShape(rawUrl)
+    const pageShape = classifyPageShape(rawUrl, title)
 
     const sourceType: SourceType = (() => {
         if (!host) return "unclassified"
@@ -261,6 +285,18 @@ export function classifyCitation(
         if (INSTITUTIONAL_TLD.test(host) || INSTITUTIONAL_CC.test(host)) {
             return "institutional"
         }
+
+        // Page shape is a stored fact about this exact citation. It is more
+        // useful than guessing the host's industry: recommendation pages are
+        // earned placements, while third-party docs are report-only context.
+        if (
+            pageShape === "listicle" ||
+            pageShape === "comparison" ||
+            pageShape === "review"
+        ) {
+            return "recommendation_page"
+        }
+        if (pageShape === "docs") return "documentation"
 
         // 3. Short curated lists.
         if (matchesHost(host, REVIEW_MARKETPLACE_HOSTS)) return "review_marketplace"
@@ -284,11 +320,11 @@ export function classifyCitation(
 /**
  * Whether this is work you do or work you ask for.
  *
- * `owned` is the only "publish" case: it is the one surface you control. A
- * competitor's page is not earnable either — you answer the question yourself
- * on your own site — but it signals that the engines currently prefer their
- * explanation, which is a publishing job. Everything else needs someone else
- * to act.
+ * `owned` is the only directly controlled surface. A competitor's page is not
+ * earnable either — you answer the question yourself on your own site — but it
+ * signals that the engines currently prefer their explanation, which is a
+ * publishing job. External recommendation surfaces require earned placement;
+ * reference material is report-only; unresolved evidence stops for review.
  */
 export function actionabilityOf(sourceType: SourceType): Actionability {
     switch (sourceType) {
@@ -298,11 +334,14 @@ export function actionabilityOf(sourceType: SourceType): Actionability {
         case "review_marketplace":
         case "community":
         case "social_video":
+        case "recommendation_page":
         case "publisher":
             return "earn"
         case "institutional":
-        case "unclassified":
+        case "documentation":
             return "none"
+        case "unclassified":
+            return "review"
     }
 }
 
@@ -328,6 +367,8 @@ export interface CitationBreakdown {
     unclassifiedShare: number
     publishShare: number
     earnShare: number
+    reportOnlyShare: number
+    reviewShare: number
 }
 
 /** Aggregates classified citations into the shape the dashboard renders. */
@@ -372,5 +413,7 @@ export function summariseCitations(
         unclassifiedShare: share((entry) => entry.sourceType === "unclassified"),
         publishShare: share((entry) => entry.actionability === "publish"),
         earnShare: share((entry) => entry.actionability === "earn"),
+        reportOnlyShare: share((entry) => entry.actionability === "none"),
+        reviewShare: share((entry) => entry.actionability === "review"),
     }
 }

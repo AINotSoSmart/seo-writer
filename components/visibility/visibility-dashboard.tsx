@@ -105,6 +105,12 @@ export interface DashboardSummary {
         sourceType: SourceType
     }>
     citationBreakdown?: CitationBreakdown
+    citationReviewQueue?: Array<{
+        url: string
+        title: string
+        host: string
+        count: number
+    }>
     fanOut?: FanOutSummary
     keyPages?: Array<{
         url: string
@@ -293,6 +299,19 @@ export function VisibilityDashboard(props: DashboardProps) {
 
     const hostMax = Math.max(...summary.citedHosts.map((host) => host.count), 1)
     const breakdown = summary.citationBreakdown
+    const citationReviewQueue = summary.citationReviewQueue ?? []
+    // Completed runs predate Phase 0b's explicit split. Preserve their frozen
+    // counts while mapping the old unclassified bucket to founder review.
+    const reviewShare = breakdown?.reviewShare ?? breakdown?.unclassifiedShare ?? 0
+    const reportOnlyShare =
+        breakdown?.reportOnlyShare ??
+        Math.max(
+            0,
+            100 -
+                (breakdown?.publishShare ?? 0) -
+                (breakdown?.earnShare ?? 0) -
+                reviewShare,
+        )
     const keyPages = summary.keyPages ?? []
     const fanOut = summary.fanOut
     // Sub-queries the engines kept running and never found the brand in — a
@@ -607,7 +626,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                                  * a source you can publish to yourself is a different kind
                                  * of work from one someone else has to publish about you.
                                  */}
-                                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                                <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                                     <div className="rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
                                         <div className="flex items-center gap-2 text-sm font-medium">
                                             <PenLine
@@ -640,6 +659,38 @@ export function VisibilityDashboard(props: DashboardProps) {
                                             a publishing job.
                                         </p>
                                     </div>
+                                    <div className="rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
+                                        <div className="flex items-center gap-2 text-sm font-medium">
+                                            <ShieldCheck
+                                                className="size-4 text-[var(--viz-ink-muted)]"
+                                                aria-hidden
+                                            />
+                                            Report only
+                                        </div>
+                                        <div className="mt-2 text-3xl font-semibold tabular-nums">
+                                            {reportOnlyShare}%
+                                        </div>
+                                        <p className="mt-1 text-sm text-[var(--viz-ink-secondary)]">
+                                            institutional and third-party reference material — not
+                                            an owned-page production job.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-[var(--viz-warning)]/40 bg-[var(--viz-warning)]/5 p-5">
+                                        <div className="flex items-center gap-2 text-sm font-medium">
+                                            <AlertTriangle
+                                                className="size-4 text-[var(--viz-warning-ink)]"
+                                                aria-hidden
+                                            />
+                                            Founder review
+                                        </div>
+                                        <div className="mt-2 text-3xl font-semibold tabular-nums">
+                                            {reviewShare}%
+                                        </div>
+                                        <p className="mt-1 text-sm text-[var(--viz-ink-secondary)]">
+                                            unresolved sources — excluded from production until a
+                                            person reviews them.
+                                        </p>
+                                    </div>
                                 </div>
 
                                 {/*
@@ -659,8 +710,8 @@ export function VisibilityDashboard(props: DashboardProps) {
                                                 {breakdown.unclassifiedShare}% of citations
                                                 couldn&apos;t be categorised.
                                             </strong>{" "}
-                                            Treat the categories below as a rough shape and read the
-                                            source list itself.
+                                            These sources are placed in founder review and cannot
+                                            enter article production automatically.
                                         </span>
                                     </p>
                                 )}
@@ -693,7 +744,9 @@ export function VisibilityDashboard(props: DashboardProps) {
                                                                     ? "var(--viz-series-1)"
                                                                     : tally.actionability === "earn"
                                                                       ? "var(--viz-series-2)"
-                                                                      : "var(--viz-muted-mark)",
+                                                                      : tally.actionability === "review"
+                                                                        ? "var(--viz-warning)"
+                                                                        : "var(--viz-muted-mark)",
                                                         }}
                                                     />
                                                 </span>
@@ -725,8 +778,51 @@ export function VisibilityDashboard(props: DashboardProps) {
                                             />
                                             Neither
                                         </span>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <span
+                                                className="inline-block size-2.5 rounded-sm"
+                                                style={{ background: "var(--viz-warning)" }}
+                                            />
+                                            Founder review
+                                        </span>
                                     </div>
                                 </div>
+
+                                {citationReviewQueue.length > 0 && (
+                                    <div className="mt-5 rounded-lg border border-[var(--viz-warning)]/40 bg-[var(--viz-warning)]/5 p-5">
+                                        <h3 className="flex items-center gap-2 text-sm font-semibold">
+                                            <AlertTriangle
+                                                className="size-4 text-[var(--viz-warning-ink)]"
+                                                aria-hidden
+                                            />
+                                            Sources awaiting founder review
+                                        </h3>
+                                        <p className="mt-1 text-xs text-[var(--viz-ink-muted)]">
+                                            These exact pages could not be classified from stored
+                                            evidence. They remain report-only until reviewed.
+                                        </p>
+                                        <ul className="mt-3 space-y-2">
+                                            {citationReviewQueue.slice(0, 10).map((item) => (
+                                                <li
+                                                    key={item.url}
+                                                    className="flex items-start justify-between gap-3 text-sm"
+                                                >
+                                                    <a
+                                                        href={item.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer nofollow"
+                                                        className="min-w-0 truncate text-[var(--viz-series-1)] hover:underline"
+                                                    >
+                                                        {item.title || item.url}
+                                                    </a>
+                                                    <span className="shrink-0 text-xs tabular-nums text-[var(--viz-ink-muted)]">
+                                                        {item.host} · {item.count}×
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
                             </>
                         )}
 

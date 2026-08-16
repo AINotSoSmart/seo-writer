@@ -30,6 +30,9 @@ export const SCOPE_ROLES = [
     "workflow_step",
 ] as const
 
+/** A refinement is advisory; it must never hold the launch funnel open. */
+export const SCOPE_ROLE_TIMEOUT_MS = 45_000
+
 export type ScopeRole = (typeof SCOPE_ROLES)[number]
 
 export type ScopeBrandProfile = {
@@ -601,7 +604,18 @@ export async function refineScopeRoles(
     if (families.length === 0) return { families: [], issues: [] }
 
     try {
-        const decisions = await classifyScopeRoles(families, brandProfile)
+        let timeout: ReturnType<typeof setTimeout> | undefined
+        const decisions = await Promise.race([
+            classifyScopeRoles(families, brandProfile),
+            new Promise<never>((_, reject) => {
+                timeout = setTimeout(
+                    () => reject(new Error("Scope role refinement timed out")),
+                    SCOPE_ROLE_TIMEOUT_MS,
+                )
+            }),
+        ]).finally(() => {
+            if (timeout) clearTimeout(timeout)
+        })
         return applyScopeRoleRefinement(families, decisions, targetSeeds)
     } catch (error) {
         console.warn("[ScopeRole] refinement failed open:", error)

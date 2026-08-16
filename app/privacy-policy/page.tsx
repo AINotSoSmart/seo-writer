@@ -11,14 +11,15 @@ export default function PrivacyPolicyPage() {
     return (
         <LegalPage
             title="Privacy Policy"
-            summary="This policy explains the data needed to run immutable website audits and finite content-delivery programs."
+            summary="This policy explains the data needed to run recurring AI visibility measurement and content-delivery cycles."
         >
             <LegalSection title="Data we process">
                 <p>
                     We process account identifiers, billing references, your brand settings,
-                    article content, delivery status, and any WordPress credentials you choose
-                    to provide. We scan publicly available website pages and search-result
-                    sources for audits. FlipAEO does not require Google Search Console access.
+                    tracked buyer questions, AI answer evidence, article content, delivery
+                    status, and any WordPress credentials you choose to provide. We process
+                    publicly available website pages and cited sources for reports. FlipAEO
+                    does not require Google Search Console access.
                 </p>
             </LegalSection>
             <LegalSection title="Audit and prospect links">

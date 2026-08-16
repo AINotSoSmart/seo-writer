@@ -34,13 +34,13 @@ export function BlogCTABanner() {
                         {/* The Hook - Instrument Serif */}
                         <div className="max-w-2xl mb-4">
                             <h3 className="font-serif text-3xl md:text-[42px] leading-[1.15] text-stone-800 tracking-tight">
-                                Your next six clusters should come from <span className="italic font-light text-stone-400">evidence, not a prompt.</span>
+                                Your next content actions should come from <span className="italic font-light text-stone-400">evidence, not a prompt.</span>
                             </h3>
                         </div>
 
                         {/* The Solution - Clean Sans */}
                         <p className="max-w-xl text-stone-500 font-sans text-base md:text-lg leading-relaxed mb-12">
-                            FlipAEO audits your existing B2B SaaS site, shows source-linked gaps, and offers a finite delivery program only when six qualified clusters exist.
+                            FlipAEO tracks the buyer questions that matter, shows where your brand is absent or outranked, and turns the highest-priority gaps into one complete draft batch.
                         </p>
 
                         {/* CTA Block - Integrated but direct */}

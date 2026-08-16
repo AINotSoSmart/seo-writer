@@ -13,7 +13,7 @@ export const maxDuration = 60
 /**
  * Founder-only single-article generation, for quality checks.
  *
- * Runs the REAL writer with the same inputs ship-cluster would send. When
+ * Runs the REAL writer with the same inputs ship-cycle sends. When
  * `hydrateFromPlannedId` is supplied, audit evidence, sub-nodes, cluster
  * context and any frozen links already in the database are loaded from that
  * planned article — but `plannedArticleId` is deliberately NOT passed to the

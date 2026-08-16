@@ -427,6 +427,7 @@ export async function runVisibilityProbe(
         const promptRows = promptsToUse.map((prompt) => ({
             run_id: runId,
             user_id: options.userId,
+            tracked_prompt_id: prompt.trackedPromptId ?? null,
             scope_family_id: prompt.scopeFamilyId,
             prompt: prompt.text,
             prompt_norm: prompt.textNorm,
@@ -437,7 +438,9 @@ export async function runVisibilityProbe(
         const { data: insertedPrompts, error: promptError } = await supabase
             .from("ai_probe_prompts")
             .insert(promptRows)
-            .select("id, prompt, prompt_norm, scope_family_id, intent, article_type, source_seed")
+            .select(
+                "id, tracked_prompt_id, prompt, prompt_norm, scope_family_id, intent, article_type, source_seed",
+            )
         if (promptError || !insertedPrompts) {
             throw new Error(`Could not persist prompts: ${promptError?.message ?? "unknown"}`)
         }

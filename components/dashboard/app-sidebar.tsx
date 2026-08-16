@@ -110,7 +110,7 @@ export function AppSidebar({
       url: "/articles",
       icon: FeatherIcon,
     },
-    // Product navigation follows the finite audit-to-delivery program only.
+    // Product navigation follows measurement evidence into recurring delivery cycles.
     {
       title: "Settings",
       url: "/settings",

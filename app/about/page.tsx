@@ -5,9 +5,9 @@ import { Footer } from "@/components/landing/Footer"
 import { Navbar } from "@/components/landing/Navbar"
 
 export const metadata: Metadata = {
-    title: "About FlipAEO — why we sell a programme that ends",
+    title: "About FlipAEO — why measurement comes before writing",
     description:
-        "Built by a solo founder who published for years before automating it. Why FlipAEO shows its sources and cancels itself instead of running as an open-ended retainer.",
+        "Built by a solo founder who published for years before automating it. Why FlipAEO tracks buyer questions, shows its evidence and refuses filler quotas.",
     alternates: { canonical: "/about" },
 }
 
@@ -20,29 +20,29 @@ export default function AboutPage() {
                     About FlipAEO
                 </p>
                 <h1 className="mt-4 max-w-3xl font-serif text-4xl leading-tight sm:text-6xl">
-                    A content programme designed to end.
+                    Measure first. Write only what the evidence supports.
                 </h1>
                 <div className="mt-10 space-y-6 text-base leading-8 text-stone-700 sm:text-lg">
                     <p>
                         I built FlipAEO after years of planning, writing and publishing my own
                         content — and watching where automated content tools quietly fall apart.
                         They almost always fail the same two ways: they cannot tell you where a
-                        topic came from, and they can never admit the useful ones ran out.
+                        recommendation came from, and they turn every allowance into a quota.
                     </p>
                     <p>
-                        So this works the other way round. We read your site and the competitors
-                        you name, keep the source link behind every question we find, and show
-                        you the list before you spend anything. You can open any row and check it.
-                        Then we write the missing articles and deliver them in complete, linked
-                        batches — as many as your site genuinely justifies, not a number chosen
-                        to hit a price.
+                        So this works the other way round. You confirm 40 questions buyers ask.
+                        We measure how ChatGPT and Google AI Mode answer them, preserve the
+                        mentions and citations behind each verdict, and show the report before
+                        selecting work. Then we turn at most eight high-priority gaps into
+                        create or refresh actions and deliver the selected drafts together.
                     </p>
                     <p>
-                        And when the last batch lands, the subscription cancels itself. A
-                        retainer has no natural end, which is why month three so often turns into
-                        rewrites of things you already own. We would rather lose the fee. What we
-                        will not do is promise rankings, traffic or AI citations — nobody can
-                        honestly guarantee those, and we would rather tell you that up front.
+                        Eight is a cost ceiling, not a promise to manufacture eight articles.
+                        Smaller batches and report-only cycles are honest outcomes; qualified
+                        work that does not fit stays in the backlog. You can cancel future
+                        cycles at any time and keep completed reports and delivered drafts. We
+                        do not promise rankings, traffic or AI citations — nobody can honestly
+                        guarantee those.
                     </p>
                 </div>
                 <div className="mt-10 flex flex-wrap gap-3">

@@ -81,7 +81,7 @@ export default async function ClaimAuditPage({
                             href={`/login?next=${encodeURIComponent(`/claim/${token}`)}`}
                             className="inline-flex rounded-lg bg-stone-950 px-5 py-3 text-sm font-semibold text-white"
                         >
-                            Claim this audit and choose your delivery speed
+                            Claim this audit and confirm your buyer questions
                         </Link>
                     )}
                     <p className="mt-3 text-xs text-stone-500">

@@ -8,10 +8,6 @@ export function GET() {
     const featureUrls = Object.keys(features).map(
         (slug) => `- ${defaultSEO.siteUrl}/features/${slug}`,
     )
-    const tiers = Object.values(PRODUCT_TRUTH.tiers).map(
-        (tier) =>
-            `- ${tier.label}: $${tier.price}/month; ${tier.cadence.toLowerCase()}.`,
-    )
     const body = [
         "# FlipAEO",
         "",
@@ -19,24 +15,22 @@ export function GET() {
         "",
         "## Product contract",
         "",
-        // `programClusters` is a legacy display default, never a gate. Scope is
-        // dynamic — a program contains however many qualified clusters the audit
-        // measured — so this file must not state a fixed count as fact.
-        "- One program contains every qualified priority cluster the audit measured.",
-        `- Qualified clusters contain ${PRODUCT_TRUTH.minClusterArticles}-${PRODUCT_TRUTH.maxClusterArticles} unique planned articles.`,
-        "- Measured demand too thin for its own article becomes a named section inside a related one; it is never padding.",
-        "- FlipAEO is the agency alternative for founder-led B2B SaaS: the same research, planning, writing and delivery an agency retainer covers, priced as software and scoped to end.",
-        "- Every audit query retains its observed source URL.",
-        "- Article URLs and the internal-link graph are frozen before purchase.",
-        "- A cluster is withheld until every member is generated.",
+        `- One website and ${PRODUCT_TRUTH.trackedPromptAllowance} confirmed buyer questions.`,
+        `- Questions are remeasured in ${PRODUCT_TRUTH.engines.join(" and ")} each paid billing cycle.`,
+        `- Each cycle can select up to ${PRODUCT_TRUTH.actionAllowance} create or refresh actions; the allowance is a ceiling, never a filler quota.`,
+        "- Findings that do not justify a draft remain visible as report-only evidence.",
+        "- Unselected qualified work remains in a visible backlog for a later cycle.",
+        "- Selected drafts are released together as one complete batch.",
         "- Generated, delivered, and published are separate states.",
-        `- ${PRODUCT_TRUTH.automaticCancellation}`,
+        `- ${PRODUCT_TRUTH.cancellation}`,
         "",
         "FlipAEO does not guarantee rankings, traffic, citations, or complete coverage of an entire niche. It does not require Google Search Console access.",
         "",
-        "## Delivery speeds",
+        "## Founding beta price hypothesis",
         "",
-        ...tiers,
+        `- $${PRODUCT_TRUTH.introductoryPrice}/month for the first ${PRODUCT_TRUTH.introductoryPeriods} billing periods.`,
+        `- Planned continuing price: $${PRODUCT_TRUTH.continuingPrice}/month from period ${PRODUCT_TRUTH.introductoryPeriods + 1}.`,
+        "- Checkout remains closed until the recurring payment-to-batch path passes sandbox testing.",
         "",
         "## Canonical pages",
         "",

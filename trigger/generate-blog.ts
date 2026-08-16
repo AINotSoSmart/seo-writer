@@ -2004,19 +2004,19 @@ export const generateBlogPost = task({
       .eq("generation_status", "generating")
     const { data: planned } = await supabase
       .from("planned_articles")
-      .select("cluster_id")
+      .select("cycle_action_id")
       .eq("id", payload.plannedArticleId)
       .maybeSingle()
-    if (planned?.cluster_id) {
+    if (planned?.cycle_action_id) {
       await supabase
-        .from("program_clusters")
+        .from("cycle_actions")
         .update({
-          state: "blocked",
+          state: "failed",
           failure_code: "generation_task_failed",
           updated_at: new Date().toISOString(),
         })
-        .eq("audit_cluster_id", planned.cluster_id)
-        .in("state", ["generating", "ready"])
+        .eq("id", planned.cycle_action_id)
+        .eq("state", "generating")
     }
   },
   run: async (payload: GenerateBlogPayload) => {
@@ -3074,6 +3074,24 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
             updated_at: new Date().toISOString(),
           })
           .eq("id", plannedArticleId)
+
+        const { data: planned } = await (supabase as any)
+          .from("planned_articles")
+          .select("cycle_action_id")
+          .eq("id", plannedArticleId)
+          .maybeSingle()
+        if (planned?.cycle_action_id) {
+          await (supabase as any)
+            .from("cycle_actions")
+            .update({
+              state: "ready",
+              ready_at: new Date().toISOString(),
+              failure_code: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", planned.cycle_action_id)
+            .eq("state", "generating")
+        }
       }
 
 
@@ -3138,19 +3156,19 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
           .eq("id", payload.plannedArticleId)
         const { data: planned } = await (supabase as any)
           .from("planned_articles")
-          .select("cluster_id")
+          .select("cycle_action_id")
           .eq("id", payload.plannedArticleId)
           .maybeSingle()
-        if (planned?.cluster_id) {
+        if (planned?.cycle_action_id) {
           await (supabase as any)
-            .from("program_clusters")
+            .from("cycle_actions")
             .update({
-              state: "blocked",
+              state: "failed",
               failure_code: "article_generation_failed",
               updated_at: new Date().toISOString(),
             })
-            .eq("audit_cluster_id", planned.cluster_id)
-            .in("state", ["scheduled", "generating", "ready"])
+            .eq("id", planned.cycle_action_id)
+            .eq("state", "generating")
         }
       }
       throw e

@@ -10,7 +10,7 @@ const FAQS = [
   },
   {
     question: "How is this different from hiring an agency?",
-    answer: "Scope and price. An agency runs $3,000 to $15,000 a month and keeps running until you cancel, because a retainer has no natural end. Here the audit sizes the work up front, you approve it before paying, and the subscription cancels itself when the last batch lands. What an agency gives you that we do not: a human strategist on a call, link building, and someone to chase your team for input."
+    answer: "The workflow is narrower and productised. FlipAEO measures a fixed set of buyer questions, retains the evidence, and delivers the selected content work as one batch. What an agency may give you that we do not: a human strategist on calls, link building, and someone to coordinate your team."
   },
   {
     question: "Why not just buy a $19 AI blog writer?",
@@ -18,19 +18,19 @@ const FAQS = [
   },
   {
     question: "How many articles will I actually get?",
-    answer: "Whatever your site genuinely justifies. Your audit groups the gaps into batches of 8 to 15 articles each, and you buy the batches that qualify — that might be three, it might be twelve. You see the exact article count and what it costs before you pay anything. We do not sell a fixed number and then go looking for topics to fill it."
+    answer: "Up to eight create or refresh actions can be selected in one billing cycle, but eight is a ceiling rather than a quota. A cycle may honestly contain fewer. Qualified work that does not fit stays visible in the backlog instead of being discarded or squeezed into filler."
   },
   {
     question: "How do you stop it inventing things about my product?",
     answer: "Anything an article claims about your product has to trace back to your own website or something you confirmed during setup. Facts from anywhere else are attributed to the page they came from, and never rewritten as though they were about you. Articles are checked against that rule before delivery, and a failing one is rewritten rather than shipped."
   },
   {
-    question: "What happens to the smaller topics that don't fill a batch?",
-    answer: "They are not thrown away. If a question has enough real demand behind it, it becomes its own article. If it does not, it becomes a clearly labelled section inside a related article instead of disappearing. What we will not do is pad an article with filler sections to make a number look bigger."
+    question: "What happens to work that does not fit this cycle?",
+    answer: "It stays in the visible backlog for later prioritisation. Findings that should not become owned content remain report-only evidence. Neither kind is silently deleted, and neither is used to pad the batch to eight."
   },
   {
     question: "What happens when you run out of topics?",
-    answer: "We tell you, and the subscription cancels itself. That is the whole point. Tools that bill monthly forever cannot admit the useful topics ran out, so around month three they quietly start rewriting what you already published. We would rather lose the fee than do that."
+    answer: "We show a report-only cycle or a smaller action batch; we do not manufacture articles. The subscription does not cancel itself. You can cancel future billing cycles at any time, while completed reports and delivered drafts remain available."
   },
   {
     question: "Do I need to edit the articles?",
@@ -38,15 +38,15 @@ const FAQS = [
   },
   {
     question: "What if my site is too small to qualify?",
-    answer: "Then we will not sell you a program. There is no minimum number of batches you have to hit — a small scope is simply a smaller program. But if nothing on your site qualifies at all, the audit says so and checkout stays closed. A refund in month two costs us both more than a no today."
+    answer: "There is no minimum cluster floor in the recurring contract. A narrow site may produce fewer than eight actions or only report evidence in a cycle. We would rather show that honestly than invent content merely because an allowance exists."
   },
   {
     question: "Can I use this for more than one product?",
-    answer: "Yes — each site gets its own audit and its own program, so a founder running two products can run two. It is built for the person who owns the product, though, not for agencies: there are no client workspaces, white-label reports or approval chains."
+    answer: "The launch plan covers one website. A second product on another website needs a separate subscription. It is built for the person who owns the product, not for agencies: there are no client workspaces, white-label reports or approval chains."
   },
   {
     question: "Do you promise rankings or traffic?",
-    answer: "No, and be careful with anyone who does. We can prove which questions your market searches, which ones your site does not answer, and that we delivered publishable articles for them. What search engines do next is not ours to guarantee."
+    answer: "No. We can show the exact questions measured, the AI answers and citations observed, and the drafts delivered for selected work. Search and AI systems are controlled by third parties, so rankings, traffic, mentions and citations are not guaranteed."
   },
   {
     question: "What languages do you support?",
@@ -169,4 +169,3 @@ export const FAQSection: React.FC = () => {
 };
 
 export default FAQSection;
-

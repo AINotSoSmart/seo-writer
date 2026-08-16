@@ -46,7 +46,7 @@ export default function SubscribeButton({
             disabled={loading}
             className={className}
         >
-            {loading ? "Opening checkout…" : children || "Choose delivery speed"}
+            {loading ? "Opening checkout…" : children || "Start subscription"}
         </button>
     )
 }

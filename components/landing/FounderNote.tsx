@@ -20,15 +20,15 @@ export default function FounderNote() {
                 <div className="flex flex-col md:flex-row gap-8 md:gap-16 justify-between items-start md:items-end mb-16 w-full px-4 md:px-8">
                     <div className="flex-1">
                         <span className="font-sans text-xs font-bold tracking-widest text-brand-500 uppercase mb-4 block">
-                            The Audit Is On Me
+                            The Questions Come First
                         </span>
                         <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 tracking-tight font-normal leading-[1]">
-                            See the evidence  <br /><span className='italic text-stone-500'>before you pay.</span>
+                            Make the measurement <br /><span className='italic text-stone-500'>worth running.</span>
                         </h2>
                     </div>
                     <div className="flex-1 md:max-w-xl pb-0 md:pb-2">
                         <p className="font-sans text-stone-500 text-lg leading-relaxed">
-                            The initial audit is free for a reason: you should be able to inspect the opportunity and verify its sources before I ask you to buy the delivery program.
+                            You review the 40 buyer questions before any paid AI measurement starts. A report is only useful when the questions reflect the market you actually want to win.
                         </p>
                     </div>
                 </div>
@@ -58,10 +58,10 @@ export default function FounderNote() {
                         {/* The Message */}
                         <blockquote className="mb-20">
                             <p className="font-serif text-3xl md:text-5xl lg:text-[54px] leading-[1.2] text-stone-900 mb-8 tracking-tight">
-                                "Your full evidence audit is on me. I want you to see every source-linked content gap before I ask you to pay."
+                                "Start with the buyer questions. If those are wrong, every report and every draft downstream is wrong too."
                             </p>
                             <p className="font-serif text-xl md:text-2xl leading-relaxed text-stone-500 italic">
-                                "You buy however many clusters your site actually earns — not a number I picked. You see that count and its price before anything is charged, and if nothing qualifies, checkout stays closed."
+                                "We track 40 questions and select up to eight honest create or refresh actions per cycle. Fewer is allowed. Filler is not. Anything that does not fit stays visible in the backlog."
                             </p>
                         </blockquote>
 
@@ -114,11 +114,11 @@ export default function FounderNote() {
                                         variant="primary"
                                         className="px-8 py-3.5 text-sm"
                                     >
-                                        Show Me What I'm Missing
+                                        Confirm My Buyer Questions
                                     </Button>
                                 </Link>
                                 <p className="text-[9px] text-stone-400 font-bold uppercase tracking-widest text-center">
-                                    Full audit, free &middot; one current audit per site
+                                    One website &middot; measurement starts explicitly
                                 </p>
                             </div>
 
@@ -137,4 +137,3 @@ export default function FounderNote() {
         </section>
     );
 };
-

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useId } from "react"
+import { useState } from "react"
 import {
     ArrowRight,
     ArrowLeft,
@@ -15,7 +15,10 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { normalizeQuery } from "@/lib/harvest/types"
 import type { BuyerPrompt } from "@/lib/visibility/prompt-builder"
+import { DEFAULT_PROMPTS_PER_RUN, PROMPT_INTENTS } from "@/lib/visibility/prompt-config"
+import { inferPromptIntent } from "@/lib/visibility/prompt-selection"
 import type { ScopeFamily } from "@/lib/schemas/brand"
 
 export interface PromptItem extends BuyerPrompt {
@@ -33,8 +36,8 @@ const INTENT_BADGES: Record<
         text: "text-purple-700",
         border: "border-purple-200",
     },
-    best_of: {
-        label: "Best-Of",
+    recommendation: {
+        label: "Recommendation",
         bg: "bg-blue-50",
         text: "text-blue-700",
         border: "border-blue-200",
@@ -45,13 +48,13 @@ const INTENT_BADGES: Record<
         text: "text-indigo-700",
         border: "border-indigo-200",
     },
-    workflow: {
-        label: "Workflow",
+    problem: {
+        label: "Informational",
         bg: "bg-emerald-50",
         text: "text-emerald-700",
         border: "border-emerald-200",
     },
-    definition: {
+    howto: {
         label: "How-To",
         bg: "bg-amber-50",
         text: "text-amber-700",
@@ -118,12 +121,31 @@ export function PromptsStep({
             return
         }
 
+        const edited = prompts.find((prompt) => prompt.id === promptId)
+        if (edited && checkBrandMention(trimmed)) {
+            setBrandWarnings((current) => ({
+                ...current,
+                [edited.scopeFamilyId]:
+                    "Discovery questions should not name your brand. Test what buyers ask before knowing you exist.",
+            }))
+            return
+        }
+
         onPromptsChange(
-            prompts.map((p) =>
-                p.id === promptId
-                    ? { ...p, text: trimmed, textNorm: trimmed.toLowerCase() }
-                    : p,
-            ),
+            prompts.map((p) => {
+                if (p.id !== promptId) return p
+                const intent = inferPromptIntent(trimmed, p.intent)
+                const articleType = PROMPT_INTENTS.find(
+                    (candidate) => candidate.key === intent,
+                )!.articleType
+                return {
+                    ...p,
+                    text: trimmed,
+                    textNorm: normalizeQuery(trimmed),
+                    intent,
+                    articleType,
+                }
+            }),
         )
         setEditingPromptId(null)
     }
@@ -134,7 +156,7 @@ export function PromptsStep({
 
     const handleAddCustomPrompt = (familyId: string, familyName: string) => {
         const input = (customInputs[familyId] || "").trim()
-        if (!input) return
+        if (!input || prompts.length >= DEFAULT_PROMPTS_PER_RUN) return
 
         if (checkBrandMention(input)) {
             setBrandWarnings((prev) => ({
@@ -151,13 +173,17 @@ export function PromptsStep({
             return next
         })
 
+        const intent = inferPromptIntent(input, "problem")
+        const articleType = PROMPT_INTENTS.find(
+            (candidate) => candidate.key === intent,
+        )!.articleType
         const newPrompt: PromptItem = {
             id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             text: input,
-            textNorm: input.toLowerCase(),
+            textNorm: normalizeQuery(input),
             scopeFamilyId: familyId,
-            intent: "alternatives",
-            articleType: "commercial",
+            intent,
+            articleType,
             sourceSeed: familyName,
             isCustom: true,
         }
@@ -186,16 +212,15 @@ export function PromptsStep({
                 </p>
             </div>
 
-            {/* Explanatory callout */}
             <div className="flex items-start gap-2 rounded-lg border border-stone-200 bg-stone-50/80 p-3 text-[11px] leading-relaxed text-stone-600">
                 <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-400" />
                 <p>
                     <strong className="font-medium text-stone-800">
-                        Why are brands not named in these questions?
+                        Why is your brand not named in these questions?
                     </strong>{" "}
-                    We test whether AI assistants recommend your product organically when a
-                    buyer describes their problem. If an engine names a competitor instead of
-                    you, that becomes a qualified gap we write an article to fix.
+                    We test whether AI assistants recommend you when a buyer describes the
+                    problem naturally. A missing answer becomes a measured finding; only
+                    findings that owned content can solve become create or refresh work.
                 </p>
             </div>
 
@@ -273,7 +298,7 @@ export function PromptsStep({
                                             const badge =
                                                 prompt.isCustom
                                                     ? INTENT_BADGES.custom
-                                                    : INTENT_BADGES[prompt.intent] || INTENT_BADGES.alternatives
+                                                    : INTENT_BADGES[prompt.intent]
 
                                             return (
                                                 <div
@@ -378,7 +403,10 @@ export function PromptsStep({
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                disabled={!(customInputs[familyId] || "").trim()}
+                                                disabled={
+                                                    totalPrompts >= DEFAULT_PROMPTS_PER_RUN ||
+                                                    !(customInputs[familyId] || "").trim()
+                                                }
                                                 onClick={() => handleAddCustomPrompt(familyId, family.name)}
                                                 className="h-8 shrink-0 text-xs"
                                             >
@@ -402,6 +430,12 @@ export function PromptsStep({
 
             {/* Bottom Actions */}
             <div className="sticky bottom-0 space-y-3 border-t border-stone-100 bg-white/95 py-3 backdrop-blur-sm">
+                {totalPrompts !== DEFAULT_PROMPTS_PER_RUN && (
+                    <p className="text-center text-[11px] text-amber-700">
+                        Confirm exactly {DEFAULT_PROMPTS_PER_RUN} unique questions. You currently
+                        have {totalPrompts}.
+                    </p>
+                )}
                 <div className="flex items-center justify-between gap-3">
                     <Button
                         type="button"
@@ -416,7 +450,9 @@ export function PromptsStep({
                     <Button
                         type="button"
                         onClick={onContinue}
-                        disabled={loading || saving || totalPrompts === 0}
+                        disabled={
+                            loading || saving || totalPrompts !== DEFAULT_PROMPTS_PER_RUN
+                        }
                         className="h-10 flex-1 bg-gradient-to-b from-stone-800 to-stone-950 font-semibold text-white hover:from-stone-700 hover:to-stone-900 disabled:opacity-50 sm:flex-initial sm:min-w-[200px]"
                     >
                         {saving

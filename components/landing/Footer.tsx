@@ -40,7 +40,7 @@ export function Footer() {
               </div>
 
               <p className="font-sans text-stone-500 text-sm leading-relaxed max-w-sm">
-                The SaaS SEO agency alternative for founder-led B2B SaaS. We find what your market searches that your site misses, show you where we found it, then write and deliver the articles — and stop when the work is done.
+                AI visibility measurement and evidence-bound content delivery for founder-led B2B SaaS. Track 40 buyer questions, see where your brand loses, and receive the highest-priority create or refresh work as one complete batch.
               </p>
 
 

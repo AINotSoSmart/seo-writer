@@ -107,10 +107,9 @@ export function ScopeResults({
                 <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
                     <div className="text-sm text-amber-950">
-                        <strong className="font-medium">Not eligible for a program yet.</strong>{" "}
-                        {scope.eligibilityReason} This evidence can still be shared or refreshed
-                        after the business adds products, services, or markets. No checkout is
-                        offered for this scope.
+                        <strong className="font-medium">Historical audit evidence.</strong>{" "}
+                        {scope.eligibilityReason} This report remains shareable, but it is not a
+                        recurring subscription order form.
                     </div>
                 </div>
             )}
@@ -124,15 +123,15 @@ export function ScopeResults({
                 />
                 <Stat
                     icon={Layers}
-                    label="Measured clusters"
+                    label="Editorial clusters"
                     value={scope.clusterCount}
-                    detail="qualified clusters contain 8–15 articles"
+                    detail="historical audit grouping, not a billing quota"
                 />
                 <Stat
                     icon={CalendarClock}
-                    label={scope.hasActiveProgram ? "Your program" : "Program scope"}
+                    label="Potential articles"
                     value={scope.recommendedArticleCount}
-                    detail={`${recommended.length} clusters across confirmed business areas`}
+                    detail={`${recommended.length} evidence-bound editorial groups`}
                 />
             </div>
 
@@ -144,44 +143,14 @@ export function ScopeResults({
                         <h3 className="font-serif text-xl text-stone-900">
                             {showAllClusters
                                 ? "All measured clusters"
-                                : scope.hasActiveProgram || scope.checkoutEligible
-                                  ? `Your ${recommended.length}-cluster program`
-                                  : "Measured clusters (not yet a program)"}
+                                : "Evidence-bound editorial groups"}
                         </h3>
                         <p className="mt-1 text-sm text-stone-500">
-                            {/*
-                              * Scope is whatever the audit measured. A fixed six turned away
-                              * every business whose real depth was smaller, and told them
-                              * their site was ineligible rather than that the program was
-                              * simply shorter.
-                              */}
-                            {scope.hasActiveProgram ? (
-                                <>
-                                    Your program covers {recommended.length} cluster
-                                    {recommended.length === 1 ? "" : "s"} and{" "}
-                                    {scope.recommendedArticleCount} articles across{" "}
-                                    {recommendedFamilyCount} confirmed business{" "}
-                                    {recommendedFamilyCount === 1 ? "area" : "areas"}. Clusters are
-                                    delivered complete, in priority order.
-                                </>
-                            ) : scope.checkoutEligible ? (
-                                <>
-                                    This audit measured {recommended.length} qualified cluster
-                                    {recommended.length === 1 ? "" : "s"} containing{" "}
-                                    {scope.recommendedArticleCount} articles, across{" "}
-                                    {recommendedFamilyCount} confirmed business{" "}
-                                    {recommendedFamilyCount === 1 ? "area" : "areas"}. Review every
-                                    title and its supporting searches before choosing a delivery
-                                    speed.
-                                </>
-                            ) : (
-                                <>
-                                    This audit measured no cluster with the depth to sell — every
-                                    cluster needs 8–15 articles. The evidence below is still
-                                    shareable, and a refreshed audit may qualify after the business
-                                    adds products, services, or markets.
-                                </>
-                            )}
+                            This historical audit grouped {scope.recommendedArticleCount} potential
+                            articles into {recommended.length} evidence-bound editorial group
+                            {recommended.length === 1 ? "" : "s"} across {recommendedFamilyCount}{" "}
+                            confirmed business {recommendedFamilyCount === 1 ? "area" : "areas"}.
+                            These groups are evidence to inspect, not purchased recurring-cycle actions.
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
@@ -210,9 +179,7 @@ export function ScopeResults({
                                 className="flex items-center gap-1 text-xs font-medium text-brand-600"
                             >
                                 {showAllClusters
-                                    ? scope.checkoutEligible || scope.hasActiveProgram
-                                      ? `Show ${recommended.length}-cluster program`
-                                      : "Show measured program candidates"
+                                    ? "Show evidence-bound groups"
                                     : `Show ${remainder.length} additional clusters`}
                                 {showAllClusters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                             </button>
@@ -381,50 +348,6 @@ export function ScopeResults({
                 {showEvidence && <EvidenceTable gaps={gaps} />}
             </section>
 
-            {!progress && scope.checkoutEligible && (
-                <section className="rounded-xl border border-stone-200 bg-stone-50 p-5">
-                    <h3 className="font-serif text-xl text-stone-900">
-                        Finished inspecting the scope?
-                    </h3>
-                    <p className="mb-4 mt-1 text-sm text-stone-500">
-                        Every tier freezes and delivers these same six clusters. Only the
-                        delivery cadence changes.
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                        {scope.velocity.map((velocity) => (
-                            <div
-                                key={velocity.tier}
-                                className={cn(
-                                    "rounded-lg border bg-white p-4",
-                                    velocity.tier === "accelerate"
-                                        ? "border-brand-400 bg-brand-50/40"
-                                        : "border-stone-200",
-                                )}
-                            >
-                                <div className="font-medium capitalize text-stone-900">
-                                    {velocity.tier}
-                                </div>
-                                <p className="mt-1 text-xs text-stone-500">
-                                    {velocity.clustersPerMonth} complete cluster
-                                    {velocity.clustersPerMonth === 1 ? "" : "s"} per month
-                                </p>
-                                <p className="mt-3 text-sm text-stone-700">
-                                    Approximately {velocity.months} month
-                                    {velocity.months === 1 ? "" : "s"} to deliver
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                    <Button
-                        className="mt-4"
-                        onClick={() => {
-                            window.location.href = "/subscribe"
-                        }}
-                    >
-                        Confirm URLs and view pricing
-                    </Button>
-                </section>
-            )}
         </div>
     )
 }
@@ -453,19 +376,19 @@ function Stat({
 }
 
 function ProgramBurnDown({ progress }: { progress: ProgramProgress }) {
-    const delivered = progress.scopeStatus === "scope_delivered"
+    const delivered = progress.currentCycleState === "delivered"
     return (
         <section className="rounded-lg border border-stone-200 bg-stone-50 p-5">
             <div className="mb-3 flex items-baseline justify-between">
                 <span className="text-sm font-medium text-stone-900">
                     {delivered
-                        ? "Program scope delivered"
-                        : `${progress.deliveredCount} of ${progress.totalArticles} delivered`}
+                        ? "Current cycle delivered"
+                        : `${progress.deliveredActions} of ${progress.selectedActions} selected actions delivered`}
                 </span>
                 <span className="text-xs text-stone-500">
                     {delivered
-                        ? "All six program clusters delivered"
-                        : `About ${progress.monthsRemaining} month${progress.monthsRemaining === 1 ? "" : "s"} remaining`}
+                        ? `${progress.totalCycles} recurring cycle${progress.totalCycles === 1 ? "" : "s"}`
+                        : progress.currentCycleState?.replaceAll("_", " ") || "Waiting for the first cycle"}
                 </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-stone-200">
@@ -475,16 +398,13 @@ function ProgramBurnDown({ progress }: { progress: ProgramProgress }) {
                 />
             </div>
             <p className="mt-3 text-xs text-stone-600">
-                Generated {progress.generatedCount}/{progress.totalArticles} · Delivered{" "}
-                {progress.deliveredCount}/{progress.totalArticles} · Published{" "}
-                {progress.publishedCount}/{progress.totalArticles}
+                Ready {progress.readyActions}/{progress.selectedActions} · Delivered{" "}
+                {progress.deliveredActions}/{progress.selectedActions}
             </p>
             {delivered && (
                 <p className="mt-2 text-xs text-stone-600">
-                    All six clusters in this program have been delivered.
-                    {progress.additionalQualifiedClustersAvailable
-                        ? " Additional qualified clusters remain available for a future program."
-                        : ""}
+                    This batch is complete. The subscription remains active for the next
+                    billing-period measurement.
                 </p>
             )}
         </section>

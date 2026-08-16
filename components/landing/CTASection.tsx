@@ -82,7 +82,7 @@ const CTASection: React.FC = () => {
                   </svg>
 
                 </span>
-                <span className="font-hand text-[14px] sm:text-2xl text-center text-stone-500 leading-none">Complete cluster <br /> delivery</span>
+                <span className="font-hand text-[14px] sm:text-2xl text-center text-stone-500 leading-none">Complete cycle <br /> batch</span>
               </div>
 
               {/* 5. Bottom Right: Increase conversion */}
@@ -93,7 +93,7 @@ const CTASection: React.FC = () => {
                   </svg>
                 </span>
                 <span className="font-hand text-[14px] sm:text-2xl text-stone-500 leading-none text-center">
-                  Billing stops with <br />the scope
+                  Cancel future <br />cycles anytime
                 </span>
               </div>
 
