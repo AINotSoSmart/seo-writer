@@ -118,6 +118,12 @@ export interface DashboardSummary {
 }
 
 export interface DashboardProps {
+    /**
+     * Rendered inside the dashboard shell, which already carries the page
+     * header, the width and the padding. The shareable link route renders
+     * standalone and leaves this false.
+     */
+    embedded?: boolean
     runId: string
     subjectName: string
     subjectDomains: string[]
@@ -252,6 +258,7 @@ export function VisibilityDashboard(props: DashboardProps) {
         auditId,
         publicToken,
         isAuthenticated,
+        embedded = false,
     } = props
 
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -305,12 +312,17 @@ export function VisibilityDashboard(props: DashboardProps) {
     }
 
     return (
-        <div className="viz-root bg-[var(--viz-plane)] text-[var(--viz-ink)]">
+        <div className="viz-root text-[var(--viz-ink)]">
             <VizTokens />
 
-            <div className="mx-auto max-w-5xl px-6 py-12">
+            {/* Padding and width belong to the host when there is one. The
+                dashboard page supplies the app shell, its own sidebar gutter and
+                the page header; repeating them here produced a second title and
+                a card floating inside a card. The shareable link route has no
+                shell, so it still gets both. */}
+            <div className={embedded ? "" : "mx-auto max-w-5xl px-6 py-12"}>
                 {/* ── Header ───────────────────────────────────────────── */}
-                <header>
+                <header className={embedded ? "sr-only" : undefined}>
                     <p className="text-xs uppercase tracking-wide text-[var(--viz-ink-muted)]">
                         AI visibility · {new Date(startedAt).toLocaleDateString()}
                     </p>
@@ -421,11 +433,25 @@ export function VisibilityDashboard(props: DashboardProps) {
                             label="questions you're missing from entirely"
                             tone="critical"
                         />
-                        <Stat
-                            value={String(summary.outrankedPromptCount)}
-                            label="questions where a rival is named ahead of you"
-                            tone="warning"
-                        />
+                        {/* "Outranked" means you WERE named, just never first. When
+                            the brand is absent from every answer it is zero by
+                            arithmetic, and reading "0 questions where a rival is
+                            named ahead of you" as good news inverts the actual
+                            finding — rivals were named in all of them, you simply
+                            were not there to be ranked. Say the true thing. */}
+                        {summary.presentPromptCount + summary.outrankedPromptCount === 0 ? (
+                            <Stat
+                                value={String(summary.rivalLeaderboard.length)}
+                                label="rivals named in answers you never appear in"
+                                tone="warning"
+                            />
+                        ) : (
+                            <Stat
+                                value={String(summary.outrankedPromptCount)}
+                                label="questions where a rival is named ahead of you"
+                                tone="warning"
+                            />
+                        )}
                         <Stat
                             value={String(summary.presentPromptCount)}
                             label="questions where you're named first"

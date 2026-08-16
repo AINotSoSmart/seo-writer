@@ -222,6 +222,72 @@ product built around daily tracking declined to claim trends.
 Revisit only after repeated same-day sampling establishes the variance first.
 
 ---
+---
+
+## 5b. Open — the report is one scroll, and it is not in the dashboard
+
+**Status:** identified 2026-08-15 from the first complete report. Not built.
+
+### Two separate problems
+
+**Reachability.** ✅ Fixed 2026-08-15. There is still no index of *past* runs —
+the sidebar resolves the newest completed one — which is enough while a customer
+has a single run and worth revisiting when they have several.
+
+**Density.** Everything is a single `max-w-5xl` vertical column: KPI block,
+per-surface breakdown, citation split, source list, question list, cluster plan.
+On a run with real data that is a very long scroll with no way to jump, no
+filtering, and no way to compare two things side by side.
+
+### What upstream does, concretely
+
+`flipaeo-visibility` splits one report across routes behind a sidebar —
+`insights`, `prompts`, `competitors`, `citations`, `topics`, `reports`,
+`content` — with `/dashboard` redirecting to `/dashboard/insights`.
+
+The insights page itself, which is the closest analogue of our report:
+
+| Zone | Structure |
+|---|---|
+| Header | brand name, last-run timestamp, actions (export CSV, reports, run again) |
+| Filter bar | date range, topic, region, engine — compact, 8px controls |
+| Status banners | in-flight run with progress; separate banner for a run someone else started |
+| KPI grid | five cards, `grid-cols-2` → `sm:grid-cols-3` → `xl:grid-cols-5` |
+| Competitors | `lg:grid-cols-5` — trend chart spans 3, **rival leaderboard spans 2** |
+| Share of voice | `lg:grid-cols-2` — platform breakdown beside trend |
+| Recommendations | `lg:grid-cols-2` — topic opportunities beside prompt opportunities |
+
+The lesson is not the specific charts — several of them are the trend lines this
+repo deliberately refuses (§5). It is the **shape**: a KPI grid, then paired
+two-column panels, then detail on its own route. Rivals get a dedicated panel
+next to the headline rather than appearing somewhere down a scroll.
+
+### What to build, in order
+
+1. ~~**`/visibility` index + sidebar entry.**~~ ✅ Built 2026-08-15 (seventeenth
+   pass). `app/(protected)/visibility/page.tsx` resolves the newest completed
+   run inside the dashboard shell; the dark-mode branch that made the report
+   look like a different product is gone.
+2. **Reorganise the report page**: header with brand/date/credits and a re-run
+   action, KPI grid at 2/3/5, then paired panels — rivals beside per-surface
+   presence, citation split beside the source list.
+3. **Split the long tail onto its own routes**: the full question list and the
+   full citation list are tables, not report sections. They want their own pages
+   with filtering.
+
+### What NOT to copy
+
+Their date-range filter and trend charts assume repeated daily sampling. This
+repo refuses trend claims until variance is measured (§5), so a date filter over
+a single run is a control with nothing behind it.
+
+### Build trigger
+
+Item 1 before anyone outside the building sees the product. Items 2 and 3 once a
+run with real data exists to lay out — the current empty-looking report is partly
+a data problem (0% presence, uncategorised citations), and designing a dense
+layout around an empty run risks optimising for the wrong shape.
+
 
 ## 6. Rejected — open-ended entity extraction from answers
 

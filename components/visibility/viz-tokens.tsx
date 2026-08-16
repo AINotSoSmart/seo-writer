@@ -14,21 +14,23 @@
  * every status in this dashboard ships an icon and a text label and never
  * carries meaning by colour alone.
  *
- * Declared under both `prefers-color-scheme` and `[data-theme]` so the app's
- * theme toggle wins in both directions.
+ * Light only, matching the rest of the product — see the note above the
+ * `.viz-bar` rules for why the dark column was removed rather than kept.
  */
 
 export const VIZ_TOKENS_CSS = `
 .viz-root {
   color-scheme: light;
-  --viz-surface: #fcfcfb;
-  --viz-plane: #f9f9f7;
-  --viz-ink: #0b0b0b;
-  --viz-ink-secondary: #52514e;
-  --viz-ink-muted: #898781;
-  --viz-hairline: #e1e0d9;
-  --viz-baseline: #c3c2b7;
-  --viz-track: #ebeae3;
+  /* Stone, matching every other dashboard page: surface = white cards on a
+     stone-50 plane, ink = stone-900/600/400, hairline = stone-200. */
+  --viz-surface: #ffffff;
+  --viz-plane: #fafaf9;
+  --viz-ink: #1c1917;
+  --viz-ink-secondary: #57534e;
+  --viz-ink-muted: #a8a29e;
+  --viz-hairline: #e7e5e4;
+  --viz-baseline: #d6d3d1;
+  --viz-track: #f5f5f4;
 
   /* categorical: slot 1 = the brand, slot 2 = everyone else */
   --viz-series-1: #2a78d6;
@@ -50,61 +52,18 @@ export const VIZ_TOKENS_CSS = `
   --viz-critical: #d03b3b;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) .viz-root {
-    color-scheme: dark;
-    --viz-surface: #1a1a19;
-    --viz-plane: #0d0d0d;
-    --viz-ink: #ffffff;
-    --viz-ink-secondary: #c3c2b7;
-    --viz-ink-muted: #898781;
-    --viz-hairline: #2c2c2a;
-    --viz-baseline: #383835;
-    --viz-track: #2c2c2a;
+/* No dark branch, deliberately.
 
-    --viz-series-1: #3987e5;
-    --viz-series-2: #d95926;
-    --viz-muted-mark: #4d4d49;
+   This dashboard is the only surface in the product that ever had one. Every
+   other page is stone-on-white with no dark: variants and no theme toggle, so
+   honouring prefers-color-scheme meant the report inverted to near-black on a
+   dark-OS machine while the sidebar beside it stayed light — the report read as
+   a different product bolted on. A palette that follows the system when its
+   host does not is not theme support; it is one page disagreeing with the app.
 
-    --viz-seq-200: #184f95;
-    --viz-seq-350: #256abf;
-    --viz-seq-450: #3987e5;
-    --viz-seq-550: #6da7ec;
-
-    --viz-good: #0ca30c;
-    --viz-good-ink: #0ca30c;
-    --viz-warning: #fab219;
-    --viz-warning-ink: #fab219;
-    --viz-critical: #d03b3b;
-  }
-}
-
-:root[data-theme="dark"] .viz-root {
-  color-scheme: dark;
-  --viz-surface: #1a1a19;
-  --viz-plane: #0d0d0d;
-  --viz-ink: #ffffff;
-  --viz-ink-secondary: #c3c2b7;
-  --viz-ink-muted: #898781;
-  --viz-hairline: #2c2c2a;
-  --viz-baseline: #383835;
-  --viz-track: #2c2c2a;
-
-  --viz-series-1: #3987e5;
-  --viz-series-2: #d95926;
-  --viz-muted-mark: #4d4d49;
-
-  --viz-seq-200: #184f95;
-  --viz-seq-350: #256abf;
-  --viz-seq-450: #3987e5;
-  --viz-seq-550: #6da7ec;
-
-  --viz-good: #0ca30c;
-  --viz-good-ink: #0ca30c;
-  --viz-warning: #fab219;
-  --viz-warning-ink: #fab219;
-  --viz-critical: #d03b3b;
-}
+   Restore the dark column from git history if a real app-wide dark mode ever
+   lands; the values were selected for the dark surface rather than flipped, so
+   they are worth recovering rather than re-deriving. */
 
 /* Data-ends: 4px rounded at the value end, square at the baseline. */
 .viz-bar {

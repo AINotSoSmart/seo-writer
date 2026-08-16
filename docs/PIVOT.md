@@ -987,6 +987,84 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (seventeenth pass) - the report joins the product it belongs to
+
+**Reachability.** `/visibility/[runId]` had no navigation entry and no index, so
+a customer met the report once at the end of onboarding and could never return.
+Added **AI Visibility** to the sidebar, pointing at a new
+`app/(protected)/visibility/page.tsx` that resolves the newest completed run for
+the signed-in brand and renders it inside the dashboard shell. The `[runId]`
+route stays exactly as it was — public, unindexed, addressed by run id — which
+is the same pairing `/audit` and `/audit/[token]` already use.
+
+**It looked like a different product, and there was a specific reason.**
+`viz-tokens.tsx` declared a dark palette under both `prefers-color-scheme: dark`
+and `[data-theme="dark"]`. Nothing else in this product has a dark mode — no
+`dark:` variants, no theme toggle — so on a dark-OS machine the report inverted
+to near-black while the sidebar beside it stayed stone-on-white. A palette that
+follows the system when its host does not is not theme support; it is one page
+disagreeing with the app.
+
+The dark branches are removed and the light values are now the stone scale the
+rest of the dashboard uses: white cards on `#fafaf9`, ink `#1c1917` /
+`#57534e` / `#a8a29e`, hairline `#e7e5e4`. The categorical and sequential ramps
+are untouched — those were selected against contrast gates and remain valid on a
+light surface. If an app-wide dark mode ever lands, recover the dark column from
+git history rather than flipping these; the values were re-stepped for the dark
+surface rather than inverted.
+
+**One structural addition.** `VisibilityDashboard` takes `embedded`. Inside the
+shell the host already supplies width, padding and the page header, so repeating
+them produced two titles and a card floating inside a card. The shareable link
+route renders standalone and keeps both.
+
+98 contract tests pass, `npx tsc --noEmit` clean, build clean — both
+`/visibility` and `/visibility/[runId]` compile as dynamic routes. **Not seen
+rendered while signed in**: the dev server redirects unauthenticated requests,
+so the first look at the styled report belongs to the founder.
+
+### 2026-08-15 (sixteenth pass) - the rival column read zero on a run full of rivals
+
+**From the first complete report.** Drawgle: 0% presence across 20 answers, and
+"0 questions where a rival is named ahead of you" — while the stored answers
+plainly recommended `sleek.design` and others the founder had tracked.
+
+**Cause 1: competitors are stored as hostnames, engines write brands as words.**
+`normalizedCompetitors` in `actions/brand.ts` reduces whatever the founder typed
+to a bare host, so the tracked name is `sleek.design`. `countOccurrences` then
+matches `\bsleek\.design\b`, which no answer ever contains — engines write
+"Sleek", "Sleek Design", "Uizard". The rival column was structurally incapable
+of counting anything for a domain-derived name, which is every name the
+onboarding flow produces.
+
+`brandLabelFromDomain` now derives the prose label (`sleek.design` -> `sleek`,
+minimum four characters), and `countEntityMentions` counts the given name, the
+domain, and that label. `computeMentionPosition` uses the same term set, because
+ranking that cannot see a rival computes "named first" against entities the
+answer never used.
+
+The label is matched **case-sensitively as a proper noun**. A domain label can
+collide with an ordinary adjective — `sleek.design` yields `sleek` — and a
+case-insensitive match would count "a sleek interface" as a competitor mention.
+Brands appear capitalised in prose; the adjective usually does not. The residual
+error is a sentence opening with the word, which is rarer than counting nothing,
+and every count expands to the verbatim answer so an inflated number stays
+checkable.
+
+**Cause 2: the second stat tile was arithmetic presented as a finding.**
+"Outranked" means the brand WAS named but never first, so with zero mentions it
+is zero by definition. Rendering "0 questions where a rival is named ahead of
+you" reads as good news while describing total absence. When presence is zero
+the tile now reports how many rivals were named in answers the brand never
+appeared in.
+
+**Still open — the report is one long vertical scroll and is not in the
+dashboard.** Upstream splits this across routes behind a sidebar (insights,
+prompts, competitors, citations, topics, reports), with a header carrying brand
+and last-run plus actions, a filter bar, a 2/3/5-column KPI grid, and paired
+two-column sections rather than full-width stacking. Ours is a single
+`max-w-5xl` column with no navigation entry. Recorded in `ROADMAP.md` §5b.
+
 ### 2026-08-15 (fifteenth pass) - rivals now come before the questions
 
 The fourteenth pass let buyer prompts name incumbents, which is what makes them

@@ -4159,6 +4159,74 @@ test("confirmed prompts are rebound to the audit's own scope family ids", async 
     assert.match(probeRoute, /unboundPrompts/)
 })
 
+test("the visibility report lives in the dashboard and looks like it", async () => {
+    const [sidebar, page, tokens, dashboard] = await Promise.all([
+        text("components/dashboard/app-sidebar.tsx"),
+        text("app/(protected)/visibility/page.tsx"),
+        text("components/visibility/viz-tokens.tsx"),
+        text("components/visibility/visibility-dashboard.tsx"),
+    ])
+
+    // A customer met the report once at the end of onboarding and then had no
+    // way back to it, because nothing in the product pointed at it.
+    assert.match(sidebar, /title: "AI Visibility"/)
+    assert.match(sidebar, /url: "\/visibility"/)
+    // Resolves the newest completed run, so the entry always lands somewhere.
+    assert.match(page, /\.eq\("status", "completed"\)/)
+    assert.match(page, /\.order\("started_at", \{ ascending: false \}\)/)
+
+    // Same header language as /audit — eyebrow, serif title, one explanation.
+    assert.match(page, /text-brand-600/)
+    assert.match(page, /font-serif text-3xl text-stone-900/)
+
+    // NO DARK BRANCH. This dashboard was the only surface in the product with
+    // one, so on a dark-OS machine the report inverted to near-black while the
+    // sidebar beside it stayed light — it read as a different product.
+    assert.doesNotMatch(tokens, /@media \(prefers-color-scheme: dark\)/)
+    assert.doesNotMatch(tokens, /\[data-theme="dark"\]/)
+    // And the light palette is the stone scale the rest of the app uses.
+    assert.match(tokens, /--viz-plane: #fafaf9/)
+    assert.match(tokens, /--viz-ink: #1c1917/)
+
+    // Inside the shell the host owns width, padding and the page header;
+    // repeating them produced two titles and a card inside a card.
+    assert.match(dashboard, /embedded\?: boolean/)
+    assert.match(dashboard, /embedded \? "" : "mx-auto max-w-5xl px-6 py-12"/)
+})
+
+test("a rival named as a word is still a rival", async () => {
+    const [parser, dashboard] = await Promise.all([
+        text("lib/visibility/answer-parser.ts"),
+        text("components/visibility/visibility-dashboard.tsx"),
+    ])
+
+    // Competitors are stored by hostname — `normalizedCompetitors` reduces
+    // whatever the founder typed to a bare host — while engines write brands the
+    // way people say them. Matching only `\bsleek\.design\b` meant a run whose
+    // answers were full of rivals reported a rival count of zero, which is the
+    // one number this product exists to produce.
+    assert.match(parser, /export function brandLabelFromDomain/)
+    assert.match(parser, /function countEntityMentions/)
+    // Ranking must see the same names as counting, or "named first" is computed
+    // against entities the answer never used.
+    assert.match(parser, /searchTermsFor\(/)
+
+    // The derived label is matched as a PROPER NOUN, case-sensitively: a domain
+    // label can collide with an ordinary adjective, and "a sleek interface" is
+    // not a competitor mention.
+    assert.match(parser, /function countProperNounOccurrences/)
+    assert.match(parser, /charAt\(0\)\.toUpperCase\(\)/)
+
+    // "Outranked" requires having been named at all, so it is zero by
+    // arithmetic when the brand is absent everywhere. Rendering that as
+    // "0 questions where a rival is named ahead of you" inverts the finding.
+    assert.match(
+        dashboard,
+        /summary\.presentPromptCount \+ summary\.outrankedPromptCount === 0/,
+    )
+    assert.match(dashboard, /rivals named in answers you never appear in/)
+})
+
 test("buyer prompts read like a person, not a blog title", async () => {
     const [config, builder, mapper, runner] = await Promise.all([
         text("lib/visibility/prompt-config.ts"),

@@ -87,6 +87,72 @@ function countOccurrences(text: string, term: string): number {
     return matches ? matches.length : 0
 }
 
+/**
+ * The prose name hiding inside a domain: "sleek.design" -> "Sleek".
+ *
+ * Competitors are stored by hostname — `normalizedCompetitors` in
+ * `actions/brand.ts` turns whatever the founder typed into a bare host — while
+ * answer engines write brands the way people say them. An answer recommending
+ * "Sleek Design" or "Uizard" matched neither `sleek.design` nor `uizard.io`, so
+ * the rival column read zero on a run whose answers were full of rivals. The
+ * whole product is "they were named and you weren't"; measuring that with a
+ * pattern the engines never produce made it unmeasurable.
+ *
+ * Returns null when the label is too short to be safe to match.
+ */
+export function brandLabelFromDomain(domain: string): string | null {
+    const host = domain.trim().toLowerCase().replace(/^www\./, "")
+    const label = host.split(".")[0]?.replace(/[-_]+/g, " ").trim()
+    if (!label || label.length < 4) return null
+    return label
+}
+
+/**
+ * Counts a derived label only where it is written as a proper noun.
+ *
+ * Case matters here and nowhere else in this file. A domain label can collide
+ * with an ordinary adjective — "sleek.design" yields `sleek`, and a
+ * case-insensitive match would count "a sleek interface" as a competitor
+ * mention. Brands appear capitalised in prose; the common word usually does
+ * not. So this is deliberately case-SENSITIVE on the initial letter.
+ *
+ * The residual error is a sentence that opens with the word ("Sleek interfaces
+ * are…"). That is rarer than the alternative, which was counting nothing at
+ * all, and every count on the report expands to the verbatim answer behind it —
+ * so an inflated number stays checkable rather than becoming folklore.
+ */
+function countProperNounOccurrences(text: string, label: string): number {
+    if (!label) return 0
+    const capitalised = label.charAt(0).toUpperCase() + label.slice(1)
+    const matches = text.match(new RegExp(`\\b${escapeRegExp(capitalised)}\\b`, "g"))
+    return matches ? matches.length : 0
+}
+
+/**
+ * Every way one tracked entity can appear in prose: its given name, its domain,
+ * and the proper-noun label derived from that domain.
+ */
+function countEntityMentions(
+    text: string,
+    name: string,
+    domains: string[],
+): number {
+    let count = countOccurrences(text, name)
+    const seenLabels = new Set<string>()
+    for (const domain of domains) {
+        if (!domain) continue
+        count += countOccurrences(text, domain)
+        const label = brandLabelFromDomain(domain)
+        // Skip when the given name already IS the label — otherwise a brand
+        // called "Uizard" with domain "uizard.io" is counted twice per mention.
+        if (!label || seenLabels.has(label)) continue
+        seenLabels.add(label)
+        if (label === name.trim().toLowerCase()) continue
+        count += countProperNounOccurrences(text, label)
+    }
+    return count
+}
+
 function firstOccurrenceIndex(text: string, term: string): number {
     if (!term) return -1
     const match = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").exec(text)
@@ -175,14 +241,30 @@ export function computeMentionPosition(
         return best
     }
 
-    const brandIndex = entityFirstIndex([subject.brandName, ...(subject.domains || [])])
+    // Ranking must see the same names the counting does. Without the derived
+    // label a rival written as "Sleek" is invisible here too, so "named first"
+    // is computed against a set of entities the answer never used.
+    const searchTermsFor = (name: string, domains: string[]): string[] => {
+        const terms = [name, ...domains]
+        for (const domain of domains) {
+            const label = brandLabelFromDomain(domain)
+            if (label) terms.push(label.charAt(0).toUpperCase() + label.slice(1))
+        }
+        return terms.filter(Boolean)
+    }
+
+    const brandIndex = entityFirstIndex(
+        searchTermsFor(subject.brandName, subject.domains || []),
+    )
     const mentioned = (competitors || [])
         .map((competitor) => ({
             id: competitor.id,
-            index: entityFirstIndex([
-                competitor.name,
-                ...(competitor.domain ? [competitor.domain] : []),
-            ]),
+            index: entityFirstIndex(
+                searchTermsFor(
+                    competitor.name,
+                    competitor.domain ? [competitor.domain] : [],
+                ),
+            ),
         }))
         .filter((competitor) => competitor.index >= 0)
 
@@ -218,10 +300,7 @@ export function parseAnswer(
     const { text, citations } = answer
     const clean = stripUrls(text)
 
-    let mentionCount = countOccurrences(clean, subject.brandName)
-    for (const domain of subject.domains) {
-        mentionCount += countOccurrences(clean, domain)
-    }
+    const mentionCount = countEntityMentions(clean, subject.brandName, subject.domains)
 
     const citationCount = countOwnDomainCitations(citations, subject.domains)
 
@@ -229,8 +308,11 @@ export function parseAnswer(
         computeMentionPosition(text, subject, competitors)
 
     const competitorMentions: CompetitorMention[] = competitors.map((competitor) => {
-        let count = countOccurrences(clean, competitor.name)
-        if (competitor.domain) count += countOccurrences(clean, competitor.domain)
+        const count = countEntityMentions(
+            clean,
+            competitor.name,
+            competitor.domain ? [competitor.domain] : [],
+        )
 
         const competitorCitations = competitor.domain
             ? countOwnDomainCitations(citations, [competitor.domain])

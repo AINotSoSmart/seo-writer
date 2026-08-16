@@ -5,6 +5,7 @@ import {
   Send,
   Layers3,
   Search,
+  Sparkles,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -88,6 +89,11 @@ export function AppSidebar({
   }
 
   const navItems = React.useMemo(() => [
+    {
+      title: "AI Visibility",
+      url: "/visibility",
+      icon: Sparkles,
+    },
     {
       title: "Evidence Audit",
       url: "/audit",
