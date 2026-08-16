@@ -4374,6 +4374,100 @@ test("target-page triage is explicit, atomic, and cannot create duplicate work",
     assert.doesNotMatch(triage, /Math\.round\(decision\.priority\)/)
 })
 
+test("cycle selection ranks real eligible work and freezes only the selected batch", async () => {
+    const [migration, selector, probe, auditAction, publicAudit, dryRun] =
+        await Promise.all([
+            text("supabase/migrations/20260816_cycle_action_selection.sql"),
+            text("lib/subscription/action-selection.ts"),
+            text("lib/visibility/run-probe.ts"),
+            text("actions/harvest.ts"),
+            text("app/audit/[token]/page.tsx"),
+            text("app/api/writer/dry-run/route.ts"),
+        ])
+
+    // The legacy Google-audit cluster floor remains intact, but visibility's
+    // adapter conserves every collapsed unit as a legitimate one-action group.
+    assert.match(probe, /absorbed\.unsold\.map/)
+    assert.match(probe, /legitimate one-action group/)
+    assert.match(probe, /const named = \[\.\.\.namedClusters, \.\.\.standaloneClusters\]/)
+
+    // Selection is bound to one completed cycle measurement and serialized per
+    // brand. Unknown, report-only, monitoring, resolved and stale observations
+    // cannot enter the candidate set.
+    assert.match(migration, /v_cycle\.state <> 'awaiting_input'/)
+    assert.match(migration, /status = 'completed'/)
+    assert.match(migration, /pg_advisory_xact_lock/)
+    assert.match(migration, /opportunity\.state = 'open'/)
+    assert.match(migration, /opportunity\.resolution_type IN \('create', 'refresh'\)/)
+    assert.match(migration, /opportunity\.last_seen_run_id = v_run\.id/)
+    assert.match(migration, /tracked\.tracking_status = 'active'/)
+    assert.match(migration, /tracked\.coverage_state = 'no_page'/)
+    assert.match(migration, /tracked\.coverage_state = 'has_page'/)
+
+    // A prior delivered create can never produce another create. In-flight or
+    // failed prior actions remain owned by their original cycle instead of
+    // being duplicated into a new billing period.
+    assert.match(migration, /prior_action\.state = 'delivered'/)
+    assert.match(migration, /prior_action\.resolution_type = 'create'/)
+    assert.match(migration, /pending_action\.state <> 'delivered'/)
+
+    // Compatible creates share the measured blueprint; compatible refreshes
+    // share one explicit target URL. The deterministic rank is evidence-first,
+    // capped by the frozen cycle allowance, and leftovers stay backlog.
+    assert.match(migration, /'refresh:' \|\| lower\(opportunity\.target_url\)/)
+    assert.match(migration, /'create:' \|\| COALESCE\(blueprint\.id::TEXT, opportunity\.id::TEXT\)/)
+    assert.match(migration, /highest_priority DESC/)
+    assert.match(migration, /action_rank <= v_cycle\.action_allowance/)
+    assert.match(migration, /v_backlog := GREATEST\(v_eligible - v_cycle\.action_allowance, 0\)/)
+    assert.match(migration, /eligible_action_groups = v_eligible/)
+    assert.match(migration, /backlog_action_groups = v_backlog/)
+    assert.match(migration, /'eligible_groups', COALESCE\(v_cycle\.eligible_action_groups, v_selected\)/)
+    assert.match(migration, /'backlog_groups', COALESCE\(v_cycle\.backlog_action_groups, 0\)/)
+    assert.doesNotMatch(migration, /selection_reason[^\n]*highest_priority/)
+
+    // Selection, junctions, cycle-specific output contracts and link edges all
+    // live inside one service-role transaction. A replay returns the frozen
+    // selection marker rather than ranking again.
+    assert.match(migration, /selection_completed_at IS NOT NULL/)
+    assert.match(migration, /'replayed', TRUE/)
+    assert.match(migration, /INSERT INTO public\.cycle_actions/)
+    assert.match(migration, /INSERT INTO public\.cycle_action_opportunities/)
+    assert.match(migration, /'cycle_output'/)
+    assert.match(migration, /'article-contract-v1'/)
+    assert.match(migration, /'cycle-selected-graph-v1'/)
+    assert.match(migration, /v_state := CASE WHEN v_selected = 0 THEN 'ready' ELSE 'producing' END/)
+    assert.match(
+        migration,
+        /GRANT EXECUTE ON FUNCTION public\.select_subscription_cycle_actions\(UUID, TEXT\)[\s\S]*TO service_role/,
+    )
+
+    // Every graph source and target is joined through cycle_actions from the
+    // same selected cycle. No edge query reads unselected opportunities or the
+    // old audit cluster graph, and zero edges are explicitly valid.
+    const graphBlock = migration.slice(
+        migration.indexOf("-- Every edge originates"),
+        migration.indexOf("v_state := CASE"),
+    )
+    assert.match(graphBlock, /target_action\.cycle_id = source_action\.cycle_id/)
+    assert.match(graphBlock, /source_action\.cycle_id = v_cycle\.id/)
+    assert.match(graphBlock, /Zero edges are valid for a one-action batch/)
+    assert.doesNotMatch(graphBlock, /content_opportunities|audit_clusters/)
+
+    // Cycle outputs are production derivatives, not extra rows in the frozen
+    // report. All audit-plan readers keep filtering to the immutable plan.
+    assert.match(migration, /record_kind IN \('audit_plan', 'cycle_output'\)/)
+    assert.match(migration, /NEW\.record_kind = 'cycle_output'/)
+    for (const reader of [auditAction, publicAudit, dryRun]) {
+        assert.match(reader, /\.is\("cycle_action_id", null\)/)
+    }
+
+    assert.match(selector, /maxActions:\s*8/)
+    assert.match(selector, /select_subscription_cycle_actions/)
+    assert.match(selector, /eligibleGroups: Number\(row\.eligible_groups \?\? row\.selected\)/)
+    assert.match(selector, /backlogGroups: Number\(row\.backlog_groups \?\? 0\)/)
+    assert.match(selector, /pattern\.split\("\{slug\}"\)\.length !== 2/)
+})
+
 test("confirmed prompts are rebound to the audit's own scope family ids", async () => {
     const [binding, probeRoute] = await Promise.all([
         text("lib/visibility/prompt-binding.ts"),

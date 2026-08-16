@@ -1051,7 +1051,20 @@ export async function clusterVisibilityGaps(
         { parentByFamilyId },
     )
 
-    const named = await nameClusters(absorbed.clusters)
+    const namedClusters = await nameClusters(absorbed.clusters)
+    // Visibility opportunities are not sold by cluster size. Any collapsed
+    // article unit that the legacy 8–15 editorial clusterer cannot absorb is a
+    // legitimate one-action group, not "unsold" work. Keep the strict legacy
+    // cluster rules for Google audits and remove the commercial floor only at
+    // this visibility adapter boundary.
+    const standaloneClusters: ArticleCluster[] = absorbed.unsold.map((article) => ({
+        scopeFamilyId: article.scopeFamilyId,
+        name: article.title || article.mainKeyword,
+        articles: [article],
+        priority: article.priority,
+        competitorUrls: article.competitorUrls,
+    }))
+    const named = [...namedClusters, ...standaloneClusters]
 
     // Build evidence map so freezeArticleContracts can bind frozen intent
     // contracts and capability facts into every planned article row.

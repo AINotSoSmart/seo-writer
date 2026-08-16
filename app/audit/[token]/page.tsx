@@ -68,6 +68,7 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
                     "id, scope_family_id, title, main_keyword, supporting_keywords, source_query_ids, article_type, is_pillar, generation_status, delivery_status, publication_status, cluster_id, target_url",
                 )
                 .eq("audit_id", audit.id)
+                .is("cycle_action_id", null)
                 .order("is_pillar", { ascending: false }),
             supabase
                 .from("audit_scope_families")

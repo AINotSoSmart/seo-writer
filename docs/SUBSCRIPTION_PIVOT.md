@@ -626,9 +626,10 @@ The audit screen resumes an existing run automatically but a new run waits for
 an explicit **Start visibility measurement** click. This prevents a Continue or
 page refresh from silently purchasing 80 consumer-app requests.
 
-All 104 pivot contracts pass and targeted lint is clean. Phase 5 introduces no
-new TypeScript errors; the full check still reports the same seven pre-existing
-generated-database-type errors in billing and the legacy blog trigger. The
+All 105 pivot contracts pass. The new Phase 6 selection module passes targeted
+lint, and Phase 6 introduces no new TypeScript errors; the full check still
+reports the same seven pre-existing generated-database-type errors in billing
+and the legacy blog trigger. The
 remaining release smoke test is one deployed run verifying 40 non-null
 `ai_probe_prompts.tracked_prompt_id` links. It is intentionally deferred until
 Trigger.dev and the external-provider keys are deployed; do not fabricate a
@@ -674,7 +675,7 @@ never silently create a second page. Inactive questions and explicit dismissals
 retain their evidence but stay production-ineligible. The hosted migration was
 applied successfully before Phase 5 began.
 
-**Phase 5 code-complete 2026-08-16; migration gate open.** The forward-only
+**Phase 5 deployed 2026-08-16.** The forward-only
 `20260816_target_page_triage.sql` migration backfills missing opportunities from
 the latest completed durable-question observations without calling any answer
 provider or overwriting rows already reconciled by the live worker. Its
@@ -688,7 +689,30 @@ row, ordered by internal evidence priority without displaying the hand-weighted
 integer as a customer score. The public share report receives no mutable target
 state. A target confirmed after a delivered create survives future
 reconciliation as refresh, preventing another create for the same durable
-question. Apply this migration before starting Phase 6 action selection.
+question. The hosted migration was applied successfully before Phase 6 began.
+
+**Phase 6 code-complete 2026-08-16; migration gate open.** The forward-only
+`20260816_cycle_action_selection.sql` migration adds one service-role-only,
+atomic selection boundary. It considers only open create/refresh opportunities
+from the cycle's latest completed measurement, requires matching explicit
+target-page triage, excludes already delivered creates and unfinished prior
+actions, and ranks the remaining compatible action groups deterministically.
+Create work sharing one frozen audit blueprint becomes one action; refresh work
+groups only by the exact confirmed target URL. At most the cycle allowance of
+eight is selected, while eligible and leftover backlog counts are frozen on the
+cycle rather than discarded.
+
+Selection creates a separate `cycle_output` article contract for every selected
+action; it never mutates the immutable audit plan. The visibility adapter now
+promotes every otherwise-unsold losing prompt to a standalone audit-plan article,
+so the legacy editorial cluster floor cannot delete subscription work. The
+legacy Google-audit cluster rules remain unchanged. Links are frozen only among
+selected outputs in the same scope family, with zero links explicitly valid for
+a singleton batch. A clean same-host HTTPS publication pattern is frozen for
+create URLs, and replay returns the already selected batch instead of selecting
+again. Apply this migration before Phase 7 generation and delivery work. There
+is no live-data smoke result yet because the external AI probe has intentionally
+not been run; Phase 6 verification is contract/static only and spent no credits.
 
 | # | Step | Why here |
 |---|---|---|
@@ -698,8 +722,8 @@ question. Apply this migration before starting Phase 6 action selection.
 | 2 ✅ | Add `content_opportunities`, `subscription_cycles`, `cycle_actions` and their junction; link generated outputs to actions | Migration applied successfully 2026-08-16 |
 | 3 ✅ | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | Migration applied successfully 2026-08-16 |
 | 4 ✅ | Implement per-cycle reconciliation and contract tests | Migration applied successfully 2026-08-16 |
-| 5 ◐ | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Code-complete and 104 contracts green; apply `20260816_target_page_triage.sql` before Phase 6 |
-| 6 | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Prevent links to undelivered backlog work |
+| 5 ✅ | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Migration applied successfully 2026-08-16 |
+| 6 ◐ | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Code-complete and 105 contracts green; apply `20260816_cycle_action_selection.sql` before Phase 7 |
 | 7 | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Complete the deliverable before accepting money |
 | 8 | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | This is the revenue switch |
 | 9 | Enable checkout and fulfil the first customers with founder oversight | Learn before automating edge cases |

@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
                     .from("planned_articles")
                     .select("id")
                     .eq("audit_id", auditId)
+                    .is("cycle_action_id", null)
                     .order("is_pillar", { ascending: false })
                     .limit(1)
                     .maybeSingle()

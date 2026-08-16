@@ -65,7 +65,7 @@ export default async function ContentPlanPage() {
     const { data: cycles } = await (supabase as any)
         .from("subscription_cycles")
         .select(
-            "id, period_start, period_end, state, action_allowance, delivered_at, failure_code, " +
+            "id, period_start, period_end, state, action_allowance, delivered_at, failure_code, eligible_action_groups, backlog_action_groups, " +
                 "cycle_actions(id, rank, resolution_type, state, target_url, selection_reason, " +
                 "planned_articles(id, title, target_url, generation_status, delivery_status, publication_status, publication_url))",
         )
@@ -109,6 +109,9 @@ export default async function ContentPlanPage() {
                                 </h2>
                                 <p className="mt-1 text-xs text-stone-500">
                                     {(cycle.cycle_actions || []).length}/{cycle.action_allowance} selected actions
+                                    {cycle.backlog_action_groups > 0
+                                        ? ` · ${cycle.backlog_action_groups} eligible ${cycle.backlog_action_groups === 1 ? "action" : "actions"} retained in backlog`
+                                        : ""}
                                 </p>
                             </div>
                             <StatePill state={cycle.state} />
