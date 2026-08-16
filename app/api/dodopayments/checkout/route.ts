@@ -48,6 +48,17 @@ function configuredValue(name: string): string {
     return String(process.env[name] || "").trim()
 }
 
+function subscriptionTermMonths(price: DodoProductContract["price"]): number {
+    if (!price.subscription_period_count) return 0
+    if (price.subscription_period_interval === "Month") {
+        return price.subscription_period_count
+    }
+    if (price.subscription_period_interval === "Year") {
+        return price.subscription_period_count * 12
+    }
+    return 0
+}
+
 function assertFoundingProviderContract(
     product: DodoProductContract,
     discount: DodoDiscountContract,
@@ -55,6 +66,12 @@ function assertFoundingProviderContract(
 ) {
     const price = product.price
     const expectedPrice = PRODUCT_TRUTH.continuingPrice * 100
+    // Dodo uses PascalCase intervals. `payment_frequency_*` is the actual
+    // charge cadence; `subscription_period_*` is the maximum total term, not
+    // another expression of monthly billing. The term only needs to extend
+    // beyond the three introductory cycles so the $189 continuing phase can
+    // actually occur.
+    const termMonths = subscriptionTermMonths(price)
     if (
         !product.is_recurring ||
         price.type !== "recurring_price" ||
@@ -62,9 +79,8 @@ function assertFoundingProviderContract(
         price.price !== expectedPrice ||
         price.discount !== 0 ||
         price.payment_frequency_count !== 1 ||
-        price.payment_frequency_interval !== "month" ||
-        price.subscription_period_count !== 1 ||
-        price.subscription_period_interval !== "month" ||
+        price.payment_frequency_interval !== "Month" ||
+        termMonths <= PRODUCT_TRUTH.introductoryPeriods ||
         (price.trial_period_days ?? 0) !== 0
     ) {
         throw new FoundingCheckoutConfigurationError(

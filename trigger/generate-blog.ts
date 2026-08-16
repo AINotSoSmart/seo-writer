@@ -2419,7 +2419,11 @@ ${JSON.stringify(outline)}`
         .eq("id", articleId)
         .single()
 
-      if (existingArticle?.raw_content && existingArticle.current_step_index > 0) {
+      if (
+        existingArticle?.raw_content &&
+        typeof existingArticle.current_step_index === "number" &&
+        existingArticle.current_step_index > 0
+      ) {
         currentDraft = existingArticle.raw_content
         startIndex = existingArticle.current_step_index
         console.log(`[Checkpoint] Resuming from section index ${startIndex}`)

@@ -744,9 +744,11 @@ same-host HTTPS publication pattern containing `{slug}` once. Onboarding now
 stops at the plan instead of exposing the pre-payment probe. The probe API also
 enforces an active subscription, so an old tab cannot bypass the paywall.
 Immediately before creating a hosted checkout, the server reads the configured
-Dodo objects back and fails closed unless they are exactly a no-trial $189 USD
-monthly subscription plus a product-restricted $90 USD flat discount limited to
-three subscription cycles.
+Dodo objects back and fails closed unless they are a no-trial $189 USD product
+charging every one month, with a total subscription term long enough to reach
+the continuing phase, plus a product-restricted $90 USD flat discount limited
+to three subscription cycles. Dodo's `subscription_period_*` fields describe
+the maximum total term, not the monthly charge cadence.
 
 `20260816_phase8_checkout_contract.sql` creates the stable
 `founding_beta` pricing row at the $189 recurring price, deactivates rather than
@@ -765,9 +767,33 @@ The required sandbox configuration is:
    test values while `DODO_ENVIRONMENT=test_mode`.
 4. Apply `20260816_phase8_checkout_contract.sql`, deploy the code, then set
    `FOUNDING_CHECKOUT_ENABLED=true` only for the sandbox journey.
-5. Complete checkout → activation → paid probe → triage → action selection →
+5. For the first credit-bounded pipeline test only, deploy
+   `CLORO_SANDBOX_ENGINE=google-aimode`. The server will still measure all 40
+   durable questions, but on one 4-credit surface (160 credits total) instead
+   of the 11-credit production pair (440 credits total). Browser requests cannot
+   choose their own engines. This one-engine result proves orchestration only;
+   it is not a customer baseline. Remove the variable before live billing.
+6. Complete checkout → activation → paid probe → triage → action selection →
    generation/founder refresh → atomic batch release. Keep production payments
    closed until the whole journey passes.
+
+Live verification on 2026-08-16 confirmed that customer evidence now redirects
+anonymous visitors to login, privileged RPCs no longer accept caller-supplied
+user ids, anonymous function execution is closed, and the intended owner/service
+RLS boundaries are present. The remaining manual security setting is Supabase
+Auth leaked-password protection.
+
+The test Dodo product is a valid $189 USD recurring product charged monthly, and
+the FlipAEO webhook is enabled with the required subscription/payment events and
+the deployed secret. Two provider configuration gates remain before checkout:
+restrict the $90 discount to the founding product, and re-run the updated Phase 8
+migration so the early `FOUNDINGBETA` plan code is repaired to canonical
+`founding_beta`. An older Drawgle test webhook is also enabled in the same Dodo
+business; preserve it unless that separate product no longer needs it.
+
+The live Supabase schema is now the source of the checked-in TypeScript database
+types. This removed the stale billing/writer type errors: `tsc --noEmit` is clean,
+and all 112 pivot contracts pass.
 
 The same phase audited live Supabase state before proposing cleanup. The three
 `legacy_*` commercial tables, `programs` legacy columns and the old cost-event
@@ -793,7 +819,7 @@ remain readable.
 | 5 ✅ | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Migration applied successfully 2026-08-16 |
 | 6 ✅ | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Migration applied successfully 2026-08-16 |
 | 7 ✅ | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Migration applied successfully 2026-08-16; live generation remains part of the Phase 8 sandbox journey |
-| 8 ◐ | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | Code-complete; apply the two Phase 8 migrations, configure the Dodo test product/three-cycle discount, deploy, and pass the sandbox journey before enabling revenue |
+| 8 ◐ | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | Code-complete; restrict the Dodo discount, re-run the repaired checkout migration, deploy the 160-credit one-engine sandbox configuration, and pass the sandbox journey before enabling revenue |
 | 9 | Enable checkout and fulfil the first customers with founder oversight | Learn before automating edge cases |
 | 10 | Add the automated renewal scheduler and retry/alerting path | Required before the first customer's second billing period |
 

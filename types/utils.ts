@@ -1,14 +1,5 @@
 import { Database } from "./supabase";
 
-export type modelRow = Database["public"]["Tables"]["models"]["Row"] & {
-  isCustom?: boolean;
-};
-export type sampleRow = Database["public"]["Tables"]["samples"]["Row"];
-
-
-
-export type imageRow = Database["public"]["Tables"]["images"]["Row"];
-
 export type creditsRow = Database["public"]["Tables"]["credits"]["Row"];
 
 export type modelRowWithSamples = {
@@ -21,4 +12,3 @@ export type modelRowWithSamples = {
   is_custom: boolean
   auto_extend: boolean
 }
-

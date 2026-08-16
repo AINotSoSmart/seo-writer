@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual, createHash } from 'crypto'
 import { Webhook } from 'standardwebhooks'
 import { ensureProgramForSubscription } from '@/lib/harvest/program-provisioning'
 import { ensureBillingCycle } from '@/lib/harvest/billing-lifecycle'
+import type { TablesUpdate } from '@/types/supabase'
 
 export const runtime = 'nodejs'
 
@@ -365,7 +366,7 @@ async function updateSubscriptionServiceFields(
         subscriptionObj?.cancelled_at ??
         undefined;
 
-    const update: Record<string, any> = {};
+    const update: TablesUpdate<'dodo_subscriptions'> = {};
 
     // cancellation event implies cancel_at_period_end is false and canceled_at is now if absent
     if (eventType && eventType.toLowerCase().includes('cancel')) {

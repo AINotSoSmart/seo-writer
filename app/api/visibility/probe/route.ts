@@ -41,6 +41,7 @@ import type { CapabilityContract } from "@/lib/writer/article-contract"
 import {
     cloroConfigured,
     configuredEngines,
+    DEFAULT_ENGINES,
     ENGINE_SPECS,
     estimateCredits,
     type AiEngine,
@@ -82,6 +83,42 @@ interface ProbeRequest {
      * customer is paying for with a materially different one.
      */
     allowApiSurface?: boolean
+}
+
+function resolveProbeEngines(allowApiSurface: boolean | undefined): {
+    engines: AiEngine[]
+    configurationError?: string
+} {
+    const normalEngines = configuredEngines({ allowApiSurface })
+    const sandboxEngine = String(process.env.CLORO_SANDBOX_ENGINE || "").trim()
+    if (!sandboxEngine) return { engines: normalEngines }
+
+    // This override exists solely to exercise a deployed payment-to-batch
+    // journey without buying a full two-engine baseline. Fail closed if it is
+    // accidentally carried into live billing.
+    if (process.env.DODO_ENVIRONMENT !== "test_mode") {
+        return {
+            engines: [],
+            configurationError:
+                "CLORO_SANDBOX_ENGINE is only allowed while DODO_ENVIRONMENT=test_mode.",
+        }
+    }
+    if (!cloroConfigured()) {
+        return {
+            engines: [],
+            configurationError:
+                "CLORO_SANDBOX_ENGINE requires CLORO_API_KEY.",
+        }
+    }
+    if (!DEFAULT_ENGINES.includes(sandboxEngine as AiEngine)) {
+        return {
+            engines: [],
+            configurationError:
+                "CLORO_SANDBOX_ENGINE must be chatgpt-web or google-aimode.",
+        }
+    }
+
+    return { engines: [sandboxEngine as AiEngine] }
 }
 
 interface ActiveTrackedPromptRow {
@@ -316,9 +353,30 @@ export async function POST(req: NextRequest) {
         )
     }
 
-    const engines = body.engines?.length
-        ? body.engines
-        : configuredEngines({ allowApiSurface: body.allowApiSurface })
+    // Engine choice changes both the evidence contract and provider spend. It
+    // is deployment configuration, never a browser-controlled input.
+    if (Object.prototype.hasOwnProperty.call(body, "engines")) {
+        return NextResponse.json(
+            {
+                error: "Answer engines are configured by the service.",
+                reason: "client_engines_forbidden",
+            },
+            { status: 400 },
+        )
+    }
+
+    const engineConfiguration = resolveProbeEngines(body.allowApiSurface)
+    const engines = engineConfiguration.engines
+
+    if (engineConfiguration.configurationError) {
+        return NextResponse.json(
+            {
+                error: engineConfiguration.configurationError,
+                reason: "invalid_engine_configuration",
+            },
+            { status: 503 },
+        )
+    }
 
     // Checked before anything is created. An unconfigured engine must not leave
     // an open audit row behind that blocks the next attempt.

@@ -28,7 +28,8 @@
  *
  * Cloro drives the real consumer surfaces and returns their markdown and
  * sources. It is also roughly 10x cheaper than the API path for the same
- * prompt (~9 credits vs ~$0.02+ of search fees and tokens).
+ * prompt (~11 credits for the default pair vs ~$0.02+ of search fees and
+ * tokens).
  *
  * The API adapters are retained behind `allowApiSurface` for self-hosters with
  * no Cloro key. They are labelled `surface: "api"` on every stored answer and
@@ -79,7 +80,10 @@ export const ENGINE_SPECS: Record<AiEngine, EngineSpec> = {
         label: "ChatGPT",
         surface: "consumer_app",
         cloroTaskType: "CHATGPT",
-        credits: 5,
+        // `buildCloroPayload` requests the observed search queries. Cloro bills
+        // that enriched/full response at 7 credits, not the 5-credit base web
+        // response. Keeping this exact is what makes the pre-flight meaningful.
+        credits: 7,
     },
     "google-aimode": {
         id: "google-aimode",
@@ -128,7 +132,7 @@ export const ENGINE_SPECS: Record<AiEngine, EngineSpec> = {
  *
  * ChatGPT is ~63% of measurable B2B AI referrals; Google AI Mode is the
  * highest-reach Google surface for someone researching a purchase — far wider
- * than the Gemini app, because it sits inside Search. Two surfaces, ~9 credits
+ * than the Gemini app, because it sits inside Search. Two surfaces, 11 credits
  * per prompt, both consumer.
  *
  * Claude is deliberately not here despite being ~18% of B2B referrals: Cloro

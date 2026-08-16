@@ -3293,6 +3293,9 @@ test("founding checkout is disabled by default and owns the three-cycle price ph
     assert.match(checkout, /client\.discounts\.retrieveByCode\(discountCode\)/)
     assert.match(checkout, /price\.type !== "recurring_price"/)
     assert.match(checkout, /price\.price !== expectedPrice/)
+    assert.match(checkout, /price\.payment_frequency_interval !== "Month"/)
+    assert.match(checkout, /termMonths <= PRODUCT_TRUTH\.introductoryPeriods/)
+    assert.doesNotMatch(checkout, /price\.subscription_period_count !== 1/)
     assert.match(checkout, /discount\.type !== "flat"/)
     assert.match(
         checkout,
@@ -3308,12 +3311,31 @@ test("founding checkout is disabled by default and owns the three-cycle price ph
     assert.match(migration, /'introductory_periods', 3/)
     assert.match(migration, /'continuing_price', 189/)
     assert.match(migration, /price_phase_owner', 'dodo_cycle_limited_discount'/)
+    assert.match(migration, /regexp_replace\(COALESCE\(plan_code, ''\)/)
     assert.match(consent, /analytics/)
     assert.match(consent, /support/)
     assert.match(consent, /localStorage/)
     assert.doesNotMatch(layout, /GoogleAnalytics/)
     assert.doesNotMatch(layout, /clarity\.start/)
     await assert.rejects(access(path.join(root, "lib/harvest/purchase-intent.ts")))
+})
+
+test("the sandbox probe preserves forty durable questions while bounding provider spend", async () => {
+    const [engines, route, pivot] = await Promise.all([
+        text("lib/visibility/engines.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("docs/SUBSCRIPTION_PIVOT.md"),
+    ])
+
+    assert.match(engines, /"chatgpt-web":[\s\S]{0,500}credits: 7/)
+    assert.match(engines, /"google-aimode":[\s\S]{0,220}credits: 4/)
+    assert.match(route, /process\.env\.CLORO_SANDBOX_ENGINE/)
+    assert.match(route, /process\.env\.DODO_ENVIRONMENT !== "test_mode"/)
+    assert.match(route, /client_engines_forbidden/)
+    assert.match(route, /DEFAULT_ENGINES\.includes\(sandboxEngine as AiEngine\)/)
+    assert.match(pivot, /CLORO_SANDBOX_ENGINE=google-aimode/)
+    assert.match(pivot, /160 credits total/)
+    assert.match(pivot, /440 credits total/)
 })
 
 test("WordPress publication fails closed on a missing or changed frozen permalink", async () => {

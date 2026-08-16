@@ -10,6 +10,29 @@
 ALTER TABLE public.dodo_pricing_plans
     ADD COLUMN IF NOT EXISTS plan_code TEXT;
 
+-- Repair the spelling used by an early manual sandbox setup before creating
+-- the canonical row. Without this, a re-run would insert a second Founding
+-- beta plan while checkout continued to ignore `FOUNDINGBETA`.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.dodo_pricing_plans
+        WHERE plan_code = 'founding_beta'
+    ) THEN
+        UPDATE public.dodo_pricing_plans
+        SET plan_code = 'founding_beta',
+            updated_at = now()
+        WHERE id = (
+            SELECT id
+            FROM public.dodo_pricing_plans
+            WHERE lower(regexp_replace(COALESCE(plan_code, ''), '[^a-z0-9]', '', 'g')) = 'foundingbeta'
+            ORDER BY is_active DESC, created_at
+            LIMIT 1
+        );
+    END IF;
+END;
+$$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS dodo_pricing_plans_plan_code_key
     ON public.dodo_pricing_plans(plan_code)
     WHERE plan_code IS NOT NULL;
