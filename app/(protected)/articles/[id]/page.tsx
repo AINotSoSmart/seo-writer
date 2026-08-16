@@ -286,11 +286,11 @@ export default function ArticleDetailPage() {
 
             if (editorMarkdown) {
                 const markdownContent = editorMarkdown
-                updatePayload.raw_content = markdownContent
+                updatePayload.rawContent = markdownContent
 
                 // Convert to HTML for publishing
                 const finalHtml = await generateFinalHtml(markdownContent)
-                updatePayload.final_html = finalHtml
+                updatePayload.finalHtml = finalHtml
             }
 
             if (outlineData) {
@@ -302,12 +302,13 @@ export default function ArticleDetailPage() {
                 return
             }
 
-            const { error } = await supabase
-                .from("articles")
-                .update(updatePayload)
-                .eq("id", article.id)
-
-            if (error) throw error
+            const response = await fetch(`/api/articles/${article.id}/draft`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatePayload),
+            })
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error || "Unable to save article.")
 
             setLastSaved(new Date())
             toast.success("Article saved successfully")
@@ -581,14 +582,16 @@ export default function ArticleDetailPage() {
                                 if (!article) return
                                 setIsSavingMetadata(true)
                                 try {
-                                    const { error } = await supabase
-                                        .from("articles")
-                                        .update({
-                                            meta_description: editableMetaDescription,
-                                            slug: editableSlug
-                                        })
-                                        .eq("id", article.id)
-                                    if (error) throw error
+                                    const response = await fetch(`/api/articles/${article.id}/draft`, {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            metaDescription: editableMetaDescription,
+                                            slug: editableSlug,
+                                        }),
+                                    })
+                                    const result = await response.json()
+                                    if (!response.ok) throw new Error(result.error || "Unable to save metadata.")
                                     setArticle(prev => prev ? { ...prev, meta_description: editableMetaDescription, slug: editableSlug } : null)
                                     toast.success("Metadata saved!")
                                 } catch (err) {

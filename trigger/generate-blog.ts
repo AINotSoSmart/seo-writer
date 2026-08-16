@@ -3016,6 +3016,16 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
         // Non-blocking, just continue
       }
 
+      let persistedSlug = slug
+      if (plannedArticleId) {
+        const { data: frozenOutput } = await (supabase as any)
+          .from("planned_articles")
+          .select("slug")
+          .eq("id", plannedArticleId)
+          .maybeSingle()
+        if (frozenOutput?.slug) persistedSlug = frozenOutput.slug
+      }
+
       const { error: finalUpdateError } = await supabase
         .from("articles")
         .update({
@@ -3023,7 +3033,7 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
           final_html: finalHtml,
           status: "completed",
           meta_description,
-          slug,
+          slug: persistedSlug,
           featured_image_url
         })
         .eq("id", articleId)
@@ -3081,7 +3091,7 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
           .eq("id", plannedArticleId)
           .maybeSingle()
         if (planned?.cycle_action_id) {
-          await (supabase as any)
+          const { data: completedAction } = await (supabase as any)
             .from("cycle_actions")
             .update({
               state: "ready",
@@ -3091,6 +3101,20 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
             })
             .eq("id", planned.cycle_action_id)
             .eq("state", "generating")
+            .select("cycle_id")
+            .maybeSingle()
+          if (completedAction?.cycle_id) {
+            const { error: releaseError } = await (supabase as any).rpc(
+              "release_subscription_cycle_if_ready",
+              { p_cycle_id: completedAction.cycle_id },
+            )
+            if (releaseError) {
+              console.error(
+                `[CycleDelivery] Could not release ready cycle ${completedAction.cycle_id}:`,
+                releaseError.message,
+              )
+            }
+          }
         }
       }
 

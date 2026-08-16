@@ -4468,6 +4468,87 @@ test("cycle selection ranks real eligible work and freezes only the selected bat
     assert.match(selector, /pattern\.split\("\{slug\}"\)\.length !== 2/)
 })
 
+test("phase seven delivers one complete create and assisted-refresh batch", async () => {
+    const [
+        migration,
+        lifecycle,
+        writer,
+        founderPage,
+        founderApi,
+        exportRoute,
+        contentPlan,
+        articlesPage,
+        articleList,
+        articleEditor,
+        draftApi,
+        wordpress,
+        sidebar,
+    ] = await Promise.all([
+        text("supabase/migrations/20260816_phase7_batch_delivery.sql"),
+        text("trigger/ship-cycle.ts"),
+        text("trigger/generate-blog.ts"),
+        text("app/(protected)/founder/refresh-actions/page.tsx"),
+        text("app/api/founder/refresh-actions/[id]/complete/route.ts"),
+        text("app/api/subscription-cycles/[id]/export/route.ts"),
+        text("app/(protected)/content-plan/page.tsx"),
+        text("app/(protected)/articles/page.tsx"),
+        text("components/articles/DeliveredArticles.tsx"),
+        text("app/(protected)/articles/[id]/page.tsx"),
+        text("app/api/articles/[id]/draft/route.ts"),
+        text("app/api/wordpress/publish/route.ts"),
+        text("components/dashboard/app-sidebar.tsx"),
+    ])
+
+    // The automated writer owns create actions only. Refresh work stays selected
+    // until a founder attaches a reviewed replacement draft to the same target.
+    assert.match(lifecycle, /resolution_type:\s*"create" \| "refresh"/)
+    assert.match(lifecycle, /action\.resolution_type === "refresh"\) continue/)
+    assert.match(migration, /action_row\.resolution_type = 'create'/)
+    assert.match(migration, /complete_founder_assisted_refresh/)
+    assert.match(migration, /v_action\.resolution_type <> 'refresh'/)
+    assert.match(migration, /v_planned\.target_url <> v_action\.target_url/)
+    assert.match(migration, /assisted_by_user_id = p_actor_user_id/)
+
+    // Assisted drafts are founder-only in both layers, preserve required frozen
+    // links, and become ordinary withheld article outputs rather than a second
+    // public post.
+    assert.match(founderPage, /isFounderUser\(user\.id\)/)
+    assert.match(founderApi, /isFounderUser\(user\.id\)/)
+    assert.match(founderApi, /complete_founder_assisted_refresh/)
+    assert.match(sidebar, /\/founder\/refresh-actions/)
+    assert.match(migration, /Refresh draft is missing frozen link/)
+    assert.match(migration, /v_planned\.id,\s*NULL/)
+    assert.match(wordpress, /refresh_requires_existing_page_update/)
+    assert.match(articleList, /article\.resolutionType !== "refresh"/)
+    assert.match(articleList, /Confirm update applied/)
+
+    // Whichever output finishes last attempts one serialized release. The old
+    // delivery RPC remains the single all-or-nothing visibility transaction.
+    assert.match(writer, /release_subscription_cycle_if_ready/)
+    assert.match(writer, /slug:\s*persistedSlug/)
+    assert.match(founderApi, /release_subscription_cycle_if_ready/)
+    assert.match(migration, /RETURN public\.deliver_subscription_cycle\(p_cycle_id\)/)
+    assert.match(migration, /state <> 'ready'/)
+
+    // A delivered cycle is usable as one product batch: grouped in-app review,
+    // one ZIP containing Markdown, HTML and a manifest, and no pre-release export.
+    assert.match(contentPlan, /Download batch/)
+    assert.match(contentPlan, /Review and export draft/)
+    assert.match(exportRoute, /cycle\.state !== "delivered"/)
+    assert.match(exportRoute, /manifest\.json/)
+    assert.match(exportRoute, /\.md`/)
+    assert.match(exportRoute, /\.html`/)
+    assert.match(exportRoute, /application\/zip/)
+
+    // Delivered drafts can actually be edited despite the intentionally
+    // read-only browser RLS policy; the narrow owner API preserves frozen URLs.
+    assert.match(articleEditor, /fetch\(`\/api\/articles\/\$\{article\.id\}\/draft`/)
+    assert.doesNotMatch(articleEditor, /\.from\("articles"\)[\s\S]{0,80}\.update\(updatePayload\)/)
+    assert.match(draftApi, /planned\.delivery_status !== "delivered"/)
+    assert.match(draftApi, /slug !== frozenSlug/)
+    assert.match(articlesPage, /cycle_actions\(resolution_type\)/)
+})
+
 test("confirmed prompts are rebound to the audit's own scope family ids", async () => {
     const [binding, probeRoute] = await Promise.all([
         text("lib/visibility/prompt-binding.ts"),

@@ -15,6 +15,7 @@ type Article = {
     deliveryStatus: string
     publicationStatus: string
     publicationUrl: string | null
+    resolutionType: "create" | "refresh" | null
 }
 
 export function DeliveredArticles({
@@ -67,7 +68,9 @@ export function DeliveredArticles({
     async function markManual(article: Article) {
         if (!article.targetUrl) return
         const value = window.prompt(
-            "Paste the final public URL. It must match the frozen program URL.",
+            article.resolutionType === "refresh"
+                ? "Confirm that the delivered revision was applied to this existing URL."
+                : "Paste the final public URL. It must match the frozen program URL.",
             article.targetUrl,
         )
         if (!value) return
@@ -113,6 +116,7 @@ export function DeliveredArticles({
                             <div className="min-w-0">
                                 <h2 className="truncate font-medium text-stone-900">{article.keyword}</h2>
                                 <div className="mt-1 flex flex-wrap gap-3 text-xs text-stone-500">
+                                    {article.resolutionType && <span>Action: {article.resolutionType}</span>}
                                     <span>Generated: {article.generationStatus}</span>
                                     <span>Delivered: {article.deliveryStatus}</span>
                                     <span>Published: {article.publicationStatus}</span>
@@ -130,7 +134,7 @@ export function DeliveredArticles({
                                 >
                                     <FilePenLine className="h-3.5 w-3.5" /> Review
                                 </Link>
-                                {wordpressConnectionId && (
+                                {wordpressConnectionId && article.resolutionType !== "refresh" && (
                                     <>
                                         <button
                                             onClick={() => void wordpress(article.id, "draft")}
@@ -155,7 +159,9 @@ export function DeliveredArticles({
                                             disabled={pending === article.id}
                                             className="rounded-lg border px-3 py-2 text-xs font-medium"
                                         >
-                                            Confirm manual URL
+                                            {article.resolutionType === "refresh"
+                                                ? "Confirm update applied"
+                                                : "Confirm manual URL"}
                                         </button>
                                     )}
                                 {article.publicationUrl && (
@@ -176,8 +182,8 @@ export function DeliveredArticles({
             </div>
             {articles.length === 0 && (
                 <div className="rounded-xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-500">
-                    No delivered articles yet. Generated cluster members remain withheld until
-                    their complete cluster passes delivery validation.
+                    No delivered drafts yet. Selected outputs remain withheld until their
+                    complete cycle passes delivery validation.
                 </div>
             )}
         </div>

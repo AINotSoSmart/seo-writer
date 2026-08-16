@@ -626,8 +626,8 @@ The audit screen resumes an existing run automatically but a new run waits for
 an explicit **Start visibility measurement** click. This prevents a Continue or
 page refresh from silently purchasing 80 consumer-app requests.
 
-All 105 pivot contracts pass. The new Phase 6 selection module passes targeted
-lint, and Phase 6 introduces no new TypeScript errors; the full check still
+All 106 pivot contracts pass. The new Phase 7 surfaces pass targeted lint, and
+Phase 7 introduces no new TypeScript errors; the full check still
 reports the same seven pre-existing generated-database-type errors in billing
 and the legacy blog trigger. The
 remaining release smoke test is one deployed run verifying 40 non-null
@@ -691,7 +691,7 @@ state. A target confirmed after a delivered create survives future
 reconciliation as refresh, preventing another create for the same durable
 question. The hosted migration was applied successfully before Phase 6 began.
 
-**Phase 6 code-complete 2026-08-16; migration gate open.** The forward-only
+**Phase 6 deployed 2026-08-16.** The forward-only
 `20260816_cycle_action_selection.sql` migration adds one service-role-only,
 atomic selection boundary. It considers only open create/refresh opportunities
 from the cycle's latest completed measurement, requires matching explicit
@@ -710,9 +710,28 @@ legacy Google-audit cluster rules remain unchanged. Links are frozen only among
 selected outputs in the same scope family, with zero links explicitly valid for
 a singleton batch. A clean same-host HTTPS publication pattern is frozen for
 create URLs, and replay returns the already selected batch instead of selecting
-again. Apply this migration before Phase 7 generation and delivery work. There
-is no live-data smoke result yet because the external AI probe has intentionally
-not been run; Phase 6 verification is contract/static only and spent no credits.
+again. The hosted migration was applied successfully before Phase 7 began.
+
+**Phase 7 code-complete 2026-08-16; migration gate open.** The forward-only
+`20260816_phase7_batch_delivery.sql` migration makes action claiming explicitly
+create-only, adds an audited founder-assisted refresh completion boundary, and
+releases the cycle through the existing atomic batch transaction only after
+every selected action is ready. The existing evidence-bound writer and QA path
+continues to produce create drafts. A selected refresh remains waiting until a
+founder reviews the confirmed existing page and attaches a complete replacement
+draft; required selected-graph links are validated before it becomes ready.
+Refresh outputs are blocked from WordPress post creation so the system cannot
+silently create a second page at the target slug.
+
+The last ready writer or refresh completion attempts one serialized release.
+Before that transaction, generated articles remain hidden by RLS. After release,
+the customer can review and safely edit each draft, download the complete cycle
+as one ZIP containing Markdown, HTML and a manifest, optionally create WordPress
+drafts for create actions, or confirm that a refresh was applied to its existing
+URL. There is no live generation or delivery smoke result yet because the paid
+AI probe has intentionally not run and the deployment-only provider keys are not
+available locally. Phase 7 verification is contract/static only and spent no
+provider credits. Apply this migration before the Phase 8 sandbox journey.
 
 | # | Step | Why here |
 |---|---|---|
@@ -723,8 +742,8 @@ not been run; Phase 6 verification is contract/static only and spent no credits.
 | 3 ✅ | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | Migration applied successfully 2026-08-16 |
 | 4 ✅ | Implement per-cycle reconciliation and contract tests | Migration applied successfully 2026-08-16 |
 | 5 ✅ | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Migration applied successfully 2026-08-16 |
-| 6 ◐ | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Code-complete and 105 contracts green; apply `20260816_cycle_action_selection.sql` before Phase 7 |
-| 7 | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Complete the deliverable before accepting money |
+| 6 ✅ | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Migration applied successfully 2026-08-16 |
+| 7 ◐ | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Code-complete and 106 contracts green; apply `20260816_phase7_batch_delivery.sql` before Phase 8 |
 | 8 | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | This is the revenue switch |
 | 9 | Enable checkout and fulfil the first customers with founder oversight | Learn before automating edge cases |
 | 10 | Add the automated renewal scheduler and retry/alerting path | Required before the first customer's second billing period |

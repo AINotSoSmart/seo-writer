@@ -104,11 +104,25 @@ export async function POST(req: NextRequest) {
         const { data: plannedArticle } = article.planned_article_id
             ? await (supabase as any)
                   .from("planned_articles")
-                  .select("id, slug, target_url")
+                  .select("id, slug, target_url, cycle_actions(resolution_type)")
                   .eq("id", article.planned_article_id)
                   .eq("user_id", user.id)
                   .maybeSingle()
             : { data: null }
+
+        const selectedAction = Array.isArray(plannedArticle?.cycle_actions)
+            ? plannedArticle.cycle_actions[0]
+            : plannedArticle?.cycle_actions
+        if (selectedAction?.resolution_type === "refresh") {
+            return NextResponse.json(
+                {
+                    error:
+                        "Refresh drafts must update the confirmed existing page; FlipAEO will not create a second WordPress post.",
+                    code: "refresh_requires_existing_page_update",
+                },
+                { status: 409 },
+            )
+        }
 
         // Program posts are created as drafts first. This lets us verify the
         // actual permalink before any public publication can break the graph.

@@ -15,6 +15,7 @@ import { createClient } from "@/utils/supabase/server"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import Script from "next/script"
+import { isFounderUser } from "@/lib/founder"
 
 export default async function DashboardLayout({
   children,
@@ -111,6 +112,7 @@ export default async function DashboardLayout({
           }}
           isSubscribed={isSubscribed}
           planName={planName}
+          isFounder={isFounderUser(user.id)}
         />
         <SidebarInset>
           <header className="flex h-16 shrink-0 items-center gap-2 justify-between">

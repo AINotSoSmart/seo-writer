@@ -12,7 +12,7 @@ export default async function ArticlesPage() {
         (supabase as any)
             .from("articles")
             .select(
-                "id, keyword, final_html, wordpress_post_url, planned_article_id, planned_articles(target_url, generation_status, delivery_status, publication_status, publication_url)",
+                "id, keyword, final_html, wordpress_post_url, planned_article_id, planned_articles(target_url, generation_status, delivery_status, publication_status, publication_url, cycle_actions(resolution_type))",
             )
             .eq("user_id", user.id)
             .order("created_at", { ascending: false }),
@@ -42,6 +42,9 @@ export default async function ArticlesPage() {
                 planned?.publication_status ||
                 (row.wordpress_post_url ? "published" : "unpublished"),
             publicationUrl: planned?.publication_url || row.wordpress_post_url,
+            resolutionType: Array.isArray(planned?.cycle_actions)
+                ? planned.cycle_actions[0]?.resolution_type || null
+                : planned?.cycle_actions?.resolution_type || null,
         }
     })
 

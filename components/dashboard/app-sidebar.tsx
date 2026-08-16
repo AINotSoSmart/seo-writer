@@ -71,6 +71,7 @@ export function AppSidebar({
   user,
   isSubscribed,
   planName,
+  isFounder,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user?: {
@@ -81,6 +82,7 @@ export function AppSidebar({
   }
   isSubscribed?: boolean
   planName?: string | null
+  isFounder?: boolean
 }) {
   const userData = user || {
     name: "User",
@@ -121,9 +123,16 @@ export function AppSidebar({
       url: "/integrations",
       icon: WebhookIcon,
     },
+    ...(isFounder
+      ? [{
+          title: "Refresh Queue",
+          url: "/founder/refresh-actions",
+          icon: SyringeIcon,
+        }]
+      : []),
 
 
-  ], [])
+  ], [isFounder])
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -135,7 +144,7 @@ export function AppSidebar({
                 <Image src="/site-logo.png" alt="FlipAEO AI" width={30} height={30} className="rounded-sm" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">FlipAEO</span>
-                  <span className="truncate text-xs">Cluster Delivery</span>
+                  <span className="truncate text-xs">Visibility + Delivery</span>
                 </div>
               </Link>
             </SidebarMenuButton>

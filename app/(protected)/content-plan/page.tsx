@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- forward Phase 3 relations are absent from generated database types until migration. */
 import Link from "next/link"
-import { CheckCircle2, CircleDashed, FileText } from "lucide-react"
+import { CheckCircle2, CircleDashed, Download, FileText } from "lucide-react"
 
 import { getAuditScope, getGapEvidence, getPlannedArticles } from "@/actions/harvest"
 import { ScopeResults } from "@/components/audit/scope-results"
@@ -65,9 +65,9 @@ export default async function ContentPlanPage() {
     const { data: cycles } = await (supabase as any)
         .from("subscription_cycles")
         .select(
-            "id, period_start, period_end, state, action_allowance, delivered_at, failure_code, eligible_action_groups, backlog_action_groups, " +
+                "id, period_start, period_end, state, action_allowance, delivered_at, failure_code, eligible_action_groups, backlog_action_groups, " +
                 "cycle_actions(id, rank, resolution_type, state, target_url, selection_reason, " +
-                "planned_articles(id, title, target_url, generation_status, delivery_status, publication_status, publication_url))",
+                "planned_articles(id, article_id, title, target_url, generation_status, delivery_status, publication_status, publication_url))",
         )
         .eq("program_id", program.id)
         .order("period_start", { ascending: false })
@@ -114,7 +114,18 @@ export default async function ContentPlanPage() {
                                         : ""}
                                 </p>
                             </div>
-                            <StatePill state={cycle.state} />
+                            <div className="flex items-center gap-2">
+                                {cycle.state === "delivered" &&
+                                    (cycle.cycle_actions || []).length > 0 && (
+                                    <a
+                                        href={`/api/subscription-cycles/${cycle.id}/export`}
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700"
+                                    >
+                                        <Download className="h-3.5 w-3.5" /> Download batch
+                                    </a>
+                                )}
+                                <StatePill state={cycle.state} />
+                            </div>
                         </header>
                         {(cycle.cycle_actions || []).length ? (
                             <div className="divide-y divide-stone-100">
@@ -137,6 +148,14 @@ export default async function ContentPlanPage() {
                                                         </span>
                                                     </div>
                                                     <p className="mt-1 text-xs text-stone-500">{action.selection_reason}</p>
+                                                    {action.state === "delivered" && output?.article_id && (
+                                                        <Link
+                                                            href={`/articles/${output.article_id}`}
+                                                            className="mt-2 inline-flex text-xs font-semibold text-stone-700 underline underline-offset-2"
+                                                        >
+                                                            Review and export draft
+                                                        </Link>
+                                                    )}
                                                 </div>
                                                 <StatePill state={action.state} />
                                             </div>

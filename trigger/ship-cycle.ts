@@ -19,6 +19,7 @@ type CycleRow = {
 
 type ActionRow = {
     id: string
+    resolution_type: "create" | "refresh"
     state: "selected" | "generating" | "ready" | "failed"
     retry_count: number
     generation_started_at: string | null
@@ -87,7 +88,7 @@ async function advanceCycle(
 ): Promise<{ triggered: number; failed: number; ready: boolean }> {
     const { data: actionRows, error } = await supabase
         .from("cycle_actions")
-        .select("id, state, retry_count, generation_started_at")
+        .select("id, resolution_type, state, retry_count, generation_started_at")
         .eq("cycle_id", cycle.id)
         .order("rank", { ascending: true })
 
@@ -111,6 +112,11 @@ async function advanceCycle(
 
     for (const action of actions) {
         if (action.state === "ready") continue
+
+        // Refreshes are an explicit founder-assisted path at launch. Sending
+        // one through the create writer would produce a second article instead
+        // of a reviewed replacement for the confirmed existing page.
+        if (action.resolution_type === "refresh") continue
 
         const { data: planned } = await supabase
             .from("planned_articles")
