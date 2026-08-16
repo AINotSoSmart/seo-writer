@@ -10,10 +10,9 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ is_subscribed: false })
         }
 
-        // Use the same RPC to get token status
-        const { data, error } = await supabase.rpc('consume_ai_tokens', {
-            p_user_id: user.id
-        })
+        // Same RPC as the pre-flight check. It scopes itself to auth.uid(),
+        // so there is no user id to pass and none to forge.
+        const { data, error } = await supabase.rpc('consume_ai_tokens')
 
         if (error) {
             console.error("Token usage check error:", error)

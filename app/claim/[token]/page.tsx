@@ -62,12 +62,19 @@ export default async function ClaimAuditPage({
                     {audit.cluster_count || 0} clusters, and preserved a source URL for each
                     gap claim.
                 </p>
-                <Link
-                    href={`/audit/${audit.public_token}`}
-                    className="mt-5 inline-block text-sm font-medium text-stone-900 underline"
-                >
-                    Review the read-only evidence report
-                </Link>
+                {/*
+                  * The public report dies with the claim: /audit/[token] only
+                  * serves prospect audits whose claim is still open. Offering
+                  * the link after it has been used would dangle into a 404.
+                  */}
+                {!claimed && (
+                    <Link
+                        href={`/audit/${audit.public_token}`}
+                        className="mt-5 inline-block text-sm font-medium text-stone-900 underline"
+                    >
+                        Review the read-only evidence report
+                    </Link>
+                )}
 
                 <div className="mt-8 border-t border-stone-200 pt-6">
                     {claimed ? (

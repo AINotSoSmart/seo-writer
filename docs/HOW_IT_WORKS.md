@@ -587,20 +587,29 @@ first invoice.)
 
 ### 11.5.5 Where all of this shows up in the app
 
-| Page | What it shows | State |
+| Page | What it shows | Who can open it |
 |---|---|---|
-| `/visibility/[runId]` | The AI report: which questions you lose, who won them, which sources got cited, and the verbatim answer behind every claim. Onboarding ends here. | Works. **No link to it anywhere in the dashboard** — see below. |
-| `/evidence/ai-answer/[runId]/[promptId]` | One stored answer, word for word. Every gap row links here. | Works. |
-| `/audit` | The saved audit: clusters, articles, and one evidence row per gap. | Works — the probe fills the same tables. The page's own wording still says "observed search queries" and each evidence row's source column shows "source" instead of a website name, because an AI answer has no website. Cosmetic, but it reads like the old pipeline. |
-| `/content-plan` | The delivery schedule and cluster shipping. | Works, same tables. |
-| `/articles`, `/settings`, `/integrations`, `/subscribe`, `/account` | Unchanged. | Works. |
+| `/visibility` | The AI report: which questions you lose, who won them, which sources got cited, and the verbatim answer behind every claim. Reached from **AI Visibility** in the sidebar; resolves your newest completed run. | You, signed in. |
+| `/visibility/[runId]` | Nothing. It checks that the run is yours and forwards to `/visibility`. Kept only so old links still land somewhere correct. | You, signed in. |
+| `/evidence/ai-answer/[runId]/[promptId]` | One stored answer, word for word. Every gap row links here. | You, signed in. |
+| `/audit` | The saved audit: clusters, articles, and one evidence row per gap. | You, signed in. The page's own wording still says "observed search queries" and each evidence row's source column shows "source" instead of a website name, because an AI answer has no website. Cosmetic, but it reads like the old pipeline. |
+| `/audit/[token]` | The same audit, read-only, for a company that is **not** a customer yet. | Anyone with the link — until the prospect claims it, at which point the link stops working. This is the only page in the product that does not need an account, and it only ever serves audits you prepared through the founder tools. |
+| `/content-plan` | The delivery schedule and cluster shipping. | You, signed in. |
+| `/articles`, `/settings`, `/integrations`, `/subscribe`, `/account` | Unchanged. | You, signed in. |
 
-**The gap: the visibility report is reachable exactly once.** The sidebar has
-Evidence Audit, Content Plan, Articles, Settings and Integrations — nothing for
-the AI report. A customer sees it at the end of onboarding, navigates away, and
-has no way back short of the original URL. There is also no index page listing
-past runs. This needs a sidebar entry pointing at the newest completed run
-before anyone outside the building uses it.
+**On the "who can open it" column.** Until 2026-08-16, the first three rows read
+"anyone with the link", and not on purpose — the pages were built to be shared
+and never got the check that would have limited them to their owner. A customer's
+buyer questions, competitor set and the verbatim AI answers about their brand
+were readable by anyone who had the URL. Nothing indicates the URLs were ever
+found or indexed, and they were marked `noindex`, but `noindex` only asks search
+engines to look away; it does not stop a person opening the page. That is fixed:
+those pages now require you to be signed in **as the owner of the run**, and no
+share links are created for customer reports at all.
+
+The one deliberate exception is `/audit/[token]`, above. An outreach report is
+supposed to be openable by someone who has no account — that is what it is for.
+It dies the moment they claim it and become a customer.
 
 ---
 

@@ -9,16 +9,30 @@
  *
  * This page must never summarise. A paraphrased answer is exactly the
  * unverifiable evidence the audit exists to avoid.
+ *
+ * It is **private**. It once rendered for anyone holding two UUIDs, because it
+ * read through the admin client — which bypasses RLS — and never asked who was
+ * calling. What that exposed was not a score but the raw material: verbatim
+ * third-party answers, the customer's own buyer questions, their competitor
+ * set, and when each was asked. `noindex` was the only thing standing in front
+ * of it, and `noindex` is a request to crawlers, not an access control.
+ *
+ * The rule now: authenticate, then match `ai_probe_runs.user_id` against the
+ * signed-in user exactly. The admin client stays — the visibility tables are
+ * read through it everywhere — but it may only be used *after* ownership has
+ * been established, never as a substitute for establishing it.
  */
 
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import type { Metadata } from "next"
 
 import { createAdminClient } from "@/utils/supabase/admin"
+import { createClient } from "@/utils/supabase/server"
 import { ENGINE_LABELS, type AiEngine } from "@/lib/visibility/engines"
 
 export const metadata: Metadata = {
-    // Same posture as the public audit report: shareable by link, never indexed.
+    // Owner-only and never indexed. The noindex is belt-and-braces now that
+    // authentication is the actual boundary.
     robots: { index: false, follow: false },
 }
 
@@ -48,7 +62,30 @@ const VERDICT_COPY: Record<string, string> = {
 
 export default async function AiAnswerEvidencePage({ params }: PageProps) {
     const { runId, promptId } = await params
+
+    // Authentication first. An anonymous reader is bounced to login carrying the
+    // deep link, so following an evidence URL from a report survives signing in.
+    const userClient = await createClient()
+    const {
+        data: { user },
+    } = await userClient.auth.getUser()
+    if (!user) {
+        redirect(
+            `/login?next=${encodeURIComponent(`/evidence/ai-answer/${runId}/${promptId}`)}`,
+        )
+    }
+
     const supabase = createAdminClient() as any
+
+    // Ownership before content. `notFound()` rather than a 403: a stranger must
+    // not be able to tell an existing run from an invented one, because "this
+    // run id is real" is itself a fact about someone else's account.
+    const { data: run } = await supabase
+        .from("ai_probe_runs")
+        .select("subject_name, started_at, country_code, user_id")
+        .eq("id", runId)
+        .single()
+    if (!run || run.user_id !== user.id) notFound()
 
     const { data: prompt } = await supabase
         .from("ai_probe_prompts")
@@ -58,19 +95,16 @@ export default async function AiAnswerEvidencePage({ params }: PageProps) {
         .single()
     if (!prompt) notFound()
 
-    const { data: run } = await supabase
-        .from("ai_probe_runs")
-        .select("subject_name, started_at, country_code")
-        .eq("id", runId)
-        .single()
-    if (!run) notFound()
-
     const { data: results } = await supabase
         .from("ai_probe_results")
         .select(
             "engine, model, answer_text, citations, mention_count, citation_count, total_citations, mention_position, mentioned_entity_count, competitor_mentions, observed_at",
         )
         .eq("prompt_id", promptId)
+        // Redundant with the prompt's own run scoping, and kept anyway: this is
+        // the query that returns the answer text, so it states its own boundary
+        // rather than inheriting one from a check several lines above.
+        .eq("run_id", runId)
         .order("engine", { ascending: true })
 
     const rows: ResultRow[] = results || []

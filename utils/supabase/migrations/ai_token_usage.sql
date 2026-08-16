@@ -21,16 +21,25 @@ create trigger update_ai_token_usage_modtime before update on ai_token_usage
 -- Enable RLS
 alter table public.ai_token_usage enable row level security;
 
--- Users can only read their own usage
+-- Users can only read their own usage.
+-- The `to authenticated` clause is not decoration: without a role, a policy
+-- applies to PUBLIC.
 create policy "Users can view their own AI usage"
   on public.ai_token_usage
   for select
+  to authenticated
   using (auth.uid() = user_id);
 
--- Service role can do anything (for API routes)
+-- Service role can do anything (for API routes).
+-- This policy originally had no `to` clause, which means PUBLIC — so `anon` and
+-- `authenticated` inherited full read/write on every row and the owner policy
+-- above was decorative. Both policies were rewritten by
+-- supabase/migrations/20260816_security_hardening.sql (section 2); this file is
+-- corrected to match so re-applying it cannot reopen the hole.
 create policy "Service role full access to AI usage"
   on public.ai_token_usage
   for all
+  to service_role
   using (true)
   with check (true);
 

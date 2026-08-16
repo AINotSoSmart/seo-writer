@@ -143,7 +143,13 @@ export async function proxy(request: NextRequest) {
   // here as defence in depth: an anonymous request should be turned away at the
   // edge rather than reaching a server component that queries the database on
   // its way to rejecting the caller.
-  const protectedRoutes = ['/content-plan', '/seo-health', '/reports', '/settings', '/articles', '/integrations', '/subscribe', '/onboarding', '/account', '/api', '/founder']
+  //
+  // '/visibility' and '/evidence' were the two that were NOT here, and both
+  // read through the admin client, which bypasses RLS. Their pages now check
+  // ownership themselves; this is the outer of the two gates. Any future
+  // customer-data page belongs in this list on the day it is created, not on
+  // the day someone notices.
+  const protectedRoutes = ['/content-plan', '/seo-health', '/reports', '/settings', '/articles', '/integrations', '/subscribe', '/onboarding', '/account', '/api', '/founder', '/visibility', '/evidence']
   const isProtectedRoute = protectedRoutes.some(route =>
     request.nextUrl.pathname.startsWith(route)
   ) && !isPublicApiRoute // Exclude public API routes from protection
@@ -161,9 +167,19 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // If accessing protected routes and not authenticated, redirect to login
+  // If accessing protected routes and not authenticated, redirect to login.
+  // Report pages carry their deep link through the login round-trip, so an
+  // evidence URL followed from an email or a bookmark still resolves once the
+  // owner signs in. Everything else keeps the plain bounce it already had.
   if (isProtectedRoute && !user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url)
+    if (
+      request.nextUrl.pathname.startsWith('/visibility') ||
+      request.nextUrl.pathname.startsWith('/evidence')
+    ) {
+      loginUrl.searchParams.set('next', request.nextUrl.pathname)
+    }
+    return NextResponse.redirect(loginUrl)
   }
 
   const pathname = request.nextUrl.pathname

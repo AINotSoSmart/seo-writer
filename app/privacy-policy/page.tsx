@@ -22,12 +22,20 @@ export default function PrivacyPolicyPage() {
                     does not require Google Search Console access.
                 </p>
             </LegalSection>
-            <LegalSection title="Audit and prospect links">
+            <LegalSection title="Where your reports are readable">
                 <p>
-                    Audit evidence may be shared through an unguessable, read-only public link
-                    marked noindex. Founder-created prospect audits use a separate one-time
-                    claim token bound to the specified email address. Claim tokens expire after
-                    30 days and are stored as hashes.
+                    Your AI visibility report, the stored answer evidence behind it, your
+                    tracked buyer questions, and your audit are readable only while signed in
+                    to your own account. We do not issue public share links for customer
+                    reports, and these pages are excluded from search engine indexing.
+                </p>
+                <p>
+                    The one exception is outreach: where we prepare an audit for a company that
+                    is not yet a customer, that single report is reachable through an
+                    unguessable read-only link until the recipient claims it, at which point
+                    the link stops working. Claiming uses a separate one-time token bound to
+                    the named email address; claim tokens expire after 30 days and are stored
+                    only as hashes.
                 </p>
             </LegalSection>
             <LegalSection title="Third-party processing">

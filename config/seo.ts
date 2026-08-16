@@ -165,6 +165,10 @@ export const robotsConfig = {
   rules: {
     userAgent: "*",
     allow: "/",
+    // Crawl policy, not access control. Everything below is either behind
+    // authentication or behind a token; these rules only keep the URLs out of
+    // the index if one ever escapes into a link. They are not what stops a
+    // stranger reading a report — that is the auth check on the page.
     disallow: [
       "/api/",
       "/account/",
@@ -177,6 +181,10 @@ export const robotsConfig = {
       "/claim/",
       "/audit/",
       "/compare/",
+      "/reports/",
+      "/integrations/",
+      "/visibility/",
+      "/evidence/",
     ],
   },
   sitemap: `${defaultSEO.siteUrl}/sitemap.xml`,

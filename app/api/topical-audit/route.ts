@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import { tasks } from "@trigger.dev/sdk/v3"
 import type { runAuditTask } from "@/trigger/run-audit"
-import { randomBytes } from "crypto"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import { createAdminClient } from "@/utils/supabase/admin"
 /**
@@ -342,13 +341,18 @@ export async function POST(req: NextRequest) {
             )
         }
 
-        const publicToken = randomBytes(24).toString("hex")
+        // No public token for a customer audit. A share token is an
+        // unauthenticated read path, and one was minted here for every paying
+        // customer whether or not anyone ever asked to share anything.
+        // `/audit/[token]` now serves founder prospect outreach only; a
+        // customer reads their own audit signed in. The RPC keeps the parameter
+        // so its signature is unchanged, and refuses a non-null value.
         const { data: auditId, error: insertError } = await db.rpc(
             "create_customer_audit_with_scope",
             {
                 p_user_id: user.id,
                 p_brand_id: brandId,
-                p_public_token: publicToken,
+                p_public_token: null,
                 p_policy_version: HARVEST_POLICY.version,
             },
         )

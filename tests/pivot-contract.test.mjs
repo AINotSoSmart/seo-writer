@@ -5241,19 +5241,220 @@ test("probe clusters freeze article contracts and finalize into relational deliv
 })
 
 test("visibility dashboard renders actionable content program delivery CTA linking to content plan", async () => {
+    // This test used to assert that `/visibility/[runId]` selected
+    // `audit_id, user_id, public_token` and that the dashboard offered a
+    // "Claim Audit & Ship Articles" button to anonymous readers. Both were
+    // true, and both were the bug: the page selected `user_id` and never
+    // compared it, so the report rendered for anyone holding a run id. A test
+    // that pins the shape of a leak keeps the leak. The CTA assertions survive;
+    // the public-rendering ones are replaced by their opposites below.
     const [page, dashboard] = await Promise.all([
-        text("app/visibility/[runId]/page.tsx"),
+        text("app/(protected)/visibility/page.tsx"),
         text("components/visibility/visibility-dashboard.tsx"),
     ])
 
-    // 1. Server page selects audit_id and checks user authentication.
-    assert.match(page, /audit_id,\s*user_id,\s*public_token/)
-    assert.match(page, /userClient\.auth\.getUser\(\)/)
+    // 1. The report is resolved from the signed-in user's own newest run.
+    assert.match(page, /auth\.getUser\(\)/)
+    assert.match(page, /\.eq\("user_id", user\.id\)/)
     assert.match(page, /auditId=\{run\.audit_id\}/)
 
     // 2. Dashboard renders actionable delivery CTA with frozen contract guarantee.
     assert.match(dashboard, /Turn these visibility gaps into ranking content/)
     assert.match(dashboard, /View Delivery Program/)
     assert.match(dashboard, /href=\{auditId \? `\/content-plan` : `\/onboarding`\}/)
-    assert.match(dashboard, /Claim Audit & Ship Articles/)
+})
+
+test("customer reports are never readable without authentication", async () => {
+    // Three server pages read customer data through the admin client, which
+    // bypasses RLS by design. That is fine — it is how every report in this
+    // repo is assembled — but it moves authorization entirely into the page.
+    // All three had forgotten it, so a run id or an audit id was the only thing
+    // between a stranger and a customer's buyer questions, competitor set and
+    // verbatim third-party AI answers. `noindex` was doing the work, and
+    // `noindex` is a request to crawlers, not an access control.
+    const [evidence, runRedirect, dashboardIndex, proxy] = await Promise.all([
+        text("app/evidence/ai-answer/[runId]/[promptId]/page.tsx"),
+        text("app/visibility/[runId]/page.tsx"),
+        text("app/(protected)/visibility/page.tsx"),
+        text("proxy.ts"),
+    ])
+
+    // The evidence page authenticates, then matches the run's owner exactly.
+    // The equality check is the assertion that matters: selecting `user_id`
+    // without comparing it is what shipped.
+    assert.match(evidence, /auth\.getUser\(\)/)
+    assert.match(evidence, /run\.user_id !== user\.id/)
+    assert.match(evidence, /notFound\(\)/)
+
+    // `/visibility/[runId]` is an ownership-checked redirect and renders
+    // nothing. A second renderer for the same report is a second place to
+    // forget the check — which is precisely what happened.
+    assert.match(runRedirect, /run\.user_id !== user\.id/)
+    assert.match(runRedirect, /redirect\("\/visibility"\)/)
+    assert.doesNotMatch(runRedirect, /VisibilityDashboard/)
+
+    // Only the protected index renders the report, and only for its owner.
+    assert.match(dashboardIndex, /\.eq\("user_id", user\.id\)/)
+
+    // Defence in depth at the edge. Both prefixes were absent from this list.
+    assert.match(proxy, /const protectedRoutes = \[[^\]]*'\/visibility'/)
+    assert.match(proxy, /const protectedRoutes = \[[^\]]*'\/evidence'/)
+})
+
+test("public audit links serve founder prospect outreach only", async () => {
+    // `/audit/[token]` is the one deliberately unauthenticated surface. It was
+    // serving any audit that carried a `public_token`, and one was minted for
+    // every customer audit at creation — so a paying customer's gap list and
+    // article plan sat on an anonymous URL for the life of the account.
+    const [auditPage, topicalRoute, probeRoute, runProbe, migration] =
+        await Promise.all([
+            text("app/audit/[token]/page.tsx"),
+            text("app/api/topical-audit/route.ts"),
+            text("app/api/visibility/probe/route.ts"),
+            text("lib/visibility/run-probe.ts"),
+            text("supabase/migrations/20260816_security_hardening.sql"),
+        ])
+
+    // Prospect audits only, and only while the founder's claim is still open.
+    // `claim_prospect_audit` reassigns the owner but leaves `audit_kind` as
+    // 'prospect', so the kind check alone would keep the link alive one step
+    // after the prospect became a customer.
+    assert.match(auditPage, /\.eq\("audit_kind", "prospect"\)/)
+    assert.match(auditPage, /hasOpenClaim/)
+    assert.match(auditPage, /!claim\.claimed_at/)
+    assert.match(auditPage, /!claim\.revoked_at/)
+
+    // No writer mints a share token for customer work any more.
+    assert.match(topicalRoute, /p_public_token: null/)
+    assert.match(probeRoute, /p_public_token: null/)
+    assert.match(probeRoute, /public_token: null/)
+    assert.match(runProbe, /public_token: null/)
+    assert.doesNotMatch(runProbe, /publicToken/)
+
+    // And the database refuses to hold one, so a future writer cannot quietly
+    // reintroduce it. The column default that minted a token for every probe
+    // run is dropped.
+    assert.match(migration, /topical_audits_no_customer_public_token/)
+    assert.match(
+        migration,
+        /CHECK \(audit_kind <> 'customer' OR public_token IS NULL\)/,
+    )
+    assert.match(
+        migration,
+        /ALTER TABLE public\.ai_probe_runs ALTER COLUMN public_token DROP DEFAULT/,
+    )
+})
+
+test("privileged RPCs take their identity from the session, not an argument", async () => {
+    // `consume_ai_tokens(p_user_id)` and `record_ai_usage(p_user_id, tokens)`
+    // were SECURITY DEFINER, carried Postgres's default PUBLIC execute grant,
+    // and named their target user in a parameter. Anonymous callers could read
+    // any user's quota state and write to any user's counter — including a
+    // negative amount, which refunds quota instead of consuming it.
+    const [migration, aiRoute, usageRoute, consumeFile, recordFile] =
+        await Promise.all([
+            text("supabase/migrations/20260816_security_hardening.sql"),
+            text("app/api/editor/ai/route.ts"),
+            text("app/api/editor/ai/usage/route.ts"),
+            text("utils/supabase/migrations/ai_token_rpc_consume.sql"),
+            text("utils/supabase/migrations/ai_token_rpc_record.sql"),
+        ])
+
+    // The vulnerable overloads are dropped, not merely re-granted. Leaving them
+    // in place would let PostgREST route to them regardless of the new ones.
+    assert.match(migration, /DROP FUNCTION IF EXISTS public\.consume_ai_tokens\(uuid\)/)
+    assert.match(migration, /DROP FUNCTION IF EXISTS public\.record_ai_usage\(uuid, bigint\)/)
+
+    // Identity comes from auth.uid(), which a caller cannot forge.
+    assert.match(migration, /CREATE OR REPLACE FUNCTION public\.consume_ai_tokens\(\)/)
+    assert.match(migration, /CREATE OR REPLACE FUNCTION public\.record_ai_usage\(p_tokens_used BIGINT\)/)
+    assert.match(migration, /v_user_id UUID := auth\.uid\(\)/)
+    assert.match(migration, /p_tokens_used < 0/)
+
+    // Every privileged function pins its search_path and refuses anon.
+    assert.match(migration, /REVOKE ALL ON FUNCTION public\.consume_ai_tokens\(\) FROM PUBLIC, anon/)
+    assert.match(migration, /REVOKE ALL ON FUNCTION public\.record_ai_usage\(BIGINT\) FROM PUBLIC, anon/)
+    assert.match(migration, /SET search_path = public, auth, pg_catalog/)
+
+    // The quota table's "service role" policy had no TO clause, so it applied
+    // to PUBLIC and made the owner policy beside it decorative.
+    assert.match(migration, /DROP POLICY IF EXISTS "Service role full access to AI usage"/)
+    assert.match(migration, /FOR ALL\s*\n\s*TO service_role/)
+
+    // Callers pass no user id.
+    assert.match(aiRoute, /supabase\.rpc\(\s*'consume_ai_tokens'\s*\)/)
+    assert.match(aiRoute, /\{ p_tokens_used: tokensUsed \}/)
+    // Match the argument, not the word — the comments above these calls name
+    // `p_user_id` deliberately, to record why it is gone.
+    assert.doesNotMatch(aiRoute, /p_user_id:/)
+    assert.doesNotMatch(usageRoute, /p_user_id:/)
+
+    // The standalone SQL files that created the vulnerable definitions are
+    // runnable scripts. Neutralise them, or someone re-applies one and
+    // recreates the overload beside the fix.
+    for (const file of [consumeFile, recordFile]) {
+        assert.match(file, /SUPERSEDED — DO NOT APPLY/)
+        assert.doesNotMatch(file, /create or replace function/i)
+    }
+})
+
+test("the security sweep leaves no anonymous execute and no mutable search_path", async () => {
+    const migration = await text(
+        "supabase/migrations/20260816_security_hardening.sql",
+    )
+
+    // Both sweeps read the live catalog rather than a hand-kept list. A list
+    // stops covering functions added after it was written, which is the same
+    // shape of hole as the one being closed.
+    assert.match(migration, /FROM pg_proc p/)
+    assert.match(migration, /has_function_privilege\('anon', fn\.oid, 'EXECUTE'\)/)
+    assert.match(migration, /prorettype = 'pg_catalog\.trigger'::regtype/)
+
+    // Extension-owned functions are skipped: pgvector installs into `public` on
+    // some projects, and revoking its operators would break every embedding
+    // query.
+    assert.match(migration, /d\.deptype = 'e'/)
+
+    // The vector schema is discovered, never assumed. Pinning search_path to a
+    // bare `public` is what produced "type vector does not exist" in production
+    // once already.
+    assert.match(migration, /WHERE e\.extname = 'vector'/)
+    assert.match(migration, /SET search_path = public, %I, pg_catalog/)
+
+    // Granting `authenticated` before revoking PUBLIC is what makes the sweep
+    // non-breaking: those roles could already reach the function through the
+    // PUBLIC grant, so only `anon` loses anything.
+    assert.match(
+        migration,
+        /GRANT EXECUTE ON FUNCTION %s TO authenticated, service_role[\s\S]{0,400}REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon/,
+    )
+
+    // The migration verifies its own postconditions instead of reporting
+    // success on a database where the sweeps did not take.
+    assert.match(migration, /Anonymous execute still granted on/)
+    assert.match(migration, /search_path still mutable on/)
+
+    // Leaked-password protection is an Auth setting, not schema. Say so rather
+    // than let a reader assume this file covered it.
+    assert.match(migration, /leaked[- ]password/i)
+})
+
+test("crawler rules cover every authenticated report surface", async () => {
+    const [seo, privacy] = await Promise.all([
+        text("config/seo.ts"),
+        text("app/privacy-policy/page.tsx"),
+    ])
+
+    for (const path of ["/visibility/", "/evidence/", "/reports/", "/audit/", "/claim/"]) {
+        assert.ok(
+            seo.includes(`"${path}"`),
+            `robots disallow is missing ${path}`,
+        )
+    }
+
+    // The policy claimed audit evidence "may be shared through" a public link,
+    // which described the leak as a feature. It now describes what is actually
+    // true: customer reports need a session; outreach reports die on claim.
+    assert.match(privacy, /readable only while signed in/)
+    assert.match(privacy, /do not issue public share links for customer\s*\n?\s*reports/)
 })

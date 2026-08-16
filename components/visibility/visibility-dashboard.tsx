@@ -146,7 +146,13 @@ export interface DashboardProps {
     /** Per-engine presence, computed server-side from the stored answers. */
     perEngine: Array<{ engine: string; label: string; surface: string; total: number; present: number }>
     auditId?: string | null
-    publicToken?: string | null
+    /**
+     * Retained so the CTA can still be read as a decision rather than a
+     * constant, but there is only one caller now and it is behind login: the
+     * report has no anonymous rendering path since `/visibility/[runId]` stopped
+     * being public. There is deliberately no `publicToken` prop — an
+     * unauthenticated share token for a customer run no longer exists.
+     */
     isAuthenticated?: boolean
 }
 
@@ -268,7 +274,6 @@ export function VisibilityDashboard(props: DashboardProps) {
         clusters,
         perEngine,
         auditId,
-        publicToken,
         isAuthenticated,
         embedded = false,
     } = props
@@ -1264,10 +1269,10 @@ export function VisibilityDashboard(props: DashboardProps) {
                                         </Link>
                                     ) : (
                                         <Link
-                                            href={publicToken ? `/signup?claim=${publicToken}` : `/signup`}
+                                            href="/login"
                                             className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--viz-series-1)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-[0.99]"
                                         >
-                                            Claim Audit & Ship Articles
+                                            Sign In to Ship Articles
                                             <ArrowRight className="size-4" aria-hidden />
                                         </Link>
                                     )}

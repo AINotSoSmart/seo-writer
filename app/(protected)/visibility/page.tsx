@@ -1,12 +1,14 @@
 /**
  * The AI-visibility report, inside the dashboard.
  *
- * `app/visibility/[runId]` is the shareable link — public, unindexed, addressed
- * by run id, the same posture as `app/audit/[token]`. This is the other half of
- * that pair and the one that was missing: a customer met the report once at the
- * end of onboarding and then had no way back, because nothing in the product
- * pointed at it. It resolves the newest completed run for their brand, so the
- * sidebar entry always lands somewhere real.
+ * This is the only place the report renders. It resolves the newest completed
+ * run for the signed-in user, so the sidebar entry always lands somewhere real.
+ *
+ * `app/visibility/[runId]` used to be a second, *public* renderer of the same
+ * report, addressed by run id and readable by anyone who had one. It is now an
+ * ownership-checked redirect into this page and renders nothing. Two renderers
+ * meant two places to remember an authorization check, and the second one
+ * never had it.
  *
  * Header language is deliberately identical to `/audit` — eyebrow, serif title,
  * one-line explanation — because a report that arrives styled like a different
@@ -61,7 +63,7 @@ export default async function VisibilityPage() {
         admin
             .from("ai_probe_runs")
             .select(
-                "id, brand_id, subject_name, subject_domains, status, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id, public_token",
+                "id, brand_id, subject_name, subject_domains, status, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id",
             )
             .eq("user_id", user.id)
             .eq("status", "completed")
@@ -229,7 +231,6 @@ export default async function VisibilityPage() {
                 clusters={run.clusters || []}
                 perEngine={[...perEngineMap.values()]}
                 auditId={run.audit_id}
-                publicToken={run.public_token}
                 isAuthenticated
                 embedded
             />

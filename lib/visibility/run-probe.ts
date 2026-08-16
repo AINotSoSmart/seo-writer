@@ -109,7 +109,6 @@ export class ProbeError extends Error {
 
 export interface ProbeResult {
     runId: string
-    publicToken: string
     summary: RunSummary
     clusters: ArticleCluster[]
     engineLedger: EngineLedgerEntry[]
@@ -311,13 +310,15 @@ export async function runVisibilityProbe(
         )
     }
 
-    let run: { id: string; public_token: string }
+    // No `public_token`. A probe run is customer data read behind login; it has
+    // no unauthenticated share URL, so there is nothing for a token to address.
+    let run: { id: string }
     if (options.existingRunId) {
         const { data: existing, error: existingError } = await supabase
             .from("ai_probe_runs")
             .update({ status: "running", updated_at: new Date().toISOString() })
             .eq("id", options.existingRunId)
-            .select("id, public_token")
+            .select("id")
             .single()
         if (existingError || !existing) {
             throw new Error(
@@ -338,8 +339,9 @@ export async function runVisibilityProbe(
                 engines,
                 country_code: options.countryCode ?? null,
                 status: "running",
+                public_token: null,
             })
-            .select("id, public_token")
+            .select("id")
             .single()
         if (runError || !created) {
             throw new Error(`Could not open a probe run: ${runError?.message ?? "unknown"}`)
@@ -933,7 +935,6 @@ export async function runVisibilityProbe(
 
         return {
             runId,
-            publicToken: run.public_token,
             summary,
             clusters,
             engineLedger,

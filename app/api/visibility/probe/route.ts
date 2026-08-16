@@ -28,7 +28,6 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { tasks } from "@trigger.dev/sdk/v3"
-import { randomBytes } from "crypto"
 
 import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
@@ -243,12 +242,14 @@ async function openAuditForBrand(
         }
     }
 
+    // See the matching call in app/api/topical-audit/route.ts: customer audits
+    // get no unauthenticated share token.
     const { data: auditId, error: createError } = await db.rpc(
         "create_customer_audit_with_scope",
         {
             p_user_id: userId,
             p_brand_id: brandId,
-            p_public_token: randomBytes(24).toString("hex"),
+            p_public_token: null,
             p_policy_version: PROBE_POLICY_VERSION,
         },
     )
@@ -600,8 +601,13 @@ export async function POST(req: NextRequest) {
             country_code: countryCode,
             status: "running",
             phase: "queued",
+            // The column still carries a random default from the original
+            // migration. Writing NULL explicitly is what actually stops a
+            // share token being minted for every customer run; the migration
+            // drops the default so this stays true if a new writer appears.
+            public_token: null,
         })
-        .select("id, public_token")
+        .select("id")
         .single()
     if (runError || !run) {
         if (openedAuditHere) {
@@ -646,7 +652,6 @@ export async function POST(req: NextRequest) {
             {
                 runId: run.id,
                 auditId,
-                publicToken: run.public_token,
                 engines: engines.map((engine) => ({
                     id: engine,
                     label: ENGINE_SPECS[engine].label,

@@ -28,6 +28,63 @@ running, or the run row is created and never picked up. Saving confirmed
 questions never starts that paid work: a new probe now requires an explicit
 **Start visibility measurement** click.
 
+## 2026-08-16 — security pass before checkout testing (code-complete, migration pending)
+
+Four authorization defects, found by the founder auditing the repo before
+deployment. Three were application bugs of the same shape; one was a database
+privilege bug. **The migration has not been applied yet** — see §3 for the
+order.
+
+**The shape.** Every report page in this repo reads through
+`createAdminClient()`, which bypasses RLS by design, because reports join across
+tables that a customer's own token cannot see whole. That is a sound pattern and
+it moves authorization entirely into the page. Three pages had not done their
+half:
+
+| Page | What it exposed | Now |
+|---|---|---|
+| `/evidence/ai-answer/[runId]/[promptId]` | Verbatim third-party AI answers, citations, the customer's buyer questions, competitor set, models, timestamps — to anyone holding two UUIDs | Authenticated; `run.user_id === user.id` or `notFound()` |
+| `/visibility/[runId]` | The whole visibility report, addressed by run id. `user_id` **was selected and never compared** | Ownership-checked redirect to `/visibility`; renders nothing |
+| `/audit/[token]` | Any audit carrying a `public_token` — and one was minted for every customer audit at creation | Founder prospect audits only, and only while the claim is open |
+
+`noindex` was the only thing in front of the first two. `noindex` is a request
+to crawlers, not an access control. Nothing suggests the URLs were indexed; the
+privacy exposure never depended on indexing.
+
+**The one that was not a page bug.** `consume_ai_tokens(p_user_id)` and
+`record_ai_usage(p_user_id, p_tokens_used)` were `SECURITY DEFINER`, carried
+Postgres's default `PUBLIC` execute grant, and took the target user as an
+argument. Anonymous callers could read any user's quota and subscription state,
+and write to any user's counter — including a negative amount, which refunds
+quota rather than consuming it. Both are replaced by zero-identity-argument
+versions reading `auth.uid()`. A privileged function that accepts "which user am
+I" as a parameter is broken by construction; no grant fixes it.
+
+Alongside it, `ai_token_usage`'s "service role full access" policy was written
+without a `TO` clause, which in Postgres means `PUBLIC`. RLS was enabled, the
+owner policy existed, and the blanket policy underneath made both irrelevant.
+
+**Share tokens are gone from customer data.** `topical_audits.public_token` is
+nulled and revoked for every customer audit and for every prospect audit whose
+claim has closed; `ai_probe_runs.public_token` had a *column default* minting a
+fresh token on every insert, now dropped. Two CHECK constraints hold the
+invariant so a future writer cannot quietly reintroduce it. The one live
+customer audit token is revoked by the migration. The ten stored evidence URLs
+are unchanged and now resolve to an authenticated page — the URL was never the
+problem, the missing check was.
+
+**Anonymous execute and mutable `search_path`** are swept from the live catalog
+rather than a hand-kept list, because a hand-kept list is how the first six were
+missed. Trigger functions lose EXECUTE entirely (Postgres checks the privilege
+at trigger *creation*, so this cannot break a trigger). Everything else that
+`anon` could call has its signed-in access granted explicitly **before** the
+`PUBLIC` grant is revoked, so only `anon` loses anything. The sweep verifies its
+own postconditions and raises rather than reporting success.
+
+**Still outstanding, and not fixable in SQL:** leaked-password protection is a
+GoTrue setting. Turn it on at Authentication → Providers → Email → "Prevent use
+of leaked passwords", then re-run Security Advisor.
+
 ## 2026-08-16 — subscription Phase 3, recurring commercial lifecycle (code-complete)
 
 Added the forward-only `20260816_recurring_commercial_state.sql` migration and
@@ -954,6 +1011,39 @@ Public/product cleanup completed:
 
 Do not enable checkout while applying this work.
 
+**Security pass (2026-08-16) — do this before any checkout testing.**
+
+1. Apply `supabase/migrations/20260816_security_hardening.sql` **after every
+   other 20260816 migration**. It sweeps every function in `public`, so running
+   it last is what makes it cover the functions the others create. It is
+   idempotent; re-run it whenever new functions are added.
+2. Deploy the application. Between the migration and the deploy, the editor's
+   AI actions (rewrite / improve / expand) return an error, because the RPC
+   signature changed from `consume_ai_tokens(p_user_id)` to
+   `consume_ai_tokens()`. Nothing else calls those two functions. Migration
+   first is the correct order: the reverse would leave the vulnerable overloads
+   live against new code.
+3. Turn on **Authentication → Providers → Email → "Prevent use of leaked
+   passwords"** in the Supabase dashboard. No SQL can set it.
+4. Re-run Security Advisor and confirm the anonymous-function and
+   mutable-`search_path` findings are clear.
+
+Verification queries, after applying:
+
+```sql
+-- Expect zero rows from all three.
+SELECT id, audit_kind FROM topical_audits
+ WHERE audit_kind = 'customer' AND public_token IS NOT NULL;
+SELECT id FROM ai_probe_runs WHERE public_token IS NOT NULL;
+SELECT p.oid::regprocedure FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public'
+   AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR p.proconfig IS NULL)
+   AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                    WHERE d.objid = p.oid AND d.classid = 'pg_proc'::regclass
+                      AND d.deptype = 'e');
+```
+
 **Apply migrations by pasting them into the Supabase SQL editor, one file at a
 time. Do not run `supabase db push`.** `supabase_migrations.schema_migrations`
 on the live project has nothing recorded after `20260404014829`, so every pivot
@@ -1162,6 +1252,90 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-08-16 (twenty-first pass) — the service client's other half
+
+Three report pages leaked customer data, and the diagnosis is worth keeping
+because the code looked correct in each one.
+
+`createAdminClient()` bypasses RLS. That is the point of it, and this repo uses
+it everywhere reports are assembled, because a report joins across tables that a
+customer's own token cannot see whole. The trade is explicit: **the service
+client transfers authorization from the database to the page**. Three pages took
+the first half of that trade and not the second.
+
+`/visibility/[runId]` is the clearest example. It selected `user_id` from the
+run. It also called `getUser()`. It used the result to choose between two
+call-to-action buttons. It never compared the two values. Every ingredient of
+the check was present and assembled into something else, which is why reading it
+does not feel like reading a hole.
+
+Fixes:
+
+- **`/evidence/ai-answer/[runId]/[promptId]`** authenticates, then requires
+  `run.user_id === user.id`. `notFound()` rather than 403 — "this run id is
+  real" is itself a fact about someone else's account.
+- **`/visibility/[runId]`** stops rendering. It is an ownership-checked redirect
+  into `/visibility`, the one report surface, which resolves the caller's own
+  newest completed run. Two renderers meant two places to remember the check.
+- **`/audit/[token]`** serves founder prospect outreach only, and only while the
+  claim is open. `claim_prospect_audit` reassigns the audit's owner but leaves
+  `audit_kind = 'prospect'`, so the kind check alone would have kept the link
+  alive one step after the prospect became a customer.
+- **No writer mints a share token for customer work.** Both audit creators pass
+  `p_public_token: null`; `ai_probe_runs.public_token` loses its column default,
+  which had been minting a fresh token on every insert. Two CHECK constraints
+  make it an invariant instead of a convention.
+- **`proxy.ts`** gains `/visibility` and `/evidence`, carrying the deep link
+  through `?next=` so an evidence URL still resolves after signing in.
+
+The database half, in `20260816_security_hardening.sql`:
+
+- `consume_ai_tokens(p_user_id)` and `record_ai_usage(p_user_id, tokens)` are
+  dropped and replaced by `consume_ai_tokens()` and `record_ai_usage(bigint)`,
+  reading `auth.uid()`. The old pair were `SECURITY DEFINER` with the default
+  `PUBLIC` grant, so an anonymous caller could read anyone's quota and write to
+  anyone's counter — negative amounts included, which refunds quota. Dropping
+  rather than re-granting matters: an overload left in place is one PostgREST
+  will happily route to. The two standalone SQL files that created them are
+  neutralised, because they are runnable scripts.
+- `ai_token_usage`'s "service role full access" policy had no `TO` clause, which
+  means `PUBLIC`. The owner policy beside it was decorative.
+- Anonymous execute and mutable `search_path` are swept from `pg_proc` rather
+  than a list. Trigger functions lose EXECUTE outright; everything else has
+  `authenticated`/`service_role` granted **explicitly before** `PUBLIC` is
+  revoked, so no signed-in feature can lose a capability it had. The vector
+  helpers (`match_*`, `find_covered_answer`, `find_live_url_from_article`) are
+  narrowed to `service_role` by name, because every caller is the service
+  client. Extension-owned functions are skipped and the pgvector schema is
+  discovered, not assumed — pinning to bare `public` is what produced "type
+  vector does not exist" in production once already.
+
+**The other `authenticated` functions were checked, one by one, and are sound.**
+Every function granted to `authenticated` derives identity from `auth.uid()` and
+scopes its writes with it:
+
+| Function | Guard |
+|---|---|
+| `confirm_brand_scope` | `auth.uid()`, then `WHERE id = p_brand_id AND user_id = v_user_id` |
+| `save_onboarding_brand_with_scope` | `auth.uid()`, `user_id = v_user_id` on brand and audit |
+| `confirm_tracked_prompts` | `auth.uid()`, brand scoped by `user_id` |
+| `triage_content_opportunity_target` | `auth.uid()`, tracked prompt scoped by `user_id` |
+| `pause_program` / `resume_program` | `WHERE id = … AND user_id = auth.uid()` |
+| `claim_prospect_audit` | `auth.uid()` **and** verified-email match against the claim |
+| `select_subscription_cycle_actions` | Refuses outright unless the caller is `service_role` |
+| `normalize_tracked_prompt` | Pure text function; touches no rows |
+
+The two AI-token RPCs were the only ones that took the target user as a
+parameter, which is what made them exploitable rather than merely broad.
+
+`npm run test:pivot-contract`: 111/111. `tsc --noEmit`: no errors in any touched
+file. Anonymous `GET /evidence/ai-answer/…`, `/visibility/…` and `/visibility`
+verified returning 307 to `/login`; `/audit/<random>` verified rendering
+not-found.
+
+One item in the founder's list is not code and is not done: **leaked-password
+protection** must be enabled in the Supabase Auth dashboard.
 
 ### 2026-08-15 (nineteenth pass) - the scaffolding was the defect
 

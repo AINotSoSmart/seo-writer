@@ -63,10 +63,12 @@ export async function POST(req: NextRequest) {
             )
         }
 
-        // 2. Check token quota (pre-flight)
+        // 2. Check token quota (pre-flight).
+        // No user id is passed: the RPC reads auth.uid() from the caller's own
+        // session. It used to take `p_user_id`, which meant anyone — including
+        // an anonymous caller — could name any user.
         const { data: quotaCheck, error: quotaError } = await supabase.rpc(
-            'consume_ai_tokens',
-            { p_user_id: user.id }
+            'consume_ai_tokens'
         )
 
         if (quotaError) {
@@ -115,7 +117,7 @@ export async function POST(req: NextRequest) {
 
         const { data: usageResult, error: usageError } = await supabase.rpc(
             'record_ai_usage',
-            { p_user_id: user.id, p_tokens_used: tokensUsed }
+            { p_tokens_used: tokensUsed }
         )
 
         if (usageError) {

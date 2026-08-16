@@ -22,15 +22,40 @@ type PublicAuditData = {
     brandName: string
 }
 
+/**
+ * The one surface in this product that is deliberately readable without an
+ * account — and it is narrower than it looks.
+ *
+ * It serves **founder-created prospect audits only**, and only while the
+ * prospect's claim is still open. That is what an outreach link is: a report
+ * about a company that has not signed up yet, prepared explicitly by the
+ * founder, sent to one named address.
+ *
+ * It used to serve any audit row carrying a `public_token`, and customer audits
+ * were issued one at creation. A paying customer's gap list, competitor set and
+ * article plan were therefore live on an unauthenticated URL for the lifetime
+ * of the account. Three conditions close that:
+ *
+ *   1. `audit_kind = 'prospect'` — a customer audit can never resolve here.
+ *   2. A matching `audit_claims` row that is unrevoked and unexpired — the
+ *      founder's explicit act of preparing this report for someone.
+ *   3. That claim is still unclaimed. `claim_prospect_audit` reassigns the
+ *      audit's `user_id` but leaves `audit_kind` as 'prospect', so without this
+ *      the link would keep working after the prospect became a customer — the
+ *      exact leak, one step later.
+ *
+ * The customer-facing equivalent of this page is `/audit` behind login.
+ */
 async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
     if (!token || token.length < 16) return null
     const supabase = createAdminClient() as any
     const { data: audit } = await supabase
         .from("topical_audits")
         .select(
-            "id, brand_id, brand_snapshot, subject_url, pool_size, article_count, cluster_count, authority_score, public_token, public_token_revoked_at, completed_at, run_status, requires_reaudit",
+            "id, brand_id, brand_snapshot, subject_url, pool_size, article_count, cluster_count, authority_score, public_token, public_token_revoked_at, completed_at, run_status, requires_reaudit, audit_kind, audit_claims(claimed_at, revoked_at, expires_at)",
         )
         .eq("public_token", token)
+        .eq("audit_kind", "prospect")
         .maybeSingle()
     if (
         !audit ||
@@ -39,6 +64,20 @@ async function loadPublicAudit(token: string): Promise<PublicAuditData | null> {
     ) {
         return null
     }
+
+    const claims = Array.isArray(audit.audit_claims)
+        ? audit.audit_claims
+        : audit.audit_claims
+          ? [audit.audit_claims]
+          : []
+    const hasOpenClaim = claims.some(
+        (claim: any) =>
+            !claim.claimed_at &&
+            !claim.revoked_at &&
+            claim.expires_at &&
+            new Date(claim.expires_at).getTime() > Date.now(),
+    )
+    if (!hasOpenClaim) return null
 
     const [
         { data: clusterRows },
