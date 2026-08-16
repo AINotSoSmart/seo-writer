@@ -547,9 +547,10 @@ Backfilling an old run would invent stable customer intent after the fact.
 
 The hosted migration is applied. The authenticated confirmation flow persisted
 exactly 40 active rows with 40 unique ids, 40 unique normalized questions and
-positions 0–39. The flow now stops at an explicit paid-measurement button; no
-provider credits were spent during this gate. After deployment, run one smoke
-measurement and verify 40 non-null observation links before enabling checkout.
+positions 0–39. Phase 8 now sends that confirmed set to the plan/checkout screen;
+only an active subscription can reach the explicit paid-measurement button. No
+provider credits were spent during this gate. During the Phase 8 sandbox journey,
+verify 40 non-null observation links before enabling production checkout.
 
 Subscription Phase 2 added `content_opportunities`, `subscription_cycles`,
 `cycle_actions`, `cycle_action_opportunities` and the unique

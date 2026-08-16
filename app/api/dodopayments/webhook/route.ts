@@ -539,6 +539,10 @@ export async function POST(req: NextRequest) {
         const user_id: string | undefined = meta?.user_id
         const brand_id: string | undefined =
             meta?.brand_id || payload?.metadata?.brand_id || data?.metadata?.brand_id
+        const publication_url_pattern: string | undefined =
+            meta?.publication_url_pattern ||
+            payload?.metadata?.publication_url_pattern ||
+            data?.metadata?.publication_url_pattern
 
         // Payment or invoice events may not have subscription payload; try alternative metadata root
         const rootUserId = payload?.metadata?.user_id
@@ -597,6 +601,7 @@ export async function POST(req: NextRequest) {
                     effective_user_id,
                     brand_id ?? null,
                     dodo_subscription_id,
+                    publication_url_pattern ?? null,
                 )
             }
             // Persist service-management fields for reporting/operations
@@ -631,6 +636,7 @@ export async function POST(req: NextRequest) {
                 effective_user_id,
                 brand_id ?? null,
                 effectiveSubscriptionId,
+                publication_url_pattern ?? null,
             )
             if (!provisioning.ok) {
                 throw new Error(`Payment could not open a recurring program: ${provisioning.skipped}`)

@@ -25,6 +25,7 @@ import {
     type DashboardEngine,
     type DashboardPrompt,
 } from "@/components/visibility/visibility-dashboard"
+import { PaidProbeConsole } from "@/components/visibility/paid-probe-console"
 
 type ProbePromptRow = Omit<DashboardPrompt, "targetPage"> & {
     tracked_prompt_id: string | null
@@ -56,18 +57,40 @@ export default async function VisibilityPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const admin = createAdminClient() as any
 
-    const { data: run } = await admin
-        .from("ai_probe_runs")
-        .select(
-            "id, brand_id, subject_name, subject_domains, status, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id, public_token",
-        )
-        .eq("user_id", user.id)
-        .eq("status", "completed")
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
+    const [{ data: run }, { data: brand }, { data: subscription }] = await Promise.all([
+        admin
+            .from("ai_probe_runs")
+            .select(
+                "id, brand_id, subject_name, subject_domains, status, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id, public_token",
+            )
+            .eq("user_id", user.id)
+            .eq("status", "completed")
+            .order("started_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        admin
+            .from("brand_details")
+            .select("id")
+            .eq("user_id", user.id)
+            .is("deleted_at", null)
+            .limit(1)
+            .maybeSingle(),
+        admin
+            .from("dodo_subscriptions")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .limit(1)
+            .maybeSingle(),
+    ])
 
-    if (!run) return <NoRun />
+    if (!run) {
+        return subscription && brand ? (
+            <PaidProbeConsole brandId={brand.id} />
+        ) : (
+            <NoRun />
+        )
+    }
 
     const [{ data: promptRows }, { data: resultRows }] = await Promise.all([
         admin
@@ -225,10 +248,10 @@ function NoRun() {
                 the answers and everything measured from them appear here.
             </p>
             <Link
-                href="/onboarding"
+                href="/subscribe"
                 className="mt-5 inline-flex rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
             >
-                Finish setting up
+                View the founding plan
             </Link>
         </main>
     )

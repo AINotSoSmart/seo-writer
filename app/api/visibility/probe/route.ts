@@ -494,6 +494,26 @@ export async function POST(req: NextRequest) {
         )
     }
 
+    // The launch funnel is paid-first. Client routing is not an authorization
+    // boundary: old onboarding tabs and direct requests must not spend Cloro
+    // credits before Dodo has activated the subscription.
+    const { data: paidSubscription } = await supabase
+        .from("dodo_subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle()
+    if (!paidSubscription) {
+        return NextResponse.json(
+            {
+                error: "An active subscription is required before measurement starts.",
+                reason: "subscription_required",
+            },
+            { status: 402 },
+        )
+    }
+
     /**
      * Durable questions reference brand scope. Each run observes the same
      * question against its immutable audit-scope snapshot, so only the family

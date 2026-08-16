@@ -621,10 +621,12 @@ contained exactly 40 active rows, 40 unique ids, 40 unique normalized questions
 and the complete position range 0–39. No Cloro tasks were queued and no credits
 were spent.
 
-Saving questions and spending measurement credits are now separate actions.
-The audit screen resumes an existing run automatically but a new run waits for
-an explicit **Start visibility measurement** click. This prevents a Continue or
-page refresh from silently purchasing 80 consumer-app requests.
+Saving questions and spending measurement credits are separate actions.
+Phase 8 now sends the confirmed 40-question set to the plan and checkout screen.
+Only an account with an active Dodo subscription can open the probe API. Its
+empty visibility screen then waits for an explicit **Start visibility
+measurement** click, so checkout activation, Continue and page refresh cannot
+silently purchase 80 consumer-app requests.
 
 All 106 pivot contracts pass. The new Phase 7 surfaces pass targeted lint, and
 Phase 7 introduces no new TypeScript errors; the full check still
@@ -712,7 +714,7 @@ a singleton batch. A clean same-host HTTPS publication pattern is frozen for
 create URLs, and replay returns the already selected batch instead of selecting
 again. The hosted migration was applied successfully before Phase 7 began.
 
-**Phase 7 code-complete 2026-08-16; migration gate open.** The forward-only
+**Phase 7 deployed 2026-08-16.** The forward-only
 `20260816_phase7_batch_delivery.sql` migration makes action claiming explicitly
 create-only, adds an audited founder-assisted refresh completion boundary, and
 releases the cycle through the existing atomic batch transaction only after
@@ -731,7 +733,54 @@ drafts for create actions, or confirm that a refresh was applied to its existing
 URL. There is no live generation or delivery smoke result yet because the paid
 AI probe has intentionally not run and the deployment-only provider keys are not
 available locally. Phase 7 verification is contract/static only and spent no
-provider credits. Apply this migration before the Phase 8 sandbox journey.
+provider credits. The migration was applied successfully before Phase 8 began.
+
+**Phase 8 code-complete 2026-08-16; migration and sandbox gates open.** The
+one-plan checkout is implemented behind `FOUNDING_CHECKOUT_ENABLED`. The server,
+not the browser, owns the Dodo product, discount, plan id, brand, customer and
+return URLs. It refuses checkout unless the account has exactly one live brand,
+exactly 40 active tracked prompts, no active/pending subscription and a clean
+same-host HTTPS publication pattern containing `{slug}` once. Onboarding now
+stops at the plan instead of exposing the pre-payment probe. The probe API also
+enforces an active subscription, so an old tab cannot bypass the paywall.
+Immediately before creating a hosted checkout, the server reads the configured
+Dodo objects back and fails closed unless they are exactly a no-trial $189 USD
+monthly subscription plus a product-restricted $90 USD flat discount limited to
+three subscription cycles.
+
+`20260816_phase8_checkout_contract.sql` creates the stable
+`founding_beta` pricing row at the $189 recurring price, deactivates rather than
+deletes the three historical velocity rows, stores the publication pattern on
+the recurring program and carries it through signed Dodo metadata into webhook
+provisioning. The $99 periods 1–3 price is a Dodo-managed $90 flat discount with
+a three-subscription-cycle limit; the app never counts webhook deliveries to
+decide when to reprice.
+
+The required sandbox configuration is:
+
+1. Create one monthly Dodo test product at **$189 USD**.
+2. Create one **$90 USD flat discount**, restrict it to that product, and set
+   **Subscription Cycle Limit = 3**.
+3. Deploy `DODO_FOUNDING_PRODUCT_ID` and `DODO_FOUNDING_DISCOUNT_CODE` with those
+   test values while `DODO_ENVIRONMENT=test_mode`.
+4. Apply `20260816_phase8_checkout_contract.sql`, deploy the code, then set
+   `FOUNDING_CHECKOUT_ENABLED=true` only for the sandbox journey.
+5. Complete checkout → activation → paid probe → triage → action selection →
+   generation/founder refresh → atomic batch release. Keep production payments
+   closed until the whole journey passes.
+
+The same phase audited live Supabase state before proposing cleanup. The three
+`legacy_*` commercial tables, `programs` legacy columns and the old cost-event
+FK were empty and had no runtime callers. Two maintenance functions still
+named them, so `20260816_legacy_pivot_cleanup.sql` rewrites those functions
+first and aborts if any legacy row appears before dropping the objects.
+`internal_links` is **not legacy**: the manual/non-cycle writer and sitemap
+duplication checks still call its RPCs. Its empty IVFFlat index had nevertheless
+grown to 183 MB, so the cleanup reindexes it instead of deleting live
+capability. `answer_coverage`, billing history and inactive Dodo plan rows are
+also preserved. The protected finite-audit sales page was removed from dashboard
+navigation and now redirects to AI Visibility; public founder/demo audit links
+remain readable.
 
 | # | Step | Why here |
 |---|---|---|
@@ -743,8 +792,8 @@ provider credits. Apply this migration before the Phase 8 sandbox journey.
 | 4 ✅ | Implement per-cycle reconciliation and contract tests | Migration applied successfully 2026-08-16 |
 | 5 ✅ | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Migration applied successfully 2026-08-16 |
 | 6 ✅ | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Migration applied successfully 2026-08-16 |
-| 7 ◐ | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Code-complete and 106 contracts green; apply `20260816_phase7_batch_delivery.sql` before Phase 8 |
-| 8 | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | This is the revenue switch |
+| 7 ✅ | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Migration applied successfully 2026-08-16; live generation remains part of the Phase 8 sandbox journey |
+| 8 ◐ | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | Code-complete; apply the two Phase 8 migrations, configure the Dodo test product/three-cycle discount, deploy, and pass the sandbox journey before enabling revenue |
 | 9 | Enable checkout and fulfil the first customers with founder oversight | Learn before automating edge cases |
 | 10 | Add the automated renewal scheduler and retry/alerting path | Required before the first customer's second billing period |
 

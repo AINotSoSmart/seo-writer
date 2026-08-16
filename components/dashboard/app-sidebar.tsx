@@ -4,7 +4,6 @@ import * as React from "react"
 import {
   Send,
   Layers3,
-  Search,
   Sparkles,
 } from "lucide-react"
 import Link from "next/link"
@@ -40,14 +39,14 @@ const navSecondary = [
   },
 ]
 
-function ProgramCard({ isSubscribed, planName }: { isSubscribed?: boolean; planName?: string | null }) {
+function ProgramCard({ isSubscribed }: { isSubscribed?: boolean }) {
   return (
     <Card className="py-2">
       <CardContent className="gap-1 flex flex-col px-3">
         <div className="text-sm font-medium mb-1">Delivery program</div>
         <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
           <Layers3 className="h-3 w-3" />
-          {isSubscribed ? `${planName || "Active"} velocity` : "Program not purchased"}
+          {isSubscribed ? "Active recurring plan" : "No active subscription"}
         </div>
         {isSubscribed ? (
           <Button size="sm" variant="outline" className="w-full" asChild>
@@ -57,8 +56,8 @@ function ProgramCard({ isSubscribed, planName }: { isSubscribed?: boolean; planN
           </Button>
         ) : (
           <Button size="sm" className="w-full bg-black hover:bg-black/90 text-white border-0" asChild>
-            <Link href="/audit" prefetch={false}>
-              Review audit
+            <Link href="/subscribe" prefetch={false}>
+              View founding plan
             </Link>
           </Button>
         )}
@@ -70,7 +69,6 @@ function ProgramCard({ isSubscribed, planName }: { isSubscribed?: boolean; planN
 export function AppSidebar({
   user,
   isSubscribed,
-  planName,
   isFounder,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
@@ -81,7 +79,6 @@ export function AppSidebar({
     id?: string
   }
   isSubscribed?: boolean
-  planName?: string | null
   isFounder?: boolean
 }) {
   const userData = user || {
@@ -95,11 +92,6 @@ export function AppSidebar({
       title: "AI Visibility",
       url: "/visibility",
       icon: Sparkles,
-    },
-    {
-      title: "Evidence Audit",
-      url: "/audit",
-      icon: Search,
     },
     {
       title: "Content Plan",
@@ -156,7 +148,7 @@ export function AppSidebar({
         <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <ProgramCard isSubscribed={isSubscribed} planName={planName} />
+        <ProgramCard isSubscribed={isSubscribed} />
         <NavUser user={userData} />
       </SidebarFooter>
     </Sidebar>

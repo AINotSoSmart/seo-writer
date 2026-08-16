@@ -3,7 +3,11 @@ import { Sparkles } from "lucide-react"
 
 import ManageSubscription from "@/components/subscribe/ManageSubscription"
 import RealtimeSubscriptionSync from "@/components/subscribe/RealtimeSubscriptionSync"
+import SubscribeButton from "@/components/subscribe/SubscribeButton"
 import { GlobalCard } from "@/components/ui/global-card"
+import { PRODUCT_TRUTH } from "@/config/product-truth"
+import { defaultPublicationPattern } from "@/lib/subscription/publication-pattern"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
 
 type PlanRow = {
@@ -20,9 +24,17 @@ async function loadPageData() {
     const {
         data: { user },
     } = await supabase.auth.getUser()
-    if (!user) return { user: null, plans: [], subscription: null }
+    if (!user) {
+        return {
+            user: null,
+            plans: [],
+            subscription: null,
+            brand: null,
+            promptCount: 0,
+        }
+    }
 
-    const [{ data: plans }, { data: subscription }] = await Promise.all([
+    const [{ data: plans }, { data: subscription }, { data: brands }] = await Promise.all([
         supabase
             .from("dodo_pricing_plans")
             .select("id, name, description, price, currency, dodo_product_id")
@@ -38,14 +50,58 @@ async function loadPageData() {
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
+        supabase
+            .from("brand_details")
+            .select("id, website_url")
+            .eq("user_id", user.id)
+            .is("deleted_at", null)
+            .limit(2),
     ])
 
-    return { user, plans: (plans || []) as PlanRow[], subscription }
+    const brand = brands?.length === 1 ? brands[0] : null
+    let promptCount = 0
+    if (brand) {
+        const { count } = await supabase
+            .from("tracked_prompts")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("brand_id", brand.id)
+            .eq("tracking_status", "active")
+            .is("retired_at", null)
+        promptCount = count || 0
+    }
+
+    const visiblePlans = [...(plans || [])]
+    if (
+        subscription?.pricing_plan_id &&
+        !visiblePlans.some((plan) => plan.id === subscription.pricing_plan_id)
+    ) {
+        // Active checkout plans are public under RLS; an inactive historical
+        // plan is loaded only by the exact id on this user's own subscription.
+        const admin = createAdminClient()
+        const { data: historicalPlan } = await admin
+            .from("dodo_pricing_plans")
+            .select("id, name, description, price, currency, dodo_product_id")
+            .eq("id", subscription.pricing_plan_id)
+            .maybeSingle()
+        if (historicalPlan) visiblePlans.push(historicalPlan)
+    }
+
+    return {
+        user,
+        plans: visiblePlans.map((plan) => ({
+            ...plan,
+            dodo_product_id: plan.dodo_product_id || "",
+        })) as PlanRow[],
+        subscription,
+        brand,
+        promptCount,
+    }
 }
 
 export default async function SubscribePage() {
     await cookies()
-    const { user, plans, subscription } = await loadPageData()
+    const { user, plans, subscription, brand, promptCount } = await loadPageData()
 
     if (subscription?.status === "active") {
         return (
@@ -70,6 +126,38 @@ export default async function SubscribePage() {
         )
     }
 
+    if (subscription?.status === "pending") {
+        return (
+            <main className="flex min-h-screen items-center justify-center py-8 text-stone-900">
+                <RealtimeSubscriptionSync userId={user?.id} />
+                <GlobalCard className="w-full max-w-2xl">
+                    <section className="px-6 py-14 text-center sm:px-12">
+                        <Sparkles className="mx-auto h-7 w-7 text-amber-600" />
+                        <h1 className="mt-4 font-serif text-4xl tracking-tight">
+                            Activating your subscription
+                        </h1>
+                        <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-stone-600">
+                            Payment confirmation is still being reconciled. This page updates
+                            automatically; do not open a second checkout.
+                        </p>
+                    </section>
+                </GlobalCard>
+            </main>
+        )
+    }
+
+    const checkoutConfigured =
+        process.env.FOUNDING_CHECKOUT_ENABLED === "true" &&
+        Boolean(process.env.DODO_FOUNDING_PRODUCT_ID?.trim()) &&
+        Boolean(process.env.DODO_FOUNDING_DISCOUNT_CODE?.trim())
+    const disabledReason = !brand
+        ? "Complete onboarding for exactly one website before checkout."
+        : promptCount !== PRODUCT_TRUTH.trackedPromptAllowance
+          ? `Confirm exactly ${PRODUCT_TRUTH.trackedPromptAllowance} buyer questions first (${promptCount} currently active).`
+          : !checkoutConfigured
+            ? "Checkout is code-complete but remains closed until the sandbox price phase is configured and verified."
+            : null
+
     return (
         <main className="flex min-h-screen items-center justify-center py-8 text-stone-900">
             <GlobalCard className="w-full max-w-3xl" contentClassName="overflow-hidden">
@@ -87,8 +175,20 @@ export default async function SubscribePage() {
                         remain visible without consuming a production slot.
                     </p>
                     <div className="mx-auto mt-8 max-w-lg rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-900">
-                        Checkout remains closed until the recurring payment-to-complete-batch
-                        path passes end to end. No finite cluster plan can be purchased.
+                        <strong>${PRODUCT_TRUTH.introductoryPrice}/month</strong> for billing
+                        periods 1–{PRODUCT_TRUTH.introductoryPeriods}, then
+                        {" "}<strong>${PRODUCT_TRUTH.continuingPrice}/month</strong> from
+                        period {PRODUCT_TRUTH.introductoryPeriods + 1}. Cancel anytime;
+                        completed reports and drafts remain available.
+                    </div>
+                    <div className="mx-auto mt-6 max-w-lg">
+                        <SubscribeButton
+                            defaultPublicationUrlPattern={defaultPublicationPattern(
+                                brand?.website_url || "",
+                            )}
+                            disabledReason={disabledReason}
+                            className="w-full rounded-lg bg-stone-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300"
+                        />
                     </div>
                 </section>
             </GlobalCard>

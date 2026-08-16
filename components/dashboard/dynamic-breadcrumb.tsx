@@ -12,10 +12,7 @@ import {
 
 // Map of routes to display names
 const routeDisplayNames: Record<string, string> = {
-  dashboard: "Dashboard",
-  "demo-tool": "Demo Tool",
-  reports: "Reports",
-  audit: "Evidence Audit",
+  visibility: "AI Visibility",
   "content-plan": "Content Plan",
   settings: "Settings",
 }
@@ -68,7 +65,7 @@ export function DynamicBreadcrumb() {
         )}
 
         {/* Dynamic breadcrumb items */}
-        {breadcrumbItems.map((item, index) => (
+        {breadcrumbItems.map((item) => (
           <div key={item.segment} className="flex items-center">
             <BreadcrumbItem className="text-xs md:text-sm">
               {item.isLast ? (

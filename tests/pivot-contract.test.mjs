@@ -3241,13 +3241,13 @@ test("onboarding uses a focused authenticated shell outside the dashboard sideba
     assert.match(consent, /\["do", "chat:hide"\]/)
 })
 
-test("the completed audit remains inspectable before purchase", async () => {
-    const [accessAction, auditPage, contentPlan, scopeResults, publicAudit, sidebar, subscribe] =
+test("the paid-first funnel retires the protected finite audit without deleting evidence", async () => {
+    const [accessAction, onboarding, auditPage, contentPlan, publicAudit, sidebar, subscribe] =
         await Promise.all([
             text("actions/onboarding.ts"),
+            text("app/(onboarding)/onboarding/page.tsx"),
             text("app/(protected)/audit/page.tsx"),
             text("app/(protected)/content-plan/page.tsx"),
-            text("components/audit/scope-results.tsx"),
             text("app/audit/[token]/page.tsx"),
             text("components/dashboard/app-sidebar.tsx"),
             text("app/(protected)/subscribe/page.tsx"),
@@ -3255,39 +3255,59 @@ test("the completed audit remains inspectable before purchase", async () => {
 
     assert.match(accessAction, /currentStep === "audit"/)
     assert.match(accessAction, /currentStep === "audit-results"/)
-    assert.match(accessAction, /redirectTo: "\/audit"/)
-    assert.doesNotMatch(accessAction, /redirectTo: "\/content-plan"/)
-
-    for (const source of [auditPage, contentPlan]) {
-        assert.match(source, /getAuditScope/)
-        assert.match(source, /getGapEvidence/)
-        assert.match(source, /getPlannedArticles/)
-        assert.match(source, /articles=\{articles\}/)
-    }
-
-    assert.match(scopeResults, /Evidence-bound editorial groups/)
-    assert.match(scopeResults, /not purchased recurring-cycle actions/)
-    assert.match(scopeResults, /Expand all articles/)
-    assert.match(scopeResults, /sourceQueryIds/)
-    assert.match(scopeResults, /source-linked/)
-    assert.match(scopeResults, /Show all \$\{gaps\.length\} evidence rows/)
+    assert.match(accessAction, /redirectTo: "\/visibility"/)
+    assert.match(onboarding, /router\.push\("\/subscribe"\)/)
+    assert.ok(
+        onboarding.indexOf('fetch("/api/visibility/prompts/confirm"') <
+            onboarding.indexOf('router.push("/subscribe")'),
+        "confirmed prompts must persist before checkout",
+    )
+    assert.match(auditPage, /redirect\("\/visibility"\)/)
+    assert.doesNotMatch(auditPage, /getAuditScope|ScopeResults|checkoutEligible/)
+    assert.match(contentPlan, /getAuditScope/)
+    assert.match(contentPlan, /getGapEvidence/)
+    assert.match(contentPlan, /getPlannedArticles/)
     assert.match(publicAudit, /from\("planned_articles"\)/)
     assert.match(publicAudit, /articles=\{data\.articles\}/)
-    assert.match(sidebar, /title: "Evidence Audit"/)
-    assert.match(sidebar, /url: "\/audit"/)
+    assert.doesNotMatch(sidebar, /title: "Evidence Audit"/)
+    assert.doesNotMatch(sidebar, /url: "\/audit"/)
     assert.match(subscribe, /Founding beta/)
     assert.match(subscribe, /40 tracked buyer questions/)
 })
 
-test("checkout remains disabled by default and consent gates optional analytics", async () => {
-    const [checkout, consent, layout] = await Promise.all([
+test("founding checkout is disabled by default and owns the three-cycle price phase", async () => {
+    const [checkout, probe, migration, consent, layout] = await Promise.all([
         text("app/api/dodopayments/checkout/route.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("supabase/migrations/20260816_phase8_checkout_contract.sql"),
         text("components/CookieConsent.tsx"),
         text("app/layout.tsx"),
     ])
-    assert.match(checkout, /recurring_checkout_not_ready/)
+    assert.match(checkout, /FOUNDING_CHECKOUT_ENABLED !== "true"/)
+    assert.match(checkout, /founding_checkout_disabled/)
     assert.match(checkout, /status:\s*503/)
     assert.doesNotMatch(checkout, /purchase_intent|program_cluster|DodoPayments/)
+    assert.match(checkout, /DODO_FOUNDING_PRODUCT_ID/)
+    assert.match(checkout, /DODO_FOUNDING_DISCOUNT_CODE/)
+    assert.match(checkout, /client\.products\.retrieve\(productId\)/)
+    assert.match(checkout, /client\.discounts\.retrieveByCode\(discountCode\)/)
+    assert.match(checkout, /price\.type !== "recurring_price"/)
+    assert.match(checkout, /price\.price !== expectedPrice/)
+    assert.match(checkout, /discount\.type !== "flat"/)
+    assert.match(
+        checkout,
+        /discount\.subscription_cycles !== PRODUCT_TRUTH\.introductoryPeriods/,
+    )
+    assert.match(checkout, /usdOption\?\.max_amount_possible !== expectedDiscount/)
+    assert.match(checkout, /discount_codes: \[discountCode\]/)
+    assert.match(checkout, /idempotencyKey: `founding-/)
+    assert.match(checkout, /promptCount !== PRODUCT_TRUTH\.trackedPromptAllowance/)
+    assert.match(checkout, /validatePublicationPattern/)
+    assert.match(probe, /reason: "subscription_required"/)
+    assert.match(migration, /'introductory_price', 99/)
+    assert.match(migration, /'introductory_periods', 3/)
+    assert.match(migration, /'continuing_price', 189/)
+    assert.match(migration, /price_phase_owner', 'dodo_cycle_limited_discount'/)
     assert.match(consent, /analytics/)
     assert.match(consent, /support/)
     assert.match(consent, /localStorage/)
@@ -4465,7 +4485,9 @@ test("cycle selection ranks real eligible work and freezes only the selected bat
     assert.match(selector, /select_subscription_cycle_actions/)
     assert.match(selector, /eligibleGroups: Number\(row\.eligible_groups \?\? row\.selected\)/)
     assert.match(selector, /backlogGroups: Number\(row\.backlog_groups \?\? 0\)/)
-    assert.match(selector, /pattern\.split\("\{slug\}"\)\.length !== 2/)
+    const publicationPattern = await text("lib/subscription/publication-pattern.ts")
+    assert.match(selector, /validatePublicationPattern\(pattern, subjectUrl\)/)
+    assert.match(publicationPattern, /trimmed\.split\("\{slug\}"\)\.length !== 2/)
 })
 
 test("phase seven delivers one complete create and assisted-refresh batch", async () => {

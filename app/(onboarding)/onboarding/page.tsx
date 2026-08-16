@@ -880,16 +880,13 @@ export default function OnboardingPage() {
                 )
             }
 
-            // A fresh save is a fresh measurement. Any run id left over from an
-            // earlier attempt would be adopted by the console and reported as
-            // this brand's result.
+            // A fresh save is ready for the paid-first offer. Any run id left
+            // from the pre-Phase-8 onboarding probe must not be adopted.
             localStorage.removeItem(STORAGE_KEYS.PROBE_RUN_ID)
             setProbeRunId(null)
 
-            // The confirmed scope is now frozen in brand_scope_families, which
-            // is everything the probe needs to open its own audit. Next screen
-            // asks the confirmed questions.
-            setStep("audit")
+            clearOnboardingStorage()
+            router.push("/subscribe")
         } catch (e: any) {
             const message = e.message || "Failed to save brand details"
             setError(message)
@@ -974,10 +971,12 @@ export default function OnboardingPage() {
     }, [])
 
     /**
-     * Onboarding ends on the visibility report, not on the old scope screen.
+     * Historical in-flight probes still finish on the visibility report. New
+     * customers leave onboarding for checkout before any provider credits are
+     * spent.
      *
      * The probe finalizes its own audit through `finalize_audit_run`, so the
-     * permanent views — `/audit` and `/content-plan` — are already populated by
+     * permanent views — `/visibility` and `/content-plan` — are already populated by
      * the time this fires. The report is where the finding is: which questions
      * name a competitor instead of the customer, with the verbatim answer
      * behind every claim.
@@ -994,7 +993,7 @@ export default function OnboardingPage() {
     // legacy content_plans table or run a second paid harvest.
     const handleOpenSavedAudit = () => {
         clearOnboardingStorage()
-        router.push("/audit")
+        router.push("/visibility")
     }
 
     // Load the closed-pool read model after completion and on refresh.

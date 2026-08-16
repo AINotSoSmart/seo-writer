@@ -111,7 +111,6 @@ export default async function DashboardLayout({
             id: user.id,
           }}
           isSubscribed={isSubscribed}
-          planName={planName}
           isFounder={isFounderUser(user.id)}
         />
         <SidebarInset>

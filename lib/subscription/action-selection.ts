@@ -1,5 +1,10 @@
 import "server-only"
 
+import {
+    PublicationPatternError,
+    validatePublicationPattern,
+} from "./publication-pattern"
+
 export const ACTION_SELECTION_POLICY = Object.freeze({
     version: "cycle-action-selection-v1",
     graphVersion: "cycle-selected-graph-v1",
@@ -30,38 +35,14 @@ export function validateCyclePublicationPattern(
     pattern: string,
     subjectUrl: string,
 ): string {
-    if (typeof pattern !== "string" || pattern.split("{slug}").length !== 2) {
-        throw new CycleSelectionError(
-            "The publication URL pattern must contain {slug} exactly once.",
-        )
-    }
-    let target: URL
-    let subject: URL
     try {
-        target = new URL(pattern.replace("{slug}", "selected-action-preview"))
-        subject = new URL(subjectUrl)
-    } catch {
-        throw new CycleSelectionError("The publication URL pattern is not a valid URL.")
+        return validatePublicationPattern(pattern, subjectUrl)
+    } catch (error) {
+        if (error instanceof PublicationPatternError) {
+            throw new CycleSelectionError(error.message)
+        }
+        throw error
     }
-    if (
-        target.protocol !== "https:" ||
-        target.search ||
-        target.hash ||
-        target.username ||
-        target.password ||
-        !target.pathname.includes("selected-action-preview")
-    ) {
-        throw new CycleSelectionError(
-            "The publication URL pattern must be a clean HTTPS path.",
-        )
-    }
-    const normalizeHost = (url: URL) => url.hostname.toLowerCase().replace(/^www\./, "")
-    if (normalizeHost(target) !== normalizeHost(subject)) {
-        throw new CycleSelectionError(
-            "The publication URL pattern must use the measured website host.",
-        )
-    }
-    return pattern.trim()
 }
 
 /** Service-role wrapper used by the future cycle orchestrator and founder control. */

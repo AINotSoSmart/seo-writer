@@ -14,6 +14,7 @@ export async function ensureProgramForSubscription(
     userId: string,
     brandId: string | null,
     dodoSubscriptionId: string | null,
+    publicationUrlPattern: string | null = null,
 ): Promise<ProvisioningResult> {
     if (!dodoSubscriptionId) return { ok: false, skipped: "missing subscription id" }
 
@@ -40,6 +41,7 @@ export async function ensureProgramForSubscription(
             p_user_id: userId,
             p_brand_id: resolvedBrandId,
             p_dodo_subscription_id: dodoSubscriptionId,
+            p_publication_url_pattern: publicationUrlPattern,
         },
     )
     if (error) throw new Error(`Recurring program provisioning failed: ${error.message}`)

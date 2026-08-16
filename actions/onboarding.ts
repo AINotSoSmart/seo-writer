@@ -30,12 +30,13 @@ export async function canAccessOnboarding(
     // Do not eject the customer at the exact moment finalization sets the
     // brand's current audit. The audit and audit-results steps are the focused
     // completion experience; all other attempts to reopen onboarding land on
-    // the permanent evidence view.
+    // the recurring visibility view. The protected finite-audit sales page was
+    // retired in Phase 8.
     if (currentStep === "audit" || currentStep === "audit-results") {
         return { allowed: true }
     }
 
-    return { allowed: false, redirectTo: "/audit" }
+    return { allowed: false, redirectTo: "/visibility" }
 }
 
 /**

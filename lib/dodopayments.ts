@@ -9,10 +9,7 @@
  */
 export async function checkout(
     input: {
-        auditId: string
-        tier: 'close' | 'accelerate' | 'dominate'
         publicationUrlPattern: string
-        returnUrl: string
     },
 ): Promise<{ checkout_url: string; session_id: string }> {
     const res = await fetch('/api/dodopayments/checkout', {
