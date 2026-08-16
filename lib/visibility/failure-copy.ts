@@ -32,6 +32,7 @@ export type ProbeFailureCode =
     | "queue_failed"
     | "worker_never_ran"
     | "brand_unreadable"
+    | "opportunity_reconciliation_failed"
     | "unknown"
 
 interface ProbeFailureCopy {
@@ -85,6 +86,13 @@ export const PROBE_FAILURE_COPY: Record<ProbeFailureCode, ProbeFailureCopy> = {
         message:
             "We couldn't read your saved brand details, so the run was stopped before anything was asked.",
         retryable: true,
+    },
+    opportunity_reconciliation_failed: {
+        message:
+            "The answers were collected and saved, but the recurring action backlog could not be updated. No content action was selected. Our team has been alerted.",
+        // Re-running the probe would buy the same answers twice. The saved run
+        // can be reconciled by an operator after the storage issue is fixed.
+        retryable: false,
     },
     unknown: {
         message:

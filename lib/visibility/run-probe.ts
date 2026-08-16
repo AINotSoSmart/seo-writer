@@ -64,6 +64,7 @@ import {
     probeFailureCopy,
     type ProbeFailureCode,
 } from "./failure-copy"
+import { reconcileContentOpportunities } from "./opportunity-reconciliation"
 
 /**
  * Cloro is a queue, not a synchronous API, so the run is two phases: submit
@@ -98,7 +99,8 @@ export class ProbeError extends Error {
             | "no_scope"
             | "no_prompts"
             | "all_engines_failed"
-            | "no_answers",
+            | "no_answers"
+            | "opportunity_reconciliation_failed",
     ) {
         super(message)
         this.name = "ProbeError"
@@ -690,7 +692,7 @@ export async function runVisibilityProbe(
         }
 
         for (const outcome of outcomes.values()) {
-            await supabase
+            const { error: outcomeError } = await supabase
                 .from("ai_probe_prompts")
                 .update({
                     answers_total: outcome.answersTotal,
@@ -699,6 +701,32 @@ export async function runVisibilityProbe(
                     verdict: outcome.verdict,
                 })
                 .eq("id", outcome.promptId)
+            if (outcomeError) {
+                throw new Error(
+                    `Could not persist prompt outcome ${outcome.promptId}: ${outcomeError.message}`,
+                )
+            }
+        }
+
+        // ── 4. Observations → one durable opportunity per tracked question ─
+        // This happens before clustering because the recurring backlog is the
+        // product state. Editorial clusters are one possible production input;
+        // they are never allowed to become a floor that deletes real findings.
+        await report("reconciling_opportunities", `${outcomes.size} observed questions`)
+        try {
+            await reconcileContentOpportunities(
+                supabase,
+                runId,
+                insertedPrompts,
+                outcomes,
+            )
+        } catch (error) {
+            throw new ProbeError(
+                error instanceof Error
+                    ? error.message
+                    : "The recurring opportunity backlog could not be updated.",
+                "opportunity_reconciliation_failed",
+            )
         }
 
         const summary = summariseRun([...outcomes.values()], prompts)
@@ -714,7 +742,7 @@ export async function runVisibilityProbe(
             discoveryFailed: competitorTracking.discoveryFailed,
         }
 
-        // ── 4. Gaps → the existing clusterer with frozen contracts ────────
+        // ── 5. Gaps → the existing clusterer with frozen contracts ────────
         await report("clustering", `${summary.absentPromptCount + summary.outrankedPromptCount} losing prompts`)
 
         const gaps = toGapItems(prompts, outcomes, runId)
@@ -723,7 +751,7 @@ export async function runVisibilityProbe(
             subjectType: options.subjectType,
         })
 
-        // ── 5. Relational persistence to topical_audits (if auditId provided)
+        // ── 6. Relational persistence to topical_audits (if auditId provided)
         if (options.auditId) {
             try {
                 const clusterIds = clusters.map(() => randomUUID())

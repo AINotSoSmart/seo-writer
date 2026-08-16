@@ -4221,6 +4221,84 @@ test("recurring findings, cycles and selected actions have separate durable iden
     assert.doesNotMatch(actionTable, /planned_article_id/)
 })
 
+test("each observed tracked question reconciles one replay-safe opportunity", async () => {
+    const [migration, reconciler, runner, failureCopy] = await Promise.all([
+        text("supabase/migrations/20260816_opportunity_reconciliation.sql"),
+        text("lib/visibility/opportunity-reconciliation.ts"),
+        text("lib/visibility/run-probe.ts"),
+        text("lib/visibility/failure-copy.ts"),
+    ])
+
+    // The observation window is one explicit product policy in both halves of
+    // the boundary. It is not a caller-controlled knob that can drift per run.
+    const codeDays = Number(
+        reconciler.match(/monitoringDays:\s*(\d+)/)?.[1],
+    )
+    const databaseDays = Number(
+        migration.match(/v_monitoring_days CONSTANT INTEGER := (\d+)/)?.[1],
+    )
+    assert.equal(codeDays, 21)
+    assert.equal(databaseDays, codeDays)
+    assert.doesNotMatch(migration, /p_monitoring_days/)
+
+    // Partial engine failure is not absence. Only prompts with at least one
+    // usable answer are expected, and each one must match its stored stable id
+    // and persisted verdict before any backlog row changes.
+    assert.match(migration, /prompt_row\.answers_total > 0/)
+    assert.match(migration, /jsonb_array_length\(p_findings\) <> v_expected_count/)
+    assert.match(migration, /COUNT\(DISTINCT finding->>'tracked_prompt_id'\)/)
+    assert.match(migration, /prompt_row\.verdict = v_finding->>'verdict'/)
+    assert.match(reconciler, /has no durable tracked-question identity/)
+    assert.match(reconciler, /appears more than once in this run/)
+    assert.match(reconciler, /outcome\.answersTotal < 1/)
+
+    // A brand-level lock plus the unique upsert makes a replay or concurrent
+    // run update the same opportunity. first_seen_run_id is intentionally not
+    // overwritten by the conflict branch.
+    assert.match(migration, /pg_advisory_xact_lock/)
+    assert.match(migration, /FOR UPDATE;/)
+    assert.match(migration, /ON CONFLICT \(brand_id, tracked_prompt_id\) DO UPDATE/)
+    const upsertUpdate = migration.slice(
+        migration.indexOf("ON CONFLICT (brand_id, tracked_prompt_id) DO UPDATE"),
+        migration.indexOf("IF v_opportunity_id IS NULL"),
+    )
+    assert.doesNotMatch(upsertUpdate, /first_seen_run_id/)
+
+    // Delivery never closes visibility. A still-losing delivered action is
+    // monitoring inside the window; afterwards a refresh may reopen, while a
+    // created draft needs publication/target confirmation before more work.
+    assert.match(migration, /action_row\.state = 'delivered'/)
+    assert.match(migration, /v_state := 'monitoring'/)
+    assert.match(migration, /v_delivered_type = 'refresh'[\s\S]{0,180}v_state := 'open'/)
+    assert.match(migration, /Confirm where the delivered draft was published/)
+    const resolvedBranch = migration.slice(
+        migration.indexOf("ELSIF v_finding->>'verdict' = 'present'"),
+        migration.indexOf("ELSIF v_existing_state = 'dismissed'"),
+    )
+    assert.match(resolvedBranch, /v_state := 'resolved'/)
+    assert.doesNotMatch(resolvedBranch, /v_delivered_at|v_delivered_type/)
+
+    // Reconciliation is the recurring product state, so it completes after
+    // verdict persistence and before optional editorial clustering. A failure
+    // cannot be retried by buying the same provider answers again.
+    const reconcileAt = runner.indexOf("await reconcileContentOpportunities(")
+    const verdictAt = runner.indexOf("Could not persist prompt outcome")
+    const clusterAt = runner.indexOf("const gaps = toGapItems")
+    assert.ok(verdictAt < reconcileAt && reconcileAt < clusterAt)
+    assert.match(runner, /"opportunity_reconciliation_failed"/)
+    assert.match(failureCopy, /opportunity_reconciliation_failed/)
+    assert.match(failureCopy, /Re-running the probe would buy the same answers twice/)
+
+    assert.match(
+        migration,
+        /REVOKE ALL ON FUNCTION public\.reconcile_content_opportunities\(UUID, JSONB\)[\s\S]*FROM PUBLIC, anon, authenticated/,
+    )
+    assert.match(
+        migration,
+        /GRANT EXECUTE ON FUNCTION public\.reconcile_content_opportunities\(UUID, JSONB\)[\s\S]*TO service_role/,
+    )
+})
+
 test("confirmed prompts are rebound to the audit's own scope family ids", async () => {
     const [binding, probeRoute] = await Promise.all([
         text("lib/visibility/prompt-binding.ts"),

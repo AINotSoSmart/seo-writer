@@ -326,7 +326,9 @@ On a successful initial payment or renewal:
 2. It creates one `subscription_cycles` row for the billing period.
 3. The cycle probes the brand's active durable questions.
 4. Per-run prompt rows and verbatim evidence are stored exactly as today.
-5. Each result reconciles its durable `content_opportunities` row.
+5. Each result with at least one usable answer reconciles its durable
+   `content_opportunities` row. A question whose providers all failed is not an
+   “absent” observation and keeps its prior opportunity state.
 
 The first paid cycle may be started manually from a founder control. The cron is
 required before the first renewal, not before the first sale.
@@ -624,13 +626,11 @@ The audit screen resumes an existing run automatically but a new run waits for
 an explicit **Start visibility measurement** click. This prevents a Continue or
 page refresh from silently purchasing 80 consumer-app requests.
 
-All 102 pivot contracts pass and the Phase 1/2/3 files introduce no TypeScript
-errors. TypeScript still reports the same seven pre-existing generated-DB-type
-errors in billing and the legacy blog trigger. The remaining release smoke test
-is one deployed run verifying 40 non-null
-`ai_probe_prompts.tracked_prompt_id` links. It is intentionally deferred until
-Trigger.dev and the external-provider keys are deployed; do not fabricate a
-successful local run or spend credits merely to unblock schema work.
+All 103 pivot contracts pass, targeted lint is clean and the full TypeScript
+check passes. The remaining release smoke test is one deployed run verifying
+40 non-null `ai_probe_prompts.tracked_prompt_id` links. It is intentionally
+deferred until Trigger.dev and the external-provider keys are deployed; do not
+fabricate a successful local run or spend credits merely to unblock schema work.
 
 **Phase 2 deployed 2026-08-16.** The forward-only
 `20260816_subscription_state_model.sql` migration adds durable opportunities,
@@ -641,7 +641,7 @@ of eight actions, same-target refresh grouping, cross-table ownership and RLS.
 Generated outputs gain the single authoritative unique `cycle_action_id` link.
 The hosted migration was applied successfully before Phase 3 began.
 
-**Phase 3 code-complete 2026-08-16; migration gate open.** The forward-only
+**Phase 3 deployed 2026-08-16.** The forward-only
 `20260816_recurring_commercial_state.sql` migration retires the finite
 commercial state without deleting its history. Purchase intents, cluster
 schedules and article-credit consumptions become read-only `legacy_*` tables;
@@ -651,8 +651,26 @@ creates one `subscription_cycle`, selected actions are claimed with a
 three-attempt lease, costs and frozen links carry cycle/action ownership, and
 all selected outputs become visible in one atomic batch. The webhook no longer
 provisions from a purchase intent or automatically cancels completed work.
-Checkout returns 503 until the Phase 8 sandbox gate. Apply this migration before
-starting Phase 4 reconciliation.
+Checkout returns 503 until the Phase 8 sandbox gate. The hosted migration was
+applied successfully before Phase 4 began.
+
+**Phase 4 code-complete 2026-08-16; migration gate open.** The forward-only
+`20260816_opportunity_reconciliation.sql` migration adds the service-role-only,
+atomic `reconcile_content_opportunities` boundary. It validates that the payload
+accounts for every run prompt with a usable answer, matches each stable tracked
+question and persisted verdict, serialises updates per brand, and upserts on
+`(brand_id, tracked_prompt_id)`. Replaying a run therefore updates the same row
+without replacing `first_seen_run_id`; partial provider failure cannot become a
+fabricated absence.
+
+The observation policy is frozen at 21 days in code and SQL. A fresh `present`
+verdict is the only event that resolves visibility. A still-losing delivered
+action remains `monitoring` inside the window. After the window, a prior refresh
+may reopen as refresh against its explicit URL; a delivered create draft becomes
+`needs_input` until publication and target URL are confirmed, so delivery can
+never silently create a second page. Inactive questions and explicit dismissals
+retain their evidence but stay production-ineligible. Apply this migration
+before starting Phase 5 target-page triage.
 
 | # | Step | Why here |
 |---|---|---|
@@ -660,8 +678,8 @@ starting Phase 4 reconciliation.
 | 0b ✅ | Inspect the uncategorised citation shapes and define a conservative classifier plus founder-review fallback | Completed 2026-08-16 against 373 stored citations; unresolved evidence is visible and production-ineligible |
 | 1 ✅ | Add `tracked_prompts`; make onboarding write them and the probe observe them through `tracked_prompt_id` | Migration applied and authenticated 40-row persistence gate passed 2026-08-16; deployed observation-link smoke test remains a release gate |
 | 2 ✅ | Add `content_opportunities`, `subscription_cycles`, `cycle_actions` and their junction; link generated outputs to actions | Migration applied successfully 2026-08-16 |
-| 3 ◐ | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | Code-complete and 102 contracts green; apply `20260816_recurring_commercial_state.sql` before Phase 4 |
-| 4 | Implement per-cycle reconciliation and contract tests | Prevent duplicate backlog and false “closed” claims |
+| 3 ✅ | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | Migration applied successfully 2026-08-16 |
+| 4 ◐ | Implement per-cycle reconciliation and contract tests | Code-complete and 103 contracts green; apply `20260816_opportunity_reconciliation.sql` before Phase 5 |
 | 5 | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Never infer create versus refresh from an incomplete crawl |
 | 6 | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Prevent links to undelivered backlog work |
 | 7 | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Complete the deliverable before accepting money |
