@@ -174,17 +174,18 @@ export function MethodPanel({
                             <Section title="Where the questions come from">
                                 <p>
                                     For each confirmed business area we write {PROMPTS_PER_FAMILY}{" "}
-                                    candidate questions, from that area&apos;s own description and
-                                    your own words for it — never invented topics. The mix is fixed
-                                    in code so two runs ask structurally comparable questions:
+                                    candidate questions, from that area&apos;s own description, what
+                                    the product does, and your own words for it — never invented
+                                    topics. We do not dictate their phrasing; each is labelled with
+                                    the situation it came from:
                                 </p>
                                 <ul className="list-disc space-y-1 pl-5">
                                     {PROMPT_INTENTS.map((intent) => (
                                         <li key={intent.key}>
                                             <strong className="font-medium text-[var(--viz-ink)]">
-                                                {intent.weight}× {intent.key}
+                                                {intent.key}
                                             </strong>{" "}
-                                            — {intent.brief}
+                                            — {intent.label}
                                         </li>
                                     ))}
                                 </ul>

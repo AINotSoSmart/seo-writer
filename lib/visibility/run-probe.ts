@@ -387,22 +387,23 @@ export async function runVisibilityProbe(
                 .eq("id", options.brandId)
                 .maybeSingle()
             const persona = (brandRow?.brand_data ?? {}) as {
-                audience?: { primary?: string }
+                category?: string
                 core_features?: string[]
+                audience?: { primary?: string }
             }
 
             const built = await buildBuyerPrompts(families, {
                 subjectType: options.subjectType,
                 language: options.language,
                 subjectTokens,
-                // The persona the founder confirmed during onboarding, finally
-                // reaching the stage that decides what gets measured. It was
-                // collected, stored, used by the writer months later, and never
-                // consulted by the generator — which is why the questions read
-                // like category descriptions rather than someone's situation.
+                // Everything a person would hand a model to write these by
+                // hand: what it is, what it does, who has the problem, what
+                // they already use. All of it background — the templates that
+                // turned the last two of these into every question are gone.
                 context: {
-                    audience: persona.audience?.primary,
+                    category: persona.category,
                     coreFeatures: persona.core_features,
+                    audience: persona.audience?.primary,
                     incumbents: competitors.map((competitor) => competitor.name),
                 },
                 maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,

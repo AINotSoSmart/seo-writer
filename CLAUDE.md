@@ -17,6 +17,12 @@ for what is being built, why, how it works, what is calibrated, and what is stil
 open. Read it fully before changing anything under `lib/harvest/`, `lib/audit/`,
 `lib/plans/`, or `trigger/`.
 
+**[`docs/SUBSCRIPTION_PIVOT.md`](docs/SUBSCRIPTION_PIVOT.md)** is the proposed
+commercial refactor: from a finite article program to a tracked-prompt monthly
+subscription. Not built. Read it before touching `programs`, `purchase-intent`,
+`program-contract.ts`, or the cluster qualification thresholds — several of those
+are scheduled for deletion and patching them first is wasted work.
+
 **[`docs/ROADMAP.md`](docs/ROADMAP.md) is the other half**: what was deliberately
 deferred or rejected, and why. Read it before proposing a feature — several
 obvious-looking ideas (full-site coverage scanning, weighted opportunity scores,

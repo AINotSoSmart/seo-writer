@@ -3904,6 +3904,11 @@ test("the method panel reads its values from the code that computes them", async
     )
     assert.match(panel, /from "@\/lib\/visibility\/citation-classifier"/)
     assert.match(panel, /PROMPT_INTENTS\.map/)
+    // It describes labels the model applies, not a quota it is held to — the
+    // weighted mix it used to explain no longer exists.
+    assert.doesNotMatch(panel, /intent\.weight/)
+    // It describes labels, not a quota — the mix it used to explain is gone.
+    assert.doesNotMatch(panel, /intent\.weight/)
 
     // It must state limits, not only justify numbers.
     assert.match(panel, /What this measurement cannot tell you/)
@@ -4227,97 +4232,82 @@ test("a rival named as a word is still a rival", async () => {
     assert.match(dashboard, /rivals named in answers you never appear in/)
 })
 
-test("buyer prompts read like a person, not a blog title", async () => {
-    const [config, builder, mapper, runner] = await Promise.all([
+test("prompt generation is given context and a goal, never a form", async () => {
+    const [config, builder, runner, mapper] = await Promise.all([
         text("lib/visibility/prompt-config.ts"),
         text("lib/visibility/prompt-builder.ts"),
-        text("lib/visibility/gap-mapper.ts"),
         text("lib/visibility/run-probe.ts"),
+        text("lib/visibility/gap-mapper.ts"),
     ])
 
-    // The first real run produced "Can you recommend a platform that helps me
-    // generate editable mobile UI screens and provides developer-ready
-    // implementation context?" — a brochure sentence with a question mark. A
-    // formal category question makes an assistant retreat to the safest listicle
-    // of whichever legacy tools have the most written about them, so the run
-    // measures a conversation no buyer ever had.
-
-    // 1. Intents are sentence SHAPES, not topic labels.
-    assert.match(config, /CONTEXT \+ PAIN \+ ASK/)
-    assert.match(config, /FRUSTRATED SWITCHER/)
-    assert.match(config, /CONSENSUS CHECK/)
-    assert.match(config, /FUNCTIONAL BRIDGE/)
-
-    // 2. Competitors are material, not contraband. Banning every rival name is
-    //    what left the model with nothing but abstract category questions —
-    //    comparative framing is the phrasing that makes an engine name
-    //    challengers at all.
-    assert.match(builder, /function namesSubject/)
-    assert.doesNotMatch(builder, /function namesTrackedEntity/)
-    assert.match(builder, /incumbents\?: string\[\]/)
-
-    // 3. Realism is a POSITIVE structural test, never a banned-word list — this
-    //    repo has twice been burned by blocklists that caught the previous
-    //    examples and missed the next.
-    assert.match(builder, /function readsLikeAPerson/)
-    assert.match(builder, /\\b\(i\|i'm/)
-
-    // 4. The persona the founder confirmed finally reaches the generator. It was
-    //    collected, stored, used by the writer months later, and never consulted
-    //    by the stage that decides what gets measured.
-    assert.match(runner, /coreFeatures: persona\.core_features/)
-    assert.match(runner, /audience: persona\.audience\?\.primary/)
-
-    // 5. A competitor the prompt itself named must not count as a rival for that
-    //    prompt, or our own prompt text tops the leaderboard.
-    assert.match(mapper, /namedInPrompt\(competitor\.name\)/)
-
-    // 6. ONLY TWO OF THE FIVE SHAPES MAY NAME A RIVAL.
+    // TWO LIVE RUNS FAILED HERE, IN OPPOSITE DIRECTIONS, FOR THE SAME REASON.
     //
-    //    When naming one was merely allowed, every shape used it — a rival name
-    //    is the cheapest way for a model to look concrete — and a live run came
-    //    back as ten variations of "X is too expensive, what else?" with every
-    //    problem-first question filtered out. The buyer who has a problem and
-    //    does not know what exists is the larger half of AI discovery and the
-    //    half where an engine names vendors from nothing.
-    assert.match(config, /namesIncumbent: true/)
-    assert.match(config, /namesIncumbent: false/)
-    assert.match(builder, /NAME NO TOOL AT ALL/)
-    assert.match(builder, /!shape\.namesIncumbent &&/)
-    assert.match(builder, /namesAnyIncumbent\(row\.text/)
+    // First the briefs were topic labels and the output was SEO titles with
+    // question marks. Then they became literal sentence formulas with per-shape
+    // quotas — "I'm [who I am] using [current stack]" — and the output became
+    // ten variations of "MyHeritage is too expensive, what else?", asked by
+    // "family archivists" and "genealogists". Nobody describes themselves that
+    // way; real buyers describe the photo on their desk and the result they are
+    // afraid of.
+    //
+    // Dictating a form guarantees output with that form. The founder got better
+    // questions from a plain model call given only the brand, its features and
+    // its category. So the scaffolding is gone, and these assertions exist to
+    // stop it growing back.
+    assert.doesNotMatch(config, /weight:/)
+    assert.doesNotMatch(config, /namesIncumbent/)
+    assert.doesNotMatch(builder, /function orderByIntentMix/)
+    assert.doesNotMatch(builder, /function readsLikeAPerson/)
+    assert.doesNotMatch(builder, /function namesAnyIncumbent/)
+    assert.doesNotMatch(builder, /BANNED openings/)
+    assert.doesNotMatch(builder, /NAME NO TOOL AT ALL/)
+    // Audience and competitors ARE in the context — they were removed with the
+    // scaffolding and that over-corrected. Without who has the problem the model
+    // cannot write from a real situation, and without tools they already use the
+    // alternatives-seeking buyer is never measured at all. The defect was the
+    // template slot they were plugged into, not the facts.
+    assert.match(builder, /audience\?: string/)
+    assert.match(builder, /incumbents\?: string\[\]/)
+    assert.match(builder, /category\?: string/)
+    assert.match(builder, /coreFeatures\?: string\[\]/)
+    assert.match(runner, /audience: persona\.audience\?\.primary/)
+    assert.match(runner, /incumbents: competitors\.map/)
 
-    //    And naming one must not buy realism: `readsLikeAPerson` accepting
-    //    "or it names an incumbent" is what biased survival toward exactly the
-    //    prompts that named a tool. First person is required of every shape.
-    assert.match(builder, /function readsLikeAPerson\(text: string\)/)
-    assert.doesNotMatch(builder, /readsLikeAPerson\(text: string, incumbents/)
+    // But labelled as background, with the two failure modes named: nobody
+    // announces their job title, and naming a tool is the exception.
+    assert.match(builder, /Background, not instructions/)
+    assert.match(builder, /do not have anyone announce themselves/)
+    assert.match(builder, /most of these questions should name no product at all/)
 
-    // 7. The run cap must not decide which buyer situations get measured. Only
-    //    the first one or two prompts per family survive it, so the pool is
-    //    interleaved by intent rather than left in model emission order.
-    assert.match(builder, /function orderByIntentMix/)
-    assert.match(builder, /byFamily\.set\(family\.id, orderByIntentMix\(accepted\)\)/)
+    // And the circularity is closed downstream: asking "alternatives to X"
+    // cannot inflate X on the rival leaderboard.
+    assert.match(mapper, /if \(namedInPrompt\(competitor\.name\)\) continue/)
 
-    // 8. RIVALS ARE CONFIRMED BEFORE THE QUESTIONS ARE WRITTEN. This is a data
-    //    dependency wearing the costume of a screen order: the questions are
-    //    written against incumbent names, so generating them first — as this
-    //    flow originally did — passed an empty list at the only moment it
-    //    mattered, and every comparative prompt silently degraded back into an
-    //    abstract category question.
-    const route = await text(ONBOARDING_ROUTE)
-    const topicsContinue = route.indexOf('onRestart={() => resetToBrandStep("")}')
-    const rivalsScreen = route.indexOf('{step === "extras" && brandData && (')
-    const questionsScreen = route.indexOf('{step === "prompts" && brandData && (')
-    assert.ok(topicsContinue > 0 && rivalsScreen > 0 && questionsScreen > 0)
-    assert.ok(
-        rivalsScreen < questionsScreen,
-        "the rivals screen must be walked before the questions screen",
-    )
-    // Rivals hands off to generation; questions is the last screen and commits.
-    assert.match(route, /onContinue=\{handleProceedToPrompts\}/)
-    assert.match(route, /onContinue=\{handleSaveBrand\}/)
-    // Discovery starts a screen earlier still, so the list is filled on arrival.
-    assert.match(route, /step !== "scope" && step !== "extras" && step !== "prompts"/)
+    // The intent is now an OUTPUT LABEL the model applies, not an input quota —
+    // it still has to exist because `articleType` flows into the writer's
+    // frozen contract.
+    assert.match(config, /articleType: "commercial" as const/)
+    assert.match(builder, /articleType: intent\.articleType/)
+    assert.match(builder, /Label each question with the situation it comes from/)
+
+    // Three checks survive, and none of them judges style. A style filter can
+    // only delete: the last one shrank a set of ten to six and skewed what
+    // remained toward exactly the questions it was meant to balance.
+    assert.match(builder, /isPlausiblePrompt\(row\.text\) &&/)
+    assert.match(builder, /validIntents\.has\(row\.intent\) &&/)
+    assert.match(builder, /!namesSubject\(row\.text, options\.subjectTokens\)/)
+
+    // Naming the customer's own brand stays banned — measurement validity, not
+    // taste. Naming them hands the engine the answer it is being tested on.
+    assert.match(builder, /function namesSubject/)
+    assert.match(builder, /Never name this product or its website/)
+
+    // Ownership stays structural: one call per family, id attached by code.
+    assert.match(builder, /scopeFamilyId: family\.id/)
+
+    // A competitor the prompt itself named still cannot count as a rival for
+    // that prompt. Prompts may mention one when the model judges it natural.
+    assert.match(mapper, /namedInPrompt\(competitor\.name\)/)
 })
 
 test("a delivery artifact can never become a search market", async () => {

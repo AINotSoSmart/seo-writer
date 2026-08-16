@@ -24,7 +24,9 @@ interface GeneratePromptsRequest {
     competitors?: string[]
     /** ISO-639-1. Buyers ask in their own language, so the questions must be in it. */
     language?: string
-    /** Who buys it, so a prompt can open from their situation. */
+    /** The confirmed category, in the customer's words. */
+    category?: string
+    /** Who has the problem. Background on whose situation to write from. */
     audience?: string
     /** What the product actually does, so a prompt can name a real constraint. */
     coreFeatures?: string[]
@@ -123,8 +125,9 @@ export async function POST(req: NextRequest) {
             language: resolveLanguage(body.language),
             subjectTokens,
             context: {
-                audience: body.audience?.trim() || undefined,
+                category: body.category?.trim() || undefined,
                 coreFeatures: body.coreFeatures,
+                audience: body.audience?.trim() || undefined,
                 incumbents,
             },
             maxPrompts: body.maxPrompts,

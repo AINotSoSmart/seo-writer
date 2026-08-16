@@ -15,109 +15,76 @@
  */
 
 /**
- * The buyer situations worth testing, and why each is here.
+ * The vocabulary a generated prompt may be labelled with — **an output label,
+ * not an input quota.**
  *
- * `weight` is how many candidate prompts of that intent each confirmed family
- * gets. Commercial intents are weighted up because they are the ones where an
- * engine answers with a list of named products — an informational prompt that
- * returns an explanation mentions nobody, and an absence there means very
- * little.
+ * ## What used to be here, and why it was deleted
  *
- * ## Each brief is a SENTENCE SHAPE, not a topic
+ * This was a weighted mix of five buyer situations, each with a literal
+ * sentence formula the model was told to fill in — "I'm [who I am] using
+ * [current stack]", "[Incumbent] is [friction] for [my situation]" — plus a
+ * required count per shape.
  *
- * They used to read like topic labels ("asks for alternatives in this
- * category"), and the model dutifully produced the tidiest sentence matching
- * that description — which is an SEO title with a question mark on it:
+ * Those formulas produced exactly what a formula produces. A live run for a
+ * photo-restoration tool returned questions from "family archivists" and
+ * "genealogists" complaining that a named rival was "too expensive" and "does
+ * not seem to get updates" — an SEO consultant's idea of a person. What real
+ * buyers type describes the thing on their desk and the outcome they are afraid
+ * of: *"I scanned an old torn photo of my grandparents from the 1950s. What can
+ * fix the cracks without making their faces look like smooth plastic?"*
  *
- *     "Can you recommend a platform that helps me generate editable mobile UI
- *      screens and provides developer-ready implementation context?"
+ * The scaffolding was the cause. Dictating a form guarantees the output has
+ * that form, and the filters added afterwards could only delete the escapees —
+ * which shrank the set and skewed it further toward the two comparative shapes.
  *
- * Nobody types that. It is marketing copy in interrogative form, and it is
- * actively harmful as a measurement: fed a formal, category-level question, an
- * answer engine returns the safe top-of-funnel listicle naming whichever legacy
- * tools have the most written about them. The run then reports the customer
- * absent from a conversation no buyer was ever having.
+ * So the model is now given context and a goal, and labels each question it
+ * writes with one of these keys. The label is used downstream: `articleType`
+ * flows into the article contract and decides how the writer treats the piece.
  *
- * Real prompts are: who I am + what is going wrong + what I want. First person,
- * specific, sometimes naming a tool the buyer already uses. So each brief below
- * is the literal structure to fill in.
+ * ## Why dropping the fixed mix is safe now
  *
- * ## `namesIncumbent` is a hard split, and it exists because of a failure
- *
- * Two of these five shapes are about a buyer who already has a tool and wants
- * off it. The other three are about a buyer who has a problem and does not know
- * what exists — which is the larger half of AI discovery and the half worth
- * measuring, because it is where an engine names vendors from nothing.
- *
- * When incumbents were merely *allowed*, every shape used one: naming a tool was
- * the cheapest way to satisfy "include a concrete anchor", so a real run came
- * back as ten variations of "X is too expensive, what else is there?" and the
- * problem-first questions vanished entirely. Six of ten weights produced nothing.
- *
- * So it is now structural. `false` means the prompt may not name any tracked
- * rival at all; the anchor has to come from the buyer's own situation.
- *
- * ## Declaration order is queue priority, not cosmetics
- *
- * `orderByIntentMix` walks this array to decide which prompts sit at the front
- * of a family's pool, and the run cap only ever takes the front. At the default
- * ten prompts across five confirmed areas each area contributes two, so the
- * first two entries here are what a first run actually measures. They alternate
- * deliberately: a problem-first shape, then an incumbent shape, then another
- * problem-first — so a small run spans both kinds of buyer instead of becoming
- * all switching questions, which is exactly what a live run produced when the
- * order was left to whatever the model emitted first.
+ * The mix existed so two runs of the same audit would ask structurally
+ * comparable questions. Under the subscription model prompts are **persisted
+ * and re-run** — comparability comes from tracking the same questions every
+ * month, not from regenerating the same shapes. The reason for the quota
+ * disappeared the moment prompts became durable. See `SUBSCRIPTION_PIVOT.md`.
  */
 export const PROMPT_INTENTS = [
     {
         key: "recommendation",
-        weight: 3,
-        namesIncumbent: false,
-        brief:
-            "CONTEXT + PAIN + ASK. \"I'm [who I am] using [current stack]. I'm trying to [job], but [what is going wrong]. What tool handles this?\" The buyer states their situation before they ask.",
+        label: "asking what to use for a specific job",
         articleType: "commercial" as const,
     },
     {
         key: "alternatives",
-        weight: 2,
-        namesIncumbent: true,
-        brief:
-            "FRUSTRATED SWITCHER. \"[Incumbent] is [too expensive / too heavy / missing X] for [my situation]. What is a simpler alternative that just does [core job]?\" Name a real incumbent — this is the phrasing that makes an engine list challengers.",
+        label: "looking for options, or something other than what they have",
+        articleType: "commercial" as const,
+    },
+    {
+        key: "comparison",
+        label: "weighing choices, or asking what others use",
         articleType: "commercial" as const,
     },
     {
         key: "problem",
-        weight: 2,
-        namesIncumbent: false,
-        brief:
-            "FUNCTIONAL BRIDGE. \"Is there something that takes [input] and gives me [output] without [the step I hate]?\" Pure capability, described in the buyer's own mechanics — no product category named.",
+        label: "describing a problem and asking how to solve it",
         articleType: "informational" as const,
     },
     {
-        key: "comparison",
-        weight: 2,
-        namesIncumbent: true,
-        brief:
-            "CONSENSUS CHECK. \"What are most [persona] using now for [job] instead of [legacy incumbent]?\" Asks what the community has moved to, which pushes the engine to synthesise recent discussion rather than recite old documentation.",
-        articleType: "commercial" as const,
-    },
-    {
         key: "howto",
-        weight: 1,
-        namesIncumbent: false,
-        brief:
-            "STUCK MID-JOB. \"I need to [specific task] — [constraint that makes it awkward]. How do people do this?\" A real task with a real obstacle, not a tutorial title.",
+        label: "asking how to actually carry out the job",
         articleType: "howto" as const,
     },
 ] as const
 
 export type PromptIntentKey = (typeof PROMPT_INTENTS)[number]["key"]
 
-/** Candidate prompts generated per family, before the run's budget applies. */
-export const PROMPTS_PER_FAMILY = PROMPT_INTENTS.reduce(
-    (total, intent) => total + intent.weight,
-    0,
-)
+/**
+ * Candidate questions requested per confirmed area, before the run's budget
+ * applies. A plain number now — it was previously the sum of the per-shape
+ * weights, which no longer exist.
+ */
+export const PROMPTS_PER_FAMILY = 10
 
 /**
  * How many prompts a run asks when the caller doesn't say.

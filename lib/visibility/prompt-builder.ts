@@ -74,46 +74,6 @@ const MAX_ATTEMPTS_PER_FAMILY = 2
 const RETRY_BASE_DELAY_MS = 1200
 
 /**
- * Interleaves a family's prompts so every buyer situation is represented early.
- *
- * The run cap is a hard budget — ten prompts across every confirmed area — so
- * only the first one or two from each family survive it. Taking them in the
- * order the model happened to emit meant the cap, not the design, chose which
- * buyer situations got measured. On a live run that produced four questions for
- * one family that were two "alternatives" and two "comparison", and not a single
- * problem-first question anywhere in the set.
- *
- * Ordering here is by the declared mix: one of each intent in `PROMPT_INTENTS`
- * order, then the next of each, and so on. Weight still decides how many of each
- * the model writes; this only decides who is at the front of the queue.
- */
-function orderByIntentMix(prompts: BuyerPrompt[]): BuyerPrompt[] {
-    const byIntent = new Map<string, BuyerPrompt[]>()
-    for (const prompt of prompts) {
-        const bucket = byIntent.get(prompt.intent)
-        if (bucket) bucket.push(prompt)
-        else byIntent.set(prompt.intent, [prompt])
-    }
-
-    const ordered: BuyerPrompt[] = []
-    let round = 0
-    while (ordered.length < prompts.length) {
-        let placed = false
-        for (const intent of PROMPT_INTENTS) {
-            const bucket = byIntent.get(intent.key)
-            const candidate = bucket?.[round]
-            if (!candidate) continue
-            ordered.push(candidate)
-            placed = true
-        }
-        // Nothing left at this depth in any bucket — every prompt is placed.
-        if (!placed) break
-        round += 1
-    }
-    return ordered
-}
-
-/**
  * A prompt must read like something a person typed into a chat box.
  *
  * Mechanical sanitation only — no opinion about words or industries, matching
@@ -161,127 +121,90 @@ function namesSubject(text: string, subjectTokens: string[]): boolean {
     })
 }
 
-/** Does this text name any of the tracked rivals? */
-function namesAnyIncumbent(text: string, incumbents: string[]): boolean {
-    const flattened = text.toLowerCase().replace(/[^a-z0-9]/g, "")
-    return incumbents.some((name) => {
-        const needle = name.toLowerCase().replace(/[^a-z0-9]/g, "")
-        return needle.length >= 4 && flattened.includes(needle)
-    })
-}
-
 /**
- * True when the prompt is written from a person's situation rather than as a
- * topic.
+ * What the model is told about the business. **Context, never form.**
  *
- * A positive structural test, not a banned-words list — this repo has twice been
- * burned by blocklists that caught the previous examples and missed the next. It
- * asks for evidence that a human is speaking, which is a fact about the string.
- *
- * **This used to accept "or it names an incumbent" as sufficient, and that was a
- * bug with visible consequences.** Naming a rival is the cheapest way for a
- * model to look concrete, so every shape used one; and because the filter then
- * waved those through while holding the problem-first shapes to a real standard,
- * survival was biased toward exactly the prompts that named a tool. A live run
- * came back as ten variations of "X is too expensive, what else?" with the six
- * weights' worth of problem-first questions filtered out entirely. First person
- * is now required of every shape, and naming a rival buys nothing.
+ * That distinction is the whole lesson of this file's history. `audience` and
+ * `incumbents` were here before, and the questions came back written by "family
+ * archivists" complaining that a named rival was too expensive — but the cause
+ * was the sentence template they were plugged into (`"I'm [who I am] using
+ * [current stack]"`) and a list captioned "you MAY name these", not the facts
+ * themselves. Removing the facts as well cost the model everything it needed to
+ * write from a real person's situation, and removed the alternatives-seeking
+ * buyer from the measurement entirely.
  */
-function readsLikeAPerson(text: string): boolean {
-    const lower = text.toLowerCase()
-    // Word boundaries are load-bearing: without them "i" matches inside
-    // "editable" and every candidate passes, making this test decorative.
-    return (
-        /\b(i|i'm|im|i've|ive|we|we're|were|my|our|us)\b/.test(lower) ||
-        /\bwhat (are|is) (people|everyone|most|devs|developers|teams|founders)\b/.test(
-            lower,
-        )
-    )
-}
-
-/** Everything about the business that makes a prompt sound like a person. */
 export interface PromptBrandContext {
-    /** Plain description of the product — "browser tool that generates app screens". */
+    /** Plain description of the product — "browser tool that restores old photos". */
     subjectType: string
-    /** Who buys it, in the customer's own words. */
-    audience?: string
+    /** The category the customer confirmed, in their words. */
+    category?: string
     /** What it actually does, a few concrete capabilities. */
     coreFeatures?: string[]
+    /** Who buys it. Background on whose situation to write from — never a label to quote. */
+    audience?: string
     /**
-     * Tools the buyer already uses or is trying to move off.
+     * Tools these buyers already use.
      *
-     * These may be NAMED in a prompt, and that is the point. Comparative
-     * framing — "X is too expensive for what I need, what else does Y?" — is
-     * how buyers actually ask, and it is the phrasing that makes an engine list
-     * challengers instead of reciting the same three market leaders. The
-     * customer's OWN brand is still banned; see `namesSubject`.
+     * Present so a couple of questions out of twenty can be the genuinely
+     * comparative ones people really ask, and absent from the rest. The
+     * measurement is protected either way: `summarisePrompt` excludes a
+     * competitor named in a prompt from that prompt's rival counts, so asking
+     * "alternatives to X" can never inflate X on the leaderboard.
      */
     incumbents?: string[]
 }
 
+/**
+ * Asks for the questions a buyer would really type, and nothing about how.
+ *
+ * Everything prescriptive was removed from here in one pass, because the
+ * prescription was the defect. This previously carried five named sentence
+ * shapes with fill-in slots, a required count of each, a list of rival names,
+ * banned openings, banned words and two worked examples — and it produced
+ * questions from "family archivists" and "genealogists" complaining that a
+ * named competitor was "too expensive". Dictating a form guarantees output with
+ * that form. The founder got better questions out of a plain model call given
+ * only the brand, its features and its category, which is the whole argument.
+ *
+ * What is left is context plus a goal. The three constraints that remain are
+ * not style rules:
+ *
+ * - **one family per call** — ownership is structural, not requested
+ * - **never name the customer's brand** — measurement validity; naming them
+ *   hands the engine the answer to the question being asked
+ * - **stay inside the confirmed area** — a prompt about an adjacent market
+ *   measures a business the customer did not confirm
+ */
 function buildFamilyPrompt(
     family: AuditScopeFamily,
     context: PromptBrandContext,
     language: string,
 ): string {
-    const operations = family.capabilityContract.operations
-        .slice(0, 4)
-        .map((operation) => `- ${operation.customerJob}: ${operation.action}`)
-        .join("\n")
-
+    const features = (context.coreFeatures || []).filter(Boolean).slice(0, 8)
+    const incumbents = (context.incumbents || []).filter(Boolean).slice(0, 6)
     const intents = PROMPT_INTENTS.map(
-        (intent) => `- ${intent.key} (${intent.weight} prompts): ${intent.brief}`,
+        (intent) => `- ${intent.key}: ${intent.label}`,
     ).join("\n")
 
-    const incumbents = (context.incumbents || []).filter(Boolean).slice(0, 6)
-    const features = (context.coreFeatures || []).filter(Boolean).slice(0, 6)
+    return `Below is a real product. Write the questions real people actually type into ChatGPT when they have the problem it solves — before they know this product, or any product, exists. The real users use messy, direct, functional language. Users search relative to dominant market leaders they already use.
 
-    return `You write the messages real people type into ChatGPT when they are stuck and want a tool recommendation. Not search queries. Not blog titles. Messages.
+THE PRODUCT
+It is: ${context.subjectType}
+${context.category ? `Category: ${context.category}\n` : ""}This part of it: ${family.name} — ${family.description}
+The customer's own words for it: ${family.seedKeywords.join(", ")}
+${features.length ? `What it does:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `Who has this problem: ${context.audience}\n` : ""}${incumbents.length ? `Tools some of them already use: ${incumbents.join(", ")}\n` : ""}
+Write ${PROMPTS_PER_FAMILY} questions someone would type about the problem this part solves.
 
-BUSINESS AREA (confirmed by the customer — do not widen or reinterpret it)
-Name: ${family.name}
-What it covers: ${family.description}
-Customer's own words for it: ${family.seedKeywords.join(", ")}
-Delivered as: ${context.subjectType}
-Jobs this area actually performs:
-${operations || "- (no operations recorded)"}
-${features.length ? `What the product actually does:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `Who buys it: ${context.audience}\n` : ""}${
-        incumbents.length
-            ? `Tools these buyers already use or are trying to replace (you MAY name these):\n${incumbents.map((name) => `- ${name}`).join("\n")}\n`
-            : ""
-    }
-WRITE ${PROMPTS_PER_FAMILY} PROMPTS, in these shapes, this many of each:
+Background, not instructions: the last two lines are there so you know whose situation to write from and what they might already have tried. People describe what they are working on, not what category of person they are — so do not have anyone announce themselves. And most of these questions should name no product at all; ask about a named tool only where that is genuinely how someone would put it, which is the exception rather than the rule.
+
+Two rules, both about measurement rather than style:
+- Never name this product or its website. These questions test whether an assistant recommends it unprompted, and naming it hands over the answer.
+- Stay inside the part described above. A question about an adjacent problem measures a business this is not.
+
+Label each question with the situation it comes from:
 ${intents}
 
-THE SHAPE OF A REAL PROMPT
-  who I am / what I'm using  +  what is going wrong  +  what I want
-
-Real, naming nothing (this is the common case):
-       "I'm building an MVP and I've got a folder of app screenshots. Is there
-        something that turns them into editable components so I don't redraw
-        everything by hand?"
-Real, naming an incumbent (only the two marked shapes):
-       "Figma is overkill for what I'm doing — I just need to hand a developer
-        clean screens. What are people using instead?"
-Fake:  "What is the best tool to turn a static screenshot into an editable
-        mobile UI design?"
-
-The second one is a blog title with a question mark. It is not just unrealistic
-— it produces a WORSE measurement, because a formal category question makes the
-assistant fall back to the safest possible listicle of whichever legacy tools
-have the most written about them.
-
-RULES
-- First person, always, every shape. Start from the buyer's situation: "I'm…", "I've got…", "I need…", "We're on…", or "What are people using…".
-- Every prompt carries at least one concrete anchor: a stack or platform, a number, a file format, a deadline, the material they are working with, or a specific annoyance. A prompt with no anchor is not a real message.
-- **Most buyers naming no tool.** Only the two shapes marked [NAME a tool] may mention one — those are the buyer who already has something and wants off it. The three marked [NAME NO TOOL AT ALL] are the buyer who has a problem and does not know what exists yet, which is the larger half of how people actually ask. For those, the anchor must come from their situation, never from a brand.
-- Never name the customer's own product in any shape — these prompts test whether an assistant recommends it unprompted, and naming it gives away the answer.
-- BANNED openings, because they are SEO artifacts rather than things people type: "What is the best…", "What are the best…", "Top tools for…", "How to [x] without [y]".
-- BANNED words, because no one types them at a chatbot: streamlined, seamless, cutting-edge, robust, efficiently, leverage, solution that provides, developer-ready, best-in-class.
-- Stay strictly inside the business area above. An adjacent problem is worse than no prompt.
-- Each prompt stands alone with no prior context, and reads like one message — one or two sentences.
-- Vary the situation. ${PROMPTS_PER_FAMILY} rewordings of one question measures one question.
-- Write every prompt in ${languageName(language)}. Do not translate the business area above — quote its terms as the customer wrote them.`
+Write them in ${languageName(language)}.`
 }
 
 const RESPONSE_SCHEMA = {
@@ -390,30 +313,19 @@ export async function buildBuyerPrompts(
                         text: String(row.text ?? "").trim(),
                         intent: String(row.intent ?? "").trim() as PromptIntentKey,
                     }))
-                    .filter((row) => {
-                        if (!isPlausiblePrompt(row.text)) return false
-                        if (!validIntents.has(row.intent)) return false
-                        if (namesSubject(row.text, options.subjectTokens)) return false
-                        if (!readsLikeAPerson(row.text)) return false
-
-                        // A rival name belongs only in the two shapes that are
-                        // ABOUT having a rival. Everywhere else it is the model
-                        // reaching for the cheapest concrete detail, and it
-                        // turns a "buyer who does not know what exists" question
-                        // into a switching question — collapsing the run onto
-                        // one buyer situation out of five.
-                        const shape = PROMPT_INTENTS.find(
-                            (candidate) => candidate.key === row.intent,
-                        )
-                        if (
-                            shape &&
-                            !shape.namesIncumbent &&
-                            namesAnyIncumbent(row.text, options.context?.incumbents || [])
-                        ) {
-                            return false
-                        }
-                        return true
-                    })
+                    // Three checks, and deliberately no more. Everything that
+                    // used to live here judged STYLE — first-person openers,
+                    // rival names in the wrong shape — and a style filter can
+                    // only delete, never improve. It shrank a set of ten to six
+                    // and skewed what remained toward exactly the questions it
+                    // was meant to balance. Generation is the place to fix
+                    // generation.
+                    .filter(
+                        (row) =>
+                            isPlausiblePrompt(row.text) &&
+                            validIntents.has(row.intent) &&
+                            !namesSubject(row.text, options.subjectTokens),
+                    )
                     .map((row) => {
                         const intent = PROMPT_INTENTS.find(
                             (candidate) => candidate.key === row.intent,
@@ -440,17 +352,14 @@ export async function buildBuyerPrompts(
             }
         }
 
-        if (accepted.length > 0) byFamily.set(family.id, orderByIntentMix(accepted))
+        if (accepted.length > 0) byFamily.set(family.id, accepted)
     }
 
     // Round-robin across families up to the cap, so a family that produced 10
     // prompts cannot crowd out one that produced 4. Same fairness rule the
     // harvest applies at `roundRobinCap`; a probe that spends its whole budget
     // on one confirmed area measures that area, not the business.
-    //
-    // Each family's pool is interleaved by intent first (see orderByIntentMix),
-    // so the prompts that survive the cap span the designed mix of buyer
-    // situations rather than whichever ones the model happened to write first.
+
     const seen = new Set<string>()
     const prompts: BuyerPrompt[] = []
     const cursors = new Map<string, number>()

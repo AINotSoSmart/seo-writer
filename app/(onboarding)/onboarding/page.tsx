@@ -700,10 +700,12 @@ export default function OnboardingPage() {
                     // founder reviews must already be in it — regenerating them
                     // later in a different language would invalidate the review.
                     language: brandData?.target_language,
-                    // Persona and features, so a question can open from the
-                    // buyer's situation instead of restating the category.
-                    audience: brandData?.audience?.primary,
+                    // Everything a person would hand a model to write these by
+                    // hand — including who has the problem. Background, not a
+                    // template: nobody announces their own job title.
+                    category: brandData?.category,
                     coreFeatures: brandData?.core_features,
+                    audience: brandData?.audience?.primary,
                     competitors,
                 }),
             })
@@ -750,10 +752,12 @@ export default function OnboardingPage() {
                     // founder reviews must already be in it — regenerating them
                     // later in a different language would invalidate the review.
                     language: brandData?.target_language,
-                    // Persona and features, so a question can open from the
-                    // buyer's situation instead of restating the category.
-                    audience: brandData?.audience?.primary,
+                    // Everything a person would hand a model to write these by
+                    // hand — including who has the problem. Background, not a
+                    // template: nobody announces their own job title.
+                    category: brandData?.category,
                     coreFeatures: brandData?.core_features,
+                    audience: brandData?.audience?.primary,
                     competitors,
                 }),
             })

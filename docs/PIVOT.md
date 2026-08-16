@@ -987,6 +987,72 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (nineteenth pass) - the scaffolding was the defect
+
+Two live runs failed here in opposite directions, and both were caused by the
+same thing.
+
+The first produced SEO titles with question marks, because the intent briefs
+were topic labels. The fix replaced them with literal sentence formulas and
+per-shape quotas — `"I'm [who I am] using [current stack]"`,
+`"[Incumbent] is [friction] for [my situation]"` — plus a rival list in context,
+banned openings, banned words, a first-person filter, a per-shape rival ban and
+an intent interleaver.
+
+The second run produced ten variations of *"MyHeritage is getting too expensive
+for just the basic photo repair features I need"*, asked by **"family
+archivists"** and **"genealogists"**. Every question named a rival. Nobody
+describes themselves by occupation to a chatbot, and someone restoring their
+grandparents' photograph is not price-shopping — they are afraid of ruining the
+face.
+
+**Dictating a form guarantees output with that form.** The formulas were
+templates, so the output was templated. Worse, the filters added to correct it
+could only subtract: rejecting a rival name in the three non-comparative shapes
+deleted exactly the questions that were wanted, shrinking a set of ten to six
+and skewing what remained further toward the two shapes that were allowed to
+name one.
+
+The founder produced markedly better questions from a plain model call given
+only the brand, its features and its category — *"I scanned an old torn photo of
+my grandparents from the 1950s. What can fix the cracks without making their
+faces look like smooth plastic?"* That is the whole argument, and it is
+unanswerable.
+
+**Deleted:** the five sentence formulas and their weights, `namesIncumbent`
+enforcement, the incumbent list in the generation context, the `audience`
+persona injection, `readsLikeAPerson`, `namesAnyIncumbent`, `orderByIntentMix`,
+the banned-opening and banned-word lists, and the worked examples.
+
+**Kept, because none of it is a style rule:**
+
+- one model call per family, family id attached by code — ownership is
+  structural, not requested
+- `namesSubject` — naming the customer's own brand hands the engine the answer
+  to the question being asked; that is measurement validity
+- `isPlausiblePrompt` — mechanical sanitation only
+- the run cap — spend control
+- `PROMPT_INTENTS` as an **output label** the model applies, because
+  `articleType` flows into the writer's frozen contract
+
+**Why dropping the fixed mix is safe now.** It existed so two runs of the same
+audit would ask structurally comparable questions. Under the subscription model
+prompts are persisted and re-run, so comparability comes from tracking the same
+questions every month rather than from regenerating the same shapes. The reason
+for the quota disappeared the moment prompts became durable — see
+`SUBSCRIPTION_PIVOT.md` §3.1.
+
+98 contract tests pass, `npx tsc --noEmit` clean, build clean. The replacement
+test asserts the scaffolding stays gone, since the instinct to add a rule after
+every bad batch is exactly what produced two bad batches.
+
+**Unverified.** Third attempt at this, so it is worth saying plainly: the only
+proof is generating a set and reading it against the founder's ten hand-written
+examples, which are now the fixture. The properties that matter are whether a
+question opens with something concrete the buyer has, whether it names a feared
+outcome rather than a procurement complaint, and whether most of them name no
+competitor at all.
+
 ### 2026-08-15 (eighteenth pass) - every question became a switching question
 
 **What the fourteenth pass actually shipped.** A live generation for a photo
