@@ -45,7 +45,9 @@ import {
 
 import { AnswerEvidence } from "./answer-evidence"
 import { MethodPanel } from "./method-panel"
+import { TargetPageTriage } from "./target-page-triage"
 import { VizTokens } from "./viz-tokens"
+import type { TargetPageDecision } from "@/lib/visibility/target-page"
 import {
     PAGE_SHAPE_LABELS,
     type CitationBreakdown,
@@ -62,6 +64,8 @@ export interface DashboardPrompt {
     answers_total: number
     answers_present: number
     mean_mention_position: number | null
+    /** Present only on the authenticated owner report. Public reports are read-only. */
+    targetPage?: TargetPageDecision
 }
 
 export interface DashboardEngine {
@@ -167,6 +171,8 @@ const VERDICT_META = {
     },
 } as const
 
+const VERDICT_ORDER = { absent: 0, outranked: 1, present: 2 } as const
+
 function Stat({
     value,
     label,
@@ -269,6 +275,7 @@ export function VisibilityDashboard(props: DashboardProps) {
 
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
     const [filter, setFilter] = useState<"losing" | "all">("losing")
+    const [promptRows, setPromptRows] = useState(prompts)
 
     const engineLabels = useMemo(
         () => Object.fromEntries(engines.map((engine) => [engine.engine, engine.label])),
@@ -279,16 +286,28 @@ export function VisibilityDashboard(props: DashboardProps) {
     const apiEngines = engines.filter((engine) => engine.surface === "api")
     const degraded = engines.filter((engine) => engine.failed > 0)
 
-    const order = { absent: 0, outranked: 1, present: 2 }
     const visible = useMemo(() => {
         const rows =
             filter === "losing"
-                ? prompts.filter((prompt) => prompt.verdict !== "present")
-                : prompts
-        return [...rows].sort((a, b) => order[a.verdict] - order[b.verdict])
-    }, [prompts, filter])
+                ? promptRows.filter((prompt) => prompt.verdict !== "present")
+                : promptRows
+        return [...rows].sort((a, b) => {
+            const priority = (b.targetPage?.priority ?? -1) - (a.targetPage?.priority ?? -1)
+            return priority || VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict]
+        })
+    }, [promptRows, filter])
 
-    const losingCount = prompts.filter((prompt) => prompt.verdict !== "present").length
+    const losingCount = promptRows.filter((prompt) => prompt.verdict !== "present").length
+
+    const saveTargetPageDecision = (decision: TargetPageDecision) => {
+        setPromptRows((current) =>
+            current.map((prompt) =>
+                prompt.targetPage?.trackedPromptId === decision.trackedPromptId
+                    ? { ...prompt, targetPage: decision }
+                    : prompt,
+            ),
+        )
+    }
 
     // Emphasis chart: the brand is the point, rivals are context. Ranked by how
     // many questions named each entity.
@@ -1070,7 +1089,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                                         : "text-[var(--viz-ink-secondary)]"
                                 }`}
                             >
-                                All ({prompts.length})
+                                All ({promptRows.length})
                             </button>
                         </div>
                     </div>
@@ -1128,6 +1147,12 @@ export function VisibilityDashboard(props: DashboardProps) {
                                                 subjectName={subjectName}
                                                 subjectDomains={subjectDomains}
                                             />
+                                            {prompt.verdict !== "present" && prompt.targetPage && (
+                                                <TargetPageTriage
+                                                    decision={prompt.targetPage}
+                                                    onSaved={saveTargetPageDecision}
+                                                />
+                                            )}
                                             <div className="pb-4">
                                                 <Link
                                                     href={`/evidence/ai-answer/${runId}/${prompt.id}`}

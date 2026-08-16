@@ -4299,6 +4299,81 @@ test("each observed tracked question reconciles one replay-safe opportunity", as
     )
 })
 
+test("target-page triage is explicit, atomic, and cannot create duplicate work", async () => {
+    const [migration, route, dashboard, triage, ownerPage, publicPage] = await Promise.all([
+        text("supabase/migrations/20260816_target_page_triage.sql"),
+        text("app/api/visibility/opportunities/target-page/route.ts"),
+        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/target-page-triage.tsx"),
+        text("app/(protected)/visibility/page.tsx"),
+        text("app/visibility/[runId]/page.tsx"),
+    ])
+
+    const { normalizeHttpsTargetUrl } = await import("../lib/visibility/target-page.ts")
+    assert.equal(normalizeHttpsTargetUrl("http://brand.example/page"), null)
+    assert.equal(normalizeHttpsTargetUrl("not a URL"), null)
+    assert.equal(
+        normalizeHttpsTargetUrl(" https://brand.example/page#section "),
+        "https://brand.example/page",
+    )
+
+    // The authenticated RPC owns both writes in one transaction. Browser input
+    // cannot mutate opportunity state directly or claim a third-party URL.
+    assert.match(route, /auth\.getUser\(\)/)
+    assert.match(route, /triage_content_opportunity_target/)
+    assert.doesNotMatch(route, /\.from\("tracked_prompts"\)[\s\S]*\.update\(/)
+    assert.match(migration, /UPDATE public\.tracked_prompts/)
+    assert.match(migration, /UPDATE public\.content_opportunities/)
+    assert.match(migration, /p_coverage_state NOT IN \('unknown', 'no_page', 'has_page'\)/)
+    assert.match(migration, /valid HTTPS URL/)
+    assert.match(migration, /target page must belong to the measured website/)
+    assert.match(migration, /pg_advisory_xact_lock/)
+    assert.match(
+        migration,
+        /GRANT EXECUTE ON FUNCTION public\.triage_content_opportunity_target\(UUID, TEXT, TEXT\)[\s\S]*TO authenticated/,
+    )
+
+    // Unknown selects no production. no_page creates only when a create draft
+    // has never been delivered; has_page is refresh against its one saved URL.
+    assert.match(migration, /p_coverage_state = 'has_page'[\s\S]{0,180}v_resolution := 'refresh'/)
+    assert.match(
+        migration,
+        /p_coverage_state = 'no_page' AND NOT v_delivered_create[\s\S]{0,180}v_resolution := 'create'/,
+    )
+    assert.match(migration, /v_state := 'needs_input'[\s\S]{0,100}v_resolution := 'unknown'/)
+    assert.match(migration, /action_row\.resolution_type = 'create'/)
+    assert.match(migration, /the honest next action is publication, not a[\s\S]*second draft/)
+
+    // A target supplied after a delivered create survives the next measurement:
+    // the Phase 4 conservative needs_input state is corrected to refresh, never
+    // reopened as another create.
+    assert.match(migration, /apply_confirmed_target_to_opportunity/)
+    assert.match(migration, /NEW\.state <> 'needs_input'/)
+    assert.match(migration, /v_tracked\.coverage_state = 'has_page'/)
+    assert.match(migration, /NEW\.resolution_type := 'refresh'/)
+
+    // Existing completed measurements are backfilled without overwriting rows
+    // already reconciled by the live worker.
+    assert.match(migration, /WITH latest_observation AS/)
+    assert.match(migration, /prompt_row\.answers_total > 0/)
+    assert.match(migration, /ON CONFLICT \(brand_id, tracked_prompt_id\) DO NOTHING/)
+
+    // Only the owner dashboard loads mutable target state. The public evidence
+    // report stays read-only even when its viewer happens to be logged in.
+    assert.match(ownerPage, /from\("content_opportunities"\)/)
+    assert.match(ownerPage, /coverage_state, target_url/)
+    assert.match(ownerPage, /targetPage/)
+    assert.doesNotMatch(publicPage, /content_opportunities|coverage_state|targetPage/)
+
+    assert.match(triage, /Do you already have a page meant to answer this question\?/)
+    assert.match(triage, /Yes, an existing page/)
+    assert.match(triage, /No suitable page/)
+    assert.match(triage, /I’m not sure yet/)
+    assert.match(triage, /skipping selects nothing/)
+    assert.match(dashboard, /b\.targetPage\?\.priority/)
+    assert.doesNotMatch(triage, /Math\.round\(decision\.priority\)/)
+})
+
 test("confirmed prompts are rebound to the audit's own scope family ids", async () => {
     const [binding, probeRoute] = await Promise.all([
         text("lib/visibility/prompt-binding.ts"),

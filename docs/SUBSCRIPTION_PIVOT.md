@@ -626,11 +626,13 @@ The audit screen resumes an existing run automatically but a new run waits for
 an explicit **Start visibility measurement** click. This prevents a Continue or
 page refresh from silently purchasing 80 consumer-app requests.
 
-All 103 pivot contracts pass, targeted lint is clean and the full TypeScript
-check passes. The remaining release smoke test is one deployed run verifying
-40 non-null `ai_probe_prompts.tracked_prompt_id` links. It is intentionally
-deferred until Trigger.dev and the external-provider keys are deployed; do not
-fabricate a successful local run or spend credits merely to unblock schema work.
+All 104 pivot contracts pass and targeted lint is clean. Phase 5 introduces no
+new TypeScript errors; the full check still reports the same seven pre-existing
+generated-database-type errors in billing and the legacy blog trigger. The
+remaining release smoke test is one deployed run verifying 40 non-null
+`ai_probe_prompts.tracked_prompt_id` links. It is intentionally deferred until
+Trigger.dev and the external-provider keys are deployed; do not fabricate a
+successful local run or spend credits merely to unblock schema work.
 
 **Phase 2 deployed 2026-08-16.** The forward-only
 `20260816_subscription_state_model.sql` migration adds durable opportunities,
@@ -654,7 +656,7 @@ provisions from a purchase intent or automatically cancels completed work.
 Checkout returns 503 until the Phase 8 sandbox gate. The hosted migration was
 applied successfully before Phase 4 began.
 
-**Phase 4 code-complete 2026-08-16; migration gate open.** The forward-only
+**Phase 4 deployed 2026-08-16.** The forward-only
 `20260816_opportunity_reconciliation.sql` migration adds the service-role-only,
 atomic `reconcile_content_opportunities` boundary. It validates that the payload
 accounts for every run prompt with a usable answer, matches each stable tracked
@@ -669,8 +671,24 @@ action remains `monitoring` inside the window. After the window, a prior refresh
 may reopen as refresh against its explicit URL; a delivered create draft becomes
 `needs_input` until publication and target URL are confirmed, so delivery can
 never silently create a second page. Inactive questions and explicit dismissals
-retain their evidence but stay production-ineligible. Apply this migration
-before starting Phase 5 target-page triage.
+retain their evidence but stay production-ineligible. The hosted migration was
+applied successfully before Phase 5 began.
+
+**Phase 5 code-complete 2026-08-16; migration gate open.** The forward-only
+`20260816_target_page_triage.sql` migration backfills missing opportunities from
+the latest completed durable-question observations without calling any answer
+provider or overwriting rows already reconciled by the live worker. Its
+authenticated atomic RPC saves both the tracked question's explicit coverage
+decision and the matching losing opportunity. `has_page` requires an HTTPS URL
+on the measured website and becomes refresh; `no_page` becomes create only when
+no create draft was already delivered; `unknown` remains production-ineligible.
+
+The owner dashboard asks the target-page question inside each losing evidence
+row, ordered by internal evidence priority without displaying the hand-weighted
+integer as a customer score. The public share report receives no mutable target
+state. A target confirmed after a delivered create survives future
+reconciliation as refresh, preventing another create for the same durable
+question. Apply this migration before starting Phase 6 action selection.
 
 | # | Step | Why here |
 |---|---|---|
@@ -679,8 +697,8 @@ before starting Phase 5 target-page triage.
 | 1 ✅ | Add `tracked_prompts`; make onboarding write them and the probe observe them through `tracked_prompt_id` | Migration applied and authenticated 40-row persistence gate passed 2026-08-16; deployed observation-link smoke test remains a release gate |
 | 2 ✅ | Add `content_opportunities`, `subscription_cycles`, `cycle_actions` and their junction; link generated outputs to actions | Migration applied successfully 2026-08-16 |
 | 3 ✅ | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | Migration applied successfully 2026-08-16 |
-| 4 ◐ | Implement per-cycle reconciliation and contract tests | Code-complete and 103 contracts green; apply `20260816_opportunity_reconciliation.sql` before Phase 5 |
-| 5 | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Never infer create versus refresh from an incomplete crawl |
+| 4 ✅ | Implement per-cycle reconciliation and contract tests | Migration applied successfully 2026-08-16 |
+| 5 ◐ | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Code-complete and 104 contracts green; apply `20260816_target_page_triage.sql` before Phase 6 |
 | 6 | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Prevent links to undelivered backlog work |
 | 7 | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Complete the deliverable before accepting money |
 | 8 | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | This is the revenue switch |
