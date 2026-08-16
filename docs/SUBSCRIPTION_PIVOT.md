@@ -1,485 +1,616 @@
-# From a finite article program to a tracked-prompt subscription
+# From a finite article program to a tracked-question subscription
 
-> Refactor plan. Not yet built. Written 2026-08-15 against the code as it stands.
-> `PIVOT.md` is the record of what exists; this is the shape it needs to become.
-> Read §2 before disagreeing with anything else here — it is the one measured
-> fact the whole model rests on.
-
----
-
-## 1. What is actually being changed
-
-Today the product sells **a fixed set of article clusters, delivered on a
-schedule, after which the subscription cancels itself**. The measurement — the
-part with no substitute — is given away in full before payment and then never
-repeated.
-
-The new model sells **continuous measurement of a fixed set of buyer prompts**,
-with content as the output of what that measurement finds:
-
-```
-20 / 40 / 80 tracked prompts
-      ↓  asked monthly of ChatGPT + Google AI Mode
-losing prompts
-      ↓  content-solvable only
-      ↓  collapse duplicates
-every remaining gap becomes an article
-      ↓  ALL of them written, interlinked, fact-checked, delivered
-re-measure the same prompts next month
-```
-
-**The measurement is the paid product.** Nothing is probed before payment —
-there is no free tier and no sample. The audit that used to be given away in
-full is now the thing being bought, and the customer's first run happens after
-checkout. See §3.5.
-
-The unit of sale becomes the prompt allowance. Article count is never promised;
-it falls out of the measurement and is mathematically capped by it.
-
-**This is a replacement, not an addition.** Every instruction below either
-changes a thing or deletes it. There is no compatibility flag, no
-`if (program.model === 'legacy')`, and no second delivery path. A repo carrying
-two commercial models is a repo where neither is ever fully correct. so that old program based rows from db is to be completely deleted.
+> Refactor and launch plan. Not yet built. Revised 2026-08-16 against the code
+> as it stands. `PIVOT.md` records what exists; this document defines the next
+> product contract and the minimum architecture needed to support it.
+>
+> Commercial decisions are labelled separately from launch hypotheses. Nothing
+> becomes validated merely because it appears in this document.
 
 ---
 
-## 2. The invariant that makes this pricing honest — verified in code
+## 1. The product contract
 
-The claim "articles can never exceed tracked prompts" is not a marketing
-approximation. It is a property of the existing pipeline:
+Today the product sells a fixed set of article clusters, delivers them on a
+schedule, and then cancels its own subscription. Measurement is performed once,
+shown before payment, and never repeated.
 
-1. `toGapItems` (`lib/visibility/gap-mapper.ts`) emits **one gap per losing
-   prompt**, keyed `queryId: prompt.id`. A prompt cannot produce two gaps.
-2. `collapseToArticles` (`lib/harvest/clusterer.ts`) merges near-duplicate gaps
-   into single articles. It only ever reduces.
-3. Nothing downstream invents an article from nothing — `freezeArticleContracts`
-   binds contracts to gaps that already exist.
+The replacement product sells continuous measurement of a stable set of buyer
+questions, followed by a bounded batch of work against what that measurement
+finds.
 
-Therefore, per cycle:
+It makes three separate guarantees:
 
-```
-articles ≤ unique losing prompts ≤ tracked prompts
-
-Starter   20 prompts  →  ≤ 20 articles
-Growth    40 prompts  →  ≤ 40 articles
-Scale     80 prompts  →  ≤ 80 articles
-```
-
-Real output is normally well below the ceiling. Worked, on Growth:
+1. **Findings are conserved.** Within the customer's 40 tracked questions,
+   every losing result and its classification is preserved and shown. Nothing is
+   silently discarded because it failed a cluster-size rule.
+2. **Production is capped.** Up to eight eligible create or refresh actions are
+   completed per billing cycle. Report-only findings do not consume a production
+   slot. The remaining eligible opportunities stay visible and are reconsidered
+   while the subscription is active.
+3. **Delivery is one batch.** All drafts completed in a cycle are released
+   together. There is no drip-feeding or intra-month delivery schedule.
 
 ```
-40 tracked prompts
- →  22 losing prompts          (18 already name the brand)
- →   5 overlap with each other
- →  17 unique articles
- →  all 17 written and delivered this cycle
+40 stable buyer questions
+      ↓ asked monthly of ChatGPT + Google AI Mode
+per-question results and evidence
+      ↓ reconcile with prior cycles
+create / refresh / report-only / needs customer input
+      ↓ collapse duplicate create/refresh work
+rank all eligible actions and retain all findings
+      ↓ select up to 8 actions
+freeze links only within the selected batch
+      ↓ generate and QA
+one complete batch of drafts
 ```
 
-The ceiling is what makes the plan safe to sell — it binds cost of goods to
-price — not a target to hit. Nothing is held back to make a later month look
-busier, and nothing is padded to reach a number.
+The sentence **“we close all qualified content gaps” must not appear in product
+copy**. The honest promise is:
 
-**Which also answers the tier question.** A Scale customer is not buying more
-clusters or a faster cadence; they are buying a wider slice of their buyer
-question space, and a wider slice mechanically finds more gaps and therefore
-produces more articles. The value ladder needs no separate delivery rule to make
-it real.
+> We track 40 buyer questions, show every opportunity we find, and complete the
+> eight highest-priority eligible content actions each cycle.
 
-**Action:** this must become a contract test, because it is now a pricing
-promise rather than an implementation detail. If someone later adds a
-"related topics" expansion step, the plan silently starts overselling.
+If a cycle has five eligible actions, five are produced. Never invent three more
+to fill the cap. If it has seventeen, the highest-priority eight are selected and
+the rest remain visible for reconciliation next cycle.
 
-A second consequence worth stating plainly to customers: output *should* fall
-over time. Month one closes the biggest gaps; month four finds fewer because the
-earlier work is winning. That is the product succeeding, and the pricing has to
-be framed so it does not read as the product running out.
+The backlog is not a debt owed after cancellation. Cancellation stops future
+production cycles; completed reports and historical findings remain readable.
+
+**The measurement is the paid product.** For the launch test, the probe runs only
+after checkout. That paywall is a hypothesis with a review trigger in §6, not a
+permanent truth.
+
+This is a replacement, not a parallel commercial path. There is no legacy
+feature flag and no second delivery model. There are no production programs to
+migrate today, but historical measurement evidence must not be deleted merely
+because the finite sales model is removed.
 
 ---
 
-## 3. The five structural changes, in dependency order
+## 2. The bounded invariants
 
-### 3.1 The prompt set becomes durable and brand-owned
+### 2.1 Measurement ceiling
 
-**The blocker for everything else.** Prompts today live in `ai_probe_prompts`,
-which is keyed by `run_id`. They are an artefact *of* a run, created fresh each
-time. "Re-run the same 20 prompts next month" has nowhere to read from, and
-month-over-month comparison is impossible because there is no stable identity
-for "the same question".
+The first ceiling is already a property of the visibility pipeline:
 
-New table, `tracked_prompts`, owned by the brand:
+1. `toGapItems` (`lib/visibility/gap-mapper.ts`) emits at most one gap for each
+   losing per-run prompt.
+2. Each per-run prompt points back to one durable tracked question.
+3. Duplicate gaps may collapse into one production action; collapse only
+   reduces the number of actions.
+4. No topic-expansion step may invent an action that has no measured source
+   question.
 
-| Column | Why |
+Therefore:
+
+```
+losing findings ≤ active tracked questions ≤ 40
+candidate create/refresh actions ≤ losing findings
+```
+
+This must become a contract test. A future “related topics” feature must create
+a separate out-of-plan recommendation, not silently expand paid production.
+
+### 2.2 Production ceiling
+
+The second ceiling is a product rule:
+
+```
+produced actions ≤ min(8, eligible candidate actions)
+```
+
+One action may resolve several duplicate buyer questions. A report-only finding
+is measurement, not production, and consumes no slot. A create action consumes
+one slot. A founder-assisted or automated refresh consumes one slot.
+
+Eight is a launch hypothesis chosen to bound cost and give a customer a
+manageable monthly batch. It is not derived from
+`HARVEST_POLICY.minQualifiedClusterArticles`. Re-evaluate it after ten customers
+have completed one cycle and after cost at the cap has been measured.
+
+---
+
+## 3. The state model
+
+The old schema makes an immutable audit, a cluster, a sold program and a
+generated article carry several meanings at once. A recurring product needs to
+separate four things:
+
+```
+tracked question → measured finding → selected cycle action → generated output
+```
+
+### 3.1 Durable tracked questions
+
+Prompts currently live in `ai_probe_prompts`, keyed by `run_id`. They are an
+artefact of a run, so there is no stable identity for “the same question next
+month”.
+
+Create `tracked_prompts`, owned by a brand:
+
+| Column | Purpose |
 |---|---|
 | `id`, `user_id`, `brand_id` | ownership |
-| `scope_family_id` | the topic it belongs to, as today |
-| `prompt`, `prompt_norm` | the text, normalised for dedupe |
-| `intent`, `article_type`, `source_seed` | unchanged, carried from generation |
-| `status` (`active` / `retired`) | a customer can drop a prompt without losing its history |
-| `created_at`, `retired_at` | when it entered the tracked set |
+| `scope_family_id` | confirmed product area |
+| `prompt`, `prompt_norm` | stable question and dedupe form |
+| `intent`, `article_type`, `source_seed` | generation provenance |
+| `tracking_status` (`active` / `inactive` / `retired`) | entitlement and customer choice |
+| `coverage_state` (`unknown` / `no_page` / `has_page`) | explicit customer answer, never inferred |
+| `target_url` | optional existing page supplied after a losing result |
+| `created_at`, `retired_at` | history |
 
-`ai_probe_prompts` keeps existing but gains `tracked_prompt_id`. It becomes the
-*per-run observation* of a tracked prompt rather than the prompt itself. Every
-existing column stays; `answers_total`, `verdict` and the rest are already
-per-run values and were always misplaced on a "prompt" record.
+`inactive` and `retired` are different. Questions outside an allowance are
+inactive and may later be activated. Retired means the customer deliberately
+stopped tracking the question.
 
-That one FK unlocks the entire model: "how did this question move since last
-month" becomes a query rather than a fuzzy text match.
+`ai_probe_prompts` remains the per-run observation and gains
+`tracked_prompt_id`. Its verdict, counts and answers remain run-scoped. The
+confirm-questions screen writes the durable set once; every probe reads the
+active set instead of regenerating it.
 
-**Onboarding change:** the confirm-prompts screen writes `tracked_prompts` once,
-at brand save, instead of passing an array into the probe. The probe then reads
-the brand's active set. This also removes `bindPromptsToAuditScope` — prompts
-will already carry a real `scope_family_id` because they were persisted against
-one, and that whole rebinding module exists only because prompts were transient.
+### 3.2 Persistent findings, not backlog-shaped articles
 
-### 3.2 The plan becomes a prompt allowance
+Do **not** use `planned_articles.delivery_status = 'withheld'` as the backlog.
+That field currently means generated work is hidden until its delivery group is
+ready, and its check constraint accepts only `withheld | delivered`. `queued`
+belongs to `generation_status`.
 
-`programs.tier` is currently `close | accelerate | dominate`, mapped to
-`clusters_per_month` of 1 / 2 / 4 by `create_program_from_intent`
-(`20260730_closed_pool_v2.sql:1218`). Velocity is the wrong axis now: cadence is
-always monthly, and what varies is coverage.
+Create `content_opportunities`, with one durable record per tracked question:
 
-| Plan | Price | Tracked prompts | Per prompt | Content |
-|---|---:|---:|---:|---|
-| Starter | $99 | 20 | $4.95 | close **all** qualified content gaps |
-| Growth | $189 | 40 | $4.73 | close **all** qualified content gaps |
-| Scale | $349 | 80 | $4.36 | close **all** qualified content gaps |
+| Column | Purpose |
+|---|---|
+| `id`, `user_id`, `brand_id`, `tracked_prompt_id` | stable identity and ownership |
+| `state` (`open` / `needs_input` / `monitoring` / `resolved` / `dismissed`) | lifecycle across runs |
+| `resolution_type` (`create` / `refresh` / `report_only` / `unknown`) | current actionability |
+| `first_seen_run_id`, `last_seen_run_id` | observation history |
+| `last_verdict`, `last_priority`, `last_reason` | current measured state |
+| `target_url` | copied from the explicit customer choice when present |
+| `resolved_at`, `updated_at` | lifecycle |
 
-Doubling prompts costs 91% then 85% more, so each tier is better value per
-prompt than the one below — the upgrade is a discount rather than a penalty, and
-the product logic is identical across all three. Nothing about a plan changes
-what the system does; it changes only how much of the buyer-question space is
-covered.
+Use a unique constraint on `(brand_id, tracked_prompt_id)`. When a question wins,
+the opportunity becomes resolved. If it loses again later, the same opportunity
+reopens; a second backlog row is not created.
 
-- `tier` → `starter | growth | scale`
-- `clusters_per_month` → **delete**. There is no per-cycle article or cluster quota; a cycle writes everything it finds.
-- new `tracked_prompt_allowance` → 20 / 40 / 80
-- `clusters_included` (frozen uuid array) → **delete**, see §3.3
-- `total_articles` → **delete**. Nothing is promised.
+Duplicate questions are conserved as separate measured findings but may be
+resolved by one production action. This keeps measurement traceable without
+charging production capacity twice for one page.
 
-The allowance is enforced at two points and nowhere else: the confirm-prompts
-screen refuses to save more than the allowance, and the monthly cycle probes the
-active set which cannot exceed it. Enforcing it in a third place is how the
-three drift apart.
+### 3.3 Billing cycles and selected actions
 
-`grantBillingPeriodOnce(allowance)` already exists in
-`lib/harvest/billing-lifecycle.ts` and already thinks in billing periods with an
-allowance. It is the natural home for "this period entitles 20 tracked prompts",
-and it already has replay protection via `p_source_event_id`.
+Create `subscription_cycles`, one per paid billing period:
 
-### 3.3 The finite program dies
+| Column | Purpose |
+|---|---|
+| `id`, `program_id`, `brand_id`, `billing_grant_id` | ownership and entitlement |
+| `period_start`, `period_end` | cycle boundary |
+| `measurement_run_id` | immutable run for this cycle |
+| `state` (`pending` / `measuring` / `awaiting_input` / `producing` / `ready` / `delivered` / `failed`) | orchestration |
+| `action_allowance` | frozen at 8 for this cycle |
+| `delivered_at`, `failure_code` | outcome |
 
-This is mostly deletion, and it is the part most likely to be done half-way.
+Enforce one cycle with a unique constraint on `(program_id, period_start)`.
 
-**Delete outright:**
+Create `cycle_actions`, representing the create/refresh units selected after
+deduplication:
 
-- `scheduleEndOfScopeCancellation` (`lib/harvest/billing-lifecycle.ts:68`) and
-  its only caller, the `scope_status === "scope_delivered"` branch at the top of
-  `trigger/ship-cluster.ts`. A subscription now ends when the customer cancels
-  it, and nothing else.
-- `programs.scope_status` and the `scope_delivered` state it exists to express.
-- The 25-article floor in `create_program_from_intent`
-  (`20260730_closed_pool_v2.sql:1200`, `RAISE EXCEPTION 'Purchase intent contains
-  fewer than 25 articles'`). This is the single most direct contradiction of the
-  new model: it refuses a sale precisely when the audit found a small, honest
-  amount of work.
-- `auditCheckoutFreshness` and `HARVEST_POLICY.checkoutFreshnessDays`
-  (`lib/harvest/program-contract.ts:18`). "This audit is more than 30 days old"
-  is incoherent when measurement is monthly by construction — the newest run is
-  always the truth.
+| Column | Purpose |
+|---|---|
+| `id`, `cycle_id`, `brand_id` | ownership |
+| `resolution_type` (`create` / `refresh`) | production path |
+| `state` (`selected` / `generating` / `ready` / `delivered` / `failed`) | production lifecycle |
+| `rank`, `selection_reason` | why this action entered the batch |
+| `target_url` | existing URL for refresh, proposed URL for create |
+| `planned_article_id` | generated output, when created |
 
-**Rewrite:** `program_clusters` rows are today created in one batch at purchase,
-one per frozen cluster, with `scheduled_for` offsets computed from the tier. The
-monthly cycle instead **appends one row per cycle** when it produces a cluster.
-`ship-cluster`'s delivery loop needs no change — it already walks
-`program_clusters` by `scheduled_for` and state, which is exactly the behaviour
-wanted. This is a change to who writes the rows, not how they are consumed.
+Create `cycle_action_opportunities` as the junction between one selected action
+and the one or more tracked-question opportunities it resolves.
 
-### 3.4 Clustering stops being a unit of sale or delivery
+`planned_articles` remains a generation and delivery record. It is created only
+for a selected create/refresh action and gains `cycle_action_id`. It is not the
+opportunity backlog and does not represent report-only work.
 
-The old model sold clusters and delivered them one per period. The new model
-sells coverage and delivers **every article the measurement produces**. A cluster
-therefore stops being a commercial object entirely and survives only as what it
-always was underneath: a group of articles that link to each other.
+`programs` becomes the long-lived subscription for one brand. Its single
+`audit_id` is no longer authoritative; each cycle points to its own immutable
+measurement run. `program_clusters` cannot be the recurring scheduler: it is
+limited to six sequence positions and delivers cluster by cluster. Replace that
+commercial role with `subscription_cycles` and `cycle_actions`.
 
-`HARVEST_POLICY.minQualifiedClusterArticles: 8` currently does three jobs. Two
-of them must go.
+Removing `program_clusters` has hard dependants and cannot be treated as a table
+rename:
 
-1. **Interlinking group (keep, demoted).** `clusterer.ts` uses it as
-   `TARGET_CLUSTER_MIN` to decide what makes a coherent web of internal links.
-   Real, but it becomes a *preference* — prefer 8–15, ship what the cycle found.
-2. **Commercial qualification (delete).** `selectQualifiedProgramScope`
-   (`program-contract.ts:44`) filters clusters by it before anything can be sold.
-   There is no selection at checkout any more; the subscription buys coverage.
-3. **Silent discard (delete — this is a defect under the new promise).** See
-   below.
+- `program_cost_events.program_cluster_id` must be replaced by a cycle/action
+  reference so per-output cost accounting survives
+- `planned_article_links` must be scoped to the selected cycle batch, not the
+  deleted sold cluster
+- `consume_program_credit`, cluster claim/delivery RPCs and `ship-cluster` must
+  be replaced by cycle-action claiming and one batch-release transaction
+- writer retries must continue to reuse the same `planned_article_id` and
+  `cycle_action_id`
 
-#### The `unsold` leak, which the new promise turns into a bug
+The batch-release transaction marks all ready selected outputs delivered and the
+cycle delivered together. It must not expose half a cycle if a worker fails.
 
-`groupIntoClusters` emits clusters plus `orphanedUnits` — units in groups too
-small to qualify. `absorbOrphanedUnits` then tries to place them, and returns
-`{ clusters, unsold }`. When **no cluster qualifies at all** it takes the early
-exit at `absorption.ts:145` and returns every unit as `unsold`:
+### 3.4 One launch plan and an explicit introductory price
 
-> "Nothing qualifies anywhere. Surface as measured-but-unsold evidence rather
-> than deleting demand the customer can still act on."
+Launch one plan:
 
-That comment is correct for a finite program: you may only sell qualified
-clusters, so the honest thing is to show the rest as evidence. Under
-"we write every content-solvable gap we find" it is a hole in the deliverable.
+> **Founding beta**
+> One site · 40 tracked buyer questions · ChatGPT + Google AI Mode · up to 8
+> prioritised create/refresh actions per cycle · one complete batch · visible
+> findings and backlog · cancel anytime.
 
-And it is worst exactly where it matters most. A Starter run tracks 20 prompts.
-If those produce, say, 9 articles spread across three topics, no group reaches 8,
-`groupIntoClusters` returns **zero** clusters, and every article lands in
-`unsold`. The customer paid $99 for "all qualified content gaps closed" and the
-pipeline delivers nothing while reporting itself successful.
+The billing contract is explicit:
 
-**Required change:** the cycle must conserve every article. Clustering decides
-*how articles are grouped for internal linking*, never *whether an article is
-written*. Concretely:
+- billing periods 1–3: **$99/month**
+- billing period 4 onward: **$189/month** while the subscription remains active
+- both phases are displayed before checkout
+- send a reminder before the first $189 charge
 
-- `absorbOrphanedUnits` returns no `unsold`. Units that cannot join a group
-  become their own single-article group.
-- A single-article group is legitimate. It has no internal links to make, which
-  is a property of that article, not a reason to withhold it.
-- The `unsold` concept and every read of it are deleted, not defaulted to empty.
+This is introductory pricing, not a surprise future repricing. Implement it as a
+provider-supported expiring discount or scheduled price phase. If Dodo cannot do
+that idempotently, do not simulate it with a fragile webhook counter; choose one
+fixed launch price before enabling checkout.
 
-**Contract test:** `articles written this cycle === unique content-solvable gaps
-this cycle`. Conservation is now a commercial promise, and the old code has an
-explicit, well-reasoned path that breaks it.
+Schema changes:
 
-### 3.5 The audit moves behind the paywall
+- collapse `tier` to one launch plan value, while retaining a plan identifier for
+  future expansion
+- delete `clusters_per_month`, `clusters_included` and `total_articles`
+- add `tracked_prompt_allowance = 40`
+- freeze `action_allowance = 8` onto each paid cycle
 
-Today the entire audit — every prompt, every gap, every citation, the full
-article plan — is produced and shown before payment, and `/audit` is explicitly
-framed as "inspect the scope before you pay". That was right for a one-off
-purchase of a known quantity. It is wrong for a subscription whose value *is*
-the measurement: the diagnosis is the product, and it is currently free.
+`subscription_period_grants` may remain the immutable billing-event ledger, but
+`grant_subscription_period` must be rewritten. Today it resets generic article
+credits and is consumed per `planned_article`. In the new model, one successful
+billing grant authorises exactly one `subscription_cycles` row with an action
+allowance of eight. `subscription_credit_consumptions` and compatibility credit
+resets must not remain the source of truth for cycle capacity.
 
-**There is no free tier and no sample.** The probe does not run until there is
-an active subscription. A customer who needs convincing by a free measurement is
-not going to be convinced by a smaller one, and a partially-redacted report
-teaches nobody anything while costing real credits to produce.
+### 3.5 Retire the finite sales model
 
-#### Where the gate sits
+Delete through new migrations and code changes; never edit an applied migration:
 
-The onboarding flow keeps every screen it has. One is inserted:
+- `scheduleEndOfScopeCancellation` and the `scope_delivered` auto-cancel path
+- the 25-article purchase floor
+- checkout freshness rules tied to a one-time audit
+- `program_purchase_intents` and the frozen cluster selection/graph snapshot
+- `program_clusters` as a sold scope and delivery scheduler
+- finite-program tier velocity and completion counters
 
-```
-website → brand → topics → rivals → questions → ★ plan + checkout → probe → report
-```
+Preserve completed visibility runs, evidence, answers and delivered content.
+“Delete the finite program” does not mean delete the facts already measured.
 
-Everything before the gate is free because it costs almost nothing and is the
-work that makes the measurement good: a crawl, two model calls, and the
-customer's own confirmations. Everything after it spends Cloro credits on their
-behalf.
+### 3.6 Paywall and launch funnel
 
-#### The gate is a good upsell moment, and it should be built as one
-
-By the time the customer reaches it they have confirmed a real set of questions —
-say 34 of them. The plan screen can then say something specific rather than
-generic:
-
-> You confirmed **34 questions**.
-> **Starter** tracks 20 of them — we pick the 20 highest-intent.
-> **Growth** tracks all 34, with room for six more.
-
-That is an honest comparison built from their own input, and it is far stronger
-than three feature columns. It also means the plan choice can come *after*
-question confirmation rather than before, which keeps the flow's momentum: the
-customer commits to what they want measured before being asked to pay for it.
-
-#### What the allowance does to the confirmed set
-
-Prompt generation is cheap (Gemini, per family); probing is what costs money. So
-generate the full confirmed set as today and let the allowance decide how many
-are *tracked*:
-
-- `tracked_prompts` stores every confirmed question
-- the allowance marks the top N `active`, the rest `retired`
-- "top N" reuses `orderByIntentMix` plus the existing family round-robin, so the
-  tracked set spans buyer situations and confirmed topics evenly rather than
-  taking the first N the model wrote
-
-Upgrading a plan then activates already-confirmed prompts rather than asking the
-customer to think again — the upgrade is instant and the history is continuous.
-
-#### What this deletes
-
-`purchase-intent` currently exists to freeze a cluster selection at checkout,
-because the customer was buying a specific set of articles. Nothing is frozen
-now: the subscription buys coverage, and what gets written is decided monthly by
-what the measurement finds. The intent record, its graph snapshot and its
-validation collapse into "start a subscription for this brand at this tier".
-
-#### The risk, stated plainly
-
-The customer pays before seeing a single measured answer. That is a real
-conversion cost and it is a deliberate trade — the alternative was giving away
-the only part of this product that has no substitute.
-
-The named future answer is a **trial**, not a free tier: full measurement, time
-boxed, card required. That is a different mechanism with a different failure
-mode and it is out of scope here. Nothing in this plan should be built in a way
-that makes adding one harder — in particular, the paywall must gate *running a
-probe*, not *viewing a report*, so a trial later means changing who may start a
-run rather than unpicking a redaction layer.
-
----
-
-## 4. The monthly cycle
-
-One new scheduled task, `trigger/run-monthly-cycle.ts`, modelled on the existing
-`ship-cluster` schedule which already sweeps active programs:
+For the launch test:
 
 ```
-for each active subscription whose cycle is due:
-  1. probe the brand's active tracked_prompts        (existing runVisibilityProbe)
-  2. losing prompts → gaps                           (existing toGapItems)
-  3. keep only content-solvable gaps                 (NEW — §5)
-  4. drop gaps already closed by a delivered article (NEW — set difference)
-  5. collapse duplicates into articles               (existing collapseToArticles)
-  6. group for internal linking                      (existing, no longer a gate)
-  7. write EVERY article from step 5                 (existing writer + ship path)
+website → brand → topics → rivals → questions → plan + checkout
+        → paid probe → report and target-page triage → production → batch
 ```
 
-Steps 1, 2, 5, 6 and the writing in 7 already exist and already work. The
-genuinely new logic is steps 3 and 4, and step 4 is a set difference against
-`planned_articles` already delivered for this brand.
+No free probe and no redacted sample are built initially. Customers can see the
+questions they confirmed before checkout, and founder-led sales can use an
+existing demonstration report. Target-page questions do not belong before the
+probe; see §5.2.
 
-**There is no per-cycle quota.** Step 7 writes what step 5 produced. If that is
-17 articles, 17 are written; if it is 3, three are. The prompt allowance is the
-only ceiling, and it binds through step 1.
+The paywall is enabled only after a complete paid first cycle can be fulfilled,
+including founder-assisted refreshes. Building the checkout screen earlier is
+fine; accepting money before the batch path works is not.
 
-**If a cycle produces nothing new**, the correct behaviour is to refresh an
-existing article whose prompts are *still* losing — not to invent topics to fill
-a quota that does not exist. A month where the measurement says "your published
-work is holding" is a real outcome and the report should say so.
+Review the gate after 30 qualified founder-led prospects have reached the offer:
 
-**Idempotency matters more here than anywhere else.** A cron that double-fires
-must not write two sets of articles or charge twice. The cycle keys on
-`(program_id, billing_period_start)` with a unique constraint — the same shape
-`grantBillingPeriodOnce` already uses.
-
-**Open: delivery pacing.** Writing 17 articles the hour a customer subscribes is
-technically fine and editorially questionable — publishing seventeen pages in a
-day is a pattern nobody wants on their site. The existing `program_clusters`
-scheduling machinery already paces delivery and can keep doing so *within* a
-cycle. That is a pacing decision about publication, and it must never quietly
-become a quota: everything found in a cycle is written in that cycle, even if it
-is published over several weeks.
+- if at least two buy, keep testing the paid-first path
+- if prospects repeatedly refuse specifically because they need proof before
+  payment, test a card-required trial or refundable first measurement
+- do not add a permanent free tier merely because generic landing-page traffic
+  did not convert
 
 ---
 
-## 5. The one genuinely new piece of judgement: content-solvable gaps
+## 4. The cycle lifecycle
 
-"Ignore PR, outreach, technical, Reddit" is the only requirement here that has
-no existing implementation, and it is the one that decides whether the monthly
-cluster is worth its price.
+### 4.1 Start and measure
 
-A losing prompt is **not** content-solvable when the answer's citations are
-dominated by sources the customer cannot publish into — a Reddit thread, a
-review aggregator, a journalist's roundup. Writing an article does not win that
-question; getting placed does.
+On a successful initial payment or renewal:
 
-The good news is the classifier already exists.
-`lib/visibility/citation-classifier.ts` splits citations into
-"you can publish this" versus "you have to earn this", and the dashboard already
-renders that split. The monthly cycle should use it as the filter: a gap whose
-answers were built overwhelmingly from earned sources is recorded as a
-**visibility gap that content will not close**, shown on the report as such, and
-excluded from the cluster.
+1. `grant_subscription_period` records the provider event idempotently.
+2. It creates one `subscription_cycles` row for the billing period.
+3. The cycle probes the brand's active durable questions.
+4. Per-run prompt rows and verbatim evidence are stored exactly as today.
+5. Each result reconciles its durable `content_opportunities` row.
 
-Two cautions:
+The first paid cycle may be started manually from a founder control. The cron is
+required before the first renewal, not before the first sale.
 
-- The last live run reported **81% of citations uncategorised**. The filter is
-  worthless until that number is understood — it may be a classifier gap, or it
-  may be that Cloro returns citation shapes the classifier has never seen. Fix
-  that before trusting this step.
-- Do not turn this into a threshold nobody can defend. Follow the repo rule: if
-  the two populations do not separate, say so rather than picking a midpoint.
+### 4.2 Reconcile, do not subtract delivered articles
+
+“An article was delivered” does not prove a visibility gap was closed. The new
+measurement decides what happened:
+
+| Current result | Prior action | Opportunity state |
+|---|---|---|
+| brand now wins | any | `resolved` |
+| still losing | no delivered action | `open` or `needs_input` |
+| still losing | delivered create/refresh, too soon to evaluate | `monitoring` |
+| still losing | delivered create/refresh, observation window elapsed | eligible refresh or report-only review |
+| question retired | any | retain history; exclude from production |
+
+Never drop a losing result merely because a related draft was delivered. Never
+write a second new page when the tracked question already has a delivered target
+URL. The exact observation window is a policy value to validate; it must prevent
+rewriting a page before engines had a reasonable chance to recrawl it.
+
+### 4.3 Triage and select
+
+After measurement:
+
+1. classify every losing finding as create, refresh, report-only or unknown
+2. surface unknown/high-priority findings for target-page input on the report
+3. exclude report-only and unknown findings from production capacity
+4. combine eligible findings only when one content action can honestly address
+   all of them
+5. never combine create and refresh, or two different refresh target URLs
+6. rank the eligible actions, including carried-over backlog and new findings
+7. select at most eight
+
+Backlog is reconsidered, not blindly FIFO. A carried-over finding may resolve,
+become report-only, or fall below newer evidence. Preserve its history and show
+why its state changed.
+
+`scoreVisibilityGap` may seed the internal ordering because it combines verdict,
+cross-engine agreement, commercial intent and rivals named. It is hand-weighted,
+so never present its integer as a scientific customer score. Show the evidence
+reason instead: “absent from 4 of 4 answers; three rivals named.”
+
+### 4.4 Freeze links after selection
+
+The selected actions define the delivery boundary:
+
+1. select up to eight actions
+2. group only those selected actions for useful internal linking
+3. freeze slugs, target URLs and links for that selected batch
+4. create `planned_articles` rows and writer contracts
+5. generate and QA every selected output
+6. release the cycle only when its selected outputs are ready
+
+No selected draft may require an internal link to an unselected backlog item.
+Clustering remains an editorial grouping mechanism, never a commercial gate.
+Single-article groups are legitimate.
+
+The `unsold` path is deleted from commercial persistence. Every losing finding
+has a durable opportunity row even when it is not selected for production.
+
+### 4.5 Deliver one batch
+
+Everything completed in the cycle becomes visible in FlipAEO together, with
+export and a recommended publishing order.
+
+WordPress behaviour must be described precisely:
+
+- without a connection, the customer receives in-app/exportable drafts
+- with a connection, the customer may opt to push the completed batch as
+  WordPress drafts
+- immediate automatic publication is not part of the launch promise
+
+Sending eight WordPress drafts is delivery, not publication pacing. The customer
+decides when to publish them.
+
+If no production action is eligible, deliver the measurement report honestly.
+Refresh only when an explicit target URL exists, the question is still losing,
+and the observation window has elapsed. Never invent work to fill eight slots.
+
+### 4.6 Idempotency and cancellation
+
+- one billing period creates at most one cycle
+- one cycle selects at most eight actions
+- one opportunity may be linked to only one selected action in a cycle
+- retries reuse the same cycle and action ids
+- a duplicate cron or webhook cannot generate a second batch
+- cancellation prevents future cycles but does not erase reports or delivered
+  drafts
 
 ---
 
-## 6. What must be decided before building, not during
+## 5. Resolution types and their dependencies
 
-**Settled: no free tier, no sample.** The audit runs after checkout. The
-conversion cost is accepted deliberately — the alternative was continuing to give
-away the only part of this product with no substitute. A **trial** (full
-measurement, time boxed, card required) is the named future answer and is out of
-scope here. The only design constraint it imposes is in §3.5: gate *running a
-probe*, never *viewing a report*, so adding a trial later changes who may start a
-run rather than unpicking a redaction layer.
+| Type | When | Production slot | Launch status |
+|---|---|---:|---|
+| **create** | customer explicitly says no suitable page exists | 1 | existing writer path, after selected-batch refactor |
+| **refresh** | customer supplies the page meant to win and it still loses | 1 | founder-assisted initially; automation not yet built |
+| **report-only** | publishing owned content is not the appropriate remedy | 0 | requires reliable classification or founder review |
+| **unknown** | coverage or citation type is unresolved | 0 | ask or review; never assume “create” |
 
-**Settled: pricing.** $99 / $189 / $349 for 20 / 40 / 80 tracked prompts. The
-per-prompt price falls at each tier, so upgrading is a discount. Product logic is
-identical across plans.
+### 5.1 Content-solvable classification
 
-**Settled: what a higher tier actually buys.** Not a faster cadence and not more
-clusters — a wider slice of the buyer-question space, which mechanically finds
-more gaps and so produces more articles. There is no per-cycle quota anywhere in
-the system, which is why `clusters_per_month` is deleted rather than repurposed.
+A losing question is not automatically solved by an owned article. Answers may
+depend on Reddit, review marketplaces, journalist roundups, directories or other
+surfaces the customer cannot publish into directly.
 
-**Open: publication pacing within a cycle.** Everything found in a cycle is
-written in that cycle; whether seventeen articles should also be *published* the
-same week is a separate editorial question. See §4 — the existing scheduling
-machinery can pace it, and it must never quietly become a quota.
+`lib/visibility/citation-classifier.ts` already attempts to separate publishable
+and earned sources, but the last live run reported 81% of citations as
+uncategorised. Diagnose the returned citation shapes before automating this
+decision.
 
-**Open: cost of goods at the ceiling.** A Growth cycle can legitimately produce
-40 articles, each carrying Tavily research and several writer calls. That is
-almost certainly comfortable against $189, but it has never been measured — and
-the ceiling is the number to measure at, not the average.
+For the founding beta, ambiguous findings may be founder-reviewed. Unknown or
+unreviewed findings remain report-only/unknown and never enter production merely
+to keep the batch full. This manual safety valve prevents the classifier from
+becoming another months-long pre-revenue project while preserving honesty.
 
-**Open: what happens to existing programs?** There are none in production today.
-If that changes before this ships, the answer is a one-way migration and not a
-compatibility layer: convert each active program to an allowance sized to its
-delivered scope and let it continue on the new machinery.
+### 5.2 Target URLs belong on the report
 
-**Open, and blocking §5: why are 81% of citations uncategorised?** The
-content-solvable filter is the difference between selling "we write the content
-that closes your gaps" and selling articles against questions no article can
-win. It cannot be built on a classifier that is failing on four fifths of its
-input. Diagnose first — it may be a classifier gap, or Cloro may be returning
-citation shapes it has never seen.
+Do not ask for a URL beside every question during onboarding. Before the customer
+has seen a result, that is maximum friction with minimum motivation and directly
+contradicts `ROADMAP.md` §1.
 
----
+After a question loses, ask on its report row:
 
-## 7. Build order
+> Do you already have a page meant to answer this question?
 
-Each step leaves the system working. Nothing here is a big-bang cutover.
+- URL supplied → `coverage_state = has_page`, save `target_url`, classify refresh
+- explicit “no” → `coverage_state = no_page`, classify create
+- skipped → `coverage_state = unknown`, make no coverage claim and do not
+  automatically produce a new page
 
-| # | Step | Size | Depends on |
-|---|---|---|---|
-| 1 | `tracked_prompts` table + onboarding writes it + probe reads it | M | — |
-| 2 | Contract test: articles ≤ losing prompts ≤ tracked prompts | S | 1 |
-| 3 | Delete the finite program (§3.3) — auto-cancel, 25-article floor, freshness gate, `clusters_included`, `purchase_intent` freezing | M | — |
-| 4 | Plan = allowance: tier rename, `tracked_prompt_allowance` at 20/40/80, allowance activates the top N tracked prompts | M | 1, 3 |
-| 5 | Clustering demoted to a grouping device; `unsold` deleted so every gap is written (§3.4) | M | 3 |
-| 6 | Paywall: probe refuses to run without an active subscription; plan screen inserted after question confirmation | M | 4 |
-| 7 | Monthly cycle task (probe → gaps → cluster → append) | L | 1, 3, 4 |
-| 8 | Content-solvable filter — **after** the citation-classification problem is understood | M | 7, and a diagnosis |
+Ask first on the highest-priority candidates rather than forcing answers for all
+40. Stored citations allow the URL to be matched retroactively at zero probe
+cost.
 
-Two notes on sequencing.
+Do not reintroduce the partial full-site coverage scanner. Sampling 150 pages of
+a large site cannot support a confident “you have no page” claim.
 
-**Steps 1–3 are worth doing regardless of whether this pricing model lands**,
-because each removes a contradiction that already exists: transient prompts make
-month-over-month comparison impossible, and the auto-cancel contradicts a
-subscription the moment anybody renews.
+### 5.3 Refresh scope
 
-**Step 6 is the revenue switch and it is small.** It is deliberately placed
-before the monthly cycle: the first paying customer only needs the paywall and a
-first run, and the recurring machinery can land before their second month. Do not
-invert this — building the cycle first means carrying it unpaid for weeks.
+Target-page input solves the classification dependency; it does not magically
+build the refresh writer. For initial customers, a supplied page can be fetched
+and the revised draft can be founder-assisted. Do not market automated refreshing
+until the single-page analysis and rewrite path has been built and verified.
+
+Track how often paid findings have an existing target URL. That rate is the build
+trigger for automated refresh—not intuition alone.
 
 ---
 
-## 8. What deliberately does not change
+## 6. Decisions, hypotheses and validation
 
-- The probe: engines, parser, gap mapper, evidence storage. All of it already
-  measures the right thing.
-- The clusterer, article contracts, the writer, internal linking, publication.
-  A cluster is a cluster; only who asks for one changes.
-- `ship-cluster`'s delivery loop, which already walks scheduled rows.
-- Dodo subscription plumbing and `grantBillingPeriodOnce`.
-- The evidence posture. Every number still expands to the answer behind it —
-  that is what makes a recurring measurement worth paying for rather than a
-  score a customer learns to ignore.
+### Settled product contract
+
+- one site and 40 active tracked buyer questions
+- ChatGPT and Google AI Mode measured monthly
+- every finding conserved and visible
+- up to eight eligible create/refresh actions per cycle
+- report-only findings consume no action slots
+- no padding and no silent discard
+- one complete batch of drafts
+- no automatic publication
+- one launch plan rather than three speculative tiers
+
+### Launch hypotheses
+
+- eight is the right action cap
+- paid measurement can convert without a free probe
+- $99 for three introductory billing periods can acquire founding customers
+- $189 is an acceptable continuing price
+- monthly measurement plus create/refresh work is sufficient for retention
+
+Treat these as experiments. They become decisions only after customer behaviour
+supports them.
+
+### Cost validation
+
+Measure one worst-case cycle with eight outputs, including:
+
+- both-engine probe cost for 40 questions
+- embeddings, clustering and title calls
+- Tavily research
+- all writer, repair and QA calls
+- image generation/storage if included
+- founder time spent classifying or refreshing
+
+Founder time is cost of goods during the beta even if no invoice records it.
+
+### First-customer validation
+
+Run founder-led outreach while implementation is underway. Do not wait for the
+monthly cron before speaking to prospects.
+
+Initial evidence threshold:
+
+- 30 qualified prospects receive the specific offer
+- at least five seriously inspect the confirmed-question offer/demo
+- at least two pay
+- at least one publishes three or more delivered drafts
+- at least one wants a second cycle at the disclosed price path
+
+Interpret the failure stage correctly:
+
+- nobody reaches the offer → targeting or acquisition problem
+- they reach it but will not pay without evidence → paywall/proof problem
+- they pay but do not publish → deliverable or quality problem
+- they publish but do not want cycle two → recurring measurement/refresh problem
+
+Do not answer any of those failures with another wholesale product pivot before
+identifying the stage that actually failed.
+
+---
+
+## 7. Build and launch order
+
+Each migration is new and forward-only. Do not edit applied migrations.
+
+| # | Step | Why here |
+|---|---|---|
+| 0a | Fix buyer-question generation and verify it by hand on several real businesses | Persisting weak prompts makes weak prompts durable. `ROADMAP.md` §7c shows mechanics are currently manufactured from repeated descriptions |
+| 0b | Inspect the uncategorised citation shapes and define a conservative classifier plus founder-review fallback | Production must not be selected from evidence nobody understands |
+| 1 | Add `tracked_prompts`; make onboarding write them and the probe observe them through `tracked_prompt_id` | Stable identity is required for every recurring comparison |
+| 2 | Add `content_opportunities`, `subscription_cycles`, `cycle_actions` and their junction; link generated outputs to actions | Establish the recurring state model before adapting delivery |
+| 3 | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | The old commercial state machine cannot renew safely, and deleting only its top-level tables would break the writer |
+| 4 | Implement per-cycle reconciliation and contract tests | Prevent duplicate backlog and false “closed” claims |
+| 5 | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Never infer create versus refresh from an incomplete crawl |
+| 6 | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Prevent links to undelivered backlog work |
+| 7 | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Complete the deliverable before accepting money |
+| 8 | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | This is the revenue switch |
+| 9 | Enable checkout and fulfil the first customers with founder oversight | Learn before automating edge cases |
+| 10 | Add the automated renewal scheduler and retry/alerting path | Required before the first customer's second billing period |
+
+Step 8—not the existence of a checkout component—is the revenue switch. Enable
+payments only after the payment-to-batch path passes end to end.
+
+Steps 0a and 0b are bounded diagnosis and verification work. Founder review is
+an acceptable beta fallback; neither step is permission to spend another month
+building a perfect universal classifier before asking anyone to pay.
+
+---
+
+## 8. Reused components and deliberate rewrites
+
+### Reuse
+
+- engine adapters, parser, evidence storage and run summaries
+- the durable evidence posture: every number expands to the answer behind it
+- gap mapping and internal scoring as inputs to reconciliation/ranking
+- article collapse, research, writer and QA machinery for create actions
+- WordPress and export integrations
+- Dodo webhook verification and billing-period parsing
+
+### Rewrite or replace
+
+- prompt ownership: run-scoped prompts become durable tracked questions plus
+  per-run observations
+- billing entitlement: generic article credits become one cycle with an action
+  allowance
+- commercial state: finite `program_clusters` become recurring cycles/actions
+- backlog: a persistent opportunity lifecycle replaces `withheld` articles
+- selection: choose the action batch before freezing links and contracts
+- delivery: release one cross-topic cycle batch rather than one sold cluster at a
+  time
+- refresh: explicit target page and founder-assisted path first; automation later
+
+---
+
+## 9. Acceptance tests before launch
+
+The refactor is not complete until these behaviours are verified:
+
+1. A brand cannot have more than 40 active tracked questions on the launch plan.
+2. Re-running a tracked question creates a new observation, not a new tracked
+   question.
+3. Every losing observation reconciles one durable opportunity; no cluster floor
+   can delete it.
+4. Present questions resolve existing opportunities without deleting history.
+5. A delivered draft does not mark a still-losing question resolved.
+6. Unknown and report-only findings consume zero production slots.
+7. Duplicate findings may map to one action, and the cycle selects no more than
+   eight actions.
+8. All frozen internal links target selected outputs or already-live pages,
+   never unselected backlog items.
+9. A cycle is released as one batch only after every selected output is ready.
+10. Duplicate billing events and cron retries cannot create duplicate cycles,
+    actions or drafts.
+11. Cancellation stops future cycles without deleting prior reports or content.
+12. The introductory-to-standard price transition is displayed, billed and
+    retried exactly as promised.
+13. A full sandbox journey succeeds from checkout through probe, report triage,
+    generation, batch delivery and optional WordPress draft push.

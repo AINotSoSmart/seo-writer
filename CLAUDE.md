@@ -18,10 +18,13 @@ open. Read it fully before changing anything under `lib/harvest/`, `lib/audit/`,
 `lib/plans/`, or `trigger/`.
 
 **[`docs/SUBSCRIPTION_PIVOT.md`](docs/SUBSCRIPTION_PIVOT.md)** is the proposed
-commercial refactor: from a finite article program to a tracked-prompt monthly
-subscription. Not built. Read it before touching `programs`, `purchase-intent`,
-`program-contract.ts`, or the cluster qualification thresholds — several of those
-are scheduled for deletion and patching them first is wasted work.
+commercial refactor: from a finite article program to a monthly subscription on
+tracked buyer questions. Not built. Read it before touching `programs`,
+`purchase-intent`, `program-contract.ts`, or the cluster qualification
+thresholds — several of those are scheduled for deletion and patching them first
+is wasted work. Note its §7: two prerequisites (buyer-question quality, and the
+uncategorised citations) come **before** any of the subscription work, because
+both would otherwise be made permanent.
 
 **[`docs/ROADMAP.md`](docs/ROADMAP.md) is the other half**: what was deliberately
 deferred or rejected, and why. Read it before proposing a feature — several
