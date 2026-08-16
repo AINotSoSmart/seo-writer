@@ -3303,6 +3303,7 @@ test("founding checkout is disabled by default and owns the three-cycle price ph
     )
     assert.match(checkout, /usdOption\?\.max_amount_possible !== expectedDiscount/)
     assert.match(checkout, /discount_codes: \[discountCode\]/)
+    assert.match(checkout, /feature_flags: \{ allow_discount_code: true \}/)
     assert.match(checkout, /idempotencyKey: `founding-/)
     assert.match(checkout, /promptCount !== PRODUCT_TRUTH\.trackedPromptAllowance/)
     assert.match(checkout, /validatePublicationPattern/)

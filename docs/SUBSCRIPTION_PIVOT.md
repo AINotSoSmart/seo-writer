@@ -780,16 +780,21 @@ The required sandbox configuration is:
 Live verification on 2026-08-16 confirmed that customer evidence now redirects
 anonymous visitors to login, privileged RPCs no longer accept caller-supplied
 user ids, anonymous function execution is closed, and the intended owner/service
-RLS boundaries are present. The remaining manual security setting is Supabase
-Auth leaked-password protection.
+RLS boundaries are present. Supabase Auth leaked-password protection is deferred
+because it requires a paid Supabase plan; it is hardening, not a launch gate.
 
 The test Dodo product is a valid $189 USD recurring product charged monthly, and
 the FlipAEO webhook is enabled with the required subscription/payment events and
-the deployed secret. Two provider configuration gates remain before checkout:
-restrict the $90 discount to the founding product, and re-run the updated Phase 8
-migration so the early `FOUNDINGBETA` plan code is repaired to canonical
-`founding_beta`. An older Drawgle test webhook is also enabled in the same Dodo
-business; preserve it unless that separate product no longer needs it.
+the deployed secret. Live verification confirmed that the $90 discount is
+restricted to the founding product and the early `FOUNDINGBETA` database plan
+code has been repaired to canonical `founding_beta`. An older Drawgle test
+webhook is also enabled in the same Dodo business; preserve it unless that
+separate product no longer needs it.
+
+Dodo requires `feature_flags.allow_discount_code=true` whenever a checkout
+session supplies pre-applied `discount_codes`. The founding checkout enables
+that flag while continuing to validate and pre-apply only the product-restricted
+`FOUNDINGBETA` code owned by the server.
 
 The live Supabase schema is now the source of the checked-in TypeScript database
 types. This removed the stale billing/writer type errors: `tsc --noEmit` is clean,

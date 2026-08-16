@@ -243,7 +243,10 @@ export async function POST(req: NextRequest) {
         const session = await client.checkoutSessions.create({
             product_cart: [{ product_id: productId, quantity: 1 }],
             discount_codes: [discountCode],
-            feature_flags: { allow_discount_code: false },
+            // Dodo rejects pre-applied `discount_codes` unless the checkout's
+            // discount-code feature is enabled. Product restriction and the
+            // server-side contract check still limit FOUNDINGBETA to this item.
+            feature_flags: { allow_discount_code: true },
             return_url: returnUrl,
             cancel_url: cancelUrl,
             customer: user.email ? { email: user.email } : undefined,
@@ -257,7 +260,10 @@ export async function POST(req: NextRequest) {
             // One hosted session per account per 30-minute window. This closes
             // the two-tabs/double-click race without making an abandoned
             // checkout impossible to reopen later.
-            idempotencyKey: `founding-${user.id}-${Math.floor(Date.now() / 1_800_000)}`,
+            // Version the key with the request contract so Dodo cannot replay
+            // the earlier invalid `allow_discount_code=false` attempt after
+            // this deployment within the same 30-minute window.
+            idempotencyKey: `founding-v2-${user.id}-${Math.floor(Date.now() / 1_800_000)}`,
         })
         if (!session.checkout_url) {
             throw new Error("Dodo did not return a hosted checkout URL.")
