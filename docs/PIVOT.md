@@ -987,6 +987,33 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-15 (fifteenth pass) - rivals now come before the questions
+
+The fourteenth pass let buyer prompts name incumbents, which is what makes them
+read like something a person typed. It shipped **inert**, because onboarding
+walked `topics -> questions -> rivals`: the questions were generated on entry to
+the questions screen, and the competitor list was still empty at that moment.
+Competitor discovery had been started on the *same* transition, so it had not
+returned either. Every comparative prompt quietly degraded back into the abstract
+category question the pass existed to remove.
+
+The walk is now `topics -> rivals -> questions`, which is the data dependency
+made visible:
+
+- **Topics** hands off to the rivals screen, and starts competitor discovery, so
+  the list is filled by the time the founder arrives.
+- **Rivals** is where discovery lands for confirmation, and it hands off to
+  generation — so `handleProceedToPrompts` runs with a populated list. It still
+  refuses to advance without at least one name, for the reason established in the
+  ninth pass: mentions are counted against the tracked list only.
+- **Questions** is now the last screen and the commit point. It saves the brand
+  and starts the probe, so the exact set on screen is the set that gets asked.
+
+A contract test asserts the rivals screen is walked before the questions screen,
+that rivals hands off to generation and questions to the save, and that discovery
+begins a screen earlier still. The ordering looks like a UX preference and is
+not one, which is exactly the kind of thing that gets "tidied" back.
+
 ### 2026-08-15 (fourteenth pass) - the prompts were SEO titles with question marks
 
 **What the first generated set looked like:**

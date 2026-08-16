@@ -70,6 +70,7 @@ export function PromptsStep({
     scopeFamilies,
     productName,
     loading,
+    saving,
     regeneratingFamilyId,
     error,
     onPromptsChange,
@@ -81,6 +82,8 @@ export function PromptsStep({
     scopeFamilies: ScopeFamily[]
     productName: string
     loading: boolean
+    /** The brand is being written — this screen commits the run. */
+    saving: boolean
     regeneratingFamilyId: string | null
     error?: string
     onPromptsChange: (prompts: PromptItem[]) => void
@@ -177,8 +180,9 @@ export function PromptsStep({
                     </span>
                 </div>
                 <p className="text-xs text-stone-500">
-                    We generated real buyer questions from your confirmed business areas.
-                    Edit, remove, or add your own before we probe ChatGPT & Google AI Mode.
+                    Written from your confirmed topics and the rivals you just
+                    confirmed. Edit, remove, or add your own — these exact questions
+                    are what we put to ChatGPT &amp; Google AI Mode.
                 </p>
             </div>
 
@@ -406,16 +410,18 @@ export function PromptsStep({
                         className="h-10 text-xs text-stone-600"
                     >
                         <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-                        Back to What you sell
+                        Back to rivals
                     </Button>
 
                     <Button
                         type="button"
                         onClick={onContinue}
-                        disabled={loading || totalPrompts === 0}
+                        disabled={loading || saving || totalPrompts === 0}
                         className="h-10 flex-1 bg-gradient-to-b from-stone-800 to-stone-950 font-semibold text-white hover:from-stone-700 hover:to-stone-900 disabled:opacity-50 sm:flex-initial sm:min-w-[200px]"
                     >
-                        Confirm {totalPrompts} {totalPrompts === 1 ? "Prompt" : "Prompts"} & Continue
+                        {saving
+                            ? "Starting…"
+                            : `Ask these ${totalPrompts} question${totalPrompts === 1 ? "" : "s"}`}
                         <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                 </div>

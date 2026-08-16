@@ -8,7 +8,14 @@ import type { BrandDetails } from "@/lib/schemas/brand"
 import { marketLabel, TARGET_MARKETS } from "@/lib/target-market"
 
 /**
- * The last screen before the probe: confirm who you compete with.
+ * Confirm who you compete with — and it comes BEFORE the questions screen.
+ *
+ * That order is a data dependency, not a preference. The buyer questions are
+ * written against these names ("X is overkill for this, what else…"), which is
+ * both how people really ask and what makes an answer engine list challengers
+ * rather than recite the same three leaders. Generating the questions first, as
+ * this flow did originally, meant the incumbent list was empty at the only
+ * moment it mattered.
  *
  * Competitors stopped being optional here, and the reason is structural rather
  * than a growth tactic. `parseAnswer` counts mentions of the *tracked* list and
@@ -28,8 +35,7 @@ export function ExtrasStep({
     discovering,
     onCompetitorsChange,
     onFieldChange,
-    saving,
-    onStart,
+    onContinue,
 }: {
     brand: BrandDetails
     competitors: string[]
@@ -37,8 +43,7 @@ export function ExtrasStep({
     discovering: boolean
     onCompetitorsChange: (competitors: string[]) => void
     onFieldChange: (field: string, value: string) => void
-    saving: boolean
-    onStart: () => void
+    onContinue: () => void
 }) {
     const hasCompetitors = competitors.length > 0
 
@@ -49,9 +54,10 @@ export function ExtrasStep({
                     Who are you up against?
                 </h2>
                 <p className="text-sm text-stone-500">
-                    We count how often each of these gets named in an AI answer where
-                    you don&apos;t. That comparison is the whole finding — so we can
-                    only report on companies you list here.
+                    Two jobs. We count how often each gets named in an AI answer where
+                    you don&apos;t — that comparison is the whole finding. And the
+                    questions we write next reference them, because that is how buyers
+                    actually ask: against a tool they already use.
                 </p>
             </div>
 
@@ -146,19 +152,17 @@ export function ExtrasStep({
             </div>
 
             <Button
-                onClick={onStart}
-                disabled={saving || discovering || !hasCompetitors}
+                onClick={onContinue}
+                disabled={discovering || !hasCompetitors}
                 className="w-full h-10 font-semibold bg-gradient-to-b from-stone-800 to-stone-950 hover:from-stone-700 hover:to-stone-900 disabled:opacity-50"
             >
-                {saving ? (
-                    <>Saving…</>
-                ) : discovering ? (
+                {discovering ? (
                     <>Finding your competitors…</>
                 ) : !hasCompetitors ? (
                     <>Add a competitor to continue</>
                 ) : (
                     <>
-                        Ask the AI engines
+                        Write my buyer questions
                         <ArrowRight className="w-4 h-4 ml-2" />
                     </>
                 )}

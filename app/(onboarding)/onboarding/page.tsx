@@ -859,7 +859,7 @@ export default function OnboardingPage() {
      */
     useEffect(() => {
         if (!isHydrated) return
-        if (step !== "prompts" && step !== "extras") return
+        if (step !== "scope" && step !== "extras" && step !== "prompts") return
         if (competitorDiscoveryRef.current) return
         if (competitors.length > 0) return
         if (!brandData?.product_name || !url) return
@@ -1074,9 +1074,9 @@ export default function OnboardingPage() {
                                     {[
                                         { key: "site", label: "Website", done: step !== "brand", active: step === "brand" },
                                         { key: "profile", label: "Your brand", done: ["scope", "prompts", "extras", "audit"].includes(step), active: step === "profile" },
-                                        { key: "scope", label: "Topics", done: ["prompts", "extras", "audit"].includes(step), active: step === "scope" },
-                                        { key: "prompts", label: "Questions", done: ["extras", "audit"].includes(step), active: step === "prompts" },
-                                        { key: "audit", label: "Rivals", done: false, active: step === "extras" || step === "audit" },
+                                        { key: "scope", label: "Topics", done: ["extras", "prompts", "audit"].includes(step), active: step === "scope" },
+                                        { key: "extras", label: "Rivals", done: ["prompts", "audit"].includes(step), active: step === "extras" },
+                                        { key: "prompts", label: "Questions", done: step === "audit", active: step === "prompts" },
                                     ].map((entry, entryIndex) => (
                                         <li key={entry.key} className="flex items-center gap-1">
                                             {entryIndex > 0 ? <span className="text-stone-300">·</span> : null}
@@ -1179,6 +1179,25 @@ export default function OnboardingPage() {
                                             }}
                                             onLookAgain={handleFindScope}
                                             onRestart={() => resetToBrandStep("")}
+                                            onContinue={() => setStep("extras")}
+                                        />
+                                    </motion.div>
+                                )}
+
+                                {step === "extras" && brandData && (
+                                    <motion.div
+                                        key="extras-step"
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 20 }}
+                                        className="px-4 py-6 sm:px-6"
+                                    >
+                                        <ExtrasStep
+                                            brand={brandData}
+                                            competitors={competitors}
+                                            discovering={discoveringCompetitors}
+                                            onCompetitorsChange={setCompetitors}
+                                            onFieldChange={updateField}
                                             onContinue={handleProceedToPrompts}
                                         />
                                     </motion.div>
@@ -1204,28 +1223,9 @@ export default function OnboardingPage() {
                                                 localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(newPrompts))
                                             }}
                                             onRegenerateFamily={handleRegenerateFamily}
-                                            onBack={() => setStep("scope")}
-                                            onContinue={() => setStep("extras")}
-                                        />
-                                    </motion.div>
-                                )}
-
-                                {step === "extras" && brandData && (
-                                    <motion.div
-                                        key="extras-step"
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: 20 }}
-                                        className="px-4 py-6 sm:px-6"
-                                    >
-                                        <ExtrasStep
-                                            brand={brandData}
-                                            competitors={competitors}
-                                            discovering={discoveringCompetitors}
-                                            onCompetitorsChange={setCompetitors}
-                                            onFieldChange={updateField}
                                             saving={savingBrand}
-                                            onStart={handleSaveBrand}
+                                            onBack={() => setStep("extras")}
+                                            onContinue={handleSaveBrand}
                                         />
                                     </motion.div>
                                 )}

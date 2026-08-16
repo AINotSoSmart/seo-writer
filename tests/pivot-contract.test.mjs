@@ -4203,6 +4203,27 @@ test("buyer prompts read like a person, not a blog title", async () => {
     // 5. A competitor the prompt itself named must not count as a rival for that
     //    prompt, or our own prompt text tops the leaderboard.
     assert.match(mapper, /namedInPrompt\(competitor\.name\)/)
+
+    // 6. RIVALS ARE CONFIRMED BEFORE THE QUESTIONS ARE WRITTEN. This is a data
+    //    dependency wearing the costume of a screen order: the questions are
+    //    written against incumbent names, so generating them first — as this
+    //    flow originally did — passed an empty list at the only moment it
+    //    mattered, and every comparative prompt silently degraded back into an
+    //    abstract category question.
+    const route = await text(ONBOARDING_ROUTE)
+    const topicsContinue = route.indexOf('onRestart={() => resetToBrandStep("")}')
+    const rivalsScreen = route.indexOf('{step === "extras" && brandData && (')
+    const questionsScreen = route.indexOf('{step === "prompts" && brandData && (')
+    assert.ok(topicsContinue > 0 && rivalsScreen > 0 && questionsScreen > 0)
+    assert.ok(
+        rivalsScreen < questionsScreen,
+        "the rivals screen must be walked before the questions screen",
+    )
+    // Rivals hands off to generation; questions is the last screen and commits.
+    assert.match(route, /onContinue=\{handleProceedToPrompts\}/)
+    assert.match(route, /onContinue=\{handleSaveBrand\}/)
+    // Discovery starts a screen earlier still, so the list is filled on arrival.
+    assert.match(route, /step !== "scope" && step !== "extras" && step !== "prompts"/)
 })
 
 test("a delivery artifact can never become a search market", async () => {
