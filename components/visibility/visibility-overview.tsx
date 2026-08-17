@@ -30,6 +30,8 @@ export function VisibilityOverview({ subjectName, summary }: VisibilityOverviewP
         (total, row) => total + row.namedQuestions,
         0,
     )
+    /** Questions where any answer named the brand, first or not. */
+    const namedQuestions = brand.ledQuestions + brand.namedNeverFirstQuestions
 
     return (
         <>
@@ -54,18 +56,57 @@ export function VisibilityOverview({ subjectName, summary }: VisibilityOverviewP
                         </div>
                     </div>
 
-                    <div className="mt-5 border-t border-[var(--viz-hairline)] pt-4">
-                        <p className="text-sm font-medium text-[var(--viz-ink)]">
-                            {brand.questionsTotal} questions = {brand.ledQuestions} named first + {brand.namedNeverFirstQuestions} named, never first + {brand.notNamedQuestions} not named
+                    {/*
+                      * Two plain sentences, not two equations.
+                      *
+                      * This was `40 questions = 2 + 2 + 36` stacked on top of
+                      * `40 answers = 3 + 1 + 1 + 35`, annotated with
+                      * "denominator" and "mutually exclusive". The founder could
+                      * not read their own report: naming and citing are
+                      * independent axes, and presenting them as two partitions
+                      * of the same 40 makes a reader try to reconcile numbers
+                      * that were never meant to reconcile.
+                      *
+                      * So: say what happened, then say plainly that the two
+                      * things are counted separately. Every figure is still
+                      * exact and still checkable against the rows below.
+                      */}
+                    <div className="mt-5 space-y-3 border-t border-[var(--viz-hairline)] pt-4 text-sm leading-relaxed text-[var(--viz-ink-secondary)]">
+                        <p>
+                            An assistant named {subjectName} in{" "}
+                            <strong className="text-[var(--viz-ink)]">
+                                {namedQuestions} of the {brand.questionsTotal} questions
+                            </strong>
+                            {namedQuestions > 0 && (
+                                brand.namedNeverFirstQuestions === 0
+                                    ? <> — and named you <strong className="text-[var(--viz-ink)]">first</strong> every time</>
+                                    : <> — naming you first in <strong className="text-[var(--viz-ink)]">{brand.ledQuestions}</strong>, and after a rival in {brand.namedNeverFirstQuestions}</>
+                            )}
+                            . The other {brand.notNamedQuestions} never named you.
                         </p>
-                        <p className="mt-1 text-xs leading-relaxed text-[var(--viz-ink-muted)]">
-                            Question outcomes use questions as their denominator. “Not named” does not mean “not cited.”
-                        </p>
-                        <p className="mt-3 text-sm font-medium text-[var(--viz-ink)]">
-                            {brand.answersTotal} answers = {brand.namedAndCitedAnswers} named and cited + {brand.namedOnlyAnswers} named only + {brand.citedOnlyAnswers} cited only + {brand.neitherAnswers} neither
-                        </p>
-                        <p className="mt-1 text-xs leading-relaxed text-[var(--viz-ink-muted)]">
-                            Answer outcomes are mutually exclusive, so the arithmetic can be checked directly.
+                        <p>
+                            Being <em>named</em> and being <em>linked</em> are counted
+                            separately — an answer can do one without the other.{" "}
+                            {brand.namedAndCitedAnswers > 0 && (
+                                <>
+                                    <strong className="text-[var(--viz-ink)]">{brand.namedAndCitedAnswers}</strong>{" "}
+                                    {brand.namedAndCitedAnswers === 1 ? "answer" : "answers"} did both
+                                    {brand.namedOnlyAnswers + brand.citedOnlyAnswers > 0 ? ", " : ". "}
+                                </>
+                            )}
+                            {brand.namedOnlyAnswers > 0 && (
+                                <>
+                                    <strong className="text-[var(--viz-ink)]">{brand.namedOnlyAnswers}</strong> named you
+                                    without linking{brand.citedOnlyAnswers > 0 ? ", and " : ". "}
+                                </>
+                            )}
+                            {brand.citedOnlyAnswers > 0 && (
+                                <>
+                                    <strong className="text-[var(--viz-ink)]">{brand.citedOnlyAnswers}</strong> linked to
+                                    your site without naming you.{" "}
+                                </>
+                            )}
+                            The remaining {brand.neitherAnswers} did neither.
                         </p>
                     </div>
                 </div>

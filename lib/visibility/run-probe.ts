@@ -394,15 +394,23 @@ export async function runVisibilityProbe(
                 subjectType: options.subjectType,
                 language: options.language,
                 subjectTokens,
+                // Rivals are a rejection list, never context. Naming one in a
+                // question asserts a capability we have no verified fact about,
+                // and these questions are durable — a false premise persists for
+                // the life of the subscription.
+                rivalBrands: competitors.flatMap((competitor) =>
+                    [competitor.name, competitor.domain].filter(
+                        (value): value is string => Boolean(value),
+                    ),
+                ),
                 // Everything a person would hand a model to write these by
-                // hand: what it is, what it does, who has the problem, what
-                // they already use. All of it background — the templates that
-                // turned the last two of these into every question are gone.
+                // hand: what it is, what it does, who has the problem. All of it
+                // background — the templates that turned these into every
+                // question are gone.
                 context: {
                     category: persona.category,
                     coreFeatures: persona.core_features,
                     audience: persona.audience?.primary,
-                    incumbents: competitors.map((competitor) => competitor.name),
                 },
                 maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
             })

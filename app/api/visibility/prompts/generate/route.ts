@@ -92,7 +92,9 @@ export async function POST(req: NextRequest) {
             subjectTokens.push(body.productName.trim())
         }
 
-        const incumbents = (body.competitors || [])
+        // Rivals are a rejection list, not context. They are never shown to the
+        // model; they exist so a question that names one can be discarded.
+        const rivalBrands = (body.competitors || [])
             .map((competitor) => competitor?.trim())
             .filter((competitor): competitor is string => Boolean(competitor))
 
@@ -102,11 +104,11 @@ export async function POST(req: NextRequest) {
             subjectType,
             language: resolveLanguage(body.language),
             subjectTokens,
+            rivalBrands,
             context: {
                 category: body.category?.trim() || undefined,
                 coreFeatures: body.coreFeatures,
                 audience: body.audience?.trim() || undefined,
-                incumbents,
             },
             maxPrompts: body.maxPrompts,
             questionsToAvoid: Array.isArray(body.excludeQuestions)

@@ -9,7 +9,6 @@
 import { languageName } from "../target-market.ts"
 import { getCurrentDateContext } from "../utils/date-context.ts"
 import { PROMPT_INTENTS, PROMPTS_PER_FAMILY } from "./prompt-config.ts"
-import { MAX_INCUMBENT_PROMPT_SHARE } from "./prompt-selection.ts"
 
 /** Only the confirmed fields question generation actually reads. */
 export interface BuyerPromptFamily {
@@ -28,8 +27,15 @@ export interface PromptBrandContext {
     coreFeatures?: string[]
     /** Who has the problem. Background for situations, never a label to quote. */
     audience?: string
-    /** Tools these buyers already use; comparative context, not a required form. */
-    incumbents?: string[]
+    /**
+     * There is deliberately no `incumbents` field.
+     *
+     * Rival names used to be handed to the model as "tools some of them already
+     * use", and up to 15% of the set was allowed to name one. Both are gone —
+     * see the naming rule in the instruction below. Rivals now reach the builder
+     * as a rejection list only (`rivalBrands` in `buildBuyerPrompts`), never as
+     * context, so the model cannot be led into writing them.
+     */
 }
 
 export function buildFamilyPrompt(
@@ -39,25 +45,22 @@ export function buildFamilyPrompt(
     questionsToAvoid: string[] = [],
 ): string {
     const features = (context.coreFeatures || []).filter(Boolean).slice(0, 8)
-    const incumbents = (context.incumbents || []).filter(Boolean).slice(0, 6)
     const intents = PROMPT_INTENTS.map((intent) => `- ${intent.key}: ${intent.label}`).join("\n")
 
     const priorQuestions = questionsToAvoid.filter(Boolean).slice(-40)
-    const maxNamedIncumbents = Math.floor(PROMPTS_PER_FAMILY * MAX_INCUMBENT_PROMPT_SHARE)
-    const minUnnamed = PROMPTS_PER_FAMILY - maxNamedIncumbents
 
     return `${getCurrentDateContext()}
 
-Below is a real product. Write the questions real people actually type into ChatGPT when they have the problem it solves — before they know this product, or any product, exists. The real users use messy, direct, functional language. Users search relative to dominant market leaders they already use.
+Below is a real product. Write the questions real people actually type into ChatGPT when they have the problem it solves — before they know this product, or any product, exists. The real users use messy, direct, functional language.
 
 THE PRODUCT
 It is: ${context.subjectType}
 ${context.category ? `Category: ${context.category}\n` : ""}This part of it: ${family.name} — ${family.description}
 The customer's own words for it: ${family.seedKeywords.join(", ")}
-${features.length ? `What it does:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `Who has this problem: ${context.audience}\n` : ""}${incumbents.length ? `Tools some of them already use: ${incumbents.join(", ")}\n` : ""}
+${features.length ? `What it does:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `Who has this problem: ${context.audience}\n` : ""}
 Write ${PROMPTS_PER_FAMILY} questions someone would type about the problem this part solves.
 
-Background, not instructions: the last two lines are there so you know whose situation to write from and what they might already have tried. People describe what they are working on, not what category of person they are — so do not have anyone announce themselves. At least ${minUnnamed} of the ${PROMPTS_PER_FAMILY} questions must name no product at all; a named tool is allowed only where that is genuinely how someone would put it.
+Background, not instructions: the audience line is there so you know whose situation to write from. People describe what they are working on, not what category of person they are — so do not have anyone announce themselves.
 
 ${
     priorQuestions.length
@@ -67,8 +70,9 @@ Do not restate the same buyer need with different wording. This part must add di
 
 `
         : ""
-}Two rules, both about measurement rather than style:
-- Never name this product or its website. These questions test whether an assistant recommends it unprompted, and naming it hands over the answer.
+}Rules, all about measurement rather than style:
+- Never name ANY product, brand, company or website — not this product, and not a competitor. These questions test what an assistant recommends unprompted. Naming anything hands over part of the answer: the assistant will discuss the tool you named, and whatever it says afterwards measures your question rather than the market.
+- Write about the problem and the outcome, never about a named tool. "what can fix cracks in a scanned photo without making faces look plastic" is a real question; "is X good for fixing cracks" is not, it is a survey about X.
 - Stay inside the part described above. A question about an adjacent problem measures a business this is not.
 - Do not put a calendar year in a question. These questions are persisted and rerun, so year-stamped wording becomes false and stale.
 - Do not invent technical mechanisms, capabilities, or product functions that are not present in the product description above.

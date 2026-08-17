@@ -38,7 +38,6 @@ import {
     type PromptBrandContext,
 } from "./prompt-template"
 import {
-    MAX_INCUMBENT_PROMPT_SHARE,
     containsCalendarYear,
     incumbentNeedles,
     inferPromptIntent,
@@ -72,6 +71,13 @@ export interface PromptBuildReport {
     callsAttempted: number
     callsSucceeded: number
     familiesCovered: number
+    /**
+     * Candidates discarded for naming a tracked rival. Reported rather than
+     * swallowed: the instruction forbids naming anything, so a non-zero count
+     * here is evidence the generation prompt is drifting, and a large one means
+     * the run nearly ran out of usable questions.
+     */
+    rivalNamedRejected: number
     errors: string[]
 }
 
@@ -150,13 +156,20 @@ export async function buildBuyerPrompts(
          * answer, which is the wrong measurement for a brand selling in Spain.
          */
         language?: string
-        /**
-         * Only the customer's own brand and domains. Competitors belong in
-         * `context.incumbents`, where they are material rather than contraband.
-         */
+        /** Only the customer's own brand and domains. */
         subjectTokens: string[]
-        /** What the product is, who buys it, and what they use today. */
+        /** What the product is and who buys it. */
         context?: Omit<PromptBrandContext, "subjectType">
+        /**
+         * Known rival names and domains — a **rejection list, never context**.
+         *
+         * These are not shown to the model. They exist so that a question which
+         * names a rival anyway can be discarded before it is ever confirmed. We
+         * have verified facts about the customer's product and none about a
+         * rival's, so a question asserting what a rival does is an unverifiable
+         * premise baked into a durable, monthly-rerun measurement.
+         */
+        rivalBrands?: string[]
         maxPrompts?: number
         /** Existing prompts retained while one family is regenerated. */
         questionsToAvoid?: string[]
@@ -167,7 +180,7 @@ export async function buildBuyerPrompts(
     const errors: string[] = []
     let callsAttempted = 0
     let callsSucceeded = 0
-    const incumbentTokens = incumbentNeedles(options.context?.incumbents || [])
+    const rivalTokens = incumbentNeedles(options.rivalBrands || [])
     const externalQuestions = (options.questionsToAvoid || [])
         .map((question) => question.trim())
         .filter(Boolean)
@@ -292,18 +305,20 @@ export async function buildBuyerPrompts(
     }
 
     // Round-robin across families up to the cap, so a family that produced 10
-    // prompts cannot crowd out one that produced 4. The incumbent cap is also
-    // enforced here rather than as a generation filter: natural comparative
-    // questions survive, but cannot take over the measurement. Same fairness rule the
+    // prompts cannot crowd out one that produced 4. Same fairness rule the
     // harvest applies at `roundRobinCap`; a probe that spends its whole budget
     // on one confirmed area measures that area, not the business.
+    //
+    // Rival-naming questions are REJECTED here, not rationed. There used to be a
+    // 15% allowance; see NAMED_BRAND_PROMPTS_ALLOWED for why it is zero. The
+    // instruction already forbids naming anything, so this is the backstop for
+    // when the model does it anyway — which it will, because a rival's name is
+    // often the most natural phrasing of a comparison.
 
     const seen = new Set<string>()
     const prompts: BuyerPrompt[] = []
     const cursors = new Map<string, number>()
-    const incumbentCap =
-        incumbentTokens.length > 0 ? Math.max(1, Math.floor(cap * MAX_INCUMBENT_PROMPT_SHARE)) : 0
-    let incumbentPromptCount = 0
+    let rivalNamedRejected = 0
     let exhausted = false
 
     while (prompts.length < cap && !exhausted) {
@@ -318,17 +333,15 @@ export async function buildBuyerPrompts(
 
             const candidate = pool[cursor]
             if (seen.has(candidate.textNorm)) continue
-            if (
-                mentionsIncumbent(candidate.text, incumbentTokens) &&
-                incumbentPromptCount >= incumbentCap
-            ) {
+            if (mentionsIncumbent(candidate.text, rivalTokens)) {
+                // Counted, not silently dropped: a family that keeps producing
+                // these is a signal about the generation prompt, and a run that
+                // rejects most of its candidates should be visible.
+                rivalNamedRejected++
                 continue
             }
             seen.add(candidate.textNorm)
             prompts.push(candidate)
-            if (mentionsIncumbent(candidate.text, incumbentTokens)) {
-                incumbentPromptCount++
-            }
             if (prompts.length >= cap) break
         }
     }
@@ -339,6 +352,7 @@ export async function buildBuyerPrompts(
             callsAttempted,
             callsSucceeded,
             familiesCovered: byFamily.size,
+            rivalNamedRejected,
             errors: errors.slice(0, 5),
         },
     }

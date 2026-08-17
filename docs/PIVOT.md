@@ -1253,6 +1253,75 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-17 (twenty-fifth pass) — no question may name a brand
+
+**Two changes, both from the founder reading the live report.**
+
+**1. Buyer questions may no longer name any brand, including rivals.**
+
+This reverses a judgement recorded in the contract suite, so the reasoning is
+kept rather than the assertion quietly flipped. Rivals were fed to the generator
+as `incumbents` — *"Tools some of them already use: …"* — with
+`MAX_INCUMBENT_PROMPT_SHARE = 0.15` allowing six of forty questions to name one.
+The argument for keeping them was that without incumbent context "the
+alternatives-seeking buyer is never measured at all".
+
+The live bringback.pro run settled it the other way:
+
+- **We hold no verified facts about a rival.** The customer's product has a
+  capability contract with evidence refs behind every claim; a competitor has
+  nothing. *"is kinpict.com good for making group portraits from individual
+  headshots?"* asserts a capability nobody checked. When it is wrong the engine
+  answers a false premise and the question is spent.
+- **These questions are durable.** Confirmed once, re-run every cycle. A false
+  premise is not a bad sample, it is a permanently wrong row in a paid
+  subscription.
+- **It contradicted the rule beside it.** Naming the subject was already banned
+  because "naming it hands over the answer". Naming a rival hands over the same
+  answer, guarantees that rival appears, and `adjustedBrandRank` (previous pass)
+  then discounts the whole result as prompt-induced. The run was paying for
+  questions it would later refuse to count.
+- **The unnamed questions were the good ones.** *"how can I fix a torn black and
+  white photo without paying a professional?"* — concrete, in the buyer's words,
+  naming nothing. The earlier fear of abstract category questions is not what
+  the run produced.
+
+Implementation:
+
+- `prompt-template.ts`: the incumbents slot is gone from `PromptBrandContext`
+  and from the instruction text, along with "Users search relative to dominant
+  market leaders they already use." The naming rule now covers every brand, with
+  a worked contrast — *"is X good for fixing cracks" is not a question, it is a
+  survey about X.*
+- `prompt-builder.ts`: rivals arrive as `rivalBrands`, a **rejection list that
+  is never shown to the model**. A candidate naming one is discarded, not
+  rationed, and the count surfaces as `report.rivalNamedRejected` so drift in
+  the generation prompt is visible instead of silent.
+- `prompt-selection.ts`: `MAX_INCUMBENT_PROMPT_SHARE` → `NAMED_BRAND_PROMPTS_ALLOWED = 0`.
+  `incumbentNeedles` / `mentionsIncumbent` survive — the detection is now the
+  filter rather than the meter.
+
+**Watch on the next generation**: the earlier pass's concern was that stripping
+rival context yields abstract questions. The seed keywords, core features,
+audience and family description all remain, so it should hold — but the first
+regenerated set is worth reading before it is confirmed.
+
+**2. The headline arithmetic block was unreadable.**
+
+It rendered two stacked equations — `40 questions = 4 + 0 + 36` above
+`40 answers = 3 + 1 + 1 + 35` — annotated with "denominator" and "mutually
+exclusive". The founder could not interpret their own report, which is the whole
+claim of the page failing at the first paragraph.
+
+The numbers were correct and self-consistent. The defect was presentational:
+**naming and citing are independent axes**, and printing them as two partitions
+of the same 40 invites a reader to reconcile figures that were never meant to
+reconcile. Replaced with two plain sentences that say what happened and then say
+outright that the two things are counted separately. Every figure remains exact
+and checkable against the rows underneath.
+
+121/121 contract tests, `tsc --noEmit` clean. No migration.
+
 ### 2026-08-17 (twenty-fourth pass) — two entities that never earned their rank
 
 The founder read the live bringback.pro report and challenged its arithmetic:

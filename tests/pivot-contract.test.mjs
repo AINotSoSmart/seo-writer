@@ -5119,26 +5119,40 @@ test("prompt generation is given context and a goal, never a form", async () => 
     assert.doesNotMatch(builder, /function namesAnyIncumbent/)
     assert.doesNotMatch(builder, /BANNED openings/)
     assert.doesNotMatch(builder, /NAME NO TOOL AT ALL/)
-    // Audience and competitors ARE in the context — they were removed with the
-    // scaffolding and that over-corrected. Without who has the problem the model
-    // cannot write from a real situation, and without tools they already use the
-    // alternatives-seeking buyer is never measured at all. The defect was the
-    // template slot they were plugged into, not the facts.
+    // Audience stays in the context — without who has the problem the model
+    // cannot write from a real situation.
     assert.match(promptSurface, /audience\?: string/)
-    assert.match(promptSurface, /incumbents\?: string\[\]/)
     assert.match(promptSurface, /category\?: string/)
     assert.match(promptSurface, /coreFeatures\?: string\[\]/)
     assert.match(runner, /audience: persona\.audience\?\.primary/)
-    assert.match(runner, /incumbents: competitors\.map/)
 
-    // But labelled as background, with the two failure modes named: nobody
-    // announces their job title, and naming a tool is the exception.
+    // COMPETITORS DO NOT. This reverses an earlier judgement in this file, so
+    // the reason is recorded rather than the assertion silently flipped.
+    //
+    // They were kept as background on the argument that "without tools they
+    // already use the alternatives-seeking buyer is never measured at all". The
+    // live bringback.pro run settled it the other way. The unnamed questions
+    // were excellent and concrete — "how can I fix a torn black and white photo
+    // without paying a professional?" — while every named one asserted a
+    // capability of a rival we hold no verified fact about. We have a capability
+    // contract with evidence refs for the customer's product and nothing at all
+    // for a competitor's, so "is kinpict.com good for making group portraits?"
+    // is an unfalsifiable premise. And these questions are DURABLE: confirmed
+    // once, re-run every cycle, so a false premise is permanent.
+    //
+    // It also contradicted the rule beside it. Naming the subject was banned
+    // because naming it hands over the answer; naming a rival hands over the
+    // same answer, and `adjustedBrandRank` then has to discount the result as
+    // prompt-induced. The run was paying for questions it would refuse to count.
+    assert.doesNotMatch(promptSurface, /incumbents\?: string\[\]/)
+    assert.doesNotMatch(runner, /incumbents: competitors\.map/)
+    // Rivals reach the builder as a rejection list only, never as context.
+    assert.match(promptSurface, /rivalBrands\?: string\[\]/)
+    assert.match(runner, /rivalBrands: competitors\.flatMap/)
+
+    // Still labelled as background, and nobody announces their job title.
     assert.match(template, /Background, not instructions/)
     assert.match(template, /do not have anyone announce themselves/)
-    assert.match(
-        template,
-        /At least \$\{minUnnamed\} of the \$\{PROMPTS_PER_FAMILY\} questions must name no product at all/,
-    )
 
     // And the circularity is closed downstream: asking "alternatives to X"
     // cannot inflate X on the rival leaderboard.
@@ -5158,10 +5172,15 @@ test("prompt generation is given context and a goal, never a form", async () => 
     assert.match(builder, /validIntents\.has\(row\.intent\) &&/)
     assert.match(builder, /!namesSubject\(row\.text, options\.subjectTokens\)/)
 
-    // Naming the customer's own brand stays banned — measurement validity, not
-    // taste. Naming them hands the engine the answer it is being tested on.
+    // Naming ANY brand is banned — measurement validity, not taste. Naming one
+    // hands the engine part of the answer it is being tested on, whether the
+    // name is the customer's or a rival's.
     assert.match(builder, /function namesSubject/)
-    assert.match(template, /Never name this product or its website/)
+    assert.match(template, /Never name ANY product, brand, company or website/)
+    assert.match(template, /not this product, and not a competitor/)
+    // The backstop for when the model names one anyway, which it will.
+    assert.match(builder, /mentionsIncumbent\(candidate\.text, rivalTokens\)/)
+    assert.match(builder, /rivalNamedRejected\+\+/)
 
     // Ownership stays structural: one call per family, id attached by code.
     assert.match(builder, /scopeFamilyId: family\.id/)
@@ -5192,13 +5211,15 @@ test("prompt generation is given context and a goal, never a form", async () => 
             subjectType: "browser-based photo restoration software",
             category: "AI photo tools",
             audience: "people preserving damaged family photographs",
-            incumbents: ["MyHeritage"],
         },
         "en",
     )
     assert.match(rendered, /repair damaged family photographs/)
-    assert.match(rendered, /MyHeritage/)
     assert.doesNotMatch(rendered, /restoration.*customerJob/)
+    // The instruction can no longer leak a rival name into the model's context,
+    // because there is no slot to put one in.
+    assert.doesNotMatch(rendered, /Tools some of them already use/)
+    assert.doesNotMatch(rendered, /dominant market leaders/)
 })
 
 test("buyer-question selection fixes the three failures observed in the live FlipAEO run", async () => {
@@ -5209,7 +5230,7 @@ test("buyer-question selection fixes the three failures observed in the live Fli
         text("components/onboarding/steps/prompts-step.tsx"),
     ])
     const {
-        MAX_INCUMBENT_PROMPT_SHARE,
+        NAMED_BRAND_PROMPTS_ALLOWED,
         containsCalendarYear,
         incumbentNeedles,
         inferPromptIntent,
@@ -5256,13 +5277,18 @@ test("buyer-question selection fixes the three failures observed in the live Fli
     assert.equal(containsCalendarYear("What are current AEO best practices?"), false)
     assert.match(builder, /!containsCalendarYear\(row\.text\)/)
 
-    // A URL-shaped rival suggestion still detects the brand name buyers type,
-    // and selection enforces two named rivals in a ten-question batch at most.
+    // A URL-shaped rival suggestion still detects the brand name buyers type —
+    // that detection is now the rejection filter rather than a quota meter.
     const needles = incumbentNeedles(["https://www.jasper.ai/"])
     assert.equal(mentionsIncumbent("My Jasper posts are not ranking", needles), true)
     assert.equal(mentionsIncumbent("How do I improve my blog?", needles), false)
-    assert.equal(MAX_INCUMBENT_PROMPT_SHARE, 0.15)
-    assert.match(builder, /incumbentPromptCount >= incumbentCap/)
+    // The 15% allowance is gone. Zero questions may name a rival: we hold no
+    // verified fact about a rival's features, and these questions are durable.
+    assert.equal(NAMED_BRAND_PROMPTS_ALLOWED, 0)
+    // The comment above the replacement names the old constant on purpose, so
+    // assert on the export rather than the word.
+    assert.doesNotMatch(selection, /export const MAX_INCUMBENT_PROMPT_SHARE/)
+    assert.doesNotMatch(builder, /incumbentCap/)
 
     // The labels from the same live run must follow the finished question, not
     // the model's repeated `alternatives` fallback.

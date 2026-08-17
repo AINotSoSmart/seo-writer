@@ -1,7 +1,28 @@
 import type { PromptIntentKey } from "./prompt-config.ts"
 
-/** Named incumbents are useful exceptions, never the dominant question form. */
-export const MAX_INCUMBENT_PROMPT_SHARE = 0.15
+/**
+ * There is no incumbent share any more. `MAX_INCUMBENT_PROMPT_SHARE = 0.15`
+ * used to allow six of forty questions to name a rival; that quota is gone and
+ * the number is zero, enforced as a rejection in `buildBuyerPrompts`.
+ *
+ * WHY. We hold verified facts about the customer's product — a capability
+ * contract with evidence refs behind every claim. We hold **nothing** about a
+ * rival's feature set. So a generated question like "is kinpict.com good for
+ * making group portraits from individual headshots?" asserts a capability we
+ * have never checked. When the assertion is wrong the engine answers a false
+ * premise, and the question is spent.
+ *
+ * These questions are durable — confirmed once, then re-run every cycle — so a
+ * false premise is not a bad sample, it is a permanently wrong row in a
+ * subscription the customer pays for monthly.
+ *
+ * It also contradicted the rule directly above it in the instruction: naming
+ * the subject was forbidden because "naming it hands over the answer". Naming a
+ * rival hands over the same answer, guarantees that rival appears, and then
+ * `adjustedBrandRank` has to discount the whole result as prompt-induced. The
+ * measurement was paying for questions it would later refuse to count.
+ */
+export const NAMED_BRAND_PROMPTS_ALLOWED = 0 as const
 
 const TOKEN_STOPWORDS = new Set([
     "a",
