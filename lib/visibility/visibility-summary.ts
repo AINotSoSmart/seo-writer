@@ -57,6 +57,12 @@ export interface VisibilitySummaryV2 {
         ledQuestions: number
         namedNeverFirstQuestions: number
         notNamedQuestions: number
+        /**
+         * Questions whose stored rank said "outranked" but whose only rivals
+         * ahead were introduced by our own question or were never counted.
+         * Reported so the correction is visible rather than silent.
+         */
+        promptInducedRankCorrections: number
     }
     competitorVisibility: {
         trackedCount: number
@@ -98,6 +104,84 @@ function competitorMention(
 }
 
 /**
+ * The brand's rank once the entities that never earned one are removed.
+ *
+ * The stored `mentionPosition` is the raw observation: the brand's place among
+ * every tracked competitor the parser located in the answer. Two kinds of rival
+ * inflate it, and both are judgements this layer owns rather than facts the
+ * parser should bake in:
+ *
+ * 1. **The question introduced it.** Asking "what is better than X?" guarantees
+ *    the answer opens with X. Counting that as X outranking the brand measures
+ *    our own prompt, not the engine's preference — and the report already says
+ *    so in the rival leaderboard, which excludes exactly these. Leaving the
+ *    brand's own rank unadjusted made the page contradict its own stated rule.
+ * 2. **Nothing counted it.** Before the parser fix, casing drift let a rival
+ *    hold a rank while scoring zero mentions, so a question could read "Named,
+ *    never first" beside an empty list of who outranked you. Runs measured
+ *    before that fix still carry those rows, so the guard stays here too — it is
+ *    cheap, and it repairs history rather than requiring a re-probe.
+ *
+ * Returns 1 when every rival ahead of the brand falls into one of those two
+ * buckets, which is what "you were named first" actually means.
+ */
+export function adjustedBrandRank(
+    result: VisibilityResultFact,
+    prompt: string,
+    competitors: VisibilityCompetitor[],
+): number | null {
+    if (result.mentionCount <= 0 || result.mentionPosition === null) return null
+
+    const ahead = result.competitorMentions.filter((mention) => {
+        if (mention.mentionPosition === null) return false
+        if (mention.mentionPosition >= (result.mentionPosition ?? 0)) return false
+        // A rival nothing counted never earned the slot it is holding.
+        if (mention.mentionCount <= 0) return false
+        const tracked =
+            competitors.find(
+                (competitor) =>
+                    competitor.id === mention.competitorId ||
+                    flat(competitor.name) === flat(mention.name) ||
+                    (competitor.domain &&
+                        mention.domain &&
+                        competitor.domain.toLowerCase().replace(/^www\./, "") ===
+                            mention.domain.toLowerCase().replace(/^www\./, "")),
+            ) ??
+            ({
+                id: mention.competitorId,
+                name: mention.name,
+                domain: mention.domain || null,
+            } satisfies VisibilityCompetitor)
+        return !promptNamesCompetitor(prompt, tracked)
+    })
+
+    return ahead.length + 1
+}
+
+export type DerivedVerdict = "absent" | "outranked" | "present"
+
+/**
+ * One question's verdict, recomputed from the same rule the summary counts by.
+ *
+ * The stored `ai_probe_prompts.verdict` predates `adjustedBrandRank`, so it
+ * still says "outranked" for a question whose only rival ahead was one our own
+ * question named. Displaying the stored value beside a corrected headline count
+ * would put two different answers to the same question on one screen, so the
+ * report derives this and the stored column becomes history rather than truth.
+ */
+export function deriveQuestionVerdict(
+    answers: VisibilityResultFact[],
+    prompt: string,
+    competitors: VisibilityCompetitor[],
+): DerivedVerdict {
+    if (!answers.some((answer) => answer.mentionCount > 0)) return "absent"
+    const led = answers.some(
+        (answer) => adjustedBrandRank(answer, prompt, competitors) === 1,
+    )
+    return led ? "present" : "outranked"
+}
+
+/**
  * Derives every client-facing count from persisted result facts.
  *
  * Question outcomes and answer outcomes deliberately remain separate. A
@@ -122,12 +206,19 @@ export function deriveVisibilitySummaryV2(input: {
     let ledQuestions = 0
     let namedNeverFirstQuestions = 0
     let notNamedQuestions = 0
+    let promptInducedRankCorrections = 0
     for (const promptId of usablePromptIds) {
         const answers = resultsByPrompt.get(promptId) ?? []
+        const prompt = promptById.get(promptId)
         const named = answers.some((answer) => answer.mentionCount > 0)
-        const led = answers.some(
-            (answer) => answer.mentionCount > 0 && answer.mentionPosition === 1,
-        )
+        const led = answers.some((answer) => {
+            if (answer.mentionCount <= 0) return false
+            const adjusted = adjustedBrandRank(answer, prompt?.prompt ?? "", input.competitors)
+            if (adjusted === 1 && answer.mentionPosition !== 1) {
+                promptInducedRankCorrections++
+            }
+            return adjusted === 1
+        })
         if (led) ledQuestions++
         else if (named) namedNeverFirstQuestions++
         else notNamedQuestions++
@@ -261,6 +352,7 @@ export function deriveVisibilitySummaryV2(input: {
             ledQuestions,
             namedNeverFirstQuestions,
             notNamedQuestions,
+            promptInducedRankCorrections,
         },
         competitorVisibility: {
             trackedCount: input.competitors.length,

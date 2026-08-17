@@ -27,7 +27,12 @@ import {
     type DashboardPrompt,
 } from "@/components/visibility/visibility-dashboard"
 import { PaidProbeConsole } from "@/components/visibility/paid-probe-console"
-import { deriveVisibilitySummaryV2 } from "@/lib/visibility/visibility-summary"
+import {
+    deriveQuestionVerdict,
+    deriveVisibilitySummaryV2,
+    type VisibilityResultFact,
+} from "@/lib/visibility/visibility-summary"
+import type { CompetitorMention } from "@/lib/visibility/answer-parser"
 
 type ProbePromptRow = DashboardPrompt & {
     tracked_prompt_id: string | null
@@ -114,7 +119,46 @@ export default async function VisibilityPage() {
 
     const observedPrompts = (promptRows || []) as ProbePromptRow[]
     const observedResults = (resultRows || []) as ProbeResultRow[]
-    const dashboardPrompts: DashboardPrompt[] = observedPrompts
+
+    const trackedCompetitors = Array.isArray(run.competitors)
+        ? (run.competitors as TrackedCompetitorRow[]).map((competitor) => ({
+              id: String(competitor.id ?? competitor.domain ?? competitor.name ?? ""),
+              name: String(competitor.name ?? competitor.domain ?? "Tracked competitor"),
+              domain: competitor.domain ? String(competitor.domain) : null,
+          }))
+        : []
+
+    const factsByPrompt = new Map<string, VisibilityResultFact[]>()
+    for (const result of observedResults) {
+        const rows = factsByPrompt.get(result.prompt_id) ?? []
+        rows.push({
+            promptId: result.prompt_id,
+            mentionCount: result.mention_count ?? 0,
+            citationCount: result.citation_count ?? 0,
+            mentionPosition: result.mention_position ?? null,
+            competitorMentions: Array.isArray(result.competitor_mentions)
+                ? (result.competitor_mentions as CompetitorMention[])
+                : [],
+        })
+        factsByPrompt.set(result.prompt_id, rows)
+    }
+
+    /**
+     * The verdict shown per question is derived, not the stored column.
+     *
+     * `ai_probe_prompts.verdict` was written before rank correction existed, so
+     * it still reports "outranked" for a question whose only rival ahead was
+     * one our own question named. Reading it here would print a chip that
+     * disagrees with the headline counts on the same screen.
+     */
+    const dashboardPrompts: DashboardPrompt[] = observedPrompts.map((prompt) => ({
+        ...prompt,
+        verdict: deriveQuestionVerdict(
+            factsByPrompt.get(prompt.id) ?? [],
+            prompt.prompt,
+            trackedCompetitors,
+        ),
+    }))
 
     const perEngineMap = new Map<
         string,
@@ -154,22 +198,8 @@ export default async function VisibilityPage() {
             id: prompt.id,
             prompt: prompt.prompt,
         })),
-        results: observedResults.map((result) => ({
-            promptId: result.prompt_id,
-            mentionCount: result.mention_count ?? 0,
-            citationCount: result.citation_count ?? 0,
-            mentionPosition: result.mention_position ?? null,
-            competitorMentions: Array.isArray(result.competitor_mentions)
-                ? result.competitor_mentions
-                : [],
-        })),
-        competitors: Array.isArray(run.competitors)
-            ? (run.competitors as TrackedCompetitorRow[]).map((competitor) => ({
-                  id: String(competitor.id ?? competitor.domain ?? competitor.name ?? ""),
-                  name: String(competitor.name ?? competitor.domain ?? "Tracked competitor"),
-                  domain: competitor.domain ? String(competitor.domain) : null,
-              }))
-            : [],
+        results: [...factsByPrompt.values()].flat(),
+        competitors: trackedCompetitors,
     })
 
     return (

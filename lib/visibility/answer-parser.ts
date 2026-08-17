@@ -107,56 +107,94 @@ export function brandLabelFromDomain(domain: string): string | null {
     return label
 }
 
-/**
- * Counts a derived label only where it is written as a proper noun.
- *
- * Case matters here and nowhere else in this file. A domain label can collide
- * with an ordinary adjective — "sleek.design" yields `sleek`, and a
- * case-insensitive match would count "a sleek interface" as a competitor
- * mention. Brands appear capitalised in prose; the common word usually does
- * not. So this is deliberately case-SENSITIVE on the initial letter.
- *
- * The residual error is a sentence that opens with the word ("Sleek interfaces
- * are…"). That is rarer than the alternative, which was counting nothing at
- * all, and every count on the report expands to the verbatim answer behind it —
- * so an inflated number stays checkable rather than becoming folklore.
- */
-function countProperNounOccurrences(text: string, label: string): number {
-    if (!label) return 0
-    const capitalised = label.charAt(0).toUpperCase() + label.slice(1)
-    const matches = text.match(new RegExp(`\\b${escapeRegExp(capitalised)}\\b`, "g"))
-    return matches ? matches.length : 0
+/** Where one search term appears, and how often, under one casing rule. */
+function matchTerm(
+    text: string,
+    term: string,
+    caseSensitive: boolean,
+): { count: number; firstIndex: number } {
+    if (!term) return { count: 0, firstIndex: -1 }
+    const pattern = new RegExp(
+        `\\b${escapeRegExp(term)}\\b`,
+        caseSensitive ? "g" : "gi",
+    )
+    let count = 0
+    let firstIndex = -1
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(text)) !== null) {
+        if (firstIndex === -1) firstIndex = match.index
+        count++
+        if (match.index === pattern.lastIndex) pattern.lastIndex++
+    }
+    return { count, firstIndex }
 }
 
 /**
- * Every way one tracked entity can appear in prose: its given name, its domain,
- * and the proper-noun label derived from that domain.
+ * Every way one tracked entity can appear in prose — counted AND located by the
+ * same rules, in one pass.
+ *
+ * The domain-derived label is matched case-SENSITIVELY, and that is deliberate:
+ * a label can collide with an ordinary adjective — "sleek.design" yields
+ * `sleek`, and a case-insensitive match would read "a sleek interface" as a
+ * competitor mention. Brands appear capitalised in prose; the common word
+ * usually does not. The residual error is a sentence opening with the word
+ * ("Sleek interfaces are…"), which is rarer than counting nothing at all, and
+ * every count on the report expands to the verbatim answer behind it.
+ *
+ * WHY THESE ARE ONE FUNCTION. They used to be two, and they disagreed. Counting
+ * applied that case-sensitive rule to the label while ranking matched the same
+ * label case-INSENSITIVELY. An answer writing
+ * "PixReunion" therefore satisfied the ranking matcher and not the counting one:
+ * the rival took rank 1, pushed the brand to rank 2, and was simultaneously
+ * reported as having zero mentions.
+ *
+ * The customer-visible result was a question labelled "Named, never first" whose
+ * rival list was empty — the report asserting it had been outranked by nobody.
+ * Observed on the live bringback.pro run: three of its four naming answers
+ * carried a ranked entity that no count agreed existed.
+ *
+ * An entity that is not counted must not hold a rank. Keeping both answers in
+ * one function is what makes that true by construction rather than by two
+ * matchers being kept in step by hand.
  */
-function countEntityMentions(
+function locateEntity(
     text: string,
     name: string,
     domains: string[],
-): number {
-    let count = countOccurrences(text, name)
+): { count: number; firstIndex: number } {
+    let count = 0
+    let firstIndex = -1
+    const absorb = (result: { count: number; firstIndex: number }) => {
+        count += result.count
+        if (result.firstIndex >= 0 && (firstIndex === -1 || result.firstIndex < firstIndex)) {
+            firstIndex = result.firstIndex
+        }
+    }
+
+    absorb(matchTerm(text, name, false))
     const seenLabels = new Set<string>()
     for (const domain of domains) {
         if (!domain) continue
-        count += countOccurrences(text, domain)
+        absorb(matchTerm(text, domain, false))
         const label = brandLabelFromDomain(domain)
         // Skip when the given name already IS the label — otherwise a brand
         // called "Uizard" with domain "uizard.io" is counted twice per mention.
         if (!label || seenLabels.has(label)) continue
         seenLabels.add(label)
         if (label === name.trim().toLowerCase()) continue
-        count += countProperNounOccurrences(text, label)
+        absorb(
+            matchTerm(text, label.charAt(0).toUpperCase() + label.slice(1), true),
+        )
     }
-    return count
+    return { count, firstIndex }
 }
 
-function firstOccurrenceIndex(text: string, term: string): number {
-    if (!term) return -1
-    const match = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").exec(text)
-    return match ? match.index : -1
+function countEntityMentions(
+    text: string,
+    name: string,
+    domains: string[],
+): number {
+    return locateEntity(text, name, domains).count
 }
 
 /**
@@ -232,40 +270,23 @@ export function computeMentionPosition(
 } {
     const clean = stripUrls(text)
 
-    const entityFirstIndex = (names: string[]): number => {
-        let best = -1
-        for (const name of names) {
-            const index = firstOccurrenceIndex(clean, name)
-            if (index >= 0 && (best === -1 || index < best)) best = index
-        }
-        return best
-    }
-
-    // Ranking must see the same names the counting does. Without the derived
-    // label a rival written as "Sleek" is invisible here too, so "named first"
-    // is computed against a set of entities the answer never used.
-    const searchTermsFor = (name: string, domains: string[]): string[] => {
-        const terms = [name, ...domains]
-        for (const domain of domains) {
-            const label = brandLabelFromDomain(domain)
-            if (label) terms.push(label.charAt(0).toUpperCase() + label.slice(1))
-        }
-        return terms.filter(Boolean)
-    }
-
-    const brandIndex = entityFirstIndex(
-        searchTermsFor(subject.brandName, subject.domains || []),
-    )
+    // Ranking sees exactly what counting sees — same terms, same casing rules,
+    // same result. `locateEntity` returns both, so an entity with zero mentions
+    // cannot occupy a rank ahead of the brand.
+    const brand = locateEntity(clean, subject.brandName, subject.domains || [])
+    const brandIndex = brand.count > 0 ? brand.firstIndex : -1
     const mentioned = (competitors || [])
-        .map((competitor) => ({
-            id: competitor.id,
-            index: entityFirstIndex(
-                searchTermsFor(
-                    competitor.name,
-                    competitor.domain ? [competitor.domain] : [],
-                ),
-            ),
-        }))
+        .map((competitor) => {
+            const located = locateEntity(
+                clean,
+                competitor.name,
+                competitor.domain ? [competitor.domain] : [],
+            )
+            return {
+                id: competitor.id,
+                index: located.count > 0 ? located.firstIndex : -1,
+            }
+        })
         .filter((competitor) => competitor.index >= 0)
 
     const indexes = [

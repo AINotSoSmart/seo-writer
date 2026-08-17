@@ -109,9 +109,16 @@ test("visibility summary keeps question and answer math exact", () => {
         namedOnlyAnswers: 1,
         citedOnlyAnswers: 1,
         neitherAnswers: 35,
-        ledQuestions: 2,
-        namedNeverFirstQuestions: 2,
+        // q3 ("How does Kinpict compare?") and q4 ("Is Photomyne suitable?")
+        // both store mentionPosition 2 behind the rival their own prompt named.
+        // The report already excludes prompt-induced names from the rival
+        // leaderboard; excluding them from the brand's rank is the same rule
+        // applied consistently, and without it the page contradicts itself.
+        // This fixture previously expected 2/2 — it encoded the defect.
+        ledQuestions: 4,
+        namedNeverFirstQuestions: 0,
         notNamedQuestions: 36,
+        promptInducedRankCorrections: 2,
     })
     assert.equal(summary.competitorVisibility.citationOccurrences, 14)
     assert.equal(summary.competitorVisibility.citedCompetitorCount, 3)
@@ -4982,19 +4989,102 @@ test("a rival named as a word is still a rival", async () => {
     // one number this product exists to produce.
     assert.match(parser, /export function brandLabelFromDomain/)
     assert.match(parser, /function countEntityMentions/)
-    // Ranking must see the same names as counting, or "named first" is computed
-    // against entities the answer never used.
-    assert.match(parser, /searchTermsFor\(/)
 
-    // The derived label is matched as a PROPER NOUN, case-sensitively: a domain
-    // label can collide with an ordinary adjective, and "a sleek interface" is
-    // not a competitor mention.
-    assert.match(parser, /function countProperNounOccurrences/)
+    // Ranking and counting are ONE function, not two kept in step by hand.
+    // They were two, and they drifted: counting applied the case-sensitive
+    // proper-noun rule to the derived label while ranking matched it
+    // case-insensitively, so an answer writing "PixReunion" gave the rival a
+    // rank it was never counted for. The live bringback.pro run then showed a
+    // question labelled "Named, never first" beside an empty rival list.
+    assert.match(parser, /function locateEntity/)
+    assert.doesNotMatch(parser, /function firstOccurrenceIndex/)
+    assert.doesNotMatch(parser, /function countProperNounOccurrences/)
+    // An entity nothing counted must not hold a rank.
+    assert.match(parser, /located\.count > 0 \? located\.firstIndex : -1/)
+    assert.match(parser, /brand\.count > 0 \? brand\.firstIndex : -1/)
+
+    // The derived label is still matched as a PROPER NOUN, case-sensitively: a
+    // domain label can collide with an ordinary adjective, and "a sleek
+    // interface" is not a competitor mention.
     assert.match(parser, /charAt\(0\)\.toUpperCase\(\)/)
+    assert.match(parser, /caseSensitive \? "g" : "gi"/)
 
     // The dashboard delegates the two explicit competitor views to the
     // arithmetic component instead of hiding a zero-row leaderboard.
     assert.match(dashboard, /<VisibilityOverview/)
+})
+
+test("an entity nobody counted cannot outrank the brand", async () => {
+    const { parseAnswer } = await import("../lib/visibility/answer-parser.ts")
+    const { adjustedBrandRank, deriveQuestionVerdict } = await import(
+        "../lib/visibility/visibility-summary.ts"
+    )
+
+    const subject = { brandName: "BringBack", domains: ["bringback.pro"] }
+    const competitors = [
+        { id: "pixreunion.com", name: "pixreunion.com", domain: "pixreunion.com" },
+    ]
+
+    // Observed live: the engine writes the rival in camel case. The counting
+    // matcher wanted "Pixreunion" (case-sensitive), the ranking matcher took
+    // "pixreunion" (case-insensitive) — so the rival held rank 1 with zero
+    // mentions and the question rendered as "Named, never first" beside an
+    // empty list of who had outranked the brand.
+    const parsed = parseAnswer(
+        {
+            text: "PixReunion is one option. BringBack also composites family photos.",
+            citations: [],
+        },
+        subject,
+        competitors,
+    )
+    const rival = parsed.competitorMentions.find(
+        (mention) => mention.competitorId === "pixreunion.com",
+    )
+    assert.equal(rival.mentionCount, 0, "casing rule says this is not a mention")
+    assert.equal(rival.mentionPosition, null, "so it must not hold a rank either")
+    assert.equal(parsed.mentionedEntityCount, 1, "only the brand was named")
+    assert.equal(parsed.mentionPosition, 1)
+
+    // A rival written the way the counter expects still ranks normally — the
+    // fix removes phantoms, it does not stop counting real rivals.
+    const real = parseAnswer(
+        {
+            text: "Pixreunion is the leader. BringBack is an alternative.",
+            citations: [],
+        },
+        subject,
+        competitors,
+    )
+    assert.equal(real.mentionPosition, 2)
+    assert.equal(real.mentionedEntityCount, 2)
+
+    // Historical rows still carry the phantom, so the derive layer drops any
+    // rival ahead of the brand that no count agrees exists.
+    const storedPhantomRow = {
+        promptId: "q1",
+        mentionCount: 1,
+        citationCount: 1,
+        mentionPosition: 2,
+        competitorMentions: [
+            {
+                competitorId: "pixreunion.com",
+                name: "pixreunion.com",
+                domain: "pixreunion.com",
+                mentionCount: 0,
+                citationCount: 0,
+                mentionPosition: 1,
+            },
+        ],
+    }
+    assert.equal(
+        adjustedBrandRank(storedPhantomRow, "how do I add people to family photos?", competitors),
+        1,
+    )
+    assert.equal(
+        deriveQuestionVerdict([storedPhantomRow], "how do I add people to family photos?", competitors),
+        "present",
+    )
 })
 
 test("prompt generation is given context and a goal, never a form", async () => {

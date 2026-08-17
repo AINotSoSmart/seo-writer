@@ -1253,6 +1253,79 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-17 (twenty-fourth pass) — two entities that never earned their rank
+
+The founder read the live bringback.pro report and challenged its arithmetic:
+40 questions, "2 named first + 2 named, never first", with the two
+never-first questions being ones whose own text named a rival
+(`animateoldphotos.org`, `pixreunion.com`).
+
+**Their double-count theory was wrong; their instinct was right.** The bucket
+counters are an `if / else if / else` over distinct prompt ids, so a question
+cannot occupy two buckets, and `2 + 2 + 36 = 40` proves no inflation — a real
+double-count would have read 42, or "38 not named". There genuinely were four
+distinct naming answers. But two of them were misclassified, for **two separate
+reasons**, one of which nobody had predicted.
+
+**Bug A — the exclusion rule was applied to one calculation and not the other.**
+`promptNamesCompetitor` already existed and already fed
+`promptInducedNamedAnswersExcluded`, which is what the "Who was named instead"
+section means when it says names introduced by our own question are excluded.
+But `computeMentionPosition` **takes no prompt argument at all**. Asking "what
+is better than X?" guarantees the answer opens with X; X took rank 1, the brand
+took rank 2, and `classifyPrompt` rendered "Named, never first". The page
+enforced its own stated rule in one place and contradicted it in another.
+
+**Bug B — ranking and counting used different matching rules.** Found in the
+founder's SQL output, not predicted: one row read `mention_position: 2`,
+`mentioned_entity_count: 2`, `rivals_named: []`. The brand was outranked by
+nobody. `countProperNounOccurrences` matched the domain-derived label
+case-**sensitively** (correctly — "a sleek interface" is not a mention of
+sleek.design), while `firstOccurrenceIndex` matched the same label
+case-**insensitively**. An answer writing "PixReunion" therefore satisfied the
+ranking matcher and not the counting one: the rival held rank 1 while scoring
+zero mentions. Three of the four naming answers carried such a phantom.
+
+Fixes:
+
+- **`answer-parser.ts`**: `locateEntity` returns count and first index from one
+  pass over one set of terms, and an entity with `count === 0` is excluded from
+  the ranking set. `firstOccurrenceIndex`, `searchTermsFor` and
+  `countProperNounOccurrences` are gone — they were the two matchers that
+  drifted. The case-sensitivity rationale moved onto the rule it now guards.
+- **`visibility-summary.ts`**: `adjustedBrandRank` recomputes the brand's rank
+  from `competitorMentions`, dropping rivals that are prompt-induced *or*
+  uncounted. `deriveQuestionVerdict` applies the same rule per question.
+  **This repairs existing runs with no re-probe**, because every rival's own
+  `mentionPosition` and `mentionCount` are already persisted.
+- **`(protected)/visibility/page.tsx`**: the per-question chip now renders the
+  derived verdict. `ai_probe_prompts.verdict` predates rank correction, so
+  reading it would print a chip disagreeing with the headline on the same
+  screen. That column is history now, not truth.
+- `promptInducedRankCorrections` is reported rather than silent.
+
+Replaying the founder's four live rows through the corrected derivation:
+
+```
+stored rank 1 -> 1  what is the best AI photo joiner…
+stored rank 1 -> 1  how do I make a family photo look like a professional studio shot…
+stored rank 2 -> 1  what software is better than animateoldphotos.org…   (Bug A)
+stored rank 2 -> 1  is pixreunion.com the best option…                   (Bug B)
+
+40 questions = 4 named first + 0 named, never first + 36 not named
+```
+
+The headline `4/40` was always right. The 2/2 split was not.
+
+**The rule this leaves behind:** a number the report excludes from one
+calculation must be excluded from every calculation that depends on it, and two
+functions that must agree about what counts as a mention should be one function.
+Both bugs here are the same shape as the `/audit/[token]` leak and the delivery
+mode gate — a rule enforced at one site and forgotten at its sibling.
+
+121/121 contract tests, `tsc --noEmit` clean. The 2/2→4/0 fixture change is
+deliberate: the old expectation encoded the defect.
+
 ### 2026-08-17 (twenty-third pass) — one competitor finder, seeded by the founder's own words
 
 Two competitor finders existed. Onboarding used the worse one, so the worse one
