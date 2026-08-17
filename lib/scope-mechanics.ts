@@ -25,9 +25,30 @@
 
 import type { CapabilityContract } from "./writer/article-contract.ts"
 
+/**
+ * `missing_delivery_mode` is deliberately absent.
+ *
+ * It was here, and it was a gate no founder could clear. "Delivered as" was
+ * removed from the onboarding screen, so the only value a manually added
+ * category ever had was the empty string it was minted with — and this rule
+ * reported that as a blocker, pointed the founder at the description field to
+ * fix it, and kept failing however they edited it. The symptom was Continue
+ * permanently disabled with "Say how customers get this" beside every
+ * hand-added category, and no field on screen that could satisfy it.
+ *
+ * The rule is gone rather than relaxed: a check on a value the founder cannot
+ * see or edit is not a check, it is a trap. `deliveryMode` still exists on the
+ * contract and is still consumed downstream, and it is now guaranteed non-empty
+ * at the source — every writer mints `UNSPECIFIED_DELIVERY_MODE` and
+ * `CapabilityContractSchema` normalises blanks to it — so nothing downstream
+ * gains an empty string from this deletion.
+ *
+ * The general lesson, since this is the second time: every gap below must be
+ * fixable by editing a field that is on the screen. Removing an input means
+ * removing its gate in the same change.
+ */
 export type MechanicsGap =
     | "missing_contract"
-    | "missing_delivery_mode"
     | "missing_action"
     | "placeholder_action"
     | "no_confirmed_facts"
@@ -60,7 +81,6 @@ export function mechanicsGaps(
     if (!contract) return ["missing_contract"]
 
     const gaps: MechanicsGap[] = []
-    if (!contract.deliveryMode.trim()) gaps.push("missing_delivery_mode")
     if (contract.operations.length === 0) {
         gaps.push("missing_action")
     } else if (contract.operations.some((operation) => !operation.action.trim())) {
@@ -100,12 +120,13 @@ export function isMechanicsConfirmed(
     return mechanicsGaps(contract).length === 0
 }
 
-/** Written for a founder, not an engineer. Each names the field to go fix. */
+/**
+ * Written for a founder, not an engineer. Each names the field to go fix — and
+ * every field named here must actually be on the screen.
+ */
 export const MECHANICS_GAP_COPY: Record<MechanicsGap, string> = {
     missing_contract:
-        "This area has no mechanics recorded yet — name it, say what it helps with, and how customers get it.",
-    missing_delivery_mode:
-        "Say how customers get this (for example: browser software, done-for-you service).",
+        "This area has no mechanics recorded yet — give it a name and say what it helps with.",
     missing_action:
         "Say in one line what this helps with.",
     placeholder_action:

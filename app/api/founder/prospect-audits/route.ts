@@ -110,11 +110,14 @@ export async function POST(request: NextRequest) {
                 { status: 400 },
             )
         }
+        // No `deliveryMode` check. `CapabilityContractSchema` normalises a blank
+        // one to `UNSPECIFIED_DELIVERY_MODE` above, so this clause could only
+        // ever have been unreachable or a lie about which field to fix — the
+        // same trap that made hand-added onboarding categories unconfirmable.
         if (
             scopeFamilies.some(
                 (family) =>
                     family.capability_contract?.version !== "capability-v1" ||
-                    !family.capability_contract.deliveryMode.trim() ||
                     family.capability_contract.operations.length === 0 ||
                     family.capability_contract.operations.some(
                         (operation) =>
@@ -128,7 +131,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
                 {
                     error:
-                        "Each business area needs delivery mode and verified input -> action -> output mechanics.",
+                        "Each business area needs verified input -> action -> output mechanics.",
                 },
                 { status: 400 },
             )

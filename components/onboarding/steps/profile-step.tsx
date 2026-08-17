@@ -42,7 +42,7 @@ export function ProfileStep({
                 <p className="text-sm text-stone-500">
                     Correct anything that looks wrong. Open full brand details if
                     you need to fix voice, audience, features, or anything else
-                    before we continue — the audit uses what you confirm here.
+                    before we continue, the audit uses what you confirm here.
                 </p>
             </div>
 
@@ -167,7 +167,7 @@ export function ProfileStep({
                 disabled={!brand.product_name.trim()}
                 className="h-10 w-full bg-gradient-to-b from-stone-800 to-stone-950 font-semibold hover:from-stone-700 hover:to-stone-900 disabled:opacity-50"
             >
-                Looks right — find what I sell
+                Looks right
                 <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
         </div>

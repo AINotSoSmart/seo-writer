@@ -1,6 +1,9 @@
 import { z } from "zod"
 
-import { CAPABILITY_CONTRACT_VERSION } from "../writer/article-contract.ts"
+import {
+  CAPABILITY_CONTRACT_VERSION,
+  UNSPECIFIED_DELIVERY_MODE,
+} from "../writer/article-contract.ts"
 
 export const ScopeEvidenceSchema = z.object({
   url: z.string().url(),
@@ -28,7 +31,27 @@ export const CapabilityOperationSchema = z.object({
 
 export const CapabilityContractSchema = z.object({
   version: z.literal(CAPABILITY_CONTRACT_VERSION),
-  deliveryMode: z.string().trim().min(2).max(160),
+  /**
+   * Normalised, never demanded.
+   *
+   * This was `.min(2)`, which is why deleting "Delivered as" from the
+   * onboarding screen did not finish the job: the client stopped collecting a
+   * value, the client-side gate was the visible half of the failure, and this
+   * line was the half underneath — a hand-added category would have been
+   * refused here with "Brand details are invalid." even after the gate was
+   * relaxed, which is a worse error than the one it replaced.
+   *
+   * Blank normalises rather than fails. Downstream consumers interpolate this
+   * string straight into the classifier and clusterer prompts, so an empty
+   * value is worth preventing; a *rejection* is not, because no screen collects
+   * one. See UNSPECIFIED_DELIVERY_MODE.
+   */
+  deliveryMode: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .transform((value) => value?.trim() || UNSPECIFIED_DELIVERY_MODE),
   operations: z.array(CapabilityOperationSchema).min(1).max(6),
   facts: z.array(CapabilityFactSchema).max(12).default([]),
   /**

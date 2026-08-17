@@ -11,6 +11,7 @@ import {
 import type { CapabilityContract, ScopeFamily } from "@/lib/schemas/brand"
 import {
     CAPABILITY_CONTRACT_VERSION,
+    UNSPECIFIED_DELIVERY_MODE,
     fallbackCapabilityContract,
 } from "@/lib/writer/article-contract"
 import {
@@ -95,11 +96,16 @@ export function focusScopeField(blocker: ScopeBlocker) {
     if (target instanceof HTMLInputElement) target.focus({ preventScroll: true })
 }
 
+/**
+ * Every value here must name a field that is rendered below. `scrollToField`
+ * looks the blocker up by `data-scope-field`, so a blocker naming an input that
+ * no longer exists tells the founder to fix something and then takes them
+ * nowhere. `deliveryMode` was exactly that after "Delivered as" was removed.
+ */
 export type ScopeBlockerField =
     | "name"
     | "keywords"
     | "description"
-    | "deliveryMode"
     | "action"
     | "unassigned"
 
@@ -393,7 +399,13 @@ export function ScopeFamilyReview({
                 evidence: [],
                 capability_contract: {
                     version: CAPABILITY_CONTRACT_VERSION,
-                    deliveryMode: "",
+                    // Not `""`. "Delivered as" is not on this screen, so an
+                    // empty value here could never be filled in by anyone — it
+                    // sat in the contract until a validator refused it and sent
+                    // the founder looking for a field that does not exist.
+                    // Extracted families already carry a placeholder sentence;
+                    // a hand-added one carries the equivalent.
+                    deliveryMode: UNSPECIFIED_DELIVERY_MODE,
                     operations: [{
                         key: "op1",
                         customerJob: "",

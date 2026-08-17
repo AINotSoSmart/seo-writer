@@ -1253,6 +1253,57 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-16 (twenty-second pass) — a gate with no field behind it
+
+"Delivered as" was removed from the scope screen. The rule that required it was
+not, and neither was the schema underneath. Two halves of a deletion were done
+and three were needed.
+
+The symptom: a founder adds a category by hand, fills in the name, the keywords
+and the one-line description — every field the screen shows — and Continue stays
+disabled under *"add person to photo: Say how customers get this (for example:
+browser software, done-for-you service)."* There is no such field on the screen.
+Editing the description, which is where the blocker pointed, could not clear it,
+because it was not what the rule measured. Extracted categories were unaffected,
+which is why this only ever appeared on hand-added ones: `contractFromEvidence`
+writes a placeholder delivery mode for every extracted family, and `add()` in
+`scope-family-review.tsx` minted `deliveryMode: ""`.
+
+Three layers, all of them required:
+
+1. **`lib/scope-mechanics.ts`** — `missing_delivery_mode` is deleted, not
+   relaxed. A check on a value the founder cannot see or edit is not a check.
+2. **`lib/schemas/brand.ts`** — `deliveryMode` was `z.string().min(2)`. Removing
+   only the client gate would have moved the failure, not fixed it: the server
+   would have refused the same category with "Brand details are invalid.", which
+   is worse than the message it replaced. It now normalises a blank to
+   `UNSPECIFIED_DELIVERY_MODE` instead of rejecting it.
+3. **`scope-family-review.tsx`** — `add()` mints `UNSPECIFIED_DELIVERY_MODE`, so
+   a hand-added category is indistinguishable from an extracted one at the point
+   of creation and nothing downstream ever receives an empty string.
+   `ScopeBlockerField` loses its dead `"deliveryMode"` member, which named an
+   input `scrollToField` could no longer find.
+
+The field itself stays on the contract — the classifier prompt, the clusterer
+prompt and the writer's frozen `ArticleContract` all read it, and the founder
+tool still collects one. Only the *demand* for it is gone, and
+`app/api/founder/prospect-audits/route.ts` drops its now-unreachable clause.
+
+**Fixes existing drafts.** A founder already stuck mid-onboarding has
+`deliveryMode: ""` in their localStorage draft. Because the rule and the schema
+changed rather than only the minting site, that draft clears on reload — they do
+not have to delete and re-add their categories.
+
+Verified by replaying the screenshot's exact state (two hand-added categories,
+empty delivery mode, description filled): client gaps `[]`, server
+`validateConfirmedScope` ok with `deliveryMode` normalised. 112/112 contract
+tests, `tsc --noEmit` clean. **Not clicked through signed in** — the founder
+should confirm Continue on the real screen.
+
+The rule this leaves behind: **removing an input means removing its gate and
+giving its value a source, in the same change.** This is the second gate in this
+file to have failed by measuring something invisible.
+
 ### 2026-08-16 (twenty-first pass) — the service client's other half
 
 Three report pages leaked customer data, and the diagnosis is worth keeping

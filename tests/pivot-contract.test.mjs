@@ -1107,11 +1107,21 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
     })
     assert.deepEqual(mechanicsGaps(contract()), [])
     assert.deepEqual(mechanicsGaps(null), ["missing_contract"])
-    assert.deepEqual(mechanicsGaps(contract({ deliveryMode: "" })), ["missing_delivery_mode"])
     assert.deepEqual(mechanicsGaps(contract({ facts: [] })), ["no_confirmed_facts"])
     for (const gap of Object.keys(MECHANICS_GAP_COPY)) {
         assert.ok(MECHANICS_GAP_COPY[gap].length > 20, `${gap} needs actionable copy`)
     }
+
+    // An empty delivery mode must NOT be a gap. "Delivered as" is not on the
+    // onboarding screen, so a hand-added category was minted with `""`, and
+    // this rule reported it as a blocker while pointing at the description
+    // field — which could never clear it. Continue stayed disabled with no
+    // field on screen that would help.
+    assert.deepEqual(mechanicsGaps(contract({ deliveryMode: "" })), [])
+    assert.ok(
+        !Object.keys(MECHANICS_GAP_COPY).includes("missing_delivery_mode"),
+        "a gap must name a field the founder can actually edit",
+    )
 
     // Client and server must agree for every state, or Continue lies again.
     const brand = (families) => ({
@@ -1136,10 +1146,12 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
             enabled: true,
         }
         // The invariant is directional: anything the client flags, the server
-        // must refuse. Not message-equality — an empty deliveryMode fails
-        // `CapabilityContractSchema.min(2)` before the mechanics check runs, so
-        // the server answers "Brand details are invalid." That masking is
-        // precisely why `findScopeBlockers` exists on the client.
+        // must refuse. The converse now also holds for `deliveryMode`, and that
+        // is the point of this patch list. It used to fail
+        // `CapabilityContractSchema.min(2)` — so the client showed an
+        // unclearable gap and the server, reached anyway, answered "Brand
+        // details are invalid." Both halves are gone: the schema normalises a
+        // blank to `UNSPECIFIED_DELIVERY_MODE` instead of rejecting it.
         const serverErrors = validateConfirmedScope(brand([family])).errors
         const clientGaps = mechanicsGaps(family.capability_contract)
         if (clientGaps.length > 0) {
@@ -1169,6 +1181,11 @@ test("the confirm gate is one rule, and the UI can always satisfy it", async () 
     // writes it unconditionally — so it asked the founder for work while
     // teaching nobody anything. The contract still carries the field.
     assert.doesNotMatch(review, />Delivered as</)
+    // Removing an input means removing its gate AND giving the value a source.
+    // A hand-added category minted `deliveryMode: ""`, which no screen could
+    // fill and two validators refused.
+    assert.doesNotMatch(review, /deliveryMode: ""/)
+    assert.match(review, /deliveryMode: UNSPECIFIED_DELIVERY_MODE/)
     assert.match(review, /isPlaceholderAction\(operation\.action\)/)
     // A null contract must still render an editor, or the family is unfixable.
     assert.doesNotMatch(review, /\{family\.capability_contract \? \(/)

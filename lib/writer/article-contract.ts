@@ -71,13 +71,29 @@ export type ArticleContract = {
     articleLength: "short" | "medium" | "long"
 }
 
+/**
+ * What `deliveryMode` says when nobody was asked.
+ *
+ * Nobody is asked any more. The field was removed from the onboarding screen —
+ * its extracted value was the same placeholder sentence for every family on
+ * every site, so it demanded work from the founder and taught nothing — but the
+ * field itself stays in the contract, because the classifier prompt, the
+ * clusterer prompt and the writer's frozen `ArticleContract` all read it.
+ *
+ * A contract must therefore never be *born* with an empty delivery mode. Every
+ * writer uses this constant, and `CapabilityContractSchema` normalises blanks
+ * to it, so the value is uniform rather than absent. See lib/scope-mechanics.ts
+ * for why an empty one used to be an unfixable dead end.
+ */
+export const UNSPECIFIED_DELIVERY_MODE = "Product or service described by the customer"
+
 export function fallbackCapabilityContract(input: {
     name: string
     description: string
 }): CapabilityContract {
     return {
         version: CAPABILITY_CONTRACT_VERSION,
-        deliveryMode: "Product or service described by the customer",
+        deliveryMode: UNSPECIFIED_DELIVERY_MODE,
         operations: [{
             key: "op1",
             customerJob: input.description,
