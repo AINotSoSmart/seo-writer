@@ -201,7 +201,7 @@ async function ensureTrackedCompetitors(
 
     const { data: brand } = await supabase
         .from("brand_details")
-        .select("brand_data")
+        .select("brand_data, website_url")
         .eq("id", options.brandId)
         .maybeSingle()
     const brandData = brand?.brand_data
@@ -228,6 +228,11 @@ async function ensureTrackedCompetitors(
                 attempted += 1
                 if (call.succeeded) succeeded += 1
             },
+            // Exact self-exclusion. Without it the scanner falls back to a
+            // substring guess against the product name, which both misses the
+            // customer's own site when the domain differs from the brand and
+            // drops innocent rivals whose domain contains it.
+            brand?.website_url ?? undefined,
         )
     } catch (error) {
         console.error("[Probe] Competitor discovery threw:", error)

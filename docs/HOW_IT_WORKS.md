@@ -119,9 +119,14 @@ an hour. At 20 customers you're at ~200 calls/day — Google won't notice.
 ### Tavily search — small count, real money
 
 One search per selected confirmed search, taking one from every family before a
-second from any family (maximum 12). Automatic competitor discovery may make
-one additional search per confirmed family (also capped at 12) before selecting
-at most four competitors. This is the main paid audit cost.
+second from any family (maximum 12). Automatic competitor discovery adds **one
+search for each of your top three product areas** — one to three searches, never
+more, however many areas you confirm — before selecting at most four
+competitors. This is the main paid audit cost.
+
+Three is a deliberate ceiling. Discovery returns four rivals in total and your
+areas are already in priority order, so a fourth search would be competing for a
+slot the first three have almost certainly filled.
 
 ### Page fetches — free but slow
 
@@ -442,6 +447,23 @@ competitors first, then a web search fills the remaining slots up to four. If
 that discovery fails, the report says so in the rivals section instead of
 showing an empty chart, because "nobody was named" and "we had nobody to look
 for" are opposite findings that look identical.
+
+**How that web search picks who to look for.** It runs one search for each of
+your **top three product areas**, using the first keyword you confirmed for that
+area — your words, not a label a model invented. For a photo-restoration
+business that means searching *"add deceased loved one to photo"* and *"old
+family person hug video generator"*, which is where the businesses you actually
+lose to rank. It then
+shows the real results to a model and asks which are dedicated competitors,
+rejecting listicles, generalist editors like Canva or Picsart, and sites where
+your category is one feature of fifty. Whatever it picks has to match a page the
+search really returned — it cannot name a company from memory.
+
+Until 2026-08-17 onboarding used a different, worse method: it guessed a broad
+category from your product name and searched that instead. For bringback.pro it
+guessed "AI photo editing" and returned a single competitor, PicWish — a general
+photo editor, not a rival for reunion portraits or hug videos. That method is
+deleted. There is one competitor finder now.
 
 Citations are the exception, and a useful one: every URL the engines cite is
 captured whoever owns it. So unknown players do still surface — as sources

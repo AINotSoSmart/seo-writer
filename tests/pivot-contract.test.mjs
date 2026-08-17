@@ -1768,6 +1768,114 @@ test("onboarding profile can edit full brand DNA before the audit", async () => 
     assert.match(brandOnboarding, /BrandDetailsEditor/)
 })
 
+test("there is exactly one competitor finder, and it searches confirmed seeds", async () => {
+    // Two finders existed. The onboarding one guessed a "primary product
+    // category" from about twenty words, was instructed to prefer the category
+    // over "niche features", searched 3 of the 6-9 queries it generated, read 5
+    // pages, and then DROPPED every competitor whose domain the model could not
+    // recall. Measured against bringback.pro it returned one name: PicWish, a
+    // general photo editor. The rivals that matter — reunion portraits, hug
+    // videos, adding a person to a family photo — are exactly what "not niche
+    // features" throws away, and exactly the domains a flash model cannot
+    // recall. Both halves of that design selected against the answer.
+    const [route, scanner, onboarding] = await Promise.all([
+        text("app/api/analyze-competitors/route.ts"),
+        text("lib/audit/competitor-scanner.ts"),
+        onboardingSurface(),
+    ])
+
+    // The route holds no discovery logic of its own — it delegates.
+    assert.match(route, /import \{ discoverCompetitors \}/)
+    assert.match(route, /discoverCompetitors\(/)
+    assert.doesNotMatch(route, /PRIMARY PRODUCT CATEGORY/)
+    assert.doesNotMatch(route, /searchQueries/)
+    assert.doesNotMatch(route, /generateContent/)
+    // The dead domain-parsing extractor and its hardcoded skip list are gone.
+    assert.doesNotMatch(route, /extractCompetitorBrands/)
+    assert.doesNotMatch(route, /SKIP_DOMAINS/)
+
+    // Queries come from the confirmed product areas, not a category label.
+    assert.match(scanner, /family\.seed_keywords\[0\]/)
+    assert.match(scanner, /maxCompetitorDiscoveryQueries/)
+    assert.match(onboarding, /scopeFamilies: \(brandData\.scope_families \|\| \[\]\)/)
+
+    // Paid search, so the breadth is bounded and stated in one place. Three is
+    // the ceiling, not the target: a one-area brand makes one search. Discovery
+    // returns four rivals in total and the areas are priority-ordered, so the
+    // fourth area would be searching for a slot the first three already filled.
+    const policy = await text("lib/harvest/policy.ts")
+    assert.match(policy, /maxCompetitorDiscoveryQueries:\s*3/)
+    // The priority sort decides WHICH three, so it is part of the contract.
+    assert.match(scanner, /\.sort\(\(a, b\) => a\.priority - b\.priority\)/)
+    // Every fallback path is bounded by the same constant, not a stray literal.
+    assert.doesNotMatch(scanner, /brand_keywords\.slice\(0, 3\)/)
+
+    // Discovery must not start on the scope screen: the seeds are the queries
+    // now, so running before the founder finishes editing them searches a draft.
+    assert.doesNotMatch(
+        onboarding,
+        /step !== "scope" && step !== "extras" && step !== "prompts"/,
+    )
+
+    // A named rival is never discarded for lacking a URL the model was never
+    // required to know, and a domain no search returned is never admitted.
+    assert.match(scanner, /resolveAgainstCandidates\(/)
+    assert.doesNotMatch(scanner, /catch \{ domain = item\.url \}/)
+})
+
+test("competitor discovery resolves model output onto searched domains", async () => {
+    const { resolveAgainstCandidates } = await import(
+        "../lib/audit/competitor-resolve.ts"
+    )
+
+    const candidates = [
+        { url: "https://pireunion.com", title: "PiReunion", domain: "pireunion.com" },
+        { url: "https://kinpict.com", title: "KinPict — reunion portraits", domain: "kinpict.com" },
+        { url: "https://animateoldphotos.org", title: "Animate Old Photos", domain: "animateoldphotos.org" },
+        { url: "https://bringback.pro", title: "BringBack", domain: "bringback.pro" },
+    ]
+
+    const resolved = resolveAgainstCandidates(
+        [
+            // Domain the model got right.
+            { name: "PiReunion", url: "https://pireunion.com" },
+            // Named correctly, no URL. This is the case that used to vanish.
+            { name: "KinPict", url: "" },
+            // Named correctly, WRONG url invented from memory — recovered by name.
+            { name: "Animate Old Photos", url: "https://animate-old-photos.io" },
+            // Pure invention: no candidate, no name match. Must not survive.
+            { name: "Totally Made Up", url: "https://madeup.example" },
+            // The customer's own site.
+            { name: "BringBack", url: "https://bringback.pro" },
+        ],
+        candidates,
+        "bringback.pro",
+    )
+
+    assert.deepEqual(
+        resolved.map((row) => row.domain),
+        ["pireunion.com", "kinpict.com", "animateoldphotos.org"],
+    )
+    // Every URL returned is one a search actually produced.
+    for (const row of resolved) {
+        assert.ok(
+            candidates.some((candidate) => candidate.url === row.url),
+            `${row.url} was never in the search results`,
+        )
+    }
+
+    // Duplicates collapse rather than consuming two of the four slots.
+    const deduped = resolveAgainstCandidates(
+        [
+            { name: "KinPict", url: "https://kinpict.com" },
+            { name: "Kin Pict", url: "https://www.kinpict.com/pricing" },
+        ],
+        candidates,
+        null,
+    )
+    assert.equal(deduped.length, 1)
+})
+
 test("user-supplied competitors top up via discovery instead of freezing the list", async () => {
     const { mergeUserFirstCompetitors } = await import("../lib/audit/merge-competitors.ts")
     const [runAudit, policy, assembly] = await Promise.all([
@@ -2133,7 +2241,7 @@ test("editorial clusters stay evidence-bound but are no longer the commercial qu
     ])
 
     assert.match(policy, /minQualifiedClusterArticles:\s*8/)
-    assert.match(policy, /version:\s*"evidence-bound-writer-v5\.0\.0"/)
+    assert.match(policy, /version:\s*"evidence-bound-writer-v5\.0\.1"/)
     assert.match(pricing, /Up to 8 actions/)
     assert.match(pricing, /never filler/)
     assert.doesNotMatch(pricing, /8.{0,3}15 per cluster|qualified clusters/i)
@@ -3354,6 +3462,19 @@ test("the sandbox probe preserves forty durable questions while bounding provide
     assert.match(pivot, /CLORO_SANDBOX_ENGINE=google-aimode/)
     assert.match(pivot, /160 credits total/)
     assert.match(pivot, /440 credits total/)
+})
+
+test("recurring onboarding never queries the removed audit-owned program model", async () => {
+    const repair = await text(
+        "supabase/migrations/20260817_fix_onboarding_program_audit_reference.sql",
+    )
+
+    assert.match(repair, /CREATE OR REPLACE FUNCTION public\.confirm_brand_scope/)
+    assert.match(repair, /CREATE OR REPLACE FUNCTION public\.save_onboarding_brand_with_scope/)
+    assert.match(repair, /SET requires_reaudit = TRUE/)
+    assert.doesNotMatch(repair, /p\.audit_id/)
+    assert.match(repair, /FROM PUBLIC, anon/)
+    assert.match(repair, /TO authenticated, service_role/)
 })
 
 test("WordPress publication fails closed on a missing or changed frozen permalink", async () => {
@@ -4992,11 +5113,16 @@ test("buyer-question selection fixes the three failures observed in the live Fli
 })
 
 test("onboarding sanitises rival suggestions and cannot hang on role refinement", async () => {
-    const [competitors, roles] = await Promise.all([
-        text("app/api/analyze-competitors/route.ts"),
+    const [resolve, roles] = await Promise.all([
+        // Sanitisation moved out of the retired onboarding finder and into the
+        // one resolver every discovery path now shares.
+        text("lib/audit/competitor-resolve.ts"),
         text("lib/scope-role-refine.ts"),
     ])
     const { competitorDomain } = await import("../lib/visibility/competitor-domain.ts")
+    const { resolveAgainstCandidates } = await import(
+        "../lib/audit/competitor-resolve.ts"
+    )
 
     assert.equal(
         competitorDomain('https://www.jasper.ai/" target="_blank", "reason": "writer"'),
@@ -5004,7 +5130,23 @@ test("onboarding sanitises rival suggestions and cannot hang on role refinement"
     )
     assert.equal(competitorDomain("writesonic.com"), "writesonic.com")
     assert.equal(competitorDomain("not a domain"), null)
-    assert.match(competitors, /domain: candidateDomain/)
+    assert.match(resolve, /competitorDomain\(rawUrl\)/)
+
+    // The injected fragment must not survive into a stored domain, and the
+    // model's angle brackets and braces must not survive into a name.
+    const [sanitised] = resolveAgainstCandidates(
+        [
+            {
+                name: 'Jasper<script>{"x"}',
+                url: 'https://www.jasper.ai/" target="_blank", "reason": "writer"',
+            },
+        ],
+        [{ url: "https://jasper.ai", title: "Jasper", domain: "jasper.ai" }],
+        null,
+    )
+    assert.equal(sanitised.domain, "jasper.ai")
+    assert.equal(sanitised.url, "https://jasper.ai")
+    assert.doesNotMatch(sanitised.name, /[<>"{}]/)
 
     assert.match(roles, /SCOPE_ROLE_TIMEOUT_MS = 45_000/)
     assert.match(roles, /Promise\.race/)

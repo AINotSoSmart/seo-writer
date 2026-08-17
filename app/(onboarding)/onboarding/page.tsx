@@ -903,10 +903,16 @@ export default function OnboardingPage() {
      * a Tavily search plus a model filter and takes real seconds, and the
      * founder is busy reading questions during exactly that window. Runs once,
      * and never overwrites names they typed themselves.
+     *
+     * Deliberately NOT started on the scope screen, which is where it used to
+     * begin. The confirmed seed keywords are the search queries now, so running
+     * before the founder has finished editing them would search a draft — the
+     * one input worth waiting for. By the prompts screen the families are
+     * settled, and the wait is hidden behind reading questions either way.
      */
     useEffect(() => {
         if (!isHydrated) return
-        if (step !== "scope" && step !== "extras" && step !== "prompts") return
+        if (step !== "extras" && step !== "prompts") return
         if (competitorDiscoveryRef.current) return
         if (competitors.length > 0) return
         if (!brandData?.product_name || !url) return
@@ -914,20 +920,21 @@ export default function OnboardingPage() {
         competitorDiscoveryRef.current = true
         setDiscoveringCompetitors(true)
 
-        const brandContext = [
-            brandData.product_name,
-            brandData.product_identity?.literally,
-            brandData.category,
-        ]
-            .filter(Boolean)
-            .join(" — ")
-
         void fetch("/api/analyze-competitors", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 url: `https://${url}`,
-                brandContext,
+                productName: brandData.product_name,
+                subjectType: brandData.product_identity?.literally || "",
+                category: brandData.category || "",
+                brandKeywords: brandData.brand_keywords || [],
+                // The whole reason this finds anything. One search per confirmed
+                // product area, in the founder's own words, instead of a model's
+                // guess at a category label.
+                scopeFamilies: (brandData.scope_families || []).filter(
+                    (family) => family.enabled !== false,
+                ),
                 searchPrefs: {
                     country: brandData.search_country || "",
                     topic: brandData.search_topic || "general",
@@ -955,7 +962,9 @@ export default function OnboardingPage() {
     }, [
         brandData?.product_name,
         brandData?.category,
+        brandData?.brand_keywords,
         brandData?.product_identity?.literally,
+        brandData?.scope_families,
         brandData?.search_country,
         brandData?.search_topic,
         competitors.length,

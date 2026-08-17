@@ -3,7 +3,7 @@
  * Change the version whenever any value or stage changes.
  */
 export const HARVEST_POLICY = {
-    version: "evidence-bound-writer-v5.0.0",
+    version: "evidence-bound-writer-v5.0.1",
     /** Working set scanned for gap ownership evidence. */
     maxCompetitors: 4,
     /**
@@ -12,7 +12,20 @@ export const HARVEST_POLICY = {
      * instead of aborting the whole audit.
      */
     maxCompetitorCandidates: 12,
-    maxCompetitorDiscoveryQueries: 12,
+    /**
+     * Competitor discovery searches at most the top three confirmed product
+     * areas, by priority. Fewer areas means fewer searches — one to three, not
+     * a fixed three.
+     *
+     * Three, not twelve, because this is paid search and the returns fall off a
+     * cliff. Discovery selects `maxCompetitors` (4) rivals in total, and the
+     * areas are already priority-ordered: the fourth area's search is competing
+     * for a slot the first three have almost certainly filled. A twelve-area
+     * brand would have paid for twelve searches to change, at most, which four
+     * names came back — and the later areas are the narrow ones least likely to
+     * name a rival worth tracking anyway.
+     */
+    maxCompetitorDiscoveryQueries: 3,
     maxScopeFamilies: 12,
     // A family may carry several genuinely different founder-confirmed searches.
     // The total audit cap below is the cost boundary; never silently truncate a

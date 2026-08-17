@@ -796,6 +796,14 @@ session supplies pre-applied `discount_codes`. The founding checkout enables
 that flag while continuing to validate and pre-apply only the product-restricted
 `FOUNDINGBETA` code owned by the server.
 
+The first deployed sandbox pass also exposed a Phase 3 schema-drift bug before
+checkout: `confirm_brand_scope` and its atomic onboarding wrapper still queried
+the removed finite-program `programs.audit_id` column. The forward-only
+`20260817_fix_onboarding_program_audit_reference.sql` migration removes both
+obsolete exceptions. Completed audits remain immutable and are marked stale when
+scope, website or rivals change; recurring programs remain brand-owned and their
+cycles keep their frozen measurement identities.
+
 The live Supabase schema is now the source of the checked-in TypeScript database
 types. This removed the stale billing/writer type errors: `tsc --noEmit` is clean,
 and all 112 pivot contracts pass.

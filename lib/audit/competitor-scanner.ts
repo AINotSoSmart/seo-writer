@@ -2,6 +2,12 @@ import { tavily } from "@tavily/core"
 import { BrandDetails } from "@/lib/schemas/brand"
 import { buildTavilySearchOptions, TavilySearchPrefs } from "@/lib/tavily-search"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
+import {
+    resolveAgainstCandidates,
+    type CompetitorCandidate,
+    type DiscoveredCompetitor,
+} from "./competitor-resolve"
+import { competitorDomain } from "@/lib/visibility/competitor-domain"
 
 // ============================================================
 // Competitor Scanner — Discovers competitor domains
@@ -11,31 +17,59 @@ import { HARVEST_POLICY } from "@/lib/harvest/policy"
 // because it is real Tavily search plus an LLM filter over actual results.
 // ============================================================
 
-interface DiscoveredCompetitor {
-    name: string
-    url: string
-    domain: string
-}
-
 export type CompetitorDiscoveryTelemetry = (call: {
     source: "competitor_discovery_tavily" | "competitor_filter_gemini"
     succeeded: boolean
 }) => void
 
 /**
- * Discovers ACTUAL product competitors via dual Tavily searches + LLM filtering.
- * 
+ * Only the fields discovery actually reads.
+ *
+ * Structural rather than the whole `BrandDetails`, so onboarding can call this
+ * before a brand row exists without fabricating a mission statement and an
+ * audience psychology to satisfy a type. A full `BrandDetails` still assigns.
+ */
+export type CompetitorDiscoveryBrand = {
+    product_name: string
+    product_identity?: Pick<
+        NonNullable<BrandDetails["product_identity"]>,
+        "literally"
+    > &
+        Partial<NonNullable<BrandDetails["product_identity"]>>
+    category?: string
+    brand_keywords?: string[]
+    scope_families?: BrandDetails["scope_families"]
+}
+
+/**
+ * The one competitor finder in this repo.
+ *
+ * Queries come from the founder's **confirmed scope family seed keywords** —
+ * one search per product area — because that is the only place the business is
+ * described in the words its buyers actually use. A category label cannot
+ * substitute for them: "AI photo editing" finds PicWish and Fotor, while
+ * "add deceased loved one to photo" finds the handful of businesses that
+ * genuinely compete for that customer. The seeds are already confirmed by the
+ * founder before this runs, so searching them is not a guess.
+ *
  * Approach:
- * 1. Run 2 separate Tavily queries using `literally` and `category`
- * 2. Deduplicate results by domain
- * 3. Send all found URLs + titles to a cheap LLM to filter out blogs/review sites
- *    and identify actual competitor products/services
+ * 1. One Tavily query per confirmed product area (falls back to brand keywords,
+ *    then category, then "<product> competitors alternatives").
+ * 2. Deduplicate by domain, drop self and known aggregators.
+ * 3. Hand the real results to a model that filters listicles, generalists and
+ *    side-feature pages, and picks the dedicated rivals.
+ * 4. Resolve its answers back onto the domains it was shown — see
+ *    `resolveAgainstCandidates`.
+ *
+ * @param subjectUrl The customer's own site, so it can be excluded by hostname
+ *                   rather than by guessing from the brand name.
  */
 export async function discoverCompetitors(
-    brandData: BrandDetails,
+    brandData: CompetitorDiscoveryBrand,
     maxCompetitors: number = 5,
     searchPrefs?: TavilySearchPrefs,
     telemetry?: CompetitorDiscoveryTelemetry,
+    subjectUrl?: string,
 ): Promise<DiscoveredCompetitor[]> {
     const apiKey = process.env.TAVILY_API_KEY
     if (!apiKey) {
@@ -49,9 +83,20 @@ export async function discoverCompetitors(
     try {
         const tvly = tavily({ apiKey })
         const brandNameLower = brandData.product_name.toLowerCase()
+        // Exact self-exclusion when the caller knows the site. The brand-name
+        // heuristic below stays as a fallback, but it is only a substring guess:
+        // it drops an innocent rival whose domain happens to contain the brand
+        // name, and misses the customer's own site whenever the domain and the
+        // product name differ.
+        const subjectHost = competitorDomain(subjectUrl)
 
         // Build discovery from confirmed commercial areas. A flat keyword list
         // previously collapsed multi-offer businesses into one feature family.
+        //
+        // The sort is load-bearing, not cosmetic: only the top
+        // `maxCompetitorDiscoveryQueries` areas are searched, so priority order
+        // decides which of the founder's areas get to name a rival. A brand with
+        // one area makes one search; a brand with ten still makes three.
         const queries: string[] = []
         const scopeFamilies = (brandData.scope_families || [])
             .filter((family) => family.enabled)
@@ -68,7 +113,12 @@ export async function discoverCompetitors(
                 if (primarySeed) queries.push(primarySeed)
             }
         } else if (brandData.brand_keywords && brandData.brand_keywords.length > 0) {
-            for (const keyword of brandData.brand_keywords.slice(0, 3)) {
+            for (
+                const keyword of brandData.brand_keywords.slice(
+                    0,
+                    HARVEST_POLICY.maxCompetitorDiscoveryQueries,
+                )
+            ) {
                 queries.push(`${keyword}`)
             }
         } else if (brandData.category) {
@@ -80,7 +130,7 @@ export async function discoverCompetitors(
         }
 
         // Run all queries in parallel, collect all results
-        const allResults: Array<{ url: string; title: string; domain: string; snippet: string }> = []
+        const allResults: Array<CompetitorCandidate & { snippet: string }> = []
         const seenDomains = new Set<string>()
 
         // Blocklist: social, review, and aggregator sites
@@ -113,6 +163,7 @@ export async function discoverCompetitors(
 
                         // Skip self, seen, and blocklisted
                         if (seenDomains.has(domain)) continue
+                        if (subjectHost && domain === subjectHost) continue
                         if (brandNameLower.includes(domainBase) || domainBase.includes(brandNameLower.replace(/\s+/g, ''))) continue
                         if (BLOCKLIST.has(domainBase) || 
                             domain.endsWith('google.com') || 
@@ -219,17 +270,11 @@ Be very selective. 3-5 truly relevant competitors is better than 10 loosely rela
         const text = geminiResponse.text || "[]"
         const parsed = JSON.parse(text.replace(/```json|```/g, ""))
 
-        const competitors: DiscoveredCompetitor[] = (parsed || [])
-            .slice(0, maxCompetitors)
-            .map((item: any) => {
-                let domain = ""
-                try { domain = new URL(item.url).hostname.replace('www.', '') } catch { domain = item.url }
-                return {
-                    name: item.name || domain,
-                    url: item.url,
-                    domain
-                }
-            })
+        const competitors = resolveAgainstCandidates(
+            Array.isArray(parsed) ? parsed : [],
+            allResults,
+            subjectHost,
+        ).slice(0, maxCompetitors)
         geminiCompleted = true
         telemetry?.({ source: "competitor_filter_gemini", succeeded: true })
 

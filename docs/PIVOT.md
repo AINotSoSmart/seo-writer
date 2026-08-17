@@ -1253,6 +1253,82 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-17 (twenty-third pass) — one competitor finder, seeded by the founder's own words
+
+Two competitor finders existed. Onboarding used the worse one, so the worse one
+was the only one a customer ever saw.
+
+**What it did.** `/api/analyze-competitors` asked a model to guess a "primary
+product category" from roughly twenty words — `product_name — literally —
+category`, never the site — and searched that guess. Three failure modes, all
+pulling the same direction:
+
+1. The prompt was written to generalise: *"focus on the MAIN PRODUCT
+   CATEGORY"*, *"secondary features are NOT the category"*, *"not niche
+   features"*. Its worked example turned "an AI photo restoration and animation
+   tool" into the category **"AI photo editing"**.
+2. It generated 6-9 queries and used `slice(0, 3)` at 5 results each. Fifteen
+   URLs, cut again to five pages.
+3. Its prompt told the model to leave a competitor's URL empty when it did not
+   know one — and the sanitiser then dropped every candidate without a
+   resolvable domain. That bias runs exactly the wrong way: famous generalists
+   survive because their domains are memorised; the small specific rivals do
+   not.
+
+Measured against **bringback.pro** it returned one competitor: PicWish. A
+general photo editor. The real rivals — pireunion.com, kinpict.com,
+animateoldphotos.org — are precisely what "not niche features" discards and
+precisely the domains a flash-weight model cannot recall.
+
+**What replaced it.** Nothing new was written. `lib/audit/competitor-scanner.ts`
+already built its queries from the **confirmed scope family seed keywords**, one
+search per product area, at 20 results, with a filter prompt that explicitly
+rejects Picsart/Canva-style generalists and side-feature landing pages. It was
+already better and only ever ran later, to top up the slots onboarding left
+empty. The route is now a thin authenticated wrapper around it and holds no
+discovery logic of its own.
+
+Three supporting changes:
+
+- **Onboarding passes the confirmed families**, and discovery no longer starts
+  on the scope screen — the seeds *are* the queries now, so starting before the
+  founder finishes editing them would search a draft. It starts on the prompts
+  screen, which is where the original comment always said it did.
+- **`resolveAgainstCandidates`** (new, in the dependency-free
+  `lib/audit/competitor-resolve.ts` so the contract suite can import it) anchors
+  the model's answers to the domains it was shown. A pick is matched by domain,
+  else recovered by name, else dropped. This kills both failure directions at
+  once: a rival is never lost for lacking a URL the model was never required to
+  know, and a domain no search returned can never become a tracked competitor.
+  The old code did `catch { domain = item.url }` — storing a raw string as a
+  domain.
+- **Exact self-exclusion** by hostname via the new `subjectUrl` parameter. The
+  brand-name substring guess stays as a fallback, but it both missed the
+  customer's own site when the domain differs from the product name and dropped
+  innocent rivals whose domain contained it.
+
+**Cost.** Onboarding goes from 3 `advanced` Tavily searches to one `basic`
+search for each of the **top three** confirmed areas by priority — one to three
+searches, never more — and from two Gemini calls to one. Strictly cheaper than
+before, with far better recall, because the queries are the founder's confirmed
+keywords rather than a category guess.
+
+`maxCompetitorDiscoveryQueries` was 12, matching `maxScopeFamilies`. Three is the
+right ceiling: discovery selects `maxCompetitors` (4) rivals in total and the
+areas are priority-ordered, so the fourth area's search competes for a slot the
+first three have almost certainly filled — and the later areas are the narrow
+ones least likely to name a rival worth tracking. Twelve searches would buy, at
+most, a different four names. Policy bumped to `evidence-bound-writer-v5.0.1`
+per the standing rule in `policy.ts`; the only consumer that gates on it is the
+founder's `POST /api/founder/test-article`, which will now ask for
+`allowStalePolicy: true` when replaying a pre-change audit.
+
+115/115 contract tests, `tsc --noEmit` clean. The resolver is unit-tested on the
+exact bringback.pro case: correct domain, correct name with no URL, correct name
+with an invented URL, pure invention, and the customer's own site. **Not run
+against the live APIs** — that spends Tavily/Gemini credits and is the founder's
+call.
+
 ### 2026-08-16 (twenty-second pass) — a gate with no field behind it
 
 "Delivered as" was removed from the scope screen. The rule that required it was
@@ -4365,7 +4441,8 @@ Collapse ratio is now:
   composition logged, because that band tracks source mix
 - reported by `/api/harvest/verify` with an explicit "check source mix" note
 
-Current policy version: `evidence-bound-writer-v5.0.0`.
+Current policy version: `evidence-bound-writer-v5.0.1`
+(v5.0.0 → v5.0.1 narrowed `maxCompetitorDiscoveryQueries` from 12 to 3).
 `collapseMin`/`collapseMax` remain removed; the contract suite pins their absence
 plus the direct duplicate invariant so the proxy gate cannot be reintroduced.
 
