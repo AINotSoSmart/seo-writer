@@ -3114,7 +3114,7 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
             )
             if (releaseError) {
               console.error(
-                `[CycleDelivery] Could not release ready cycle ${completedAction.cycle_id}:`,
+                `[CycleDelivery] Could not mark complete cycle ready ${completedAction.cycle_id}:`,
                 releaseError.message,
               )
             }

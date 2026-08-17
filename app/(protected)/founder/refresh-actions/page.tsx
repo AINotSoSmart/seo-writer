@@ -33,7 +33,7 @@ export default async function FounderRefreshActionsPage() {
         actionIds.length
             ? db
                   .from("planned_articles")
-                  .select("id, cycle_action_id, title, main_keyword")
+                  .select("id, cycle_action_id, title, main_keyword, deliverable_type")
                   .in("cycle_action_id", actionIds)
             : Promise.resolve({ data: [] }),
         brandIds.length
@@ -75,6 +75,10 @@ export default async function FounderRefreshActionsPage() {
                     brand?.brand_data?.product_name || brand?.website_url || "Customer brand",
                 cycleLabel: `${date.format(new Date(cycle.period_start))}–${date.format(new Date(cycle.period_end))}`,
                 title: output?.title || output?.main_keyword || "Existing-page refresh",
+                deliverableType:
+                    output?.deliverable_type === "section_patch"
+                        ? "section_patch"
+                        : "full_page_replacement",
                 targetUrl: row.target_url,
                 selectionReason: row.selection_reason,
                 state: row.state,

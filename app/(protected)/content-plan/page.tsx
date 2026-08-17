@@ -5,6 +5,11 @@ import { CheckCircle2, CircleDashed, Download, FileText } from "lucide-react"
 import { getAuditScope, getGapEvidence, getPlannedArticles } from "@/actions/harvest"
 import { ScopeResults } from "@/components/audit/scope-results"
 import { ProgramDeliveryControls } from "@/components/program/ProgramDeliveryControls"
+import {
+    ActionProposalRetry,
+    ActionProposalReview,
+    type ReviewProposal,
+} from "@/components/program/ActionProposalReview"
 import { createClient } from "@/utils/supabase/server"
 
 export default async function ContentPlanPage() {
@@ -65,12 +70,72 @@ export default async function ContentPlanPage() {
     const { data: cycles } = await (supabase as any)
         .from("subscription_cycles")
         .select(
-                "id, period_start, period_end, state, action_allowance, delivered_at, failure_code, eligible_action_groups, backlog_action_groups, " +
+                "id, measurement_run_id, period_start, period_end, state, action_allowance, delivered_at, failure_code, eligible_action_groups, backlog_action_groups, " +
                 "cycle_actions(id, rank, resolution_type, state, target_url, selection_reason, " +
                 "planned_articles(id, article_id, title, target_url, generation_status, delivery_status, publication_status, publication_url))",
         )
         .eq("program_id", program.id)
         .order("period_start", { ascending: false })
+
+    const cycleIds = (cycles || []).map((cycle: any) => cycle.id)
+    const { data: proposalSets } = cycleIds.length
+        ? await (supabase as any)
+              .from("action_proposal_sets")
+              .select("id, cycle_id, state")
+              .in("cycle_id", cycleIds)
+              .eq("state", "review")
+        : { data: [] }
+    const proposalSetIds = (proposalSets || []).map((set: any) => set.id)
+    const { data: proposals } = proposalSetIds.length
+        ? await (supabase as any)
+              .from("action_proposals")
+              .select(
+                  "id, proposal_set_id, resolution_type, deliverable_type, title, target_url, priority, reason",
+              )
+              .in("proposal_set_id", proposalSetIds)
+              .order("priority", { ascending: false })
+        : { data: [] }
+    const proposalIds = (proposals || []).map((proposal: any) => proposal.id)
+    const { data: proposalPromptLinks } = proposalIds.length
+        ? await (supabase as any)
+              .from("action_proposal_prompts")
+              .select("proposal_id, tracked_prompt_id")
+              .in("proposal_id", proposalIds)
+        : { data: [] }
+    const trackedIds = [
+        ...new Set((proposalPromptLinks || []).map((link: any) => link.tracked_prompt_id)),
+    ]
+    const { data: trackedQuestions } = trackedIds.length
+        ? await (supabase as any)
+              .from("tracked_prompts")
+              .select("id, prompt")
+              .in("id", trackedIds)
+        : { data: [] }
+    const questionById = new Map(
+        (trackedQuestions || []).map((question: any) => [question.id, question.prompt]),
+    )
+    const setByCycle = new Map<string, any>(
+        (proposalSets || []).map((set: any) => [set.cycle_id, set]),
+    )
+    const proposalsBySet = new Map<string, ReviewProposal[]>()
+    for (const proposal of proposals || []) {
+        const questions = (proposalPromptLinks || [])
+            .filter((link: any) => link.proposal_id === proposal.id)
+            .map((link: any) => questionById.get(link.tracked_prompt_id))
+            .filter((question: unknown): question is string => typeof question === "string")
+        const rows = proposalsBySet.get(proposal.proposal_set_id) ?? []
+        rows.push({
+            id: proposal.id,
+            resolutionType: proposal.resolution_type,
+            deliverableType: proposal.deliverable_type,
+            title: proposal.title,
+            targetUrl: proposal.target_url,
+            priority: proposal.priority,
+            reason: proposal.reason,
+            questions,
+        })
+        proposalsBySet.set(proposal.proposal_set_id, rows)
+    }
 
     const allActions = (cycles || []).flatMap((cycle: any) => cycle.cycle_actions || [])
     const ready = allActions.filter((action: any) =>
@@ -101,7 +166,21 @@ export default async function ContentPlanPage() {
 
             <section className="space-y-4">
                 {(cycles || []).map((cycle: any) => (
-                    <article key={cycle.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+                    <div key={cycle.id} className="space-y-4">
+                    {setByCycle.has(cycle.id) && (
+                        <ActionProposalReview
+                            proposalSetId={setByCycle.get(cycle.id).id}
+                            allowance={cycle.action_allowance}
+                            proposals={proposalsBySet.get(setByCycle.get(cycle.id).id) ?? []}
+                        />
+                    )}
+                    {!setByCycle.has(cycle.id) &&
+                        cycle.state === "awaiting_input" &&
+                        cycle.failure_code === "action_planning_failed" &&
+                        cycle.measurement_run_id && (
+                            <ActionProposalRetry runId={cycle.measurement_run_id} />
+                        )}
+                    <article className="overflow-hidden rounded-xl border border-stone-200 bg-white">
                         <header className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
                             <div>
                                 <h2 className="font-medium text-stone-900">
@@ -168,6 +247,7 @@ export default async function ContentPlanPage() {
                             </p>
                         )}
                     </article>
+                    </div>
                 ))}
             </section>
         </main>

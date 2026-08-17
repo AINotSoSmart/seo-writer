@@ -1,8 +1,10 @@
 # From a finite article program to a tracked-question subscription
 
-> Refactor and launch plan. Not yet built. Revised 2026-08-16 against the code
-> as it stands. `PIVOT.md` records what exists; this document defines the next
-> product contract and the minimum architecture needed to support it.
+> Product contract and implementation ledger. Revised 2026-08-17 against the
+> repository and the completed BringBack visibility run. The original phases
+> remain below as history; the 2026-08-17 correction in §7 is authoritative.
+> Its three forward migrations are code-complete but must ship with the matching
+> application deployment before another paid measurement is started.
 >
 > Commercial decisions are labelled separately from launch hypotheses. Nothing
 > becomes validated merely because it appears in this document.
@@ -11,9 +13,9 @@
 
 ## 1. The product contract
 
-Today the product sells a fixed set of article clusters, delivers them on a
-schedule, and then cancels its own subscription. Measurement is performed once,
-shown before payment, and never repeated.
+The retired product sold a fixed set of article clusters, delivered them on a
+schedule, and then cancelled its own subscription. Measurement was performed
+once, shown before payment, and never repeated.
 
 The replacement product sells continuous measurement of a stable set of buyer
 questions, followed by a bounded batch of work against what that measurement
@@ -36,24 +38,28 @@ It makes three separate guarantees:
       ↓ asked monthly of ChatGPT + Google AI Mode
 per-question results and evidence
       ↓ reconcile with prior cycles
-create / refresh / report-only / needs customer input
-      ↓ collapse duplicate create/refresh work
-rank all eligible actions and retain all findings
-      ↓ select up to 8 actions
+owned-content / earned-placement / report-only / founder review
+      ↓ crawl an immutable, bounded sitemap inventory
+group duplicate questions into create/refresh proposals
+      ↓ customer confirms up to 8 genuine actions
 freeze links only within the selected batch
       ↓ generate and QA
-one complete batch of drafts
+founder reviews the complete founding-beta batch
+      ↓ one release
+one complete batch of drafts and patches
 ```
 
 The sentence **“we close all qualified content gaps” must not appear in product
 copy**. The honest promise is:
 
-> We track 40 buyer questions, show every opportunity we find, and complete the
-> eight highest-priority eligible content actions each cycle.
+> We track 40 buyer questions, show every finding, check the existing site first,
+> and let the customer confirm up to eight genuine create or refresh actions for
+> one complete cycle batch.
 
-If a cycle has five eligible actions, five are produced. Never invent three more
-to fill the cap. If it has seventeen, the highest-priority eight are selected and
-the rest remain visible for reconciliation next cycle.
+If a cycle has five eligible actions, no more than five are produced. Never
+invent three more to fill the cap. If it has seventeen, the customer confirms up
+to eight from an evidence-ordered list and the rest remain visible for
+reconciliation next cycle.
 
 The backlog is not a debt owed after cancellation. Cancellation stops future
 production cycles; completed reports and historical findings remain readable.
@@ -294,13 +300,13 @@ For the launch test:
 
 ```
 website → brand → topics → rivals → questions → plan + checkout
-        → paid probe → report and target-page triage → production → batch
+        → paid probe → report → grouped proposal review → production → founder-approved batch
 ```
 
 No free probe and no redacted sample are built initially. Customers can see the
 questions they confirmed before checkout, and founder-led sales can use an
-existing demonstration report. Target-page questions do not belong before the
-probe; see §5.2.
+existing demonstration report. Site inventory and target-page matching happen
+after measurement, before the customer confirms a production batch; see §5.2.
 
 The paywall is enabled only after a complete paid first cycle can be fulfilled,
 including founder-assisted refreshes. Building the checkout screen earlier is
@@ -355,20 +361,24 @@ rewriting a page before engines had a reasonable chance to recrawl it.
 
 After measurement:
 
-1. classify every losing finding as create, refresh, report-only or unknown
-2. surface unknown/high-priority findings for target-page input on the report
-3. exclude report-only and unknown findings from production capacity
-4. combine eligible findings only when one content action can honestly address
-   all of them
-5. never combine create and refresh, or two different refresh target URLs
-6. rank the eligible actions, including carried-over backlog and new findings
-7. select at most eight
+1. classify the stored citations as owned-content, earned-placement,
+   report-only or founder-review evidence
+2. exclude report-only and unresolved findings from production capacity
+3. freeze a bounded same-host sitemap inventory with canonical URL, extracted
+   title, page kind, content excerpt and content hash
+4. require strong title/slug evidence, strengthened by body evidence, before a
+   losing question can match an existing page; category overlap alone is not a
+   match
+5. combine questions by exact target page for refresh work, or by confirmed
+   scope plus evidenced product operation/source topic for create work
+6. present every grouped proposal and its source questions to the customer
+7. let the customer confirm no more than the cycle allowance of eight
 
 Backlog is reconsidered, not blindly FIFO. A carried-over finding may resolve,
 become report-only, or fall below newer evidence. Preserve its history and show
 why its state changed.
 
-`scoreVisibilityGap` may seed the internal ordering because it combines verdict,
+`scoreVisibilityGap` may seed the proposal ordering because it combines verdict,
 cross-engine agreement, commercial intent and rivals named. It is hand-weighted,
 so never present its integer as a scientific customer score. Show the evidence
 reason instead: “absent from 4 of 4 answers; three rivals named.”
@@ -377,7 +387,7 @@ reason instead: “absent from 4 of 4 answers; three rivals named.”
 
 The selected actions define the delivery boundary:
 
-1. select up to eight actions
+1. the customer confirms up to eight grouped actions
 2. group only those selected actions for useful internal linking
 3. freeze slugs, target URLs and links for that selected batch
 4. create `planned_articles` rows and writer contracts
@@ -393,8 +403,9 @@ has a durable opportunity row even when it is not selected for production.
 
 ### 4.5 Deliver one batch
 
-Everything completed in the cycle becomes visible in FlipAEO together, with
-export and a recommended publishing order.
+Everything completed in the cycle remains withheld until a founder reviews the
+whole batch during the founding beta. One explicit approval then makes it
+visible in FlipAEO together, with export and a recommended publishing order.
 
 WordPress behaviour must be described precisely:
 
@@ -426,10 +437,10 @@ and the observation window has elapsed. Never invent work to fill eight slots.
 
 | Type | When | Production slot | Launch status |
 |---|---|---:|---|
-| **create** | customer explicitly says no suitable page exists | 1 | existing writer path, after selected-batch refactor |
-| **refresh** | customer supplies the page meant to win and it still loses | 1 | founder-assisted initially; automation not yet built |
-| **report-only** | publishing owned content is not the appropriate remedy | 0 | requires reliable classification or founder review |
-| **unknown** | coverage or citation type is unresolved | 0 | ask or review; never assume “create” |
+| **create** | citation evidence permits owned content and no existing page survives the strong sitemap match | 1 | full evidence-bound article |
+| **refresh** | citation evidence permits owned content and one existing page survives the strong sitemap match | 1 | full replacement for editorial/blog pages; section patch for product, feature and comparison pages |
+| **report-only** | stored citations point to earned placement or third-party reference material | 0 | shown with its measured questions; cannot be selected as content |
+| **unknown** | citation type remains unresolved | 0 | founder review; never assume “create” |
 
 ### 5.1 Content-solvable classification
 
@@ -467,34 +478,31 @@ unreviewed findings remain report-only/unknown and never enter production merely
 to keep the batch full. This manual safety valve prevents the classifier from
 becoming another months-long pre-revenue project while preserving honesty.
 
-### 5.2 Target URLs belong on the report
+### 5.2 Target URLs come from a reviewable site inventory
 
-Do not ask for a URL beside every question during onboarding. Before the customer
-has seen a result, that is maximum friction with minimum motivation and directly
-contradicts `ROADMAP.md` §1.
+Do not ask for a URL beside every question during onboarding. After measurement,
+crawl the site's bounded same-host sitemap and freeze the exact URLs, titles and
+page excerpts used by planning. Match against that inventory conservatively.
 
-After a question loses, ask on its report row:
+- strong match → propose refresh against the exact canonical URL
+- no strong match → propose create, but say only that no supported match was
+  found in the bounded inventory
+- truncated or failed crawl → expose that limitation and keep the measurement
+  safe for a zero-credit planning retry
+- delivered create without a confirmed publication URL → require publication
+  input; never propose a second create
 
-> Do you already have a page meant to answer this question?
-
-- URL supplied → `coverage_state = has_page`, save `target_url`, classify refresh
-- explicit “no” → `coverage_state = no_page`, classify create
-- skipped → `coverage_state = unknown`, make no coverage claim and do not
-  automatically produce a new page
-
-Ask first on the highest-priority candidates rather than forcing answers for all
-40. Stored citations allow the URL to be matched retroactively at zero probe
-cost.
-
-Do not reintroduce the partial full-site coverage scanner. Sampling 150 pages of
-a large site cannot support a confident “you have no page” claim.
+This is not permission to claim complete site coverage. The inventory records
+its bound and truncation status, and the customer confirms the grouped result
+before anything enters production.
 
 ### 5.3 Refresh scope
 
-Target-page input solves the classification dependency; it does not magically
-build the refresh writer. For initial customers, a supplied page can be fetched
-and the revised draft can be founder-assisted. Do not market automated refreshing
-until the single-page analysis and rewrite path has been built and verified.
+The inventory solves target identification; it does not make every page type the
+same deliverable. Editorial/blog pages receive a complete replacement draft.
+Product, feature and comparison pages receive a section patch so the product is
+not accidentally replaced by a blog article. Both remain founder-reviewed in the
+founding beta and must never be sent to WordPress as a new post at the target URL.
 
 Track how often paid findings have an existing target URL. That rate is the build
 trigger for automated refresh—not intuition alone.
@@ -569,6 +577,53 @@ identifying the stage that actually failed.
 Each migration is new and forward-only. Do not edit applied migrations.
 
 ### Phase status
+
+**2026-08-17 production correction — implemented in the repository; deployment
+and a fresh paid-run validation remain open.** The completed BringBack run showed
+that the old Phase 5/6 bridge could conserve measured questions yet still turn
+near-duplicate questions into duplicate articles, classify coverage from manual
+per-question input, and auto-select work the customer had never confirmed. That
+is not the launch product.
+
+The correction has five boundaries:
+
+1. `VisibilitySummaryV2` derives question and answer outcomes separately from
+   stored facts. It exposes directly checkable equations plus two distinct
+   competitor views: natural names (prompt-induced mentions excluded) and cited
+   tracked domains (prompt-induced citations retained). Exactly four confirmed
+   competitors disables discovery.
+2. `subscription.renewed` is the only event that can mint a billing-period cycle.
+   Dodo's exact start/end timestamps are required; payment events record money
+   but create no capacity. `begin_subscription_cycle_measurement` atomically
+   claims one current paid cycle and one 40-question run.
+3. A completed run freezes an immutable sitemap inventory, binds every question
+   to evidenced capability mechanics, conservatively classifies citation remedy,
+   and builds grouped `action_proposals`. The legacy visibility cluster/article
+   adapter now persists no commercial cluster or article rows.
+4. `/content-plan` shows the grouped source questions and target-page evidence.
+   The customer confirms up to eight create/refresh proposals. One authenticated
+   transaction freezes only those proposals into cycle actions and output
+   contracts; extras remain counted backlog. Report-only/founder-review cards
+   consume no production slot.
+5. Create outputs are full articles. Blog refreshes are full-page replacements;
+   product, feature and comparison refreshes are section patches. Completion
+   stops at `ready`; only the founder batch-approval surface can release the
+   complete batch during beta.
+
+The forward migrations, in required order, are:
+
+1. `20260817_bind_subscription_cycle_measurement.sql`
+2. `20260817_grouped_action_proposals.sql`
+3. `20260817_confirm_grouped_action_proposals.sql`
+
+They must be deployed with the matching application code. Applying the prompt
+binding wrapper before deploying its caller would make the old caller invalid.
+The historical BringBack audit stays immutable; validate the correction with a
+fresh run after deployment.
+
+Repository verification at this checkpoint: TypeScript is clean and all 120
+pivot contracts pass. This proves the local contracts, not the deployed Dodo →
+Supabase → Trigger.dev → Cloro → generation journey.
 
 **0a completed 2026-08-16.** The buyer-question generator was exercised through
 the real authenticated onboarding flow against FlipAEO at the launch contract
@@ -693,6 +748,10 @@ state. A target confirmed after a delivered create survives future
 reconciliation as refresh, preventing another create for the same durable
 question. The hosted migration was applied successfully before Phase 6 began.
 
+The per-question dashboard control described above was removed by the
+2026-08-17 correction. Its stored state remains historical; the site-inventory
+proposal review is now the only customer confirmation surface.
+
 **Phase 6 deployed 2026-08-16.** The forward-only
 `20260816_cycle_action_selection.sql` migration adds one service-role-only,
 atomic selection boundary. It considers only open create/refresh opportunities
@@ -714,6 +773,11 @@ a singleton batch. A clean same-host HTTPS publication pattern is frozen for
 create URLs, and replay returns the already selected batch instead of selecting
 again. The hosted migration was applied successfully before Phase 7 began.
 
+This automatic selector and the visibility cluster adapter are superseded by
+the 2026-08-17 grouped-proposal confirmation transaction. That migration drops
+the old selector and per-question target-triage functions after replacing their
+production responsibility; neither has an active application caller.
+
 **Phase 7 deployed 2026-08-16.** The forward-only
 `20260816_phase7_batch_delivery.sql` migration makes action claiming explicitly
 create-only, adds an audited founder-assisted refresh completion boundary, and
@@ -725,8 +789,9 @@ draft; required selected-graph links are validated before it becomes ready.
 Refresh outputs are blocked from WordPress post creation so the system cannot
 silently create a second page at the target slug.
 
-The last ready writer or refresh completion attempts one serialized release.
-Before that transaction, generated articles remain hidden by RLS. After release,
+The last ready writer or refresh completion now stops the cycle at `ready`.
+Generated articles remain hidden by RLS until the founder approves the complete
+batch. After that serialized release,
 the customer can review and safely edit each draft, download the complete cycle
 as one ZIP containing Markdown, HTML and a manifest, optionally create WordPress
 drafts for create actions, or confirm that a refresh was applied to its existing
@@ -773,8 +838,9 @@ The required sandbox configuration is:
    of the 11-credit production pair (440 credits total). Browser requests cannot
    choose their own engines. This one-engine result proves orchestration only;
    it is not a customer baseline. Remove the variable before live billing.
-6. Complete checkout → activation → paid probe → triage → action selection →
-   generation/founder refresh → atomic batch release. Keep production payments
+6. Complete checkout → activation → paid probe → sitemap inventory → grouped
+   customer confirmation → generation/founder refresh → founder-approved atomic
+   batch release. Keep production payments
    closed until the whole journey passes.
 
 Live verification on 2026-08-16 confirmed that customer evidence now redirects
@@ -829,10 +895,10 @@ remain readable.
 | 2 ✅ | Add `content_opportunities`, `subscription_cycles`, `cycle_actions` and their junction; link generated outputs to actions | Migration applied successfully 2026-08-16 |
 | 3 ✅ | Remove finite-program purchase intent, cluster scheduling, auto-cancel and fixed-audit ownership; re-home cost/link/claim/delivery foreign keys; rewrite billing grants to authorise one cycle | Migration applied successfully 2026-08-16 |
 | 4 ✅ | Implement per-cycle reconciliation and contract tests | Migration applied successfully 2026-08-16 |
-| 5 ✅ | Put target-page triage on losing report rows; add explicit unknown/no-page/has-page states | Migration applied successfully 2026-08-16 |
-| 6 ✅ | Rank eligible actions, select at most eight, then freeze the selected-only link graph | Migration applied successfully 2026-08-16 |
-| 7 ✅ | Generate/QA selected create actions, support founder-assisted refreshes, and release one in-app/exportable batch; optionally push the batch to WordPress drafts | Migration applied successfully 2026-08-16; live generation remains part of the Phase 8 sandbox journey |
-| 8 ◐ | Implement the one-plan checkout and explicit introductory price phases; run a full sandbox payment-to-batch test | Code-complete; restrict the Dodo discount, re-run the repaired checkout migration, deploy the 160-credit one-engine sandbox configuration, and pass the sandbox journey before enabling revenue |
+| 5 ↺ | Retain explicit coverage history but replace per-question triage with immutable sitemap inventory and grouped review | Replacement code/migration ready 2026-08-17; deployment open |
+| 6 ↺ | Replace automatic ranking/cluster selection with customer-confirmed grouped proposals, capped at eight | Replacement code/migration ready 2026-08-17; deployment open |
+| 7 ↺ | Generate/QA full articles, full-page replacements or section patches, then stop at a founder release gate | Replacement code/migration ready 2026-08-17; fresh-run validation open |
+| 8 ◐ | Keep the one-plan checkout and introductory price phases; validate checkout through the corrected payment-to-batch path | Checkout configuration complete; deploy the three 2026-08-17 migrations with code and pass a fresh sandbox journey before enabling revenue |
 | 9 | Enable checkout and fulfil the first customers with founder oversight | Learn before automating edge cases |
 | 10 | Add the automated renewal scheduler and retry/alerting path | Required before the first customer's second billing period |
 

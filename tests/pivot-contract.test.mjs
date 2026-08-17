@@ -29,12 +29,237 @@ import {
     truncationReason,
 } from "../lib/writer/draft-quality.ts"
 import { isEvidenceQuoteSupported, isKnownCompetitorUrl } from "../lib/writer/research-evidence.ts"
+import { deriveVisibilitySummaryV2 } from "../lib/visibility/visibility-summary.ts"
+import {
+    BillingPeriodError,
+    resolveBillingPeriod,
+} from "../lib/harvest/billing-period.ts"
+import { bindPromptCapability } from "../lib/visibility/capability-binding.ts"
+import { matchExistingPage } from "../lib/visibility/site-coverage-match.ts"
+import { assessPromptRemedy } from "../lib/visibility/prompt-remedy.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const text = (relativePath) => readFile(path.join(root, relativePath), "utf8")
 
 const ONBOARDING_ROUTE = "app/(onboarding)/onboarding/page.tsx"
 const ONBOARDING_STEPS_DIR = "components/onboarding/steps"
+
+test("visibility summary keeps question and answer math exact", () => {
+    const competitors = [
+        { id: "a", name: "Kinpict", domain: "kinpict.com" },
+        { id: "b", name: "Photomyne", domain: "photomyne.com" },
+        { id: "c", name: "MyHeritage", domain: "myheritage.com" },
+        { id: "d", name: "Remini", domain: "remini.ai" },
+    ]
+    const prompts = Array.from({ length: 40 }, (_, index) => ({
+        id: `q${index + 1}`,
+        prompt:
+            index === 0
+                ? "Is Kinpict a good option?"
+                : index === 2
+                  ? "How does Kinpict compare?"
+                  : index === 3
+                    ? "Is Photomyne suitable?"
+                    : `Photo restoration question ${index + 1}`,
+    }))
+    const competitorEvidence = new Map([
+        ["q1", ["a", 3, 1]],
+        ["q3", ["a", 2, 1]],
+        ["q4", ["b", 3, 1]],
+        ["q6", ["b", 2, 0]],
+        ["q7", ["c", 2, 0]],
+        ["q8", ["c", 2, 0]],
+    ])
+    const results = prompts.map((prompt, index) => {
+        const number = index + 1
+        const named = number <= 4
+        const cited = number === 1 || number === 2 || number === 3 || number === 5
+        const evidence = competitorEvidence.get(prompt.id)
+        const competitor = evidence
+            ? competitors.find((candidate) => candidate.id === evidence[0])
+            : null
+        return {
+            promptId: prompt.id,
+            mentionCount: named ? 1 : 0,
+            citationCount: cited ? 1 : 0,
+            mentionPosition: named ? (number <= 2 ? 1 : 2) : null,
+            competitorMentions: competitor
+                ? [
+                      {
+                          competitorId: competitor.id,
+                          name: competitor.name,
+                          domain: competitor.domain,
+                          citationCount: evidence[1],
+                          mentionCount: evidence[2],
+                          mentionPosition: evidence[2] ? 1 : null,
+                      },
+                  ]
+                : [],
+        }
+    })
+
+    const summary = deriveVisibilitySummaryV2({ prompts, results, competitors })
+
+    assert.deepEqual(summary.brandVisibility, {
+        questionsTotal: 40,
+        answersTotal: 40,
+        namedAnswers: 4,
+        citedAnswers: 4,
+        namedAndCitedAnswers: 3,
+        namedOnlyAnswers: 1,
+        citedOnlyAnswers: 1,
+        neitherAnswers: 35,
+        ledQuestions: 2,
+        namedNeverFirstQuestions: 2,
+        notNamedQuestions: 36,
+    })
+    assert.equal(summary.competitorVisibility.citationOccurrences, 14)
+    assert.equal(summary.competitorVisibility.citedCompetitorCount, 3)
+    assert.equal(summary.competitorVisibility.citingAnswers, 6)
+    assert.equal(summary.competitorVisibility.citingQuestions, 6)
+    assert.equal(
+        summary.competitorVisibility.competitorCitedBrandNotCitedQuestions,
+        4,
+    )
+    assert.equal(
+        summary.competitorVisibility.competitorCitedBrandNotNamedQuestions,
+        3,
+    )
+    assert.equal(summary.competitorVisibility.promptInducedNamedAnswersExcluded, 3)
+    assert.ok(
+        summary.competitorVisibility.namedRows.every((row) => row.namedAnswers === 0),
+    )
+})
+
+test("billing cycles use Dodo renewal boundaries without synthetic 30-day math", () => {
+    assert.deepEqual(
+        resolveBillingPeriod({
+            previous_billing_date: "2026-08-17T02:10:48.134498Z",
+            next_billing_date: "2026-09-17T02:11:01.973347Z",
+        }),
+        {
+            start: "2026-08-17T02:10:48.134Z",
+            end: "2026-09-17T02:11:01.973Z",
+        },
+    )
+    assert.deepEqual(
+        resolveBillingPeriod({
+            current_period_start: "2028-02-29T12:00:00Z",
+            current_period_end: "2028-03-29T12:00:00Z",
+        }),
+        {
+            start: "2028-02-29T12:00:00.000Z",
+            end: "2028-03-29T12:00:00.000Z",
+        },
+    )
+    assert.throws(
+        () => resolveBillingPeriod({ next_billing_date: "2026-09-17T00:00:00Z" }),
+        BillingPeriodError,
+    )
+    assert.throws(
+        () =>
+            resolveBillingPeriod({
+                previous_billing_date: "2026-09-17T00:00:00Z",
+                next_billing_date: "2026-08-17T00:00:00Z",
+            }),
+        BillingPeriodError,
+    )
+})
+
+test("site-aware planning refreshes a supported page and refuses category-only overlap", () => {
+    const pages = [
+        {
+            canonicalUrl: "https://bringback.pro/features/old-photo-restoration",
+            title: "Restore Old Photos Online",
+            titleSource: "html_title",
+            pageKind: "feature",
+            contentExcerpt:
+                "Repair scratches, restore faded family photographs, and colorize damaged images.",
+            fetchStatus: "fetched",
+        },
+        {
+            canonicalUrl: "https://bringback.pro/pricing",
+            title: "Pricing",
+            titleSource: "html_title",
+            pageKind: "other",
+            contentExcerpt: "Photo restoration plans and credits for every account.",
+            fetchStatus: "fetched",
+        },
+    ]
+    const match = matchExistingPage(
+        "How can I restore an old damaged family photo online?",
+        pages,
+    )
+    assert.equal(match?.page.canonicalUrl, pages[0].canonicalUrl)
+    assert.equal(
+        matchExistingPage("Which account has the lowest monthly price?", pages),
+        null,
+    )
+})
+
+test("capability binding rejects ambiguous claims and repairs malformed customer jobs", () => {
+    const contract = {
+        version: "capability-v1",
+        deliveryMode: "Web application",
+        mechanicsSource: "extracted",
+        facts: [
+            { id: "f1", url: "https://bringback.pro/restore", quote: "Restore old photos" },
+        ],
+        operations: [
+            {
+                key: "restore",
+                customerJob: "maki",
+                inputs: ["damaged photo"],
+                action: "Repairs scratches and fading",
+                outputs: ["restored photo"],
+                limits: [],
+                evidenceRefs: ["f1"],
+            },
+        ],
+    }
+    const result = bindPromptCapability({
+        scopeFamilyId: "family-1",
+        prompt: "How do I repair scratches on a damaged old photo?",
+        sourceSeed: "old photo restoration",
+        contract,
+    })
+    assert.equal(result.binding.operationKey, "restore")
+    assert.equal(result.binding.solutionMode, "product_led")
+    assert.equal(result.customerJob, "Repairs scratches and fading to produce restored photo")
+    assert.deepEqual(result.capabilityFactIds, ["f1"])
+})
+
+test("citation evidence cannot be laundered into filler article production", () => {
+    const context = {
+        subjectDomains: ["bringback.pro"],
+        competitorDomains: ["kinpict.com"],
+    }
+    assert.equal(
+        assessPromptRemedy({
+            ...context,
+            citations: [{ url: "https://example.com/best-photo-restoration-tools" }],
+        }).kind,
+        "report_only",
+    )
+    assert.equal(
+        assessPromptRemedy({
+            ...context,
+            citations: [{ url: "https://unknown.example/something" }],
+        }).kind,
+        "founder_review",
+    )
+    assert.equal(
+        assessPromptRemedy({
+            ...context,
+            citations: [{ url: "https://kinpict.com/restore-old-photos" }],
+        }).kind,
+        "content",
+    )
+    assert.equal(
+        assessPromptRemedy({ ...context, citations: [] }).kind,
+        "content",
+    )
+})
 
 /**
  * The whole onboarding surface: the route plus every step screen it renders.
@@ -3118,26 +3343,41 @@ test("database migration encodes immutable audit, graph, billing, claim, and del
 })
 
 test("webhook and scheduler preserve recurring cycle lifecycle semantics", async () => {
-    const [webhook, scheduler, billing, migration] = await Promise.all([
+    const [webhook, scheduler, billing, migration, binding, approval] = await Promise.all([
         text("app/api/dodopayments/webhook/route.ts"),
         text("trigger/ship-cycle.ts"),
         text("lib/harvest/billing-lifecycle.ts"),
         text("supabase/migrations/20260816_recurring_commercial_state.sql"),
+        text("supabase/migrations/20260817_bind_subscription_cycle_measurement.sql"),
+        text("app/api/founder/delivery-batches/approve/route.ts"),
     ])
     const updatedBlock = webhook.slice(webhook.indexOf("subscription.updated"))
     assert.doesNotMatch(updatedBlock, /ensureBillingCycle/)
     assert.doesNotMatch(updatedBlock, /scheduled_for/)
     assert.match(webhook, /ensureProgramForSubscription/)
     assert.match(webhook, /ensureBillingCycle/)
+    const renewalBlock = webhook.slice(
+        webhook.indexOf("eventType === 'subscription.renewed'"),
+        webhook.indexOf("eventType === 'payment.succeeded'"),
+    )
+    const paymentBlock = webhook.slice(
+        webhook.indexOf("eventType === 'payment.succeeded'"),
+        webhook.indexOf("eventType === 'subscription.cancelled'"),
+    )
+    assert.match(renewalBlock, /ensureBillingCycle/)
+    assert.doesNotMatch(paymentBlock, /ensureBillingCycle|grant_subscription_period/)
     assert.doesNotMatch(webhook, /purchase_intent|scope_status|pending_tier/)
     assert.match(scheduler, /cron:\s*"0 \* \* \* \*"/)
     assert.match(scheduler, /queue:\s*\{\s*concurrencyLimit:\s*1\s*\}/)
     assert.match(scheduler, /claim_cycle_action/)
-    assert.match(scheduler, /deliver_subscription_cycle/)
+    assert.doesNotMatch(scheduler, /deliver_subscription_cycle/)
+    assert.match(approval, /deliver_subscription_cycle/)
+    assert.match(approval, /isFounderUser/)
     assert.match(scheduler, /idempotencyKey:\s*`\$\{cycleId\}:\$\{actionId\}:\$\{retryCount\}`/)
     assert.match(scheduler, /generation_lease_expired/)
     assert.doesNotMatch(scheduler, /consume_program_credit|program_clusters|deliver_program_cluster/)
     assert.match(billing, /grant_subscription_period/)
+    assert.doesNotMatch(billing, /30 \* 24|eventTimestamp/)
     assert.doesNotMatch(billing, /cancel_at_next_billing_date|autoCancel|DodoPayments/)
 
     for (const invariant of [
@@ -3155,6 +3395,12 @@ test("webhook and scheduler preserve recurring cycle lifecycle semantics", async
     assert.match(migration, /action_allowance INTEGER NOT NULL DEFAULT 8/)
     assert.match(migration, /Every selected action must be ready before batch delivery/)
     assert.doesNotMatch(migration, /cancel_at_next_billing_date:\s*true/)
+    assert.match(binding, /begin_subscription_cycle_measurement/)
+    assert.match(binding, /FOR UPDATE OF cycle_row/)
+    assert.match(binding, /measurement_run_id = v_run_id/)
+    assert.match(binding, /state = 'measuring'/)
+    assert.match(binding, /state = 'awaiting_input'/)
+    assert.match(binding, /FROM PUBLIC, anon, authenticated/)
 })
 
 test("retired jobs and unsupported public surfaces cannot remain active", async () => {
@@ -3816,23 +4062,25 @@ test("AI-answer gaps are evidential, not scored into existence", async () => {
     assert.match(migration, /'autocomplete', 'paa', 'competitor_sitemap', 'ai_answer'/)
 })
 
-test("visibility gaps reuse the harvest clusterer rather than forking it", async () => {
-    // The entire argument for this design is that a gap is a gap: the clusterer
-    // does not care whether it came from a SERP or from ChatGPT declining to
-    // name you. A second clustering implementation would be two definitions of
-    // "cluster" drifting apart, which is how the plan and the report stop
-    // agreeing about what was sold.
-    const probe = await text("lib/visibility/run-probe.ts")
+test("visibility gaps become site-aware proposals, never legacy clusters", async () => {
+    const [probe, planner, matcher] = await Promise.all([
+        text("lib/visibility/run-probe.ts"),
+        text("lib/visibility/action-proposal-planner.ts"),
+        text("lib/visibility/site-coverage-match.ts"),
+    ])
 
-    assert.match(probe, /from "@\/lib\/harvest\/clusterer"/)
-    assert.match(probe, /collapseToArticles/)
-    assert.match(probe, /groupIntoClusters/)
-    assert.match(probe, /absorbOrphanedUnits/)
-    assert.match(probe, /titleArticles/)
-    assert.match(probe, /nameClusters/)
+    // Measurement freezes evidence first. Commercial actions are proposed only
+    // after the run completes and after the customer's current site is checked.
+    assert.match(probe, /buildActionProposalsForRun/)
+    assert.match(probe, /const clusters: ArticleCluster\[\] = \[\]/)
+    assert.doesNotMatch(probe, /from "@\/lib\/harvest\/clusterer"/)
+    assert.doesNotMatch(probe, /freezeArticleContracts|collapseToArticles|groupIntoClusters/)
+    assert.match(planner, /syncSiteInventory/)
+    assert.match(planner, /matchExistingPage/)
 
-    // No local re-implementation of grouping.
-    assert.doesNotMatch(probe, /function (collapse|group)[A-Za-z]*\(/)
+    // Category overlap alone is never enough evidence to overwrite a page.
+    assert.match(matcher, /best\.titleShared >= 2 && best\.confidence >= 0\.5/)
+    assert.match(matcher, /best\.titleShared >= 1 && best\.bodyShared >= 4/)
 })
 
 test("visibility measures the consumer surface, never silently the API", async () => {
@@ -4480,175 +4728,97 @@ test("each observed tracked question reconciles one replay-safe opportunity", as
     )
 })
 
-test("target-page triage is explicit, atomic, and cannot create duplicate work", async () => {
-    const [migration, route, dashboard, triage, ownerPage, publicPage] = await Promise.all([
-        text("supabase/migrations/20260816_target_page_triage.sql"),
-        text("app/api/visibility/opportunities/target-page/route.ts"),
+test("legacy per-question target triage and automatic selection have no active surface", async () => {
+    const [replacement, dashboard, ownerPage, publicPage] = await Promise.all([
+        text("supabase/migrations/20260817_confirm_grouped_action_proposals.sql"),
         text("components/visibility/visibility-dashboard.tsx"),
-        text("components/visibility/target-page-triage.tsx"),
         text("app/(protected)/visibility/page.tsx"),
         text("app/visibility/[runId]/page.tsx"),
     ])
 
-    const { normalizeHttpsTargetUrl } = await import("../lib/visibility/target-page.ts")
-    assert.equal(normalizeHttpsTargetUrl("http://brand.example/page"), null)
-    assert.equal(normalizeHttpsTargetUrl("not a URL"), null)
-    assert.equal(
-        normalizeHttpsTargetUrl(" https://brand.example/page#section "),
-        "https://brand.example/page",
-    )
-
-    // The authenticated RPC owns both writes in one transaction. Browser input
-    // cannot mutate opportunity state directly or claim a third-party URL.
-    assert.match(route, /auth\.getUser\(\)/)
-    assert.match(route, /triage_content_opportunity_target/)
-    assert.doesNotMatch(route, /\.from\("tracked_prompts"\)[\s\S]*\.update\(/)
-    assert.match(migration, /UPDATE public\.tracked_prompts/)
-    assert.match(migration, /UPDATE public\.content_opportunities/)
-    assert.match(migration, /p_coverage_state NOT IN \('unknown', 'no_page', 'has_page'\)/)
-    assert.match(migration, /valid HTTPS URL/)
-    assert.match(migration, /target page must belong to the measured website/)
-    assert.match(migration, /pg_advisory_xact_lock/)
+    // The replacement migration removes the privileged legacy functions after
+    // grouped, customer-confirmed proposals take ownership of production work.
     assert.match(
-        migration,
-        /GRANT EXECUTE ON FUNCTION public\.triage_content_opportunity_target\(UUID, TEXT, TEXT\)[\s\S]*TO authenticated/,
+        replacement,
+        /DROP FUNCTION IF EXISTS public\.select_subscription_cycle_actions\(UUID, TEXT\)/,
     )
-
-    // Unknown selects no production. no_page creates only when a create draft
-    // has never been delivered; has_page is refresh against its one saved URL.
-    assert.match(migration, /p_coverage_state = 'has_page'[\s\S]{0,180}v_resolution := 'refresh'/)
     assert.match(
-        migration,
-        /p_coverage_state = 'no_page' AND NOT v_delivered_create[\s\S]{0,180}v_resolution := 'create'/,
+        replacement,
+        /DROP FUNCTION IF EXISTS public\.triage_content_opportunity_target\(UUID, TEXT, TEXT\)/,
     )
-    assert.match(migration, /v_state := 'needs_input'[\s\S]{0,100}v_resolution := 'unknown'/)
-    assert.match(migration, /action_row\.resolution_type = 'create'/)
-    assert.match(migration, /the honest next action is publication, not a[\s\S]*second draft/)
 
-    // A target supplied after a delivered create survives the next measurement:
-    // the Phase 4 conservative needs_input state is corrected to refresh, never
-    // reopened as another create.
-    assert.match(migration, /apply_confirmed_target_to_opportunity/)
-    assert.match(migration, /NEW\.state <> 'needs_input'/)
-    assert.match(migration, /v_tracked\.coverage_state = 'has_page'/)
-    assert.match(migration, /NEW\.resolution_type := 'refresh'/)
-
-    // Existing completed measurements are backfilled without overwriting rows
-    // already reconciled by the live worker.
-    assert.match(migration, /WITH latest_observation AS/)
-    assert.match(migration, /prompt_row\.answers_total > 0/)
-    assert.match(migration, /ON CONFLICT \(brand_id, tracked_prompt_id\) DO NOTHING/)
-
-    // Only the owner dashboard loads mutable target state. The public evidence
-    // report stays read-only even when its viewer happens to be logged in.
-    assert.match(ownerPage, /from\("content_opportunities"\)/)
-    assert.match(ownerPage, /coverage_state, target_url/)
-    assert.match(ownerPage, /targetPage/)
+    // Neither the authenticated report nor the public redirect loads or exposes
+    // mutable per-question triage state. The visibility report is evidence only.
+    assert.doesNotMatch(ownerPage, /content_opportunities|coverage_state|targetPage/)
     assert.doesNotMatch(publicPage, /content_opportunities|coverage_state|targetPage/)
+    assert.doesNotMatch(dashboard, /TargetPageDecision|TargetPageTriage|targetPage/)
 
-    assert.match(triage, /Do you already have a page meant to answer this question\?/)
-    assert.match(triage, /Yes, an existing page/)
-    assert.match(triage, /No suitable page/)
-    assert.match(triage, /I’m not sure yet/)
-    assert.match(triage, /skipping selects nothing/)
-    assert.match(dashboard, /b\.targetPage\?\.priority/)
-    assert.doesNotMatch(triage, /Math\.round\(decision\.priority\)/)
+    await Promise.all([
+        assert.rejects(
+            () => text("app/api/visibility/opportunities/target-page/route.ts"),
+            (error) => error?.code === "ENOENT",
+        ),
+        assert.rejects(
+            () => text("components/visibility/target-page-triage.tsx"),
+            (error) => error?.code === "ENOENT",
+        ),
+        assert.rejects(
+            () => text("lib/subscription/action-selection.ts"),
+            (error) => error?.code === "ENOENT",
+        ),
+    ])
 })
 
-test("cycle selection ranks real eligible work and freezes only the selected batch", async () => {
-    const [migration, selector, probe, auditAction, publicAudit, dryRun] =
+test("customers confirm grouped site-aware work and only that batch is frozen", async () => {
+    const [migration, schema, planner, review, confirmRoute, auditAction, publicAudit, dryRun] =
         await Promise.all([
-            text("supabase/migrations/20260816_cycle_action_selection.sql"),
-            text("lib/subscription/action-selection.ts"),
-            text("lib/visibility/run-probe.ts"),
+            text("supabase/migrations/20260817_confirm_grouped_action_proposals.sql"),
+            text("supabase/migrations/20260817_grouped_action_proposals.sql"),
+            text("lib/visibility/action-proposal-planner.ts"),
+            text("components/program/ActionProposalReview.tsx"),
+            text("app/api/visibility/action-proposals/confirm/route.ts"),
             text("actions/harvest.ts"),
             text("app/audit/[token]/page.tsx"),
             text("app/api/writer/dry-run/route.ts"),
         ])
 
-    // The legacy Google-audit cluster floor remains intact, but visibility's
-    // adapter conserves every collapsed unit as a legitimate one-action group.
-    assert.match(probe, /absorbed\.unsold\.map/)
-    assert.match(probe, /legitimate one-action group/)
-    assert.match(probe, /const named = \[\.\.\.namedClusters, \.\.\.standaloneClusters\]/)
+    // The proposal layer has durable site inventory, grouped suggestions and a
+    // many-to-one prompt mapping. Nothing is selected by the planner itself.
+    assert.match(schema, /CREATE TABLE IF NOT EXISTS public\.site_inventory_pages/)
+    assert.match(schema, /CREATE TABLE IF NOT EXISTS public\.action_proposals/)
+    assert.match(schema, /CREATE TABLE IF NOT EXISTS public\.action_proposal_prompts/)
+    assert.match(schema, /UNIQUE \(inventory_run_id, canonical_url\)/)
+    assert.match(schema, /guard_action_proposal_ownership/)
+    assert.match(schema, /TG_TABLE_NAME = 'action_proposal_prompts'/)
+    assert.match(schema, /status TEXT NOT NULL DEFAULT 'suggested'/)
+    assert.doesNotMatch(planner, /status:\s*"confirmed"/)
+    assert.match(planner, /deliveredCreateOpportunityIds/)
+    assert.match(planner, /resolutionType:\s*"report_only"/)
 
-    // Selection is bound to one completed cycle measurement and serialized per
-    // brand. Unknown, report-only, monitoring, resolved and stale observations
-    // cannot enter the candidate set.
+    // Confirmation is authenticated, belongs to one completed measurement, and
+    // rejects more than the cycle's frozen allowance (8 at launch).
+    assert.match(confirmRoute, /confirm_action_proposals/)
+    assert.match(review, /actionable\.slice\(0, allowance\)/)
+    assert.match(review, /next\.size < allowance/)
     assert.match(migration, /v_cycle\.state <> 'awaiting_input'/)
-    assert.match(migration, /status = 'completed'/)
-    assert.match(migration, /pg_advisory_xact_lock/)
-    assert.match(migration, /opportunity\.state = 'open'/)
-    assert.match(migration, /opportunity\.resolution_type IN \('create', 'refresh'\)/)
-    assert.match(migration, /opportunity\.last_seen_run_id = v_run\.id/)
-    assert.match(migration, /tracked\.tracking_status = 'active'/)
-    assert.match(migration, /tracked\.coverage_state = 'no_page'/)
-    assert.match(migration, /tracked\.coverage_state = 'has_page'/)
+    assert.match(migration, /cardinality\(p_proposal_ids\) > v_cycle\.action_allowance/)
+    assert.match(migration, /v_backlog := GREATEST\(v_eligible - v_selected, 0\)/)
 
-    // A prior delivered create can never produce another create. In-flight or
-    // failed prior actions remain owned by their original cycle instead of
-    // being duplicated into a new billing period.
-    assert.match(migration, /prior_action\.state = 'delivered'/)
-    assert.match(migration, /prior_action\.resolution_type = 'create'/)
-    assert.match(migration, /pending_action\.state <> 'delivered'/)
-
-    // Compatible creates share the measured blueprint; compatible refreshes
-    // share one explicit target URL. The deterministic rank is evidence-first,
-    // capped by the frozen cycle allowance, and leftovers stay backlog.
-    assert.match(migration, /'refresh:' \|\| lower\(opportunity\.target_url\)/)
-    assert.match(migration, /'create:' \|\| COALESCE\(blueprint\.id::TEXT, opportunity\.id::TEXT\)/)
-    assert.match(migration, /highest_priority DESC/)
-    assert.match(migration, /action_rank <= v_cycle\.action_allowance/)
-    assert.match(migration, /v_backlog := GREATEST\(v_eligible - v_cycle\.action_allowance, 0\)/)
-    assert.match(migration, /eligible_action_groups = v_eligible/)
-    assert.match(migration, /backlog_action_groups = v_backlog/)
-    assert.match(migration, /'eligible_groups', COALESCE\(v_cycle\.eligible_action_groups, v_selected\)/)
-    assert.match(migration, /'backlog_groups', COALESCE\(v_cycle\.backlog_action_groups, 0\)/)
-    assert.doesNotMatch(migration, /selection_reason[^\n]*highest_priority/)
-
-    // Selection, junctions, cycle-specific output contracts and link edges all
-    // live inside one service-role transaction. A replay returns the frozen
-    // selection marker rather than ranking again.
-    assert.match(migration, /selection_completed_at IS NOT NULL/)
-    assert.match(migration, /'replayed', TRUE/)
+    // Only confirmed proposal ids become production rows. A grouped proposal
+    // remains one cycle action while retaining every measured prompt behind it.
     assert.match(migration, /INSERT INTO public\.cycle_actions/)
     assert.match(migration, /INSERT INTO public\.cycle_action_opportunities/)
-    assert.match(migration, /'cycle_output'/)
-    assert.match(migration, /'article-contract-v1'/)
-    assert.match(migration, /'cycle-selected-graph-v1'/)
-    assert.match(migration, /v_state := CASE WHEN v_selected = 0 THEN 'ready' ELSE 'producing' END/)
-    assert.match(
-        migration,
-        /GRANT EXECUTE ON FUNCTION public\.select_subscription_cycle_actions\(UUID, TEXT\)[\s\S]*TO service_role/,
-    )
-
-    // Every graph source and target is joined through cycle_actions from the
-    // same selected cycle. No edge query reads unselected opportunities or the
-    // old audit cluster graph, and zero edges are explicitly valid.
-    const graphBlock = migration.slice(
-        migration.indexOf("-- Every edge originates"),
-        migration.indexOf("v_state := CASE"),
-    )
-    assert.match(graphBlock, /target_action\.cycle_id = source_action\.cycle_id/)
-    assert.match(graphBlock, /source_action\.cycle_id = v_cycle\.id/)
-    assert.match(graphBlock, /Zero edges are valid for a one-action batch/)
-    assert.doesNotMatch(graphBlock, /content_opportunities|audit_clusters/)
+    assert.match(migration, /proposal_id, resolution_type/)
+    assert.match(migration, /WHERE proposal\.id = ANY\(p_proposal_ids\)/)
+    assert.match(migration, /deliverable_type/)
+    assert.match(migration, /A delivered create requires publication confirmation/)
+    assert.match(schema, /'full_page_replacement', 'section_patch'/)
 
     // Cycle outputs are production derivatives, not extra rows in the frozen
     // report. All audit-plan readers keep filtering to the immutable plan.
-    assert.match(migration, /record_kind IN \('audit_plan', 'cycle_output'\)/)
-    assert.match(migration, /NEW\.record_kind = 'cycle_output'/)
     for (const reader of [auditAction, publicAudit, dryRun]) {
         assert.match(reader, /\.is\("cycle_action_id", null\)/)
     }
-
-    assert.match(selector, /maxActions:\s*8/)
-    assert.match(selector, /select_subscription_cycle_actions/)
-    assert.match(selector, /eligibleGroups: Number\(row\.eligible_groups \?\? row\.selected\)/)
-    assert.match(selector, /backlogGroups: Number\(row\.backlog_groups \?\? 0\)/)
-    const publicationPattern = await text("lib/subscription/publication-pattern.ts")
-    assert.match(selector, /validatePublicationPattern\(pattern, subjectUrl\)/)
-    assert.match(publicationPattern, /trimmed\.split\("\{slug\}"\)\.length !== 2/)
 })
 
 test("phase seven delivers one complete create and assisted-refresh batch", async () => {
@@ -4666,6 +4836,8 @@ test("phase seven delivers one complete create and assisted-refresh batch", asyn
         draftApi,
         wordpress,
         sidebar,
+        founderGate,
+        batchApproval,
     ] = await Promise.all([
         text("supabase/migrations/20260816_phase7_batch_delivery.sql"),
         text("trigger/ship-cycle.ts"),
@@ -4680,6 +4852,8 @@ test("phase seven delivers one complete create and assisted-refresh batch", asyn
         text("app/api/articles/[id]/draft/route.ts"),
         text("app/api/wordpress/publish/route.ts"),
         text("components/dashboard/app-sidebar.tsx"),
+        text("supabase/migrations/20260817_confirm_grouped_action_proposals.sql"),
+        text("app/api/founder/delivery-batches/approve/route.ts"),
     ])
 
     // The automated writer owns create actions only. Refresh work stays selected
@@ -4699,19 +4873,22 @@ test("phase seven delivers one complete create and assisted-refresh batch", asyn
     assert.match(founderApi, /isFounderUser\(user\.id\)/)
     assert.match(founderApi, /complete_founder_assisted_refresh/)
     assert.match(sidebar, /\/founder\/refresh-actions/)
+    assert.match(sidebar, /\/founder\/delivery-batches/)
     assert.match(migration, /Refresh draft is missing frozen link/)
     assert.match(migration, /v_planned\.id,\s*NULL/)
     assert.match(wordpress, /refresh_requires_existing_page_update/)
     assert.match(articleList, /article\.resolutionType !== "refresh"/)
     assert.match(articleList, /Confirm update applied/)
 
-    // Whichever output finishes last attempts one serialized release. The old
-    // delivery RPC remains the single all-or-nothing visibility transaction.
+    // Output completion stops at ready. Only the founder approval endpoint
+    // invokes the all-or-nothing delivery transaction.
     assert.match(writer, /release_subscription_cycle_if_ready/)
     assert.match(writer, /slug:\s*persistedSlug/)
     assert.match(founderApi, /release_subscription_cycle_if_ready/)
-    assert.match(migration, /RETURN public\.deliver_subscription_cycle\(p_cycle_id\)/)
-    assert.match(migration, /state <> 'ready'/)
+    assert.doesNotMatch(founderGate, /RETURN public\.deliver_subscription_cycle/)
+    assert.match(founderGate, /SET state = 'ready'/)
+    assert.match(batchApproval, /deliver_subscription_cycle/)
+    assert.match(batchApproval, /isFounderUser/)
 
     // A delivered cycle is usable as one product batch: grouped in-app review,
     // one ZIP containing Markdown, HTML and a manifest, and no pre-release export.
@@ -4815,11 +4992,9 @@ test("a rival named as a word is still a rival", async () => {
     assert.match(parser, /function countProperNounOccurrences/)
     assert.match(parser, /charAt\(0\)\.toUpperCase\(\)/)
 
-    // "Outranked" requires having been named at all, so it is zero by
-    // arithmetic when the brand is absent everywhere. Rendering that as
-    // "0 questions where a rival is named ahead of you" inverts the finding.
-    assert.match(dashboard, /summary\.presentPromptCount \+ summary\.outrankedPromptCount === 0/)
-    assert.match(dashboard, /rivals named in answers you never appear in/)
+    // The dashboard delegates the two explicit competitor views to the
+    // arithmetic component instead of hiding a zero-row leaderboard.
+    assert.match(dashboard, /<VisibilityOverview/)
 })
 
 test("prompt generation is given context and a goal, never a form", async () => {
@@ -5271,12 +5446,12 @@ test("a probe measures the customer's market, not a default one", async () => {
     assert.doesNotMatch(profile, /target_language/)
 })
 
-test("a probe resolves its rivals before it asks anything", async () => {
-    const [probeRunner, parser, mapper, dashboard] = await Promise.all([
+test("a probe honors four confirmed rivals before it asks anything", async () => {
+    const [probeRunner, parser, mapper, overview] = await Promise.all([
         text("lib/visibility/run-probe.ts"),
         text("lib/visibility/answer-parser.ts"),
         text("lib/visibility/gap-mapper.ts"),
-        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-overview.tsx"),
     ])
 
     // Mentions are counted against the SUPPLIED list — there is no open-ended
@@ -5285,11 +5460,11 @@ test("a probe resolves its rivals before it asks anything", async () => {
     // list IS the rival column: empty list, no finding, ever.
     assert.match(parser, /competitors\.map\(/)
 
-    // So the list must be filled before answers are parsed. The harvest used to
-    // do this at its competitor_discovery phase; when onboarding stopped running
-    // the harvest, the only source left was whatever the customer typed.
+    // The confirmed list is frozen before answers are parsed. Four supplied
+    // competitors fill the policy slots, so discovery is intentionally skipped.
     assert.match(probeRunner, /ensureTrackedCompetitors/)
-    assert.match(probeRunner, /discoverCompetitors\(/)
+    assert.match(probeRunner, /const slots = HARVEST_POLICY\.maxCompetitors - supplied\.length/)
+    assert.match(probeRunner, /if \(slots <= 0\)/)
     // The customer's own names outrank discovery.
     assert.match(probeRunner, /mergeUserFirstCompetitors\(/)
     // Discovery must run before prompt building, so a generated prompt cannot
@@ -5300,11 +5475,10 @@ test("a probe resolves its rivals before it asks anything", async () => {
         "rivals must be resolved before prompts are built",
     )
 
-    // An empty leaderboard because discovery broke must never render as "nobody
-    // was named" — the same rule the engine ledger enforces one stage later.
+    // A tracked zero is rendered as a measured zero, not a missing section.
     assert.match(mapper, /competitorTracking\?:/)
-    assert.match(probeRunner, /discoveryFailed/)
-    assert.match(dashboard, /competitor discovery failed/)
+    assert.match(overview, /Zero tracked competitors were named naturally/)
+    assert.match(overview, /Who was cited instead/)
 })
 
 test("a failed probe never shows the customer an internal error", async () => {
@@ -5390,39 +5564,35 @@ test("a probe that dies closes the audit row it opened", async () => {
     assert.match(probeRunner, /no_visibility_gaps/)
 })
 
-test("probe clusters freeze article contracts and finalize into relational delivery tables", async () => {
-    const [assembly, probeRunner, migration] = await Promise.all([
-        text("lib/harvest/assembly.ts"),
+test("probe finalizes immutable evidence before proposing commercial work", async () => {
+    const [probeRunner, planner, migration] = await Promise.all([
         text("lib/visibility/run-probe.ts"),
+        text("lib/visibility/action-proposal-planner.ts"),
         text("supabase/migrations/20260815_ai_visibility_probe.sql"),
     ])
 
-    // 1. freezeArticleContracts is exported and reusable across gap sources.
-    assert.match(assembly, /export function freezeArticleContracts/)
-
-    // 2. runVisibilityProbe calls freezeArticleContracts on clustered gaps.
-    assert.match(
-        probeRunner,
-        /import \{ freezeArticleContracts \} from "@\/lib\/harvest\/assembly"/,
-    )
-    assert.match(probeRunner, /freezeArticleContracts\(named, families, evidenceById/)
-
-    // 3. Probe finalization persists into topical_audits, query_pool, audit_clusters, and planned_articles.
+    // The probe persists the measured questions as evidence, with no legacy
+    // cluster/article rows pretending to be approved production work.
     assert.match(probeRunner, /supabase\.rpc\("finalize_audit_run"/)
     assert.match(probeRunner, /source:\s*"ai_answer"/)
-    assert.match(
-        probeRunner,
-        /contract_version:\s*article\.articleContract\?\.version \|\| "article-contract-v1"/,
-    )
+    assert.match(probeRunner, /clusterRows:\s*never\[\]\s*=\s*\[\]/)
+    assert.match(probeRunner, /articleRows:\s*never\[\]\s*=\s*\[\]/)
+    assert.doesNotMatch(probeRunner, /freezeArticleContracts/)
 
-    // 4. Migration allows 'ai_answer' in query_pool.source.
+    // Site inventory and proposal generation happen only after completed
+    // measurement, so planning can be retried without spending Cloro credits.
+    assert.match(probeRunner, /buildActionProposalsForRun/)
+    assert.match(planner, /run\.status !== "completed"/)
+    assert.match(planner, /syncSiteInventory/)
+
+    // The immutable evidence pool still records the ai_answer provenance.
     assert.match(
         migration,
         /CHECK \(source IN \('autocomplete', 'paa', 'competitor_sitemap', 'ai_answer'\)\)/,
     )
 })
 
-test("visibility dashboard renders actionable content program delivery CTA linking to content plan", async () => {
+test("visibility dashboard keeps evidence separate from confirmed delivery work", async () => {
     // This test used to assert that `/visibility/[runId]` selected
     // `audit_id, user_id, public_token` and that the dashboard offered a
     // "Claim Audit & Ship Articles" button to anonymous readers. Both were
@@ -5440,10 +5610,11 @@ test("visibility dashboard renders actionable content program delivery CTA linki
     assert.match(page, /\.eq\("user_id", user\.id\)/)
     assert.match(page, /auditId=\{run\.audit_id\}/)
 
-    // 2. Dashboard renders actionable delivery CTA with frozen contract guarantee.
-    assert.match(dashboard, /Turn these visibility gaps into ranking content/)
-    assert.match(dashboard, /View Delivery Program/)
-    assert.match(dashboard, /href=\{auditId \? `\/content-plan` : `\/onboarding`\}/)
+    // 2. A losing question is not sold as an article. The report links to the
+    // grouped confirmation surface without reviving legacy cluster output.
+    assert.match(dashboard, /A losing question is evidence about an AI answer/)
+    assert.match(dashboard, /Only confirmed grouped create\/refresh actions/)
+    assert.match(dashboard, /href="\/content-plan"/)
 })
 
 test("customer reports are never readable without authentication", async () => {

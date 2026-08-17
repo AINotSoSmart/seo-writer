@@ -1,12 +1,12 @@
 /**
- * Runs one AI-visibility probe end to end and clusters what it finds.
+ * Runs one AI-visibility probe end to end and preserves what it finds.
  *
  *     confirmed families
  *       -> buyer prompts        (prompt-builder.ts)
  *       -> answer engines       (engines.ts)
  *       -> counted facts        (answer-parser.ts)
  *       -> gaps                 (gap-mapper.ts)
- *       -> clusters             (lib/harvest/clusterer.ts, unchanged)
+ *       -> site-aware proposals (after the immutable measurement completes)
  *
  * The failure posture is inherited from `assembly.ts` and is the most important
  * thing in this file: **an engine that breaks must never be indistinguishable
@@ -17,26 +17,15 @@
  * this product can be.
  */
 
-import { randomUUID } from "crypto"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { discoverCompetitors } from "@/lib/audit/competitor-scanner"
 import { mergeUserFirstCompetitors } from "@/lib/audit/merge-competitors"
 import { failAuditRun } from "@/lib/audit/run-guards"
 import { HARVEST_POLICY } from "@/lib/harvest/policy"
 import { extractSearchPrefs } from "@/lib/tavily-search"
-import { generateEmbedding } from "@/lib/gemini-embedding"
 import { mapWithConcurrency } from "@/lib/harvest/types"
-import type { AuditScopeFamily, ScopedHarvestedQuery } from "@/lib/harvest/scope-classifier"
-import { freezeArticleContracts } from "@/lib/harvest/assembly"
-import {
-    collapseToArticles,
-    groupIntoClusters,
-    nameClusters,
-    splitOversized,
-    titleArticles,
-} from "@/lib/harvest/clusterer"
-import { absorbOrphanedUnits } from "@/lib/harvest/absorption"
-import type { ArticleCluster, ArticleUnit } from "@/lib/harvest/cluster-types"
+import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
+import type { ArticleCluster } from "@/lib/harvest/cluster-types"
 import {
     askApiEngine,
     cloroConfigured,
@@ -65,6 +54,8 @@ import {
     type ProbeFailureCode,
 } from "./failure-copy"
 import { reconcileContentOpportunities } from "./opportunity-reconciliation"
+import { deriveVisibilitySummaryV2 } from "./visibility-summary"
+import { buildActionProposalsForRun } from "./action-proposal-planner"
 
 /**
  * Cloro is a queue, not a synchronous API, so the run is two phases: submit
@@ -76,7 +67,6 @@ const SUBMIT_CONCURRENCY = 8
 const POLL_CONCURRENCY = 12
 /** API-surface fallback only — provider rate limits are much tighter. */
 const API_CONCURRENCY = 4
-const EMBEDDING_CONCURRENCY = 8
 
 export interface EngineLedgerEntry {
     engine: AiEngine
@@ -90,7 +80,6 @@ export interface EngineLedgerEntry {
     creditsUsed: number
     errors: string[]
 }
-
 export class ProbeError extends Error {
     constructor(
         message: string,
@@ -736,7 +725,23 @@ export async function runVisibilityProbe(
             )
         }
 
-        const summary = summariseRun([...outcomes.values()], prompts)
+        const summary = Object.assign(
+            summariseRun([...outcomes.values()], prompts),
+            deriveVisibilitySummaryV2({
+                prompts: prompts.map((prompt) => ({
+                    id: prompt.id,
+                    prompt: prompt.text,
+                })),
+                results: resultRows.map((result) => ({
+                    promptId: result.prompt_id,
+                    mentionCount: result.mention_count,
+                    citationCount: result.citation_count,
+                    mentionPosition: result.mention_position,
+                    competitorMentions: result.competitor_mentions,
+                })),
+                competitors,
+            }),
+        )
         // Attached here rather than inside summariseRun: it is a fact about how
         // the rival list was assembled, not about the answers. Without it an
         // empty leaderboard is unreadable — "nobody beat you" and "we had
@@ -749,56 +754,23 @@ export async function runVisibilityProbe(
             discoveryFailed: competitorTracking.discoveryFailed,
         }
 
-        // ── 5. Gaps → the existing clusterer with frozen contracts ────────
-        await report("clustering", `${summary.absentPromptCount + summary.outrankedPromptCount} losing prompts`)
+        // ── 5. Persist evidence; page-aware proposals are built only after
+        // the run is immutable. Legacy editorial clustering is intentionally
+        // absent: it was the source of duplicate, unreviewed article plans.
+        await report("freezing_evidence", `${summary.absentPromptCount + summary.outrankedPromptCount} losing prompts`)
 
-        const gaps = toGapItems(prompts, outcomes, runId)
-        const clusters = await clusterVisibilityGaps(gaps, families, {
-            subjectName: options.subjectName,
-            subjectType: options.subjectType,
+        const gaps = toGapItems(prompts, outcomes, runId, {
+            capabilityContracts: new Map(
+                families.map((family) => [family.id, family.capabilityContract]),
+            ),
         })
+        const clusters: ArticleCluster[] = []
 
         // ── 6. Relational persistence to topical_audits (if auditId provided)
         if (options.auditId) {
             try {
-                const clusterIds = clusters.map(() => randomUUID())
-                const clusterRows = clusters.map((cluster, index) => ({
-                    id: clusterIds[index],
-                    scope_family_id: cluster.scopeFamilyId,
-                    name: cluster.name,
-                    description: "",
-                    priority: index,
-                    article_count: cluster.articles.length,
-                    competitor_urls: cluster.competitorUrls || [],
-                }))
-
-                const articleRows = clusters.flatMap((cluster, clusterIndex) =>
-                    cluster.articles.map((article, articleIndex) => ({
-                        id: randomUUID(),
-                        cluster_id: clusterIds[clusterIndex],
-                        scope_family_id: cluster.scopeFamilyId,
-                        title: article.title,
-                        main_keyword: article.mainKeyword,
-                        supporting_keywords: article.supportingKeywords || [],
-                        source_query_ids: article.sourceQueryIds,
-                        sub_node_intents: article.subNodes.map((node) => node.intent),
-                        sub_node_query_ids: article.subNodes.flatMap((node) => node.sourceQueryIds),
-                        origin_scope_family_id: article.originScopeFamilyId ?? null,
-                        article_type: article.articleType,
-                        article_contract: article.articleContract,
-                        contract_version: article.articleContract?.version || "article-contract-v1",
-                        intent_role: articleIndex === 0 ? "pillar" : "supporting",
-                        is_pillar: articleIndex === 0,
-                    })),
-                )
-
-                const embeddings = await mapWithConcurrency(gaps, EMBEDDING_CONCURRENCY, (gap) =>
-                    generateEmbedding(gap.query, "RETRIEVAL_QUERY"),
-                )
-                const embeddingMap = new Map<string, number[]>()
-                gaps.forEach((gap, index) => {
-                    if (embeddings[index]) embeddingMap.set(gap.queryId, embeddings[index])
-                })
+                const clusterRows: never[] = []
+                const articleRows: never[] = []
 
                 const queryRows = gaps.map((gap) => ({
                     id: gap.queryId,
@@ -812,7 +784,7 @@ export async function runVisibilityProbe(
                     source_context: gap.sourceContext,
                     intent_binding: gap.intentBinding,
                     observed_at: new Date().toISOString(),
-                    embedding: embeddingMap.get(gap.queryId) || null,
+                    embedding: null,
                     status: "gap",
                     covered_by_url: null,
                     covered_by_title: null,
@@ -900,7 +872,7 @@ export async function runVisibilityProbe(
         }
 
         const durationMs = Date.now() - startedAt
-        await supabase
+        const { error: completionError } = await supabase
             .from("ai_probe_runs")
             .update({
                 status: "completed",
@@ -937,6 +909,24 @@ export async function runVisibilityProbe(
                 duration_ms: durationMs,
             })
             .eq("id", runId)
+        if (completionError) {
+            throw new Error(`Could not complete visibility run: ${completionError.message}`)
+        }
+
+        // The status update moves the bound cycle to awaiting_input through a
+        // database trigger. Planning then inventories the real site and writes
+        // reviewable grouped proposals; it never selects production work.
+        try {
+            await report("planning_actions", "checking the sitemap before proposing work")
+            await buildActionProposalsForRun({ supabase, runId })
+        } catch (planningError) {
+            console.error(`[Probe] Action planning failed for ${runId}:`, planningError)
+            await supabase
+                .from("subscription_cycles")
+                .update({ failure_code: "action_planning_failed" })
+                .eq("measurement_run_id", runId)
+                .eq("state", "awaiting_input")
+        }
 
         return {
             runId,
@@ -982,125 +972,4 @@ export async function runVisibilityProbe(
         }
         throw error
     }
-}
-
-/**
- * Groups visibility gaps into clusters using the Google-harvest machinery.
- *
- * Nothing here is new. That is the point of the whole design: the clusterer
- * takes `GapItem[]` and does not care whether the gap came from a SERP or from
- * ChatGPT declining to mention you.
- */
-export async function clusterVisibilityGaps(
-    gaps: ReturnType<typeof toGapItems>,
-    families: AuditScopeFamily[],
-    context?: { subjectName?: string; subjectType?: string },
-): Promise<ArticleCluster[]> {
-    if (gaps.length === 0) return []
-
-    const embeddings = await mapWithConcurrency(gaps, EMBEDDING_CONCURRENCY, (gap) =>
-        generateEmbedding(gap.query, "RETRIEVAL_QUERY"),
-    )
-    const embeddingMap = new Map<string, number[]>()
-    gaps.forEach((gap, index) => {
-        const embedding = embeddings[index]
-        if (embedding) embeddingMap.set(gap.queryId, embedding)
-    })
-
-    let units: ArticleUnit[] = []
-    for (const family of families) {
-        const familyGaps = gaps.filter((gap) => gap.scopeFamilyId === family.id)
-        if (familyGaps.length === 0) continue
-        units = units.concat(collapseToArticles(familyGaps, embeddingMap))
-    }
-    if (units.length === 0) return []
-
-    units = await titleArticles(units, families)
-
-    // Sub-areas roll into their parent's pool, matching assembly.ts — thin
-    // child demand and parent demand clear the cluster floor together.
-    const childIdsByParent = new Map<string, string[]>()
-    for (const family of families) {
-        if (!family.parentScopeFamilyId) continue
-        const siblings = childIdsByParent.get(family.parentScopeFamilyId) || []
-        siblings.push(family.id)
-        childIdsByParent.set(family.parentScopeFamilyId, siblings)
-    }
-    const parentByFamilyId = new Map<string, string>()
-    for (const family of families) {
-        if (family.parentScopeFamilyId) {
-            parentByFamilyId.set(family.id, family.parentScopeFamilyId)
-        }
-    }
-
-    const roots = families.filter((family) => !family.parentScopeFamilyId)
-    const groupings = roots.map((root) => {
-        const childIds = new Set(childIdsByParent.get(root.id) || [])
-        const rolled = units
-            .filter((unit) => unit.scopeFamilyId === root.id || childIds.has(unit.scopeFamilyId))
-            .map((unit) =>
-                unit.scopeFamilyId === root.id
-                    ? unit
-                    : {
-                          ...unit,
-                          originScopeFamilyId: unit.originScopeFamilyId ?? unit.scopeFamilyId,
-                          scopeFamilyId: root.id,
-                      },
-            )
-        return groupIntoClusters(rolled)
-    })
-
-    const absorbed = absorbOrphanedUnits(
-        groupings.flatMap((grouping) => grouping.clusters),
-        groupings.flatMap((grouping) => grouping.orphanedUnits),
-        splitOversized,
-        { parentByFamilyId },
-    )
-
-    const namedClusters = await nameClusters(absorbed.clusters)
-    // Visibility opportunities are not sold by cluster size. Any collapsed
-    // article unit that the legacy 8–15 editorial clusterer cannot absorb is a
-    // legitimate one-action group, not "unsold" work. Keep the strict legacy
-    // cluster rules for Google audits and remove the commercial floor only at
-    // this visibility adapter boundary.
-    const standaloneClusters: ArticleCluster[] = absorbed.unsold.map((article) => ({
-        scopeFamilyId: article.scopeFamilyId,
-        name: article.title || article.mainKeyword,
-        articles: [article],
-        priority: article.priority,
-        competitorUrls: article.competitorUrls,
-    }))
-    const named = [...namedClusters, ...standaloneClusters]
-
-    // Build evidence map so freezeArticleContracts can bind frozen intent
-    // contracts and capability facts into every planned article row.
-    const evidenceById = new Map<
-        string,
-        { evidence: ScopedHarvestedQuery; embedding: number[] }
-    >()
-    for (const gap of gaps) {
-        const embedding = embeddingMap.get(gap.queryId) || []
-        evidenceById.set(gap.queryId, {
-            evidence: {
-                query: gap.query,
-                query_norm: gap.query.trim().toLowerCase(),
-                source: "ai_answer",
-                source_url: gap.sourceUrl,
-                source_seed: gap.query,
-                observed_value: "absent",
-                source_context: gap.sourceContext,
-                intent_binding: gap.intentBinding,
-                observed_at: new Date().toISOString(),
-                scope_family_id: gap.scopeFamilyId,
-            },
-            embedding,
-        })
-    }
-
-    freezeArticleContracts(named, families, evidenceById, {
-        subjectName: context?.subjectName,
-        subjectType: context?.subjectType,
-    })
-
-    return named
 }

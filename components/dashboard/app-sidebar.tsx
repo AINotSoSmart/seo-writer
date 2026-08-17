@@ -116,11 +116,18 @@ export function AppSidebar({
       icon: WebhookIcon,
     },
     ...(isFounder
-      ? [{
-          title: "Refresh Queue",
-          url: "/founder/refresh-actions",
-          icon: SyringeIcon,
-        }]
+      ? [
+          {
+            title: "Refresh Queue",
+            url: "/founder/refresh-actions",
+            icon: SyringeIcon,
+          },
+          {
+            title: "Batch Releases",
+            url: "/founder/delivery-batches",
+            icon: Layers3,
+          },
+        ]
       : []),
 
 

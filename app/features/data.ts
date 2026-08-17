@@ -66,7 +66,11 @@ export const features: Record<string, FeatureTruth> = {
             "Each billing cycle selects up to eight prioritised create or refresh actions and releases all selected drafts together.",
         promise:
             "A batch only reaches you once every article in it is finished. If one fails, the batch waits rather than shipping you something to repair.",
-        inputs: ["The latest measurement", "The durable opportunity backlog", "Explicit target-page decisions"],
+        inputs: [
+            "The latest measurement",
+            "A fresh snapshot of the customer’s website",
+            "The grouped actions the customer confirmed",
+        ],
         outputs: [
             "One complete cycle batch, ready to review",
             "Create or refresh drafts tied to selected opportunities",

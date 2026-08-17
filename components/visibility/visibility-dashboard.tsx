@@ -14,7 +14,7 @@
  *   3. SURFACES   the per-engine split, never averaged across surface kinds
  *   4. SOURCES    the pages the answers were built from
  *   5. GAPS       every losing question, expandable to the verbatim answer
- *   6. PLAN       the clusters those gaps produce
+ *   6. BOUNDARY   why measured gaps are not automatically articles
  *
  * Chart choices follow the data's job rather than variety: the rival chart is
  * an *emphasis* form (one series is the point, the rest are context), the
@@ -29,25 +29,22 @@ import Link from "next/link"
 import {
     AlertCircle,
     AlertTriangle,
-    ArrowRight,
     CheckCircle2,
     ChevronDown,
     ChevronRight,
     ExternalLink,
     Handshake,
     Info,
-    Layers,
     PenLine,
     Radar,
     ShieldCheck,
-    Sparkles,
 } from "lucide-react"
 
 import { AnswerEvidence } from "./answer-evidence"
 import { MethodPanel } from "./method-panel"
-import { TargetPageTriage } from "./target-page-triage"
 import { VizTokens } from "./viz-tokens"
-import type { TargetPageDecision } from "@/lib/visibility/target-page"
+import { VisibilityOverview } from "./visibility-overview"
+import type { VisibilitySummaryV2 } from "@/lib/visibility/visibility-summary"
 import {
     PAGE_SHAPE_LABELS,
     type CitationBreakdown,
@@ -64,8 +61,6 @@ export interface DashboardPrompt {
     answers_total: number
     answers_present: number
     mean_mention_position: number | null
-    /** Present only on the authenticated owner report. Public reports are read-only. */
-    targetPage?: TargetPageDecision
 }
 
 export interface DashboardEngine {
@@ -84,7 +79,7 @@ export interface DashboardCluster {
     articles: Array<{ title: string; mainKeyword: string; articleType: string }>
 }
 
-export interface DashboardSummary {
+export interface DashboardSummary extends VisibilitySummaryV2 {
     promptCount: number
     answerCount: number
     presentAnswerCount: number
@@ -179,31 +174,6 @@ const VERDICT_META = {
 
 const VERDICT_ORDER = { absent: 0, outranked: 1, present: 2 } as const
 
-function Stat({
-    value,
-    label,
-    tone = "default",
-}: {
-    value: string
-    label: string
-    tone?: "default" | "critical" | "warning"
-}) {
-    const valueColor =
-        tone === "critical"
-            ? "text-[var(--viz-critical)]"
-            : tone === "warning"
-              ? "text-[var(--viz-warning-ink)]"
-              : "text-[var(--viz-ink)]"
-    return (
-        <div className="rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-4">
-            <div className={`text-2xl font-semibold tabular-nums ${valueColor}`}>{value}</div>
-            <div className="mt-1 text-sm leading-snug text-[var(--viz-ink-secondary)]">
-                {label}
-            </div>
-        </div>
-    )
-}
-
 /**
  * Horizontal bar row. The value is always direct-labelled, so identity and
  * magnitude never depend on colour alone.
@@ -271,17 +241,13 @@ export function VisibilityDashboard(props: DashboardProps) {
         summary,
         prompts,
         engines,
-        clusters,
         perEngine,
-        auditId,
         isAuthenticated,
         embedded = false,
     } = props
 
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
     const [filter, setFilter] = useState<"losing" | "all">("losing")
-    const [promptRows, setPromptRows] = useState(prompts)
-
     const engineLabels = useMemo(
         () => Object.fromEntries(engines.map((engine) => [engine.engine, engine.label])),
         [engines],
@@ -294,32 +260,14 @@ export function VisibilityDashboard(props: DashboardProps) {
     const visible = useMemo(() => {
         const rows =
             filter === "losing"
-                ? promptRows.filter((prompt) => prompt.verdict !== "present")
-                : promptRows
-        return [...rows].sort((a, b) => {
-            const priority = (b.targetPage?.priority ?? -1) - (a.targetPage?.priority ?? -1)
-            return priority || VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict]
-        })
-    }, [promptRows, filter])
-
-    const losingCount = promptRows.filter((prompt) => prompt.verdict !== "present").length
-
-    const saveTargetPageDecision = (decision: TargetPageDecision) => {
-        setPromptRows((current) =>
-            current.map((prompt) =>
-                prompt.targetPage?.trackedPromptId === decision.trackedPromptId
-                    ? { ...prompt, targetPage: decision }
-                    : prompt,
-            ),
+                ? prompts.filter((prompt) => prompt.verdict !== "present")
+                : prompts
+        return [...rows].sort(
+            (a, b) => VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict],
         )
-    }
+    }, [prompts, filter])
 
-    // Emphasis chart: the brand is the point, rivals are context. Ranked by how
-    // many questions named each entity.
-    const rivalRows = summary.rivalLeaderboard.slice(0, 8)
-    const tracking = summary.competitorTracking
-    const brandNamed = summary.presentPromptCount + summary.outrankedPromptCount
-    const barMax = Math.max(brandNamed, ...rivalRows.map((rival) => rival.promptsNaming), 1)
+    const losingCount = prompts.filter((prompt) => prompt.verdict !== "present").length
 
     const hostMax = Math.max(...summary.citedHosts.map((host) => host.count), 1)
     const breakdown = summary.citationBreakdown
@@ -443,135 +391,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </p>
                 )}
 
-                {/* ── 1. Headline ──────────────────────────────────────── */}
-                <section className="mt-10">
-                    <div className="rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-6">
-                        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-                            <div>
-                                <div className="text-6xl font-semibold leading-none tabular-nums text-[var(--viz-ink)]">
-                                    {summary.presenceRate}%
-                                </div>
-                                <p className="mt-2 text-sm text-[var(--viz-ink-secondary)]">
-                                    of answers mentioned {subjectName} at all
-                                </p>
-                            </div>
-                            <div className="ml-auto text-right">
-                                <div className="text-2xl font-semibold tabular-nums text-[var(--viz-ink)]">
-                                    {summary.presentAnswerCount}
-                                    <span className="text-[var(--viz-ink-muted)]">
-                                        {" "}
-                                        / {summary.answerCount}
-                                    </span>
-                                </div>
-                                <p className="mt-1 text-sm text-[var(--viz-ink-secondary)]">
-                                    answers naming you
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-                        <Stat
-                            value={String(summary.absentPromptCount)}
-                            label="questions you're missing from entirely"
-                            tone="critical"
-                        />
-                        {/* "Outranked" means you WERE named, just never first. When
-                            the brand is absent from every answer it is zero by
-                            arithmetic, and reading "0 questions where a rival is
-                            named ahead of you" as good news inverts the actual
-                            finding — rivals were named in all of them, you simply
-                            were not there to be ranked. Say the true thing. */}
-                        {summary.presentPromptCount + summary.outrankedPromptCount === 0 ? (
-                            <Stat
-                                value={String(summary.rivalLeaderboard.length)}
-                                label="rivals named in answers you never appear in"
-                                tone="warning"
-                            />
-                        ) : (
-                            <Stat
-                                value={String(summary.outrankedPromptCount)}
-                                label="questions where a rival is named ahead of you"
-                                tone="warning"
-                            />
-                        )}
-                        <Stat
-                            value={String(summary.presentPromptCount)}
-                            label="questions where you're named first"
-                        />
-                        <Stat
-                            value={String(clusters.length)}
-                            label={`content clusters that close ${losingCount} of them`}
-                        />
-                    </div>
-                </section>
-
-                {/* ── 2. Rivals (emphasis) ─────────────────────────────── */}
-                {/* An empty leaderboard has two completely different meanings and
-                    the reader cannot tell them apart from the chart's absence:
-                    nobody was named, or nobody was tracked. Mentions are counted
-                    against the tracked list only, so a run with an empty list
-                    was structurally incapable of naming a rival. Saying so is
-                    the same rule the engine ledger follows — a broken source
-                    must never look like an empty result. */}
-                {rivalRows.length === 0 && tracking && tracking.tracked === 0 && (
-                    <section className="mt-12">
-                        <h2 className="text-xl font-semibold">Who gets named instead</h2>
-                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                            {tracking.discoveryFailed
-                                ? "No competitors were tracked for this run, because competitor discovery failed. This is not a finding: the run could not have named a rival even if the engines recommended ten of them. Add competitors on your brand settings and probe again."
-                                : "No competitors were tracked for this run, so the answers were never checked against any rival. Add the companies you compete with and probe again to see who is being recommended in your place."}
-                        </p>
-                    </section>
-                )}
-                {rivalRows.length > 0 && (
-                    <section className="mt-12">
-                        <h2 className="text-xl font-semibold">Who gets named instead</h2>
-                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                            Across all {summary.promptCount} questions, counting how many named
-                            each brand at least once.
-                        </p>
-
-                        <div className="mt-5 rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5">
-                            <ul className="space-y-2.5">
-                                <BarRow
-                                    name={subjectName}
-                                    value={brandNamed}
-                                    max={barMax}
-                                    total={summary.promptCount}
-                                    color="var(--viz-series-1)"
-                                    emphasis
-                                />
-                                {rivalRows.map((rival) => (
-                                    <BarRow
-                                        key={rival.name}
-                                        name={rival.name}
-                                        value={rival.promptsNaming}
-                                        max={barMax}
-                                        total={summary.promptCount}
-                                        color="var(--viz-muted-mark)"
-                                    />
-                                ))}
-                            </ul>
-                            <div className="mt-5 flex items-center gap-4 border-t border-[var(--viz-hairline)] pt-3 text-xs text-[var(--viz-ink-muted)]">
-                                <span className="inline-flex items-center gap-1.5">
-                                    <span
-                                        className="inline-block size-2.5 rounded-sm"
-                                        style={{ background: "var(--viz-series-1)" }}
-                                    />
-                                    {subjectName}
-                                </span>
-                                <span className="inline-flex items-center gap-1.5">
-                                    <span
-                                        className="inline-block size-2.5 rounded-sm"
-                                        style={{ background: "var(--viz-muted-mark)" }}
-                                    />
-                                    Competitors
-                                </span>
-                            </div>
-                        </div>
-                    </section>
-                )}
+                <VisibilityOverview subjectName={subjectName} summary={summary} />
 
                 {/* ── 3. Surfaces ──────────────────────────────────────── */}
                 {perEngine.length > 1 && (
@@ -1094,7 +914,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                                         : "text-[var(--viz-ink-secondary)]"
                                 }`}
                             >
-                                All ({promptRows.length})
+                                All ({prompts.length})
                             </button>
                         </div>
                     </div>
@@ -1152,12 +972,6 @@ export function VisibilityDashboard(props: DashboardProps) {
                                                 subjectName={subjectName}
                                                 subjectDomains={subjectDomains}
                                             />
-                                            {prompt.verdict !== "present" && prompt.targetPage && (
-                                                <TargetPageTriage
-                                                    decision={prompt.targetPage}
-                                                    onSaved={saveTargetPageDecision}
-                                                />
-                                            )}
                                             <div className="pb-4">
                                                 <Link
                                                     href={`/evidence/ai-answer/${runId}/${prompt.id}`}
@@ -1175,122 +989,33 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </ul>
                 </section>
 
-                {/* ── 6. Plan ──────────────────────────────────────────── */}
+                {/* ── 6. Production boundary ─────────────────────────── */}
                 <section className="mt-12">
-                    <h2 className="text-xl font-semibold">What closes the gap</h2>
+                    <h2 className="text-xl font-semibold">From findings to content work</h2>
                     <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                        The {losingCount} losing questions group into {clusters.length}{" "}
-                        {clusters.length === 1 ? "cluster" : "clusters"}. Every article targets
-                        questions measured above — nothing was invented to pad a plan.
+                        A losing question is evidence about an AI answer, not proof that your site
+                        needs another article. Existing-page coverage and grouped target review
+                        decide whether the remedy is a refresh, a new page, or report-only.
                     </p>
-
-                    <div className="mt-5 space-y-4">
-                        {clusters.map((cluster) => (
-                            <div
-                                key={cluster.name}
-                                className="rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5"
-                            >
-                                <div className="flex items-baseline justify-between gap-3">
-                                    <h3 className="inline-flex items-center gap-2 font-semibold">
-                                        <Layers
-                                            className="size-4 text-[var(--viz-ink-muted)]"
-                                            aria-hidden
-                                        />
-                                        {cluster.name}
-                                    </h3>
-                                    <span className="text-sm tabular-nums text-[var(--viz-ink-muted)]">
-                                        {cluster.articles.length} articles
-                                    </span>
-                                </div>
-                                <ol className="mt-3 space-y-1.5 text-sm">
-                                    {cluster.articles.map((article, index) => (
-                                        <li
-                                            key={`${article.mainKeyword}-${index}`}
-                                            className="flex gap-3"
-                                        >
-                                            <span className="tabular-nums text-[var(--viz-ink-muted)]">
-                                                {index + 1}.
-                                            </span>
-                                            <span className="text-[var(--viz-ink-secondary)]">
-                                                {article.title}
-                                                {index === 0 && (
-                                                    <span className="ml-2 rounded bg-[var(--viz-track)] px-1.5 py-0.5 text-xs text-[var(--viz-ink-muted)]">
-                                                        pillar
-                                                    </span>
-                                                )}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ol>
+                    <div className="mt-5 flex flex-col gap-4 rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div className="font-semibold text-[var(--viz-ink)]">
+                                {losingCount} losing questions await page-aware planning
                             </div>
-                        ))}
-                    </div>
-
-                    {clusters.length > 0 && (
-                        <div className="mt-8 rounded-xl border border-[var(--viz-series-1)]/30 bg-gradient-to-br from-[var(--viz-plane)] to-[var(--viz-surface)] p-6 shadow-sm">
-                            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="space-y-2">
-                                    <div className="inline-flex items-center gap-2 rounded-full bg-[var(--viz-series-1)]/10 px-3 py-1 text-xs font-semibold text-[var(--viz-series-1)]">
-                                        <Sparkles className="size-3.5" aria-hidden />
-                                        Evidence-Bound Solution
-                                    </div>
-                                    <h3 className="text-lg font-bold text-[var(--viz-ink)]">
-                                        Turn these visibility gaps into ranking content
-                                    </h3>
-                                    <p className="max-w-xl text-sm text-[var(--viz-ink-secondary)]">
-                                        Our article delivery engine synthesizes interlinked pillar and supporting articles directly bound to the verified questions measured above. Every article is grounded in real capability facts, with zero hallucinations.
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-[var(--viz-ink-muted)]">
-                                        <span className="inline-flex items-center gap-1">
-                                            <ShieldCheck className="size-3.5 text-emerald-500" aria-hidden />
-                                            Frozen Contract Engine
-                                        </span>
-                                        <span>•</span>
-                                        <span className="inline-flex items-center gap-1">
-                                            <CheckCircle2 className="size-3.5 text-emerald-500" aria-hidden />
-                                            Falsifiable AI Answer Provenance
-                                        </span>
-                                        <span>•</span>
-                                        <span className="inline-flex items-center gap-1">
-                                            <Layers className="size-3.5 text-emerald-500" aria-hidden />
-                                            Automated Topic Graph Interlinking
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-                                    {isAuthenticated ? (
-                                        <Link
-                                            href={auditId ? `/content-plan` : `/onboarding`}
-                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--viz-series-1)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-[0.99]"
-                                        >
-                                            View Delivery Program
-                                            <ArrowRight className="size-4" aria-hidden />
-                                        </Link>
-                                    ) : (
-                                        <Link
-                                            href="/login"
-                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--viz-series-1)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-[0.99]"
-                                        >
-                                            Sign In to Ship Articles
-                                            <ArrowRight className="size-4" aria-hidden />
-                                        </Link>
-                                    )}
-                                    <span className="text-xs text-[var(--viz-ink-muted)]">
-                                        {auditId ? "Deterministic 6-cluster delivery schedule" : "Free instant audit claim"}
-                                    </span>
-                                </div>
-                            </div>
+                            <p className="mt-1 max-w-2xl text-sm text-[var(--viz-ink-secondary)]">
+                                Legacy cluster suggestions are intentionally not shown or selected.
+                                Only confirmed grouped create/refresh actions can use production capacity.
+                            </p>
                         </div>
-                    )}
-
-                    {clusters.length === 0 && (
-                        <p className="mt-4 rounded-lg border border-[var(--viz-hairline)] p-4 text-sm text-[var(--viz-ink-secondary)]">
-                            The losing questions didn&apos;t group into any cluster that clears the
-                            minimum depth. That is a real result, not an error — this scope may be
-                            too narrow to justify a content program.
-                        </p>
-                    )}
+                        {isAuthenticated && (
+                            <Link
+                                href="/content-plan"
+                                className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[var(--viz-hairline)] px-4 py-2.5 text-sm font-semibold text-[var(--viz-ink)]"
+                            >
+                                Review delivery state
+                            </Link>
+                        )}
+                    </div>
                 </section>
 
                 {/* ── Method note ──────────────────────────────────────── */}
@@ -1302,7 +1027,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                         Every number above counts answers we stored. Open any question and read
                         the answer that produced its verdict. &ldquo;Not named&rdquo; means the
                         brand appears nowhere in the text; &ldquo;named, never first&rdquo; means
-                        it appears but a competitor is named ahead of it in every answer.
+                        it appears but is never the first detected product or provider named.
                     </p>
                     <p className="mt-2">
                         AI answers are non-deterministic and vary by person, place and time.

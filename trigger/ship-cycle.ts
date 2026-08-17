@@ -45,7 +45,9 @@ export const cycleLifecycleScheduler = schedules.task({
         if (error) throw new Error(`Cycle lifecycle load failed: ${error.message}`)
 
         let triggered = 0
-        let delivered = 0
+        // Delivery is founder-approved during beta. This scheduler may prepare
+        // a complete batch, but it never makes withheld outputs customer-visible.
+        const delivered = 0
         let failed = 0
 
         for (const program of (programs || []) as ProgramRow[]) {
@@ -63,17 +65,12 @@ export const cycleLifecycleScheduler = schedules.task({
 
             for (const cycle of (cycles || []) as CycleRow[]) {
                 if (cycle.state === "ready") {
-                    if (await deliverCycle(supabase, cycle.id)) delivered++
-                    else failed++
                     continue
                 }
 
                 const result = await advanceCycle(supabase, program, cycle)
                 triggered += result.triggered
                 failed += result.failed
-                if (result.ready && (await deliverCycle(supabase, cycle.id))) {
-                    delivered++
-                }
             }
         }
 
@@ -337,15 +334,4 @@ async function noteCycleFailure(
         .update({ failure_code: failureCode.slice(0, 500), updated_at: new Date().toISOString() })
         .eq("id", cycleId)
         .neq("state", "delivered")
-}
-
-async function deliverCycle(supabase: any, cycleId: string): Promise<boolean> {
-    const { data, error } = await supabase.rpc("deliver_subscription_cycle", {
-        p_cycle_id: cycleId,
-    })
-    if (error) {
-        await noteCycleFailure(supabase, cycleId, error.message)
-        return false
-    }
-    return Boolean(data)
 }

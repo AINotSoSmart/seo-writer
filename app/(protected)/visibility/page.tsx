@@ -21,31 +21,32 @@ import { ArrowRight, Sparkles } from "lucide-react"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
 import { ENGINE_SPECS, type AiEngine } from "@/lib/visibility/engines"
-import type { TargetPageDecision } from "@/lib/visibility/target-page"
 import {
     VisibilityDashboard,
     type DashboardEngine,
     type DashboardPrompt,
 } from "@/components/visibility/visibility-dashboard"
 import { PaidProbeConsole } from "@/components/visibility/paid-probe-console"
+import { deriveVisibilitySummaryV2 } from "@/lib/visibility/visibility-summary"
 
-type ProbePromptRow = Omit<DashboardPrompt, "targetPage"> & {
+type ProbePromptRow = DashboardPrompt & {
     tracked_prompt_id: string | null
 }
 
-interface TrackedTargetRow {
-    id: string
-    coverage_state: TargetPageDecision["coverageState"]
-    target_url: string | null
+interface ProbeResultRow {
+    prompt_id: string
+    engine: string
+    surface: string | null
+    mention_count: number
+    citation_count: number
+    mention_position: number | null
+    competitor_mentions: unknown
 }
 
-interface OpportunityTargetRow {
-    id: string
-    tracked_prompt_id: string
-    state: TargetPageDecision["opportunityState"]
-    resolution_type: TargetPageDecision["resolutionType"]
-    last_priority: number | null
-    last_reason: string | null
+interface TrackedCompetitorRow {
+    id?: unknown
+    name?: unknown
+    domain?: unknown
 }
 
 export default async function VisibilityPage() {
@@ -63,7 +64,7 @@ export default async function VisibilityPage() {
         admin
             .from("ai_probe_runs")
             .select(
-                "id, brand_id, subject_name, subject_domains, status, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id",
+                "id, brand_id, subject_name, subject_domains, competitors, status, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id",
             )
             .eq("user_id", user.id)
             .eq("status", "completed")
@@ -101,70 +102,25 @@ export default async function VisibilityPage() {
                 "id, tracked_prompt_id, prompt, intent, verdict, answers_total, answers_present, mean_mention_position",
             )
             .eq("run_id", run.id),
-        // Only `engine`, `surface` and `mention_count` — the answer text is
-        // never loaded here, only when a reader opens a specific question.
+        // Counted facts only — the answer text is never loaded here, only when
+        // a reader opens a specific question.
         admin
             .from("ai_probe_results")
-            .select("engine, surface, mention_count")
+            .select(
+                "prompt_id, engine, surface, mention_count, citation_count, mention_position, competitor_mentions",
+            )
             .eq("run_id", run.id),
     ])
 
     const observedPrompts = (promptRows || []) as ProbePromptRow[]
-    const trackedPromptIds = observedPrompts
-        .map((row) => row.tracked_prompt_id)
-        .filter((id: string | null): id is string => Boolean(id))
-    const trackedById = new Map<string, TrackedTargetRow>()
-    const opportunityByTrackedId = new Map<string, OpportunityTargetRow>()
-
-    if (trackedPromptIds.length > 0) {
-        const [{ data: trackedRows }, { data: opportunityRows }] = await Promise.all([
-            admin
-                .from("tracked_prompts")
-                .select("id, coverage_state, target_url")
-                .eq("brand_id", run.brand_id)
-                .in("id", trackedPromptIds),
-            admin
-                .from("content_opportunities")
-                .select(
-                    "id, tracked_prompt_id, state, resolution_type, last_priority, last_reason",
-                )
-                .eq("brand_id", run.brand_id)
-                .in("tracked_prompt_id", trackedPromptIds),
-        ])
-        for (const row of (trackedRows || []) as TrackedTargetRow[]) {
-            trackedById.set(row.id, row)
-        }
-        for (const row of (opportunityRows || []) as OpportunityTargetRow[]) {
-            opportunityByTrackedId.set(row.tracked_prompt_id, row)
-        }
-    }
-
-    const dashboardPrompts: DashboardPrompt[] = observedPrompts.map((row) => {
-        const trackedPromptId = row.tracked_prompt_id
-        if (!trackedPromptId) return row as DashboardPrompt
-
-        const tracked = trackedById.get(trackedPromptId)
-        const opportunity = opportunityByTrackedId.get(trackedPromptId)
-        if (!tracked || !opportunity) return row as DashboardPrompt
-
-        const targetPage: TargetPageDecision = {
-            trackedPromptId,
-            opportunityId: opportunity.id,
-            coverageState: tracked.coverage_state,
-            targetUrl: tracked.target_url,
-            opportunityState: opportunity.state,
-            resolutionType: opportunity.resolution_type,
-            priority: opportunity.last_priority,
-            reason: opportunity.last_reason,
-        }
-        return { ...row, targetPage } as DashboardPrompt
-    })
+    const observedResults = (resultRows || []) as ProbeResultRow[]
+    const dashboardPrompts: DashboardPrompt[] = observedPrompts
 
     const perEngineMap = new Map<
         string,
         { engine: string; label: string; surface: string; total: number; present: number }
     >()
-    for (const row of resultRows || []) {
+    for (const row of observedResults) {
         const spec = ENGINE_SPECS[row.engine as AiEngine]
         const existing = perEngineMap.get(row.engine)
         if (existing) {
@@ -192,6 +148,29 @@ export default async function VisibilityPage() {
         creditsUsed: entry.creditsUsed ?? 0,
         errors: entry.errors ?? [],
     }))
+
+    const summaryV2 = deriveVisibilitySummaryV2({
+        prompts: observedPrompts.map((prompt) => ({
+            id: prompt.id,
+            prompt: prompt.prompt,
+        })),
+        results: observedResults.map((result) => ({
+            promptId: result.prompt_id,
+            mentionCount: result.mention_count ?? 0,
+            citationCount: result.citation_count ?? 0,
+            mentionPosition: result.mention_position ?? null,
+            competitorMentions: Array.isArray(result.competitor_mentions)
+                ? result.competitor_mentions
+                : [],
+        })),
+        competitors: Array.isArray(run.competitors)
+            ? (run.competitors as TrackedCompetitorRow[]).map((competitor) => ({
+                  id: String(competitor.id ?? competitor.domain ?? competitor.name ?? ""),
+                  name: String(competitor.name ?? competitor.domain ?? "Tracked competitor"),
+                  domain: competitor.domain ? String(competitor.domain) : null,
+              }))
+            : [],
+    })
 
     return (
         <main className="mx-auto w-full max-w-6xl py-6">
@@ -225,7 +204,7 @@ export default async function VisibilityPage() {
                 subjectDomains={run.subject_domains || []}
                 startedAt={run.started_at}
                 creditsUsed={run.credits_used ?? 0}
-                summary={run.summary || {}}
+                summary={{ ...(run.summary || {}), ...summaryV2 }}
                 prompts={dashboardPrompts}
                 engines={ledger}
                 clusters={run.clusters || []}

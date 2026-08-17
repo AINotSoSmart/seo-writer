@@ -14,6 +14,8 @@ import {
     promptsAreNearDuplicates,
 } from "@/lib/visibility/prompt-selection"
 import { createClient } from "@/utils/supabase/server"
+import { bindPromptCapability } from "@/lib/visibility/capability-binding"
+import type { CapabilityContract } from "@/lib/writer/article-contract"
 
 interface ConfirmPromptInput {
     text?: string
@@ -72,17 +74,39 @@ export async function POST(req: NextRequest) {
         brand.website_url ?? "",
     ])
 
+    const { data: familyRows } = await supabase
+        .from("brand_scope_families")
+        .select("id, capability_contract")
+        .eq("brand_id", body.brandId)
+        .eq("user_id", user.id)
+        .eq("enabled", true)
+    const capabilityByFamily = new Map(
+        (familyRows ?? []).map((row: any) => [
+            row.id,
+            row.capability_contract as CapabilityContract,
+        ]),
+    )
+
     const prompts = body.prompts.map((prompt) => {
         const text = (prompt.text ?? "").trim()
         const fallback = prompt.intent ?? "problem"
         const intent = inferPromptIntent(text, fallback)
+        const scopeFamilyId = (prompt.scopeFamilyId ?? "").trim()
+        const sourceSeed = (prompt.sourceSeed ?? "").trim()
+        const bound = bindPromptCapability({
+            scopeFamilyId,
+            prompt: text,
+            sourceSeed,
+            contract: capabilityByFamily.get(scopeFamilyId),
+        })
         return {
             prompt: text,
             prompt_norm: normalizeQuery(text),
-            scope_family_id: (prompt.scopeFamilyId ?? "").trim(),
+            scope_family_id: scopeFamilyId,
             intent,
             article_type: articleTypeByIntent[intent],
-            source_seed: (prompt.sourceSeed ?? "").trim(),
+            source_seed: sourceSeed,
+            intent_binding: bound.binding,
         }
     })
 

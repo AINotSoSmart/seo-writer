@@ -72,13 +72,13 @@ export async function POST(
         .select("cycle_id")
         .eq("id", id)
         .maybeSingle()
-    let released = false
+    let batchReady = false
     if (action?.cycle_id) {
         const { data } = await admin.rpc("release_subscription_cycle_if_ready", {
             p_cycle_id: action.cycle_id,
         })
-        released = Boolean(data)
+        batchReady = Boolean(data)
     }
 
-    return NextResponse.json({ success: true, articleId, released })
+    return NextResponse.json({ success: true, articleId, batchReady })
 }

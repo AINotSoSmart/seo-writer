@@ -33,7 +33,6 @@
 
 import type { GapItem } from "@/lib/harvest/gap-engine"
 import type { ArticleType } from "@/lib/harvest/cluster-types"
-import type { CapabilityFit, SolutionMode } from "@/lib/writer/article-contract"
 import type { AiEngine } from "./engines"
 import { ENGINE_LABELS } from "./engines"
 import {
@@ -47,6 +46,8 @@ import {
 import type { ParsedAnswer } from "./answer-parser"
 import { meanMentionPosition } from "./answer-parser"
 import { summariseFanOut, type FanOutSummary } from "./fan-out"
+import type { CapabilityContract } from "@/lib/writer/article-contract"
+import { bindPromptCapability } from "./capability-binding"
 
 export type PromptVerdict = "absent" | "outranked" | "present"
 
@@ -260,9 +261,6 @@ export function evidenceUrl(runId: string, promptId: string): string {
     return `${base}/evidence/ai-answer/${runId}/${promptId}`
 }
 
-const DEFAULT_CAPABILITY_FIT: CapabilityFit = "educational"
-const DEFAULT_SOLUTION_MODE: SolutionMode = "category_educational"
-
 /**
  * Maps losing prompts to `GapItem[]`.
  *
@@ -279,7 +277,10 @@ export function toGapItems(
     prompts: ProbedPrompt[],
     outcomes: Map<string, PromptOutcome>,
     runId: string,
-    options: { excerptChars?: number } = {},
+    options: {
+        excerptChars?: number
+        capabilityContracts?: Map<string, CapabilityContract>
+    } = {},
 ): GapItem[] {
     const excerptChars = options.excerptChars ?? 600
     const gaps: GapItem[] = []
@@ -300,6 +301,13 @@ export function toGapItems(
             .trim()
             .slice(0, excerptChars)
 
+        const capability = bindPromptCapability({
+            scopeFamilyId: prompt.scopeFamilyId,
+            prompt: prompt.text,
+            sourceSeed: prompt.sourceSeed,
+            contract: options.capabilityContracts?.get(prompt.scopeFamilyId),
+        })
+
         gaps.push({
             queryId: prompt.id,
             query: prompt.text,
@@ -310,11 +318,8 @@ export function toGapItems(
                 ? `${ENGINE_LABELS[losing.engine]} answered: ${excerpt}`
                 : prompt.text,
             intentBinding: {
-                scopeFamilyId: prompt.scopeFamilyId,
-                operationKey: null,
-                capabilityFit: DEFAULT_CAPABILITY_FIT,
-                solutionMode: DEFAULT_SOLUTION_MODE,
-                reason: `Buyer prompt built from the confirmed area's own seed "${prompt.sourceSeed}"; ${
+                ...capability.binding,
+                reason: `${capability.binding.reason} Buyer question came from the confirmed seed "${prompt.sourceSeed}" and was ${
                     outcome.verdict === "absent"
                         ? `named in none of ${outcome.answersTotal} answers`
                         : `named in ${outcome.answersPresent} of ${outcome.answersTotal} answers, never first`

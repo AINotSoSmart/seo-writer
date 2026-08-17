@@ -646,46 +646,72 @@ export async function POST(req: NextRequest) {
         .filter((competitor) => competitor.name.length > 0)
 
     const subjectHost = hostOf(brand.website_url || "")
-    const { data: run, error: runError } = await admin
-        .from("ai_probe_runs")
-        .insert({
-            user_id: user.id,
-            brand_id: brand.id,
-            audit_id: auditId,
-            subject_name: subjectName || subjectHost || "the brand",
-            subject_domains: subjectHost ? [subjectHost] : [],
-            competitors,
-            engines,
-            country_code: countryCode,
-            status: "running",
-            phase: "queued",
-            // The column still carries a random default from the original
-            // migration. Writing NULL explicitly is what actually stops a
-            // share token being minted for every customer run; the migration
-            // drops the default so this stays true if a new writer appears.
-            public_token: null,
-        })
+    const now = new Date().toISOString()
+    const { data: cycle, error: cycleError } = await admin
+        .from("subscription_cycles")
         .select("id")
-        .single()
-    if (runError || !run) {
+        .eq("user_id", user.id)
+        .eq("brand_id", brand.id)
+        .eq("state", "pending")
+        .not("billing_grant_id", "is", null)
+        .lte("period_start", now)
+        .gt("period_end", now)
+        .order("period_start", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    if (cycleError || !cycle) {
         if (openedAuditHere) {
             await failAuditRun(
                 admin,
                 auditId,
                 "probe_run_not_created",
-                `Could not open a probe run: ${runError?.message ?? "unknown"}`,
+                `No current unclaimed subscription cycle was available: ${cycleError?.message ?? "none found"}`,
             )
         }
-        console.error("[Probe API] Could not open a probe run:", runError)
+        console.error("[Probe API] No current unclaimed subscription cycle:", cycleError)
+        return NextResponse.json(
+            {
+                error:
+                    "No current delivery cycle is ready for measurement. If payment just completed, wait for the subscription renewal event and try again.",
+                reason: "cycle_not_ready",
+            },
+            { status: 409 },
+        )
+    }
+
+    const { data: runId, error: runError } = await admin.rpc(
+        "begin_subscription_cycle_measurement",
+        {
+            p_cycle_id: cycle.id,
+            p_user_id: user.id,
+            p_brand_id: brand.id,
+            p_audit_id: auditId,
+            p_subject_name: subjectName || subjectHost || "the brand",
+            p_subject_domains: subjectHost ? [subjectHost] : [],
+            p_competitors: competitors,
+            p_engines: engines,
+            p_country_code: countryCode,
+        },
+    )
+    if (runError || typeof runId !== "string" || !runId) {
+        if (openedAuditHere) {
+            await failAuditRun(
+                admin,
+                auditId,
+                "probe_run_not_created",
+                `Could not claim the subscription cycle: ${runError?.message ?? "no run id returned"}`,
+            )
+        }
+        console.error("[Probe API] Could not claim subscription cycle:", runError)
         return NextResponse.json(
             { error: probeFailureCopy("queue_failed").message, reason: "queue_failed" },
-            { status: 500 },
+            { status: 409 },
         )
     }
 
     try {
         const handle = await tasks.trigger<typeof runProbeTask>("run-visibility-probe", {
-            runId: run.id,
+            runId,
             userId: user.id,
             brandId: brand.id,
             auditId,
@@ -704,11 +730,11 @@ export async function POST(req: NextRequest) {
         await admin
             .from("ai_probe_runs")
             .update({ trigger_run_id: handle.id })
-            .eq("id", run.id)
+            .eq("id", runId)
 
         return NextResponse.json(
             {
-                runId: run.id,
+                runId,
                 auditId,
                 engines: engines.map((engine) => ({
                     id: engine,
@@ -732,7 +758,7 @@ export async function POST(req: NextRequest) {
                 failure_reason: `Could not enqueue: ${message}`,
                 completed_at: new Date().toISOString(),
             })
-            .eq("id", run.id)
+            .eq("id", runId)
         // An audit opened for a probe that never enqueued would otherwise stay
         // `running` and block every audit path for this brand.
         if (openedAuditHere) {

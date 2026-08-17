@@ -8,6 +8,7 @@ export type AssistedRefreshAction = {
     brandName: string
     cycleLabel: string
     title: string
+    deliverableType: "full_page_replacement" | "section_patch"
     targetUrl: string
     selectionReason: string
     state: string
@@ -23,7 +24,7 @@ export function RefreshActionWorkbench({ actions }: { actions: AssistedRefreshAc
     async function complete(action: AssistedRefreshAction) {
         const markdown = drafts[action.id]?.trim() || ""
         if (markdown.length < 300) {
-            setError("The reviewed replacement draft must contain at least 300 characters.")
+            setError("The reviewed refresh deliverable must contain at least 300 characters.")
             return
         }
         setPending(action.id)
@@ -97,7 +98,9 @@ export function RefreshActionWorkbench({ actions }: { actions: AssistedRefreshAc
                     )}
 
                     <label className="mt-4 block text-xs font-semibold text-stone-700">
-                        Reviewed replacement draft (Markdown)
+                        {action.deliverableType === "section_patch"
+                            ? "Reviewed section patch (Markdown)"
+                            : "Reviewed full-page replacement (Markdown)"}
                     </label>
                     <textarea
                         value={drafts[action.id] || ""}
@@ -105,7 +108,11 @@ export function RefreshActionWorkbench({ actions }: { actions: AssistedRefreshAc
                             setDrafts((current) => ({ ...current, [action.id]: event.target.value }))
                         }
                         rows={18}
-                        placeholder="Paste the complete revised page. This becomes the customer-visible refresh draft; it does not publish or replace the live page."
+                        placeholder={
+                            action.deliverableType === "section_patch"
+                                ? "Paste the exact replacement/addition sections with headings and placement notes. This does not publish or create a page."
+                                : "Paste the complete revised page. This becomes the customer-visible replacement draft; it does not publish or replace the live page."
+                        }
                         className="mt-2 w-full rounded-lg border border-stone-300 p-3 font-mono text-xs leading-relaxed outline-none focus:border-stone-500"
                     />
                     <div className="mt-3 flex items-center justify-between gap-4">

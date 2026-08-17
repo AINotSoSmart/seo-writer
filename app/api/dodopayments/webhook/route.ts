@@ -1,7 +1,7 @@
 import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { createHmac, timingSafeEqual, createHash } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { Webhook } from 'standardwebhooks'
 import { ensureProgramForSubscription } from '@/lib/harvest/program-provisioning'
 import { ensureBillingCycle } from '@/lib/harvest/billing-lifecycle'
@@ -10,16 +10,6 @@ import type { TablesUpdate } from '@/types/supabase'
 export const runtime = 'nodejs'
 
 // Helpers
-function safeEqualsBase64(aB64: string, bB64: string): boolean {
-    try {
-        const aBuf = Buffer.from(aB64, 'base64')
-        const bBuf = Buffer.from(bB64, 'base64')
-        if (aBuf.length !== bBuf.length) return false
-        return timingSafeEqual(aBuf, bBuf)
-    } catch {
-        return false
-    }
-}
 function extractSignatureCandidate(header: string): {
     provided: string
     format: 'v1_eq' | 'v1_comma' | 'raw' | 'empty'
@@ -391,6 +381,35 @@ async function updateSubscriptionServiceFields(
         .update(update)
         .eq('dodo_subscription_id', dodo_subscription_id);
 }
+
+async function recordPaymentHistory(
+    supabase: ReturnType<typeof createAdminClient>,
+    userId: string,
+    pricingPlanId: string | null,
+    data: any,
+    payload: any,
+) {
+    const paymentObj = data?.payment ?? data
+    const dodoPaymentId = paymentObj?.payment_id || data?.payment_id
+    if (!dodoPaymentId || !pricingPlanId) return
+
+    const amount = Number(paymentObj?.total_amount ?? data?.total_amount ?? 0)
+    const currency = (paymentObj?.currency || data?.currency || 'USD') as string
+    const paymentTimestamp = payload?.timestamp || new Date().toISOString()
+    await supabase.from('dodo_payments').upsert(
+        [{
+            dodo_payment_id: String(dodoPaymentId),
+            user_id: userId,
+            pricing_plan_id: pricingPlanId,
+            amount,
+            currency,
+            status: 'completed',
+            credits: 0,
+            metadata: { ...(paymentObj || data), payment_timestamp: paymentTimestamp },
+        }],
+        { onConflict: 'dodo_payment_id' },
+    )
+}
 export async function POST(req: NextRequest) {
     // Read raw body FIRST for signature verification
     const rawBody = await req.text()
@@ -400,10 +419,6 @@ export async function POST(req: NextRequest) {
     const sigDodoLower = req.headers.get('dodo-signature')
     const sigDodoCase = req.headers.get('Dodo-Signature')
     const webhookSignature = (sigWH || sigDodoLower || sigDodoCase || '') as string
-    const sigHeaderSource =
-        sigWH ? 'webhook-signature' :
-            (sigDodoLower ? 'dodo-signature' :
-                (sigDodoCase ? 'Dodo-Signature' : 'none'))
     const webhookTimestamp = req.headers.get('webhook-timestamp') || ''
 
     const secret = (
@@ -430,17 +445,13 @@ export async function POST(req: NextRequest) {
     }
 
     let verified = false as boolean
-    let verifiedBy: 'standardwebhooks' | 'manual' | 'manual-trim' | null = null
-
     // Try StandardWebhooks verifier (recommended by Dodo)
     try {
         const verifier = new Webhook(secret)
         await verifier.verify(rawBody, webhookHeaders as any)
         verified = true
-        verifiedBy = 'standardwebhooks'
     } catch {
         // Fallback: manual verification (Standard Webhooks spec)
-        const sigInfo = extractSignatureCandidate(webhookSignature)
         const rawNoNL = rawBody.replace(/[\r\n]+$/, '')
 
         const validPrimary = verifySignature({
@@ -462,8 +473,6 @@ export async function POST(req: NextRequest) {
         }
 
         verified = validPrimary || validTrim
-        verifiedBy = validPrimary ? 'manual' : (validTrim ? 'manual-trim' : null)
-
     }
 
     if (!verified) {
@@ -607,7 +616,7 @@ export async function POST(req: NextRequest) {
             }
             // Persist service-management fields for reporting/operations
             await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
-        } else if (eventType === 'payment.succeeded' || eventType === 'subscription.renewed' || eventType === 'invoice.paid') {
+        } else if (eventType === 'subscription.renewed') {
             if (!effective_user_id) {
                 await markFailed(supabase, webhookId, 'Missing user_id for payment/renewal event')
                 return NextResponse.json({ ok: true, note: 'missing user_id' }, { status: 200 })
@@ -649,7 +658,6 @@ export async function POST(req: NextRequest) {
                 programId: provisioning.programId,
                 eventId: webhookId,
                 resource: subscriptionObj,
-                eventTimestamp: payload?.timestamp,
             })
             // Also complete the latest pending change if any
             try {
@@ -660,33 +668,49 @@ export async function POST(req: NextRequest) {
                 await updateSubscriptionServiceFields(supabase, dodo_subscription_id, subscriptionObj, eventType)
             }
 
-            // Persist payment record for invoice history
-            const paymentObj = data?.payment ?? data
-            const dodo_payment_id = paymentObj?.payment_id || data?.payment_id
-            const paymentAmount = Number(paymentObj?.total_amount ?? data?.total_amount ?? 0)
-            const paymentCurrency = (paymentObj?.currency || data?.currency || 'USD') as string
-            const paymentTimestamp = payload?.timestamp || new Date().toISOString()
-            const paymentPricingPlanId = activeSub?.pricing_plan_id || null
+            await recordPaymentHistory(
+                supabase,
+                String(effective_user_id),
+                activeSub?.pricing_plan_id || null,
+                data,
+                payload,
+            )
+        } else if (eventType === 'payment.succeeded' || eventType === 'invoice.paid') {
+            // Money events are accounting evidence only. They never authorize a
+            // delivery cycle because they do not carry authoritative period
+            // boundaries and can accompany the same renewal independently.
+            if (!effective_user_id) {
+                await markFailed(supabase, webhookId, 'Missing user_id for payment event')
+                return NextResponse.json({ ok: true, note: 'missing user_id' }, { status: 200 })
+            }
 
-            if (dodo_payment_id && effective_user_id && paymentPricingPlanId) {
-                try {
-                    await supabase.from('dodo_payments').upsert(
-                        [{
-                            dodo_payment_id: String(dodo_payment_id),
-                            user_id: String(effective_user_id),
-                            pricing_plan_id: paymentPricingPlanId,
-                            amount: paymentAmount,
-                            currency: paymentCurrency,
-                            status: 'completed',
-                            credits: 0,
-                            metadata: { ...(paymentObj || data), payment_timestamp: paymentTimestamp },
-                        }],
-                        { onConflict: 'dodo_payment_id' }
-                    )
-                } catch (paymentErr) {
-                    console.error('Failed to upsert payment record for invoice history:', paymentErr)
-                    // Non-blocking: don't fail the entire webhook for invoice tracking
-                }
+            let subscriptionQuery: any = (supabase as any)
+                .from('dodo_subscriptions')
+                .select('dodo_subscription_id, pricing_plan_id, status')
+                .eq('user_id', effective_user_id)
+                .eq('status', 'active')
+            if (dodo_subscription_id) {
+                subscriptionQuery = subscriptionQuery.eq('dodo_subscription_id', dodo_subscription_id)
+            }
+            const { data: activeSub } = await subscriptionQuery
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            await recordPaymentHistory(
+                supabase,
+                String(effective_user_id),
+                activeSub?.pricing_plan_id || null,
+                data,
+                payload,
+            )
+            if (dodo_subscription_id) {
+                await updateSubscriptionServiceFields(
+                    supabase,
+                    dodo_subscription_id,
+                    subscriptionObj,
+                    eventType,
+                )
             }
         } else if (eventType === 'subscription.cancelled' || eventType === 'subscription.canceled') {
             // Handle cancellation
