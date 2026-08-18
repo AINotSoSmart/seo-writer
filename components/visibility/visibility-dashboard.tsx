@@ -41,6 +41,7 @@ import {
 } from "lucide-react"
 
 import { AnswerEvidence } from "./answer-evidence"
+import { InfoHint, SectionHeading } from "./info-hint"
 import { MethodPanel } from "./method-panel"
 import { VizTokens } from "./viz-tokens"
 import { VisibilityOverview } from "./visibility-overview"
@@ -52,6 +53,7 @@ import {
     type SourceType,
 } from "@/lib/visibility/citation-classifier"
 import { blindSpots, type FanOutSummary } from "@/lib/visibility/fan-out"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export interface DashboardPrompt {
     id: string
@@ -391,17 +393,53 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </p>
                 )}
 
-                <VisibilityOverview subjectName={subjectName} summary={summary} />
+                {/*
+                  * Four views, not one scroll.
+                  *
+                  * The report is five dense sections — overview, surfaces,
+                  * sources, every question, next step — and a reader arriving
+                  * for one of them had to scroll past the other four. Worse, the
+                  * question list alone is forty expandable rows, so the sections
+                  * below it were effectively unreachable.
+                  *
+                  * Radix unmounts inactive panels, so the forty-row list and the
+                  * source tables are not in the DOM until asked for.
+                  *
+                  * Order is document order: each panel wraps the section that
+                  * already sat here, byte for byte. Nothing moved, so nothing
+                  * inside a panel changed behaviour.
+                  */}
+                <Tabs defaultValue="overview" className="mt-8">
+                    <TabsList className="w-full justify-start overflow-x-auto">
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        {perEngine.length > 1 && (
+                            <TabsTrigger value="surfaces">Surfaces</TabsTrigger>
+                        )}
+                        <TabsTrigger value="sources">Sources</TabsTrigger>
+                        <TabsTrigger value="questions">
+                            Questions ({prompts.length})
+                        </TabsTrigger>
+                    </TabsList>
 
+                    <TabsContent value="overview">
+                        <VisibilityOverview subjectName={subjectName} summary={summary} />
+                    </TabsContent>
+
+                <TabsContent value="surfaces">
                 {/* ── 3. Surfaces ──────────────────────────────────────── */}
                 {perEngine.length > 1 && (
                     <section className="mt-12">
-                        <h2 className="text-xl font-semibold">How each surface differs</h2>
-                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                            Reported per surface and never averaged together — the same brand can
-                            look very different on two engines, and an average hides exactly the
-                            gap worth acting on.
-                        </p>
+                        <SectionHeading
+                            title="How each surface differs"
+                            hintLabel="Why surfaces are never averaged"
+                            hint={
+                                <p>
+                                    Reported per surface and never averaged together — the same
+                                    brand can look very different on two engines, and an average
+                                    hides exactly the gap worth acting on.
+                                </p>
+                            }
+                        />
 
                         <div className="mt-5 grid gap-4 sm:grid-cols-2">
                             {perEngine.map((engine, index) => {
@@ -452,16 +490,23 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </section>
                 )}
 
+                </TabsContent>
+
+                <TabsContent value="sources">
                 {/* ── 4. Sources — what the answers were built from ────── */}
                 {summary.citedHosts.length > 0 && (
                     <section className="mt-12">
-                        <h2 className="text-xl font-semibold">
-                            What the answers were built from
-                        </h2>
-                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                            The pages these engines cited, by number of citations. Getting cited
-                            here is what being recommended looks like underneath.
-                        </p>
+                        <SectionHeading
+                            title="What the answers were built from"
+                            hintLabel="What citations mean here"
+                            hint={
+                                <p>
+                                    The pages these engines cited, by number of citations.
+                                    Getting cited here is what being recommended looks like
+                                    underneath.
+                                </p>
+                            }
+                        />
 
                         {breakdown && breakdown.totalCitations > 0 && (
                             <>
@@ -705,14 +750,18 @@ export function VisibilityDashboard(props: DashboardProps) {
                 {/* ── 4b. The pages that assemble recommendations ───────── */}
                 {keyPages.length > 0 && (
                     <section className="mt-12">
-                        <h2 className="text-xl font-semibold">
-                            The lists the engines read
-                        </h2>
-                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                            Best-of lists, comparisons and reviews the answers were built from.
-                            This is how an engine assembles a recommendation — which makes these
-                            the most directly actionable rows in the report.
-                        </p>
+                        <SectionHeading
+                            title="The lists the engines read"
+                            hintLabel="Why these rows are the most actionable"
+                            hint={
+                                <p>
+                                    Best-of lists, comparisons and reviews the answers were built
+                                    from. This is how an engine assembles a recommendation —
+                                    which makes these the most directly actionable rows in the
+                                    report.
+                                </p>
+                            }
+                        />
 
                         <ul className="mt-5 divide-y divide-[var(--viz-hairline)] overflow-hidden rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)]">
                             {keyPages.map((page) => (
@@ -762,14 +811,18 @@ export function VisibilityDashboard(props: DashboardProps) {
                 {/* ── 4c. Query fan-out — what the engines searched ────── */}
                 {fanOut && fanOut.queries.length > 0 && (
                     <section className="mt-12">
-                        <h2 className="text-xl font-semibold">
-                            What the engines searched for on your behalf
-                        </h2>
-                        <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                            The engines don&apos;t search your question verbatim — they break it
-                            into their own searches. These are the ones they actually ran, and
-                            how many of your {summary.promptCount} questions triggered each.
-                        </p>
+                        <SectionHeading
+                            title="What the engines searched for on your behalf"
+                            hintLabel="What fan-out searches are"
+                            hint={
+                                <p>
+                                    The engines don&apos;t search your question verbatim — they
+                                    break it into their own searches. These are the ones they
+                                    actually ran, and how many of your {summary.promptCount}{" "}
+                                    questions triggered each.
+                                </p>
+                            }
+                        />
 
                         {/*
                          * Coverage is stated before the data, because the fan-out
@@ -806,12 +859,14 @@ export function VisibilityDashboard(props: DashboardProps) {
                                         aria-hidden
                                     />
                                     Searches you never turned up in
+                                    <InfoHint label="What a retrieval-step absence means">
+                                        <p>
+                                            The engines ran these repeatedly and no answer that
+                                            used them named you. That&apos;s an absence at the
+                                            retrieval step — before the answer was even written.
+                                        </p>
+                                    </InfoHint>
                                 </h3>
-                                <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                                    The engines ran these repeatedly and no answer that used them
-                                    named you. That&apos;s an absence at the retrieval step —
-                                    before the answer was even written.
-                                </p>
                                 <ul className="mt-3 space-y-2">
                                     {fanOutBlindSpots.slice(0, 8).map((query) => (
                                         <li
@@ -887,12 +942,33 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </section>
                 )}
 
+                </TabsContent>
+
+                <TabsContent value="questions">
                 {/* ── 5. Gaps, with evidence ───────────────────────────── */}
                 <section className="mt-12">
-                    <div className="flex flex-wrap items-baseline justify-between gap-3">
-                        <h2 className="text-xl font-semibold">
-                            Every question we asked
-                        </h2>
+                    <SectionHeading
+                        title="Every question we asked"
+                        hintLabel="How to check any claim on this page"
+                        hint={
+                            <>
+                                <p>
+                                    Open any row to read the answers exactly as they came back.
+                                    If a claim here isn&apos;t supported by the answer underneath
+                                    it, the claim is wrong — check a few.
+                                </p>
+                                <p className="mt-2">
+                                    <strong className="text-[var(--viz-ink)]">Not named</strong>{" "}
+                                    means the brand appears nowhere in the answer text.{" "}
+                                    <strong className="text-[var(--viz-ink)]">
+                                        Named, never first
+                                    </strong>{" "}
+                                    means it appears but never as the first product or provider
+                                    named.
+                                </p>
+                            </>
+                        }
+                    >
                         <div className="flex items-center gap-1 rounded-lg border border-[var(--viz-hairline)] p-0.5 text-sm">
                             <button
                                 type="button"
@@ -917,12 +993,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                                 All ({prompts.length})
                             </button>
                         </div>
-                    </div>
-                    <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                        Open any row to read the answers exactly as they came back. If a claim
-                        here isn&apos;t supported by the answer underneath it, the claim is wrong
-                        — check a few.
-                    </p>
+                    </SectionHeading>
 
                     <ul className="mt-5 divide-y divide-[var(--viz-hairline)] overflow-hidden rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)]">
                         {visible.map((prompt) => {
@@ -989,23 +1060,37 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </ul>
                 </section>
 
+                </TabsContent>
+                </Tabs>
+
+                {/* Outside the tabs on purpose: the next action must be reachable
+                    from every view, not hidden behind one of them. */}
                 {/* ── 6. Production boundary ─────────────────────────── */}
                 <section className="mt-12">
-                    <h2 className="text-xl font-semibold">From findings to content work</h2>
-                    <p className="mt-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                        A losing question is evidence about an AI answer, not proof that your site
-                        needs another article. Existing-page coverage and grouped target review
-                        decide whether the remedy is a refresh, a new page, or report-only.
-                    </p>
+                    <SectionHeading
+                        title="From findings to content work"
+                        hintLabel="Why a losing question is not automatically an article"
+                        hint={
+                            <>
+                                <p>
+                                    A losing question is evidence about an AI answer, not proof
+                                    that your site needs another article. Existing-page coverage
+                                    and grouped target review decide whether the remedy is a
+                                    refresh, a new page, or report-only.
+                                </p>
+                                <p className="mt-2">
+                                    Legacy cluster suggestions are intentionally not shown or
+                                    selected. Only confirmed grouped create/refresh actions can
+                                    use production capacity.
+                                </p>
+                            </>
+                        }
+                    />
                     <div className="mt-5 flex flex-col gap-4 rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-5 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <div className="font-semibold text-[var(--viz-ink)]">
                                 {losingCount} losing questions await page-aware planning
                             </div>
-                            <p className="mt-1 max-w-2xl text-sm text-[var(--viz-ink-secondary)]">
-                                Legacy cluster suggestions are intentionally not shown or selected.
-                                Only confirmed grouped create/refresh actions can use production capacity.
-                            </p>
                         </div>
                         {isAuthenticated && (
                             <Link
@@ -1019,22 +1104,37 @@ export function VisibilityDashboard(props: DashboardProps) {
                 </section>
 
                 {/* ── Method note ──────────────────────────────────────── */}
-                <footer className="mt-14 border-t border-[var(--viz-hairline)] pt-6 text-xs leading-relaxed text-[var(--viz-ink-muted)]">
-                    <p>
-                        <strong className="font-semibold text-[var(--viz-ink-secondary)]">
-                            How to check this.
-                        </strong>{" "}
-                        Every number above counts answers we stored. Open any question and read
-                        the answer that produced its verdict. &ldquo;Not named&rdquo; means the
-                        brand appears nowhere in the text; &ldquo;named, never first&rdquo; means
-                        it appears but is never the first detected product or provider named.
-                    </p>
-                    <p className="mt-2">
-                        AI answers are non-deterministic and vary by person, place and time.
-                        These describe {summary.answerCount} answers captured on{" "}
-                        {new Date(startedAt).toLocaleDateString()} — they are a measurement, not a
-                        ranking, and a later run may differ.
-                    </p>
+                {/*
+                  * The method note is one line plus a hint, not two paragraphs.
+                  *
+                  * Both paragraphs were standing information — true of every run
+                  * and unchanged between them — sitting at the bottom of a long
+                  * scroll where they were read once and never again. The only
+                  * part that varies per run is the date and the answer count, so
+                  * that is what stays visible.
+                  */}
+                <footer className="mt-14 flex flex-wrap items-center gap-1.5 border-t border-[var(--viz-hairline)] pt-6 text-xs leading-relaxed text-[var(--viz-ink-muted)]">
+                    <span>
+                        {summary.answerCount} answers captured on{" "}
+                        {new Date(startedAt).toLocaleDateString()} — a measurement, not a ranking.
+                    </span>
+                    <InfoHint label="How to check this report, and what its limits are">
+                        <p>
+                            <strong className="text-[var(--viz-ink)]">How to check this.</strong>{" "}
+                            Every number here counts answers we stored. Open any question and read
+                            the answer that produced its verdict.
+                        </p>
+                        <p className="mt-2">
+                            &ldquo;Not named&rdquo; means the brand appears nowhere in the text;
+                            &ldquo;named, never first&rdquo; means it appears but is never the
+                            first detected product or provider named.
+                        </p>
+                        <p className="mt-2">
+                            AI answers are non-deterministic and vary by person, place and time.
+                            A later run may differ, and that is a property of what is being
+                            measured rather than a fault in the measurement.
+                        </p>
+                    </InfoHint>
                 </footer>
             </div>
         </div>

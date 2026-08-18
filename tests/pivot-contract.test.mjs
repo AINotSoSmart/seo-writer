@@ -120,19 +120,29 @@ test("visibility summary keeps question and answer math exact", () => {
         notNamedQuestions: 36,
         promptInducedRankCorrections: 2,
     })
-    assert.equal(summary.competitorVisibility.citationOccurrences, 14)
-    assert.equal(summary.competitorVisibility.citedCompetitorCount, 3)
-    assert.equal(summary.competitorVisibility.citingAnswers, 6)
-    assert.equal(summary.competitorVisibility.citingQuestions, 6)
+    // Citations from a prompt-induced answer are now discarded too, on the same
+    // rule the naming side already used. Asking "how does Kinpict compare?"
+    // makes the engine fetch kinpict.com because we named it — that is not
+    // evidence the page is authoritative, it is evidence we asked.
+    //
+    // q1 and q3 (Kinpict) and q4 (Photomyne) are prompt-induced, so their
+    // 3 + 2 + 3 = 8 citations leave the totals. Only q6, q7 and q8 remain.
+    // These figures were 14 / 3 / 6 / 6 / 4 while the two halves disagreed.
+    assert.equal(summary.competitorVisibility.citationOccurrences, 6)
+    assert.equal(summary.competitorVisibility.citedCompetitorCount, 2)
+    assert.equal(summary.competitorVisibility.citingAnswers, 3)
+    assert.equal(summary.competitorVisibility.citingQuestions, 3)
     assert.equal(
         summary.competitorVisibility.competitorCitedBrandNotCitedQuestions,
-        4,
+        3,
     )
     assert.equal(
         summary.competitorVisibility.competitorCitedBrandNotNamedQuestions,
         3,
     )
     assert.equal(summary.competitorVisibility.promptInducedNamedAnswersExcluded, 3)
+    assert.equal(summary.competitorVisibility.promptInducedCitedAnswersExcluded, 3)
+    assert.equal(summary.competitorVisibility.promptInducedCitations, 8)
     assert.ok(
         summary.competitorVisibility.namedRows.every((row) => row.namedAnswers === 0),
     )
@@ -5562,6 +5572,59 @@ test("a probe measures the customer's market, not a default one", async () => {
     assert.doesNotMatch(profile, /target_language/)
 })
 
+test("standing explanation lives in hints, and the report is not one scroll", async () => {
+    const [hint, dashboard, overview] = await Promise.all([
+        text("components/visibility/info-hint.tsx"),
+        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-overview.tsx"),
+    ])
+
+    // THE HINT MUST WORK ON A PHONE. Every screenshot of this report has been
+    // Android Chrome, where hover does not exist — a Radix `Tooltip` would have
+    // hidden the explanation on the one device it is read on. So the primitive
+    // is a Popover that opens on tap, click and keyboard focus, with hover as an
+    // enhancement gated on a real mouse. If this ever becomes a Tooltip, the
+    // explanations silently vanish on mobile and nothing else fails.
+    assert.match(hint, /react-popover/)
+    assert.doesNotMatch(hint, /react-tooltip/)
+    assert.match(hint, /event\.pointerType === "mouse"/)
+    // It is a real button with an accessible name, not decoration.
+    assert.match(hint, /aria-label=\{label\}/)
+    assert.match(hint, /type="button"/)
+
+    // Standing information — true of every run, unchanged between them — must
+    // not occupy the first screen. Each section's explanation is a hint on its
+    // heading, so a new section cannot quietly reintroduce a wall of text.
+    for (const [name, source] of [
+        ["dashboard", dashboard],
+        ["overview", overview],
+    ]) {
+        assert.match(source, /SectionHeading/, `${name} must use the shared heading`)
+    }
+    // The paragraph style these all used is gone from both surfaces.
+    assert.doesNotMatch(
+        dashboard,
+        /className="mt-1\.5 text-sm text-\[var\(--viz-ink-secondary\)\]"/,
+    )
+    assert.doesNotMatch(
+        overview,
+        /className="mt-1\.5 text-sm text-\[var\(--viz-ink-secondary\)\]"/,
+    )
+
+    // Five dense sections became navigable panels. Radix unmounts the inactive
+    // ones, so the forty-row question list is not in the DOM until asked for.
+    assert.match(dashboard, /<Tabs defaultValue="overview"/)
+    for (const value of ["overview", "sources", "questions"]) {
+        assert.match(dashboard, new RegExp(`<TabsContent value="${value}">`))
+    }
+    // The next action stays reachable from every panel rather than living in one.
+    assert.ok(
+        dashboard.indexOf("</Tabs>") <
+            dashboard.indexOf("From findings to content work"),
+        "the production-boundary CTA must sit outside the tabs",
+    )
+})
+
 test("a probe honors four confirmed rivals before it asks anything", async () => {
     const [probeRunner, parser, mapper, overview] = await Promise.all([
         text("lib/visibility/run-probe.ts"),
@@ -5591,10 +5654,30 @@ test("a probe honors four confirmed rivals before it asks anything", async () =>
         "rivals must be resolved before prompts are built",
     )
 
-    // A tracked zero is rendered as a measured zero, not a missing section.
+    // A tracked zero is STATED, not left as an empty table for the reader to
+    // interpret. "None of your rivals was recommended by name" is a finding;
+    // four rows of zeros is a page that looks broken.
     assert.match(mapper, /competitorTracking\?:/)
-    assert.match(overview, /Zero tracked competitors were named naturally/)
-    assert.match(overview, /Who was cited instead/)
+    assert.match(overview, /unpromptedTotal === 0/)
+    assert.match(overview, /recommended by name/)
+
+    // The two rival tables are one. They shared a key, split nine columns
+    // between them, and duplicated four of those columns on any single-engine
+    // run — `namedQuestions` equalled `namedAnswers` and `citingQuestions`
+    // equalled `citingAnswers`, because 40 questions produced 40 answers. Two
+    // columns that never disagree read as a defect.
+    // Headings are `SectionHeading` props now, so the explanation that used to
+    // sit under each one is a hint rather than a paragraph. Match the prop; the
+    // comments above the replacement quote the old headings deliberately, to
+    // record what merged into what.
+    assert.match(overview, /title="How your rivals showed up"/)
+    assert.doesNotMatch(overview, />Who was named instead</)
+    assert.doesNotMatch(overview, />Who was cited instead</)
+    // Everything is per answer: a question does not cite or name anything.
+    assert.doesNotMatch(overview, />Citing questions</)
+    assert.doesNotMatch(overview, />Named questions</)
+    assert.doesNotMatch(overview, /row\.citingQuestions/)
+    assert.doesNotMatch(overview, /row\.namedQuestions/)
 })
 
 test("a failed probe never shows the customer an internal error", async () => {

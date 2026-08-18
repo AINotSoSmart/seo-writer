@@ -1253,6 +1253,109 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-17 (twenty-seventh pass) — explanation on demand, and four views instead of one scroll
+
+**Standing prose moved into hints.** Every section carried a paragraph of
+explanation that was true of every run and unchanged between them — what
+"named" means, why surfaces are not averaged, why a losing question is not
+automatically an article. All of it correct, all of it re-read on every visit,
+all of it pushing the numbers below the fold. It now lives behind an ⓘ on each
+heading (`components/visibility/info-hint.tsx`, `InfoHint` + `SectionHeading`).
+
+**The primitive is a Popover, not a Tooltip, and that is the whole point.**
+Radix `Tooltip` opens on hover and focus only. Every screenshot of this report
+has been Android Chrome, where hover does not exist — a tooltip would have
+hidden the explanations on the one device the founder reads them on. `InfoHint`
+opens on tap, click and keyboard focus everywhere, and additionally on hover
+when `pointerType === "mouse"`. The contract suite asserts `react-popover` and
+forbids `react-tooltip`, because swapping them back would fail silently on
+mobile and nothing else would break.
+
+**The transparency bug, which is worth remembering.** The first build painted
+the panel with `bg-[var(--viz-surface)]` and it rendered fully transparent —
+the report showed straight through the text. Radix portals content to
+`document.body`, which is *outside* the `.viz-root` element that declares
+`--viz-surface`, so every token resolved to nothing. **A portal has to carry its
+own scope**: the fix is `viz-root` on the content itself. Verified by computed
+style rather than by eye — `rgb(255, 255, 255)`, `--viz-surface: #ffffff`.
+
+**Four views, not one scroll.** Overview / Surfaces / Sources / Questions are
+Radix tabs. Radix unmounts inactive panels, so the forty-row question list and
+the source tables are not in the DOM until asked for. Order is document order
+and each panel wraps the section that already sat there byte for byte — nothing
+moved, so nothing inside a panel changed behaviour. The production-boundary CTA
+sits outside the tabs on purpose: the next action must be reachable from every
+view.
+
+Verified by rendering the dashboard with mock data on a throwaway route at
+375×812 and at 1280×900, exercising both hints and all four tabs, then deleting
+the route. 122/122 contract tests, `tsc --noEmit` clean. No migration.
+
+**Still open:** the founder also asked for deeper interlinking — clicking a
+rival or a source to filter the question list rather than reading four panels
+side by side. That is a data-flow change, not a layout one, and is not built.
+
+### 2026-08-17 (twenty-sixth pass) — two rival tables become one, under one rule
+
+The founder could not tell what "Who was named instead" and "Who was cited
+instead" were for, said the two disagreed, and said that disagreement cost trust
+in the product. All three observations were correct, and two of them were
+defects rather than copy problems.
+
+**What the two tables actually measured.** Genuinely different events, never
+explained on the page: *named* is the engine recommending a rival to the buyer
+in prose; *cited* is the engine reading one of that rival's pages to build the
+answer. The second is the more actionable of the two — it says whose content is
+feeding the machine — and it was labelled "Who was cited instead", which reads
+like a lesser version of the first.
+
+**Defect 1: four of the nine columns were duplicates.** `namedQuestions` equals
+`namedAnswers`, and `citingQuestions` equals `citingAnswers`, on any run with
+one engine — 40 questions produced 40 answers, so every pair printed the same
+number. A reader hunting for the difference between two identical columns
+concludes the report is unreliable. The founder also made the sharper point that
+"citing questions" is a category error regardless of arithmetic: a question does
+not cite anything, the answer to it does. **Everything is now counted per
+answer.**
+
+**Defect 2: the two halves applied opposite exclusion rules.** Naming excluded
+prompt-induced evidence; citation deliberately kept it, on the argument that
+"the engine still chose that competitor's domain as a source". That argument
+does not survive the question: ask *"what is better than animateoldphotos.org?"*
+and the engine fetches animateoldphotos.org because we named it, not because it
+judged the page authoritative — the same circularity the naming exclusion exists
+to prevent. Applying opposite policies to two adjacent tables is precisely what
+made the report look like it was contradicting itself: an all-zero naming table
+beside a citation table full of numbers, with nothing saying they were counted
+differently. **Both halves now exclude prompt-induced evidence**, and the
+discarded totals are reported (`promptInducedCitedAnswersExcluded`,
+`promptInducedCitations`) rather than dropped silently.
+
+**The finding that was buried.** An all-zero naming table plus "2 prompt-induced
+rows excluded" means: across 40 questions, the only times a tracked rival was
+named were the times our own question named it. No engine recommended any of
+them unprompted — while three of them were being read as sources. That is a real
+and useful result ("their content is in the machine, their brand is not") and it
+was presented as an empty table with an apologetic footnote. It is now the first
+sentence of the section.
+
+Changes: one section, `How your rivals showed up`, one row per rival, five
+columns (recommended / used as a source / pages cited / you appeared too), the
+headline finding in prose above it, and one disclosure line instead of two
+conflicting footnotes.
+
+**Numbers will move on the existing run**, because the citation exclusion is
+new. The contract fixture moved 14 → 6 citations and 6 → 3 citing answers once
+its three prompt-induced answers were discounted. Expect the same direction
+live; a rival whose only citing answer was the question that named it drops to
+zero, which is the honest figure.
+
+A note on process: the contract suite caught me reintroducing the exact category
+error the founder had just reported — `unpromptedTotal` summed `namedQuestions`
+while my new sentence called them "answers".
+
+121/121 contract tests, `tsc --noEmit` clean. No migration.
+
 ### 2026-08-17 (twenty-fifth pass) — no question may name a brand
 
 **Two changes, both from the founder reading the live report.**

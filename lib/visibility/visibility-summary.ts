@@ -67,6 +67,10 @@ export interface VisibilitySummaryV2 {
     competitorVisibility: {
         trackedCount: number
         promptInducedNamedAnswersExcluded: number
+        /** Answers whose citations were discarded because our question named the rival. */
+        promptInducedCitedAnswersExcluded: number
+        /** Individual citation occurrences inside those discarded answers. */
+        promptInducedCitations: number
         citationOccurrences: number
         citedCompetitorCount: number
         citingAnswers: number
@@ -240,6 +244,8 @@ export function deriveVisibilitySummaryV2(input: {
     const namedRows: NamedCompetitorRow[] = []
     const citedRows: CitedCompetitorRow[] = []
     let promptInducedNamedAnswersExcluded = 0
+    let promptInducedCitedAnswersExcluded = 0
+    let promptInducedCitations = 0
 
     const anyCompetitorCitedAnswer = new Set<number>()
     const anyCompetitorCitedQuestion = new Set<string>()
@@ -278,6 +284,29 @@ export function deriveVisibilitySummaryV2(input: {
             }
 
             if (mention.citationCount <= 0) return
+
+            /**
+             * The same exclusion the naming side applies, for the same reason.
+             *
+             * This used to be the one place prompt-induced evidence was KEPT,
+             * on the argument that "the engine still chose that domain as a
+             * source". It does not survive contact with the question: ask
+             * "what is better than animateoldphotos.org?" and the engine
+             * fetches animateoldphotos.org because we named it, not because it
+             * judged the page authoritative. That is the same circularity the
+             * naming exclusion exists to prevent.
+             *
+             * Applying opposite rules to the two halves is also what made the
+             * report look like it was contradicting itself: an all-zero naming
+             * table beside a citation table full of numbers, with nothing
+             * saying the two were counted under different policies.
+             */
+            if (promptNamesCompetitor(prompt.prompt, competitor)) {
+                promptInducedCitedAnswersExcluded++
+                promptInducedCitations += mention.citationCount
+                return
+            }
+
             citationOccurrences += mention.citationCount
             citingAnswers.add(resultIndex)
             citingQuestions.add(result.promptId)
@@ -357,6 +386,8 @@ export function deriveVisibilitySummaryV2(input: {
         competitorVisibility: {
             trackedCount: input.competitors.length,
             promptInducedNamedAnswersExcluded,
+            promptInducedCitedAnswersExcluded,
+            promptInducedCitations,
             citationOccurrences: citedRows.reduce(
                 (total, row) => total + row.citationOccurrences,
                 0,
