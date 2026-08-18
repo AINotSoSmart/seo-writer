@@ -15,6 +15,8 @@
 import { useEffect, useState } from "react"
 import { AlertCircle, ExternalLink, Loader2, Search } from "lucide-react"
 
+import { formatRunDateTime } from "@/lib/visibility/format-date"
+
 const SURFACE_NOTE: Record<string, string> = {
     consumer_app: "Real answer from the consumer app",
     api: "Developer API — a different surface from the consumer app",
@@ -177,7 +179,7 @@ export function AnswerEvidence({
                                 </span>
                             </div>
                             <span className="text-xs tabular-nums text-[var(--viz-ink-muted)]">
-                                {new Date(answer.observed_at).toLocaleString()}
+                                {formatRunDateTime(answer.observed_at)}
                             </span>
                         </header>
 

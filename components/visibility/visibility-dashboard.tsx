@@ -53,6 +53,7 @@ import {
     type SourceType,
 } from "@/lib/visibility/citation-classifier"
 import { blindSpots, type FanOutSummary } from "@/lib/visibility/fan-out"
+import { formatRunDate } from "@/lib/visibility/format-date"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export interface DashboardPrompt {
@@ -63,6 +64,10 @@ export interface DashboardPrompt {
     answers_total: number
     answers_present: number
     mean_mention_position: number | null
+    /** Hosts this question's answers cited — powers the source cross-link. */
+    citedHosts?: string[]
+    /** Tracked rivals named or cited in this question's answers. */
+    rivalIds?: string[]
 }
 
 export interface DashboardEngine {
@@ -188,6 +193,7 @@ function BarRow({
     color,
     emphasis = false,
     suffix,
+    onSelect,
 }: {
     name: string
     value: number
@@ -196,6 +202,8 @@ function BarRow({
     color: string
     emphasis?: boolean
     suffix?: string
+    /** When given, the label becomes a control that filters the question list. */
+    onSelect?: () => void
 }) {
     const width = max > 0 ? Math.max((value / max) * 100, value > 0 ? 1.5 : 0) : 0
     const share = total > 0 ? Math.round((value / total) * 100) : 0
@@ -204,6 +212,19 @@ function BarRow({
             className="grid grid-cols-[minmax(0,11rem)_1fr_auto] items-center gap-3"
             title={`${name}: named in ${value} of ${total} questions (${share}%)`}
         >
+            {onSelect ? (
+                <button
+                    type="button"
+                    onClick={onSelect}
+                    className={`truncate text-left text-sm underline decoration-dotted underline-offset-4 transition hover:text-[var(--viz-series-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--viz-series-1)] ${
+                        emphasis
+                            ? "font-semibold text-[var(--viz-ink)]"
+                            : "text-[var(--viz-ink-secondary)]"
+                    }`}
+                >
+                    {name}
+                </button>
+            ) : (
             <span
                 className={`truncate text-sm ${
                     emphasis
@@ -213,6 +234,7 @@ function BarRow({
             >
                 {name}
             </span>
+            )}
             <span className="viz-track block w-full">
                 <span
                     className="viz-bar block"
@@ -259,15 +281,44 @@ export function VisibilityDashboard(props: DashboardProps) {
     const apiEngines = engines.filter((engine) => engine.surface === "api")
     const degraded = engines.filter((engine) => engine.failed > 0)
 
+    /**
+     * A cross-link from a number to the questions behind it.
+     *
+     * The report had four panels a reader had to hold in their head at once:
+     * "pixreunion.com was cited 6 times" and, somewhere in a forty-row list,
+     * the six questions that produced those citations. `focus` is what joins
+     * them — click the site or the rival, land on the questions.
+     *
+     * It deliberately does NOT replace the losing/all filter; it narrows on a
+     * second axis, so "losing questions where pixreunion was cited" is
+     * reachable and is usually the interesting set.
+     */
+    const [focus, setFocus] = useState<
+        { kind: "host" | "rival"; value: string; label: string } | null
+    >(null)
+    const [tab, setTab] = useState("overview")
+
+    const focusOn = (kind: "host" | "rival", value: string, label: string) => {
+        setFocus({ kind, value, label })
+        setTab("questions")
+    }
+
     const visible = useMemo(() => {
-        const rows =
+        let rows =
             filter === "losing"
                 ? prompts.filter((prompt) => prompt.verdict !== "present")
                 : prompts
+        if (focus) {
+            rows = rows.filter((prompt) =>
+                focus.kind === "host"
+                    ? (prompt.citedHosts ?? []).includes(focus.value)
+                    : (prompt.rivalIds ?? []).includes(focus.value),
+            )
+        }
         return [...rows].sort(
             (a, b) => VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict],
         )
-    }, [prompts, filter])
+    }, [prompts, filter, focus])
 
     const losingCount = prompts.filter((prompt) => prompt.verdict !== "present").length
 
@@ -317,7 +368,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                 {/* ── Header ───────────────────────────────────────────── */}
                 <header className={embedded ? "sr-only" : undefined}>
                     <p className="text-xs uppercase tracking-wide text-[var(--viz-ink-muted)]">
-                        AI visibility · {new Date(startedAt).toLocaleDateString()}
+                        AI visibility · {formatRunDate(startedAt)}
                     </p>
                     <h1 className="mt-2 text-3xl font-semibold">{subjectName}</h1>
                     <p className="mt-2 text-[var(--viz-ink-secondary)]">
@@ -409,7 +460,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                   * already sat here, byte for byte. Nothing moved, so nothing
                   * inside a panel changed behaviour.
                   */}
-                <Tabs defaultValue="overview" className="mt-8">
+                <Tabs value={tab} onValueChange={setTab} className="mt-8">
                     <TabsList className="w-full justify-start overflow-x-auto">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         {perEngine.length > 1 && (
@@ -422,7 +473,13 @@ export function VisibilityDashboard(props: DashboardProps) {
                     </TabsList>
 
                     <TabsContent value="overview">
-                        <VisibilityOverview subjectName={subjectName} summary={summary} />
+                        <VisibilityOverview
+                            subjectName={subjectName}
+                            summary={summary}
+                            onFocusRival={(competitorId, label) =>
+                                focusOn("rival", competitorId, label)
+                            }
+                        />
                     </TabsContent>
 
                 <TabsContent value="surfaces">
@@ -739,6 +796,13 @@ export function VisibilityDashboard(props: DashboardProps) {
                                             }
                                             emphasis={owned}
                                             suffix=""
+                                            onSelect={() =>
+                                                focusOn(
+                                                    "host",
+                                                    host.host,
+                                                    `answers citing ${host.host}`,
+                                                )
+                                            }
                                         />
                                     )
                                 })}
@@ -995,6 +1059,28 @@ export function VisibilityDashboard(props: DashboardProps) {
                         </div>
                     </SectionHeading>
 
+                    {/* The cross-link has to be visible and undoable. An
+                        invisible filter is how a reader concludes questions are
+                        missing. */}
+                    {focus && (
+                        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--viz-series-1)]/30 bg-[var(--viz-series-1)]/5 px-3 py-2 text-sm">
+                            <span className="text-[var(--viz-ink-secondary)]">
+                                Showing {visible.length}{" "}
+                                {visible.length === 1 ? "question" : "questions"} —{" "}
+                                <strong className="font-semibold text-[var(--viz-ink)]">
+                                    {focus.label}
+                                </strong>
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setFocus(null)}
+                                className="ml-auto rounded-md border border-[var(--viz-hairline)] px-2.5 py-1 text-xs font-medium text-[var(--viz-ink-secondary)] transition hover:text-[var(--viz-ink)]"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    )}
+
                     <ul className="mt-5 divide-y divide-[var(--viz-hairline)] overflow-hidden rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)]">
                         {visible.map((prompt) => {
                             const meta = VERDICT_META[prompt.verdict]
@@ -1116,7 +1202,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                 <footer className="mt-14 flex flex-wrap items-center gap-1.5 border-t border-[var(--viz-hairline)] pt-6 text-xs leading-relaxed text-[var(--viz-ink-muted)]">
                     <span>
                         {summary.answerCount} answers captured on{" "}
-                        {new Date(startedAt).toLocaleDateString()} — a measurement, not a ranking.
+                        {formatRunDate(startedAt)} — a measurement, not a ranking.
                     </span>
                     <InfoHint label="How to check this report, and what its limits are">
                         <p>

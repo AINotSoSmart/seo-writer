@@ -4,6 +4,13 @@ import { InfoHint, SectionHeading } from "./info-hint"
 interface VisibilityOverviewProps {
     subjectName: string
     summary: VisibilitySummaryV2
+    /**
+     * Turns a rival row into a link to the questions behind it.
+     *
+     * Optional so this component stays renderable on its own; when absent the
+     * name is plain text rather than a control that does nothing.
+     */
+    onFocusRival?: (competitorId: string, label: string) => void
 }
 
 function rate(part: number, whole: number): string {
@@ -24,7 +31,11 @@ function Metric({ value, label }: { value: string; label: string }) {
     )
 }
 
-export function VisibilityOverview({ subjectName, summary }: VisibilityOverviewProps) {
+export function VisibilityOverview({
+    subjectName,
+    summary,
+    onFocusRival,
+}: VisibilityOverviewProps) {
     const brand = summary.brandVisibility
     const competitors = summary.competitorVisibility
     /**
@@ -330,7 +341,22 @@ export function VisibilityOverview({ subjectName, summary }: VisibilityOverviewP
                             {rivalRows.map((row) => (
                                 <tr key={row.id}>
                                     <td className="px-4 py-3">
-                                        <div className="font-medium text-[var(--viz-ink)]">{row.name}</div>
+                                        {onFocusRival ? (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    onFocusRival(
+                                                        row.id,
+                                                        `answers involving ${row.name}`,
+                                                    )
+                                                }
+                                                className="text-left font-medium text-[var(--viz-ink)] underline decoration-dotted underline-offset-4 transition hover:text-[var(--viz-series-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--viz-series-1)]"
+                                            >
+                                                {row.name}
+                                            </button>
+                                        ) : (
+                                            <div className="font-medium text-[var(--viz-ink)]">{row.name}</div>
+                                        )}
                                         {row.domain && row.domain !== row.name && (
                                             <div className="text-xs text-[var(--viz-ink-muted)]">{row.domain}</div>
                                         )}

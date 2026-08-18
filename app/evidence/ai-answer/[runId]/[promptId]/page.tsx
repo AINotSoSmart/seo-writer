@@ -29,6 +29,7 @@ import type { Metadata } from "next"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
 import { ENGINE_LABELS, type AiEngine } from "@/lib/visibility/engines"
+import { formatRunDate, formatRunDateTime } from "@/lib/visibility/format-date"
 
 export const metadata: Metadata = {
     // Owner-only and never indexed. The noindex is belt-and-braces now that
@@ -136,7 +137,7 @@ export default async function AiAnswerEvidencePage({ params }: PageProps) {
                 <div>
                     <dt className="text-muted-foreground">Asked</dt>
                     <dd className="font-medium">
-                        {new Date(run.started_at).toLocaleDateString()}
+                        {formatRunDate(run.started_at)}
                     </dd>
                 </div>
             </dl>
@@ -162,7 +163,7 @@ export default async function AiAnswerEvidencePage({ params }: PageProps) {
                                 {ENGINE_LABELS[row.engine as AiEngine] ?? row.engine}
                             </h2>
                             <span className="text-xs text-muted-foreground">
-                                {row.model} · {new Date(row.observed_at).toLocaleString()}
+                                {row.model} · {formatRunDateTime(row.observed_at)}
                             </span>
                         </header>
 

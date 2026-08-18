@@ -32,7 +32,7 @@ import {
     deriveVisibilitySummaryV2,
     type VisibilityResultFact,
 } from "@/lib/visibility/visibility-summary"
-import type { CompetitorMention } from "@/lib/visibility/answer-parser"
+import { extractHostname, type CompetitorMention } from "@/lib/visibility/answer-parser"
 
 type ProbePromptRow = DashboardPrompt & {
     tracked_prompt_id: string | null
@@ -46,6 +46,15 @@ interface ProbeResultRow {
     citation_count: number
     mention_position: number | null
     competitor_mentions: unknown
+    /**
+     * Loaded for the cross-links only — clicking a cited site or a rival
+     * filters the question list to the questions that produced it.
+     *
+     * Deliberately just the URLs, never `answer_text`: the report shows counts
+     * and the evidence page shows prose, and pulling forty verbatim answers
+     * into this payload to build a filter would be a large cost for a link.
+     */
+    citations: unknown
 }
 
 interface TrackedCompetitorRow {
@@ -112,7 +121,7 @@ export default async function VisibilityPage() {
         admin
             .from("ai_probe_results")
             .select(
-                "prompt_id, engine, surface, mention_count, citation_count, mention_position, competitor_mentions",
+                "prompt_id, engine, surface, mention_count, citation_count, mention_position, competitor_mentions, citations",
             )
             .eq("run_id", run.id),
     ])
@@ -151,6 +160,38 @@ export default async function VisibilityPage() {
      * one our own question named. Reading it here would print a chip that
      * disagrees with the headline counts on the same screen.
      */
+    /**
+     * What each question's answers actually referenced, so the report can be
+     * navigated instead of only read.
+     *
+     * A reader who sees "pixreunion.com — 6 citations" wants the six questions,
+     * and the only way to get them used to be reading forty rows. These two
+     * maps are what turn a number into a link. Built here rather than in the
+     * component because it is a join over the same rows already loaded.
+     */
+    const citedHostsByPrompt = new Map<string, Set<string>>()
+    const rivalsByPrompt = new Map<string, Set<string>>()
+    for (const result of observedResults) {
+        const hosts = citedHostsByPrompt.get(result.prompt_id) ?? new Set<string>()
+        for (const citation of Array.isArray(result.citations) ? result.citations : []) {
+            const host = extractHostname(String((citation as { url?: unknown })?.url ?? ""))
+            if (host) hosts.add(host)
+        }
+        citedHostsByPrompt.set(result.prompt_id, hosts)
+
+        const rivals = rivalsByPrompt.get(result.prompt_id) ?? new Set<string>()
+        for (const mention of Array.isArray(result.competitor_mentions)
+            ? (result.competitor_mentions as CompetitorMention[])
+            : []) {
+            // Either axis counts: a rival that was cited but never named still
+            // belongs to this question, and that pairing is the interesting one.
+            if (mention.mentionCount > 0 || mention.citationCount > 0) {
+                rivals.add(mention.competitorId)
+            }
+        }
+        rivalsByPrompt.set(result.prompt_id, rivals)
+    }
+
     const dashboardPrompts: DashboardPrompt[] = observedPrompts.map((prompt) => ({
         ...prompt,
         verdict: deriveQuestionVerdict(
@@ -158,6 +199,8 @@ export default async function VisibilityPage() {
             prompt.prompt,
             trackedCompetitors,
         ),
+        citedHosts: [...(citedHostsByPrompt.get(prompt.id) ?? [])],
+        rivalIds: [...(rivalsByPrompt.get(prompt.id) ?? [])],
     }))
 
     const perEngineMap = new Map<

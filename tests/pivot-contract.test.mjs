@@ -5613,7 +5613,10 @@ test("standing explanation lives in hints, and the report is not one scroll", as
 
     // Five dense sections became navigable panels. Radix unmounts the inactive
     // ones, so the forty-row question list is not in the DOM until asked for.
-    assert.match(dashboard, /<Tabs defaultValue="overview"/)
+    // Controlled rather than uncontrolled, because a cross-link has to be able
+    // to switch panels — clicking a cited site in Sources lands on Questions.
+    assert.match(dashboard, /useState\("overview"\)/)
+    assert.match(dashboard, /<Tabs value=\{tab\} onValueChange=\{setTab\}/)
     for (const value of ["overview", "sources", "questions"]) {
         assert.match(dashboard, new RegExp(`<TabsContent value="${value}">`))
     }
@@ -5623,6 +5626,28 @@ test("standing explanation lives in hints, and the report is not one scroll", as
             dashboard.indexOf("From findings to content work"),
         "the production-boundary CTA must sit outside the tabs",
     )
+
+    // A number is a link to the questions behind it. "pixreunion.com — 6
+    // citations" was previously a dead end: the six questions existed somewhere
+    // in a forty-row list and the reader had to find them by eye.
+    const page = await text("app/(protected)/visibility/page.tsx")
+    assert.match(page, /citedHostsByPrompt/)
+    assert.match(page, /rivalsByPrompt/)
+    // Only citation URLs are joined in — never answer_text, which belongs to
+    // the evidence page and would be a large payload to carry for a filter.
+    assert.match(page, /competitor_mentions, citations/)
+    // Match the select list, not the word — the comment above it names
+    // `answer_text` deliberately, to record what is being kept out.
+    assert.doesNotMatch(page, /\.select\([^)]*answer_text/)
+
+    assert.match(dashboard, /const focusOn = /)
+    assert.match(dashboard, /focus\.kind === "host"/)
+    assert.match(overview, /onFocusRival/)
+    // A filter the reader cannot see or undo reads as missing data.
+    assert.match(dashboard, /Clear/)
+    assert.match(dashboard, /setFocus\(null\)/)
+    // The cross-link narrows on a second axis; it must not replace losing/all.
+    assert.match(dashboard, /filter === "losing"/)
 })
 
 test("a probe honors four confirmed rivals before it asks anything", async () => {
