@@ -82,13 +82,11 @@ export const PROMPT_INTENTS = [
 export type PromptIntentKey = (typeof PROMPT_INTENTS)[number]["key"]
 
 /**
- * Candidate questions requested per confirmed area, before the run's budget
- * applies. A business may have only one confirmed area, so that one model call
- * must still be capable of filling the complete forty-question durable set.
- * Multiple areas provide additional headroom before the global selector keeps
- * the best forty.
+ * Maximum candidates the whole-company generator may return. This is a safety
+ * ceiling, not a required count: stopping before it has to paraphrase a buyer
+ * situation is the desired behaviour.
  */
-export const PROMPTS_PER_FAMILY = 40
+export const MAX_GENERATED_PROMPTS = 25
 
 /**
  * How many prompts a run asks when the caller doesn't say.
@@ -98,7 +96,7 @@ export const PROMPTS_PER_FAMILY = 40
  * comparability comes from stable identity. At the current two-engine Cloro
  * estimate this is roughly 360 credits, about sixteen cents per cycle.
  */
-export const DEFAULT_PROMPTS_PER_RUN = 40
+export const DEFAULT_PROMPTS_PER_RUN = MAX_GENERATED_PROMPTS
 
 /**
  * Hard ceiling on one probe run, protecting spend and wall-clock.

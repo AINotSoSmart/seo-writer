@@ -155,7 +155,6 @@ export default function OnboardingPage() {
     const [discoveringCompetitors, setDiscoveringCompetitors] = useState(false)
     const competitorDiscoveryRef = useRef(false)
     const [promptsLoading, setPromptsLoading] = useState(false)
-    const [regeneratingFamilyId, setRegeneratingFamilyId] = useState<string | null>(null)
     const [promptsError, setPromptsError] = useState("")
 
     const [error, setError] = useState("")
@@ -687,8 +686,8 @@ export default function OnboardingPage() {
                     productName: brandData?.product_name,
                     subjectType: brandData?.product_identity?.literally,
                     // Buyers ask in their own language, so the questions the
-                    // founder reviews must already be in it — regenerating them
-                    // later in a different language would invalidate the review.
+                    // founder reviews must already be in it — changing them
+                    // later to a different language would invalidate the review.
                     language: brandData?.target_language,
                     // Everything a person would hand a model to write these by
                     // hand — including who has the problem. Background, not a
@@ -711,9 +710,9 @@ export default function OnboardingPage() {
                 id: `prompt-${idx}-${Date.now()}`,
             }))
 
-            if (items.length !== DEFAULT_PROMPTS_PER_RUN) {
+            if (items.length === 0 || items.length > DEFAULT_PROMPTS_PER_RUN) {
                 throw new Error(
-                    `Generated ${items.length} unique questions instead of ${DEFAULT_PROMPTS_PER_RUN}. Please try again.`,
+                    "The generator did not return a usable set of distinct buyer questions. Please try again.",
                 )
             }
 
@@ -726,76 +725,6 @@ export default function OnboardingPage() {
             )
         } finally {
             setPromptsLoading(false)
-        }
-    }
-
-    /** Regenerates candidate buyer questions for a single scope family. */
-    const handleRegenerateFamily = async (familyId: string) => {
-        const activeFamilies = (brandData?.scope_families || []).filter((f) => f.enabled !== false)
-        const target = activeFamilies.find((f) => (f.id || f.name) === familyId)
-        if (!target) return
-
-        const remaining = prompts.filter(
-            (prompt) => prompt.scopeFamilyId !== familyId && prompt.sourceSeed !== target.name,
-        )
-        const existingFamilyCount = prompts.length - remaining.length
-        const targetPromptCount =
-            existingFamilyCount ||
-            Math.ceil(DEFAULT_PROMPTS_PER_RUN / Math.max(1, activeFamilies.length))
-
-        setRegeneratingFamilyId(familyId)
-        setPromptsError("")
-        try {
-            const res = await fetch("/api/visibility/prompts/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    scopeFamilies: [target],
-                    familyId: target.id || familyId,
-                    productName: brandData?.product_name,
-                    subjectType: brandData?.product_identity?.literally,
-                    // Buyers ask in their own language, so the questions the
-                    // founder reviews must already be in it — regenerating them
-                    // later in a different language would invalidate the review.
-                    language: brandData?.target_language,
-                    // Everything a person would hand a model to write these by
-                    // hand — including who has the problem. Background, not a
-                    // template: nobody announces their own job title.
-                    category: brandData?.category,
-                    coreFeatures: brandData?.core_features,
-                    audience: brandData?.audience?.primary,
-                    competitors,
-                    maxPrompts: targetPromptCount,
-                    excludeQuestions: remaining.map((prompt) => prompt.text),
-                }),
-            })
-
-            const data = (await res.json()) as GeneratePromptsResponse
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to regenerate questions for this area")
-            }
-
-            const newItems: PromptItem[] = (data.prompts || []).map((p, idx) => ({
-                ...p,
-                id: `prompt-${familyId}-${idx}-${Date.now()}`,
-            }))
-
-            if (newItems.length < targetPromptCount) {
-                throw new Error(
-                    `Generated only ${newItems.length} of ${targetPromptCount} unique replacement questions. Your existing questions were kept.`,
-                )
-            }
-
-            const updated = [...remaining, ...newItems.slice(0, targetPromptCount)]
-            setPrompts(updated)
-            localStorage.setItem(STORAGE_KEYS.PROMPTS, JSON.stringify(updated))
-        } catch (err: unknown) {
-            setPromptsError(
-                (err instanceof Error ? err.message : "") ||
-                    "Failed to regenerate questions for this area",
-            )
-        } finally {
-            setRegeneratingFamilyId(null)
         }
     }
 
@@ -855,7 +784,7 @@ export default function OnboardingPage() {
             setBrandId(savedBrandId)
 
             // The questions are now subscription state, not payload carried
-            // from this browser into one run. Commit the exact reviewed forty
+            // from this browser into one run. Commit the exact reviewed set
             // before opening the probe screen; the probe will read them back
             // from the server and refuses client-supplied substitutes.
             const promptResponse = await fetch("/api/visibility/prompts/confirm", {
@@ -864,11 +793,12 @@ export default function OnboardingPage() {
                 body: JSON.stringify({
                     brandId: savedBrandId,
                     prompts: prompts.map(
-                        ({ text, scopeFamilyId, intent, sourceSeed }) => ({
+                        ({ text, scopeFamilyId, intent, sourceSeed, selectionClass }) => ({
                             text,
                             scopeFamilyId,
                             intent,
                             sourceSeed,
+                            selectionClass,
                         }),
                     ),
                 }),
@@ -1312,7 +1242,6 @@ export default function OnboardingPage() {
                                             scopeFamilies={brandData.scope_families || []}
                                             productName={brandData.product_name || ""}
                                             loading={promptsLoading}
-                                            regeneratingFamilyId={regeneratingFamilyId}
                                             error={promptsError}
                                             onPromptsChange={(newPrompts) => {
                                                 setPrompts(newPrompts)
@@ -1321,7 +1250,6 @@ export default function OnboardingPage() {
                                                     JSON.stringify(newPrompts),
                                                 )
                                             }}
-                                            onRegenerateFamily={handleRegenerateFamily}
                                             saving={savingBrand}
                                             onBack={() => setStep("extras")}
                                             onContinue={handleSaveBrand}

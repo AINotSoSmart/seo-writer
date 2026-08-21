@@ -372,7 +372,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
             {
                 error:
-                    "The probe only measures the brand's saved tracked questions. Confirm the 40-question set before starting it.",
+                    "The probe only measures the brand's saved tracked questions. Confirm the generated question set before starting it.",
                 reason: "client_prompts_forbidden",
             },
             { status: 400 },
@@ -564,20 +564,24 @@ export async function POST(req: NextRequest) {
         .eq("tracking_status", "active")
         .order("position", { ascending: true })
 
-    if (trackedError || trackedRows?.length !== DEFAULT_PROMPTS_PER_RUN) {
+    if (
+        trackedError ||
+        !trackedRows?.length ||
+        trackedRows.length > DEFAULT_PROMPTS_PER_RUN
+    ) {
         if (openedAuditHere) {
             await failAuditRun(
                 admin,
                 auditId,
                 "tracked_prompts_incomplete",
-                `Expected ${DEFAULT_PROMPTS_PER_RUN} active tracked questions; found ${trackedRows?.length ?? 0}.`,
+                `Expected 1-${DEFAULT_PROMPTS_PER_RUN} active tracked questions; found ${trackedRows?.length ?? 0}.`,
             )
         }
         console.error("[Probe API] Could not load the durable tracked set:", trackedError)
         return NextResponse.json(
             {
                 error:
-                    `Confirm exactly ${DEFAULT_PROMPTS_PER_RUN} tracked buyer questions before starting the measurement.`,
+                    `Confirm up to ${DEFAULT_PROMPTS_PER_RUN} tracked buyer questions before starting the measurement.`,
                 reason: "tracked_prompts_incomplete",
             },
             { status: 409 },

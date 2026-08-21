@@ -4,7 +4,6 @@ import { useState } from "react"
 import {
     ArrowRight,
     ArrowLeft,
-    RotateCw,
     Trash2,
     Plus,
     Check,
@@ -75,10 +74,8 @@ export function PromptsStep({
     productName,
     loading,
     saving,
-    regeneratingFamilyId,
     error,
     onPromptsChange,
-    onRegenerateFamily,
     onBack,
     onContinue,
 }: {
@@ -88,10 +85,8 @@ export function PromptsStep({
     loading: boolean
     /** The brand is being written — this screen commits the run. */
     saving: boolean
-    regeneratingFamilyId: string | null
     error?: string
     onPromptsChange: (prompts: PromptItem[]) => void
-    onRegenerateFamily: (familyId: string) => void
     onBack: () => void
     onContinue: () => void
 }) {
@@ -163,7 +158,7 @@ export function PromptsStep({
             setBrandWarnings((prev) => ({
                 ...prev,
                 [familyId]:
-                    "Discovery questions should not name your brand. Test what buyers ask before knowing you exist.",
+                    "Buyer questions should not name your brand. Test whether AI recommends it unprompted.",
             }))
             return
         }
@@ -252,15 +247,13 @@ export function PromptsStep({
                         const familyPrompts = prompts.filter(
                             (p) => p.scopeFamilyId === familyId || p.sourceSeed === family.name,
                         )
-                        const isRegenerating = regeneratingFamilyId === familyId
-
                         return (
                             <div
                                 key={familyId}
                                 className="overflow-hidden rounded-xl border border-stone-200 bg-white"
                             >
                                 {/* Family Header */}
-                                <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/70 px-3.5 py-2.5">
+                                <div className="border-b border-stone-100 bg-stone-50/70 px-3.5 py-2.5">
                                     <div className="space-y-0.5">
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-xs font-semibold text-stone-900">
@@ -277,27 +270,13 @@ export function PromptsStep({
                                             </p>
                                         )}
                                     </div>
-
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => onRegenerateFamily(familyId)}
-                                        disabled={isRegenerating || loading}
-                                        className="h-7 text-[11px] text-stone-600 hover:bg-stone-200/60 hover:text-stone-900"
-                                    >
-                                        <RotateCw
-                                            className={`mr-1.5 h-3 w-3 ${isRegenerating ? "animate-spin" : ""}`}
-                                        />
-                                        {isRegenerating ? "Regenerating…" : "Regenerate"}
-                                    </Button>
                                 </div>
 
                                 {/* Prompts List */}
                                 <div className="divide-y divide-stone-100 p-2">
                                     {familyPrompts.length === 0 ? (
                                         <div className="py-4 text-center text-xs text-stone-400">
-                                            No questions selected for this area. Add one below or click
-                                            Regenerate.
+                                            No questions selected for this area. Add one below.
                                         </div>
                                     ) : (
                                         familyPrompts.map((prompt) => {
@@ -437,10 +416,9 @@ export function PromptsStep({
 
             {/* Bottom Actions */}
             <div className="sticky bottom-0 space-y-3 border-t border-stone-100 bg-white/95 py-3 backdrop-blur-sm">
-                {totalPrompts !== DEFAULT_PROMPTS_PER_RUN && (
+                {totalPrompts === 0 && (
                     <p className="text-center text-[11px] text-amber-700">
-                        Confirm exactly {DEFAULT_PROMPTS_PER_RUN} unique questions. You currently
-                        have {totalPrompts}.
+                        Keep at least one distinct buyer question before continuing.
                     </p>
                 )}
                 <div className="flex items-center justify-between gap-3">
@@ -458,7 +436,7 @@ export function PromptsStep({
                         type="button"
                         onClick={onContinue}
                         disabled={
-                            loading || saving || totalPrompts !== DEFAULT_PROMPTS_PER_RUN
+                            loading || saving || totalPrompts === 0 || totalPrompts > DEFAULT_PROMPTS_PER_RUN
                         }
                         className="h-10 flex-1 bg-gradient-to-b from-stone-800 to-stone-950 font-semibold text-white hover:from-stone-700 hover:to-stone-900 disabled:opacity-50 sm:flex-initial sm:min-w-[200px]"
                     >

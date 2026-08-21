@@ -104,7 +104,7 @@ export const pageSEO = {
   pricing: {
     title: "Pricing — FlipAEO Founding Beta",
     description:
-      "One website, 40 tracked buyer questions, two AI engines, and up to eight selected content actions per billing cycle.",
+      "One website, up to 25 tracked buyer questions, two AI engines, and up to eight selected content actions per billing cycle.",
     keywords: [
       "saas seo agency pricing",
       "b2b saas content marketing cost",

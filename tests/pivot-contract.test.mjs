@@ -3110,7 +3110,7 @@ test("the launch contract has one recurring plan and a non-filler action ceiling
     const { PRODUCT_TRUTH } = await import("../config/product-truth.ts")
     assert.equal(PRODUCT_TRUTH.planId, "founding_beta")
     assert.equal(PRODUCT_TRUTH.sites, 1)
-    assert.equal(PRODUCT_TRUTH.trackedPromptAllowance, 40)
+    assert.equal(PRODUCT_TRUTH.trackedPromptAllowance, 25)
     assert.equal(PRODUCT_TRUTH.actionAllowance, 8)
     assert.deepEqual([...PRODUCT_TRUTH.engines], ["ChatGPT", "Google AI Mode"])
     assert.equal(PRODUCT_TRUTH.introductoryPrice, 99)
@@ -3670,7 +3670,7 @@ test("the paid-first funnel retires the protected finite audit without deleting 
     assert.doesNotMatch(sidebar, /title: "Evidence Audit"/)
     assert.doesNotMatch(sidebar, /url: "\/audit"/)
     assert.match(subscribe, /Founding beta/)
-    assert.match(subscribe, /40 tracked buyer questions/)
+    assert.match(subscribe, /up to \$\{PRODUCT_TRUTH\.trackedPromptAllowance\} buyer questions/)
 })
 
 test("founding checkout is disabled by default and owns the three-cycle price phase", async () => {
@@ -3703,7 +3703,8 @@ test("founding checkout is disabled by default and owns the three-cycle price ph
     assert.match(checkout, /discount_codes: \[discountCode\]/)
     assert.match(checkout, /feature_flags: \{ allow_discount_code: true \}/)
     assert.match(checkout, /idempotencyKey: `founding-/)
-    assert.match(checkout, /promptCount !== PRODUCT_TRUTH\.trackedPromptAllowance/)
+    assert.match(checkout, /!promptCount/)
+    assert.match(checkout, /promptCount > PRODUCT_TRUTH\.trackedPromptAllowance/)
     assert.match(checkout, /validatePublicationPattern/)
     assert.match(probe, /reason: "subscription_required"/)
     assert.match(migration, /'introductory_price', 99/)
@@ -3719,7 +3720,7 @@ test("founding checkout is disabled by default and owns the three-cycle price ph
     await assert.rejects(access(path.join(root, "lib/harvest/purchase-intent.ts")))
 })
 
-test("the sandbox probe preserves forty durable questions while bounding provider spend", async () => {
+test("the sandbox probe preserves the reviewed durable set while bounding provider spend", async () => {
     const [engines, route, pivot] = await Promise.all([
         text("lib/visibility/engines.ts"),
         text("app/api/visibility/probe/route.ts"),
@@ -3750,8 +3751,8 @@ test("the sandbox probe preserves forty durable questions while bounding provide
     assert.match(route, /client_engines_forbidden/)
     assert.match(route, /DEFAULT_ENGINES\.includes\(sandboxEngine as AiEngine\)/)
     assert.match(pivot, /CLORO_SANDBOX_ENGINE=google-aimode/)
-    assert.match(pivot, /160 credits total/)
-    assert.match(pivot, /440 credits total/)
+    assert.match(pivot, /100\s+credits at the cap/)
+    assert.match(pivot, /275 credits at\s+the cap/)
 })
 
 test("recurring onboarding never queries the removed audit-owned program model", async () => {
@@ -4373,7 +4374,7 @@ test("the method panel reads its values from the code that computes them", async
 
     assert.match(
         panel,
-        /import \{ PROMPT_INTENTS, PROMPTS_PER_FAMILY \} from "@\/lib\/visibility\/prompt-config"/,
+        /import \{ MAX_GENERATED_PROMPTS, PROMPT_INTENTS \} from "@\/lib\/visibility\/prompt-config"/,
     )
     assert.match(panel, /from "@\/lib\/visibility\/citation-classifier"/)
     assert.match(panel, /PROMPT_INTENTS\.map/)
@@ -4504,11 +4505,11 @@ test("fan-out is never presented as search volume", async () => {
     }
 })
 
-test("the subscription defaults to forty durable questions below its safety rail", async () => {
-    // Forty is the product contract, not a cheap temporary sample. The ceiling
-    // remains separate so an explicit diagnostic run cannot grow without a
-    // deliberate safety change.
-    const { DEFAULT_PROMPTS_PER_RUN, MAX_PROMPTS_PER_RUN, PROMPTS_PER_FAMILY } =
+test("the subscription keeps a variable durable set below its safety rail", async () => {
+    // Twenty-five is a ceiling, not a padding target. The generator may stop
+    // earlier when it exhausts distinct buyer situations, while the separate
+    // hard safety rail still prevents an accidental unbounded probe.
+    const { DEFAULT_PROMPTS_PER_RUN, MAX_GENERATED_PROMPTS, MAX_PROMPTS_PER_RUN } =
         await import("../lib/visibility/prompt-config.ts")
 
     assert.ok(
@@ -4517,19 +4518,20 @@ test("the subscription defaults to forty durable questions below its safety rail
     )
     assert.equal(
         DEFAULT_PROMPTS_PER_RUN,
-        40,
-        "the subscription measures one durable forty-question set",
+        25,
+        "the subscription measures up to twenty-five durable questions",
     )
     assert.ok(
-        PROMPTS_PER_FAMILY >= DEFAULT_PROMPTS_PER_RUN,
-        "one confirmed area must still be able to produce all forty questions",
+        MAX_GENERATED_PROMPTS === DEFAULT_PROMPTS_PER_RUN,
+        "generation and the persisted product allowance share one ceiling",
     )
 
     const route = await text("app/api/visibility/probe/route.ts")
     // A production probe reads the complete durable set. A browser cannot
-    // lower, raise or replace it per run.
+    // lower, raise or replace it per run, but a distinct set need not be padded.
     assert.match(route, /from\("tracked_prompts"\)/)
-    assert.match(route, /trackedRows\?\.length !== DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(route, /!trackedRows\?\.length/)
+    assert.match(route, /trackedRows\.length > DEFAULT_PROMPTS_PER_RUN/)
     assert.match(route, /client_prompts_forbidden/)
     assert.doesNotMatch(route, /body\.maxPrompts \?\? DEFAULT_PROMPTS_PER_RUN/)
 
@@ -4537,7 +4539,7 @@ test("the subscription defaults to forty durable questions below its safety rail
     // candidate count — those are different numbers now that a cap applies.
     const panel = await text("components/visibility/method-panel.tsx")
     assert.match(panel, /promptCount/)
-    assert.match(panel, /candidate questions/)
+    assert.match(panel, /distinct questions/)
 
     // The panel is a client component; it must read these from the import-free
     // config, not from the builder that pulls in the Gemini client.
@@ -4558,26 +4560,26 @@ test("onboarding lets the user confirm, edit, and prune buyer prompts before pro
     // 1. Prompts step is a distinct screen rendered in the onboarding surface.
     assert.match(page, /Confirm the questions buyers ask AI/)
     assert.match(promptsStep, /Why is your brand not named in these questions\?/)
-    assert.match(promptsStep, /onRegenerateFamily/)
+    assert.doesNotMatch(promptsStep, /onRegenerateFamily|Regenerate|RotateCw/)
+    assert.doesNotMatch(generateRoute, /familyId\?:|body\.familyId/)
     assert.match(promptsStep, /checkBrandMention/)
 
     // 2. The generation endpoint bridges confirmed scope to the prompt builder.
     assert.match(generateRoute, /buildBuyerPrompts/)
     assert.match(generateRoute, /normalizeScopeFamilies/)
     assert.match(generateRoute, /POST/)
-    assert.match(generateRoute, /questionsToAvoid:/)
+    assert.doesNotMatch(generateRoute, /questionsToAvoid:|excludeQuestions/)
     assert.match(page, /maxPrompts: DEFAULT_PROMPTS_PER_RUN/)
-    assert.match(page, /excludeQuestions: remaining\.map/)
-    assert.match(page, /items\.length !== DEFAULT_PROMPTS_PER_RUN/)
-    assert.match(page, /newItems\.length < targetPromptCount/)
+    assert.match(page, /items\.length === 0 \|\| items\.length > DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(promptsStep, /handleAddCustomPrompt/)
 
-    // 3. Confirmation commits exactly forty durable questions. The probe then
-    //    loads and rebinds that stored set; it never accepts a browser-owned
-    //    substitute for one run.
+    // 3. Confirmation commits the reviewed variable set. The probe then loads
+    //    and rebinds it; it never accepts a browser-owned substitute for one run.
     assert.match(page, /fetch\("\/api\/visibility\/prompts\/confirm"/)
-    assert.match(confirmRoute, /body\.prompts\.length !== DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(confirmRoute, /body\.prompts\.length === 0/)
+    assert.match(confirmRoute, /body\.prompts\.length > DEFAULT_PROMPTS_PER_RUN/)
     assert.match(confirmRoute, /confirm_tracked_prompts/)
-    assert.match(promptsStep, /totalPrompts !== DEFAULT_PROMPTS_PER_RUN/)
+    assert.match(promptsStep, /totalPrompts === 0 \|\| totalPrompts > DEFAULT_PROMPTS_PER_RUN/)
     assert.match(probeRoute, /from\("tracked_prompts"\)/)
     assert.match(probeRoute, /prompts:\s*confirmedPrompts/)
     assert.match(probeRunner, /options\.prompts && options\.prompts\.length > 0/)
@@ -5124,7 +5126,7 @@ test("an entity nobody counted cannot outrank the brand", async () => {
     )
 })
 
-test("prompt generation is given context and a goal, never a form", async () => {
+test("prompt generation gets one company-wide selection goal, not forms or quotas", async () => {
     const [config, builder, template, route, runner, mapper] = await Promise.all([
         text("lib/visibility/prompt-config.ts"),
         text("lib/visibility/prompt-builder.ts"),
@@ -5135,118 +5137,66 @@ test("prompt generation is given context and a goal, never a form", async () => 
     ])
     const promptSurface = `${builder}\n${template}`
 
-    // TWO LIVE RUNS FAILED HERE, IN OPPOSITE DIRECTIONS, FOR THE SAME REASON.
-    //
-    // First the briefs were topic labels and the output was SEO titles with
-    // question marks. Then they became literal sentence formulas with per-shape
-    // quotas — "I'm [who I am] using [current stack]" — and the output became
-    // ten variations of "MyHeritage is too expensive, what else?", asked by
-    // "family archivists" and "genealogists". Nobody describes themselves that
-    // way; real buyers describe the photo on their desk and the result they are
-    // afraid of.
-    //
-    // Dictating a form guarantees output with that form. The founder got better
-    // questions from a plain model call given only the brand, its features and
-    // its category. So the scaffolding is gone, and these assertions exist to
-    // stop it growing back.
-    assert.doesNotMatch(config, /weight:/)
-    assert.doesNotMatch(config, /namesIncumbent/)
-    assert.doesNotMatch(builder, /function orderByIntentMix/)
-    assert.doesNotMatch(builder, /function readsLikeAPerson/)
-    assert.doesNotMatch(builder, /function namesAnyIncumbent/)
-    assert.doesNotMatch(builder, /BANNED openings/)
-    assert.doesNotMatch(builder, /NAME NO TOOL AT ALL/)
-    // Audience stays in the context — without who has the problem the model
-    // cannot write from a real situation.
+    // Context is concrete, but the generator is not given sentence forms,
+    // per-family quotas, weighted intent mixes, or a target it must pad to.
+    assert.doesNotMatch(config, /weight:|PROMPTS_PER_FAMILY/)
+    assert.doesNotMatch(builder, /orderByIntentMix|readsLikeAPerson|BANNED openings/)
     assert.match(promptSurface, /audience\?: string/)
     assert.match(promptSurface, /category\?: string/)
     assert.match(promptSurface, /coreFeatures\?: string\[\]/)
     assert.match(runner, /audience: persona\.audience\?\.primary/)
+    assert.match(template, /Generate questions across the company as a whole/)
+    assert.match(template, /This is a ceiling, not a quota/)
+    assert.match(template, /Stop when another question would only paraphrase/)
+    assert.match(builder, /buildCompanyPrompt\(\s*families/)
 
-    // COMPETITORS DO NOT. This reverses an earlier judgement in this file, so
-    // the reason is recorded rather than the assertion silently flipped.
-    //
-    // They were kept as background on the argument that "without tools they
-    // already use the alternatives-seeking buyer is never measured at all". The
-    // live bringback.pro run settled it the other way. The unnamed questions
-    // were excellent and concrete — "how can I fix a torn black and white photo
-    // without paying a professional?" — while every named one asserted a
-    // capability of a rival we hold no verified fact about. We have a capability
-    // contract with evidence refs for the customer's product and nothing at all
-    // for a competitor's, so "is kinpict.com good for making group portraits?"
-    // is an unfalsifiable premise. And these questions are DURABLE: confirmed
-    // once, re-run every cycle, so a false premise is permanent.
-    //
-    // It also contradicted the rule beside it. Naming the subject was banned
-    // because naming it hands over the answer; naming a rival hands over the
-    // same answer, and `adjustedBrandRank` then has to discount the result as
-    // prompt-induced. The run was paying for questions it would refuse to count.
+    // Known rivals are rejection-only and never enter generation context.
     assert.doesNotMatch(promptSurface, /incumbents\?: string\[\]/)
-    assert.doesNotMatch(runner, /incumbents: competitors\.map/)
-    // Rivals reach the builder as a rejection list only, never as context.
     assert.match(promptSurface, /rivalBrands\?: string\[\]/)
     assert.match(runner, /rivalBrands: competitors\.flatMap/)
-
-    // Still labelled as background, and nobody announces their job title.
-    assert.match(template, /Background, not instructions/)
-    assert.match(template, /do not have anyone announce themselves/)
-
-    // And the circularity is closed downstream: asking "alternatives to X"
-    // cannot inflate X on the rival leaderboard.
+    assert.match(builder, /mentionsIncumbent\(text, rivalTokens\)/)
+    assert.match(builder, /rivalNamedRejected\+\+/)
     assert.match(mapper, /if \(namedInPrompt\(competitor\.name\)\) continue/)
 
-    // The intent is now an OUTPUT LABEL the model applies, not an input quota —
-    // it still has to exist because `articleType` flows into the writer's
-    // frozen contract.
+    // Ownership comes from an exact confirmed family id; intent remains an
+    // implementation label inferred after generation for the writer contract.
+    assert.match(builder, /familyById\.get\(scopeFamilyId\)/)
+    assert.match(builder, /scopeFamilyId,/)
     assert.match(config, /articleType: "commercial" as const/)
-    assert.match(builder, /articleType: intent\.articleType/)
-    // Two labels now: the SEO intent that drives articleType, and the
-    // selection class that decides which denominator the question lands in.
-    assert.match(template, /Label each question twice/)
-    assert.match(template, /"selectionClass"/)
+    assert.match(builder, /articleType: intentConfig\.articleType/)
+    assert.match(template, /selectionClass/)
+    assert.match(template, /scenario/)
 
-    // Three checks survive, and none of them judges style. A style filter can
-    // only delete: the last one shrank a set of ten to six and skewed what
-    // remained toward exactly the questions it was meant to balance.
-    assert.match(builder, /isPlausiblePrompt\(row\.text\) &&/)
-    assert.match(builder, /validIntents\.has\(row\.intent\) &&/)
-    assert.match(builder, /!namesSubject\(row\.text, options\.subjectTokens\)/)
+    // The deterministic layer checks validity and identity, not a second style
+    // scoring system. One whole-set critic is the only semantic deletion pass.
+    assert.match(builder, /isPlausiblePrompt\(text\)/)
+    assert.match(builder, /namesSubject\(text, options\.subjectTokens\)/)
+    assert.match(builder, /containsCalendarYear\(text\)/)
+    assert.match(builder, /seenScenarios/)
+    assert.match(builder, /reviewPromptSet\(/)
+    assert.doesNotMatch(builder, /score|threshold|rankCandidates/)
 
-    // Naming ANY brand is banned — measurement validity, not taste. Naming one
-    // hands the engine part of the answer it is being tested on, whether the
-    // name is the customer's or a rival's.
-    assert.match(builder, /function namesSubject/)
-    assert.match(template, /Never name ANY product, brand, company or website/)
-    assert.match(template, /not this product, and not a competitor/)
-    // The backstop for when the model names one anyway, which it will.
-    assert.match(builder, /mentionsIncumbent\(candidate\.text, rivalTokens\)/)
-    assert.match(builder, /rivalNamedRejected\+\+/)
-
-    // Ownership stays structural: one call per family, id attached by code.
-    assert.match(builder, /scopeFamilyId: family\.id/)
-
-    // A competitor the prompt itself named still cannot count as a rival for
-    // that prompt. Prompts may mention one when the model judges it natural.
-    assert.match(mapper, /namedInPrompt\(competitor\.name\)/)
-
-    // The route used to manufacture a fake capability contract from the family
-    // description and then pass that object to a generator which no longer read
-    // it. Keep the input contract honest: writer mechanics are neither required
-    // nor silently fabricated for buyer questions.
-    assert.doesNotMatch(route, /fallbackContract/)
-    assert.doesNotMatch(route, /fallbackCapabilityContract/)
+    assert.doesNotMatch(route, /fallbackContract|fallbackCapabilityContract/)
     assert.doesNotMatch(template, /capabilityContract|customerJob|operation\.action/)
 
-    // The pure template is the exact production instruction, so tests and live
-    // verification cannot drift onto a hand-copied approximation.
-    const { buildFamilyPrompt } = await import("../lib/visibility/prompt-template.ts")
-    const rendered = buildFamilyPrompt(
-        {
-            id: "restoration",
-            name: "Old photo restoration",
-            description: "repair damaged family photographs",
-            seedKeywords: ["restore old photos"],
-        },
+    // The pure template is the production instruction and includes all
+    // confirmed areas in one call, without leaking a competitor slot.
+    const { buildCompanyPrompt } = await import("../lib/visibility/prompt-template.ts")
+    const rendered = buildCompanyPrompt(
+        [
+            {
+                id: "restoration",
+                name: "Old photo restoration",
+                description: "repair damaged family photographs",
+                seedKeywords: ["restore old photos"],
+            },
+            {
+                id: "colour",
+                name: "Photo colourisation",
+                description: "add realistic colour to monochrome photographs",
+                seedKeywords: ["colourise old photos"],
+            },
+        ],
         {
             subjectType: "browser-based photo restoration software",
             category: "AI photo tools",
@@ -5255,11 +5205,10 @@ test("prompt generation is given context and a goal, never a form", async () => 
         "en",
     )
     assert.match(rendered, /repair damaged family photographs/)
-    assert.doesNotMatch(rendered, /restoration.*customerJob/)
-    // The instruction can no longer leak a rival name into the model's context,
-    // because there is no slot to put one in.
-    assert.doesNotMatch(rendered, /Tools some of them already use/)
-    assert.doesNotMatch(rendered, /dominant market leaders/)
+    assert.match(rendered, /add realistic colour to monochrome photographs/)
+    assert.match(rendered, /trying to FIND OR CHOOSE a solution/)
+    assert.match(rendered, /never copy its industry/)
+    assert.doesNotMatch(rendered, /Tools some of them already use|dominant market leaders/)
 })
 
 test("buyer-question selection fixes the three failures observed in the live FlipAEO run", async () => {
@@ -5301,8 +5250,8 @@ test("buyer-question selection fixes the three failures observed in the live Fli
         ),
         false,
     )
-    assert.match(template, /Questions already kept for other parts of this product/)
-    assert.match(builder, /priorQuestions/)
+    assert.match(template, /Do not repeat or paraphrase these already-retained questions/)
+    assert.match(builder, /existingQuestions/)
 
     // The model receives the actual runtime date, but durable prompts carry no
     // year at all: even a correct current year would become stale next cycle.
@@ -5312,10 +5261,10 @@ test("buyer-question selection fixes the three failures observed in the live Fli
         "[Current date and time: 2026-08-16T10:20:30.000Z; current calendar year: 2026]",
     )
     assert.match(template, /getCurrentDateContext\(\)/)
-    assert.match(template, /Do not put a calendar year in a question/)
+    assert.match(template, /Do not include calendar years/)
     assert.equal(containsCalendarYear("What are the best practices for AEO in 2024?"), true)
     assert.equal(containsCalendarYear("What are current AEO best practices?"), false)
-    assert.match(builder, /!containsCalendarYear\(row\.text\)/)
+    assert.match(builder, /containsCalendarYear\(text\)/)
 
     // A URL-shaped rival suggestion still detects the brand name buyers type —
     // that detection is now the rejection filter rather than a quota meter.
@@ -5684,12 +5633,10 @@ test("a buyer question must create a selection event", async () => {
     const { countsAsSelection, SELECTION_CLASSES } = await import(
         "../lib/visibility/selection-class.ts"
     )
-    const { selectionScore, selectionRejections, normaliseJudgement } = await import(
-        "../lib/visibility/selection-judgement.ts"
-    )
-    const [template, builder, overview] = await Promise.all([
+    const [template, builder, critic, overview] = await Promise.all([
         text("lib/visibility/prompt-template.ts"),
         text("lib/visibility/prompt-builder.ts"),
+        text("lib/visibility/selection-classifier.ts"),
         text("components/visibility/visibility-overview.tsx"),
     ])
 
@@ -5703,8 +5650,8 @@ test("a buyer question must create a selection event", async () => {
     // type "before they know this product, or ANY product, exists" — precisely
     // the half of the funnel where no product ever gets named.
     assert.doesNotMatch(template, /before they know this product/)
-    assert.match(template, /THE ONE TEST EVERY QUESTION MUST PASS/)
-    assert.match(template, /must have to NAME PRODUCTS/)
+    assert.match(template, /Every question must create a real selection event/)
+    assert.match(template, /need to name external products, tools, apps, services, or providers/)
     assert.match(template, /selectionClass/)
 
     // Only the four strongest classes are a competitive selection set. A miss on
@@ -5718,37 +5665,22 @@ test("a buyer question must create a selection event", async () => {
     assert.equal(countsAsSelection("exploration"), false)
     assert.equal(SELECTION_CLASSES.filter((c) => c.countsAsSelection).length, 4)
 
-    // The score is MULTIPLICATIVE. Any one factor at zero takes it to zero — a
-    // question that is natural, commercial and squarely in the brand's
-    // wheelhouse still scores 0 if an assistant would answer it without naming
-    // anything, because that question cannot produce the event being measured.
-    const strong = {
-        answerableWithoutProduct: false,
-        benefitsFromNamingProducts: true,
-        brandCanSatisfy: true,
-        naturalness: 0.9,
-        selectionClass: "constrained",
-    }
-    assert.equal(selectionScore(strong), 0.9)
-    assert.equal(selectionScore({ ...strong, answerableWithoutProduct: true }), 0)
-    assert.equal(selectionScore({ ...strong, brandCanSatisfy: false }), 0)
-    assert.deepEqual(
-        selectionRejections({ ...strong, answerableWithoutProduct: true }),
-        ["answerable_without_product"],
-    )
+    // The old score/threshold/rewrite machinery is gone. The one whole-set
+    // critic can only accept or reject for the four plan-defined boundaries.
+    assert.match(critic, /general_knowledge_answer/)
+    assert.match(critic, /does_not_lead_to_external_solution/)
+    assert.match(critic, /synthetic_search_phrase/)
+    assert.match(critic, /duplicate_buyer_situation/)
+    assert.match(critic, /Do not rewrite questions/)
+    assert.doesNotMatch(critic, /selectionScore|threshold/)
 
-    // A malformed or missing model response FAILS CLOSED. An unjudged question
-    // is treated as answerable-without-a-product and outside the brand, so an
-    // outage rejects candidates rather than silently admitting tutorials.
-    assert.equal(selectionScore(normaliseJudgement(null)), 0)
-    assert.equal(normaliseJudgement({}).answerableWithoutProduct, true)
-    assert.equal(normaliseJudgement({}).brandCanSatisfy, false)
-
-    // The gate runs in the builder, and a family that yields nothing is
-    // reported rather than padded back up with the tutorials just rejected.
-    assert.match(builder, /judgeSelectionPrompts\(/)
-    assert.match(builder, /weakSelectionRejected\+\+/)
-    assert.match(builder, /every candidate was answerable without naming a product/)
+    // A malformed response or critic outage fails closed, and rejected prompts
+    // are never padded back with tutorials.
+    assert.match(critic, /invalid_critic_response/)
+    assert.match(critic, /critic_unavailable/)
+    assert.match(builder, /reviewPromptSet\(/)
+    assert.match(builder, /criticRejected\+\+/)
+    assert.match(builder, /every generated question was rejected/)
 
     // The headline is recommendation visibility, over the selection denominator
     // only — never named-answers over everything.
@@ -5758,31 +5690,15 @@ test("a buyer question must create a selection event", async () => {
     assert.match(overview, /No buying moment measured/)
 })
 
-test("the selection threshold is calibrated, never chosen by eye", async () => {
-    const { separationReport, BRINGBACK_CALIBRATION } = await import(
+test("the selection critic is checked against the real BringBack boundary set", async () => {
+    const { BRINGBACK_CALIBRATION } = await import(
         "../lib/visibility/selection-calibration-set.ts"
     )
-    const [route, proxy] = await Promise.all([
+    const [route, proxy, critic] = await Promise.all([
         text("app/api/visibility/calibrate-prompts/route.ts"),
         text("proxy.ts"),
+        text("lib/visibility/selection-classifier.ts"),
     ])
-
-    // CLAUDE.md: never hand-tune a matching threshold; if the populations
-    // overlap the method is wrong and that must be REPORTED, not split.
-    const overlapping = separationReport(
-        [{ text: "p", score: 0.4 }],
-        [{ text: "n", score: 0.6 }],
-    )
-    assert.equal(overlapping.separates, false)
-    assert.equal(overlapping.suggestedThreshold, null, "must not suggest a midpoint")
-    assert.equal(overlapping.negativeLeaks.length, 1)
-
-    const clean = separationReport(
-        [{ text: "p", score: 0.8 }],
-        [{ text: "n", score: 0.2 }],
-    )
-    assert.equal(clean.separates, true)
-    assert.equal(clean.suggestedThreshold, 0.5)
 
     // The labelled set is the REAL failure, not invented examples.
     assert.ok(BRINGBACK_CALIBRATION.negatives.length >= 30)
@@ -5797,13 +5713,19 @@ test("the selection threshold is calibrated, never chosen by eye", async () => {
     // Dev-only, both by env check and by the proxy allowlist.
     assert.match(route, /NODE_ENV === "production"/)
     assert.match(proxy, /\/api\/visibility\/calibrate-prompts/)
-    // It reports; it never writes a threshold anywhere.
-    assert.match(route, /OVERLAP/)
+    // It reports concrete false rejects and false accepts. There is no score,
+    // midpoint, or persisted threshold to tune by eye.
+    assert.match(route, /positivesRejected/)
+    assert.match(route, /negativesAccepted/)
+    assert.match(route, /reviewPromptSet/)
+    assert.doesNotMatch(`${route}\n${critic}`, /suggestedThreshold|separationReport|selectionScore/)
 })
 
 test("selection class is persisted and frozen onto the run", async () => {
-    const [migration, runProbe, probeRoute, summary] = await Promise.all([
+    const [migration, variableSetMigration, confirmRoute, runProbe, probeRoute, summary] = await Promise.all([
         text("supabase/migrations/20260817_prompt_selection_class.sql"),
+        text("supabase/migrations/20260821_variable_prompt_sets.sql"),
+        text("app/api/visibility/prompts/confirm/route.ts"),
         text("lib/visibility/run-probe.ts"),
         text("app/api/visibility/probe/route.ts"),
         text("lib/visibility/visibility-summary.ts"),
@@ -5815,6 +5737,9 @@ test("selection class is persisted and frozen onto the run", async () => {
     // to inflate the headline, and pre-existing rows are genuinely unclassified.
     assert.match(migration, /DEFAULT 'knowledge'/)
     assert.match(migration, /CHECK \(selection_class IN/)
+    assert.match(variableSetMigration, /v_expected_count NOT BETWEEN 1 AND 25/)
+    assert.match(variableSetMigration, /'selection_class'/)
+    assert.match(confirmRoute, /selection_class: selectionClass/)
 
     // Frozen onto the run, so reclassifying a question next month cannot
     // retroactively move an old run between denominators.

@@ -15,13 +15,7 @@ import {
     type AnalyzeBrandPhase,
 } from "@/lib/analyze-brand/stream"
 import type { BrandDetails, ScopeFamily } from "@/lib/schemas/brand"
-// Imported, never retyped: the run cap and the per-topic count are the numbers
-// the pipeline actually uses, and a hardcoded copy of them is a promise that
-// silently stops being true the next time either one moves.
-import {
-    DEFAULT_PROMPTS_PER_RUN,
-    PROMPTS_PER_FAMILY,
-} from "@/lib/visibility/prompt-config"
+import { MAX_GENERATED_PROMPTS } from "@/lib/visibility/prompt-config"
 
 /**
  * Step 3 of onboarding. What we think you sell.
@@ -83,10 +77,9 @@ export function ScopeStep({
                    added and the copy still promised a per-topic count. */
                 <p className="text-xs leading-relaxed text-stone-500">
                     These are what we ask ChatGPT and Google AI Mode about. We write
-                    up to {PROMPTS_PER_FAMILY} buyer questions per topic, and your
-                    first run asks the best {DEFAULT_PROMPTS_PER_RUN} across all of
-                    them — you review every one on the next screen, and can add more
-                    later from your dashboard.
+                    up to {MAX_GENERATED_PROMPTS} distinct buyer questions across the
+                    whole company, stopping before another question would merely
+                    repeat one you already have. You review every question next.
                 </p>
             )}
 

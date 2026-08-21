@@ -179,10 +179,13 @@ export async function POST(req: NextRequest) {
             .eq("tracking_status", "active")
             .is("retired_at", null)
         if (promptError) throw promptError
-        if (promptCount !== PRODUCT_TRUTH.trackedPromptAllowance) {
+        if (
+            !promptCount ||
+            promptCount > PRODUCT_TRUTH.trackedPromptAllowance
+        ) {
             return NextResponse.json(
                 {
-                    error: `Confirm exactly ${PRODUCT_TRUTH.trackedPromptAllowance} buyer questions before checkout.`,
+                    error: `Confirm up to ${PRODUCT_TRUTH.trackedPromptAllowance} buyer questions before checkout.`,
                     code: "tracked_prompt_allowance_not_met",
                 },
                 { status: 409 },

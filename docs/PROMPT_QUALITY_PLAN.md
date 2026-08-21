@@ -1,9 +1,10 @@
 # Buyer questions must create a selection event
 
-Status: **partially built, then measured and cut back.** Sections 1-2 are the
+Status: **implemented and measured on 2026-08-21.** Sections 1-2 are the
 diagnosis and still hold. Sections 3-7 were the first design; the calibration in
-section 9 invalidated most of it. **Section 11 onward is the plan to follow.** Written after a live BringBack set came back as 32
-tutorials out of 40.
+section 9 invalidated most of it. **Section 11 onward remains the source of
+truth.** It was written after a live BringBack set came back as 32 tutorials out
+of 40. Section 14 records the implementation result.
 
 ## 1. The failure, stated precisely
 
@@ -360,3 +361,52 @@ decision is made from data, not taste.
 
 Step 2 gates the rest. If a single well-instructed call produces questions the
 founder recognises, most of the remaining machinery should not be rebuilt.
+
+## 14. Implementation result — 2026-08-21
+
+The work followed §13 in order.
+
+1. Generation is now one whole-company Gemini call. It receives the objective,
+   all confirmed product areas, verified company context, the 52 labelled
+   BringBack examples, and a ceiling of 25 with an explicit instruction to stop
+   before padding. It returns `question`, `scopeFamilyId`, `selectionClass` and
+   `scenario`.
+2. BringBack was regenerated before the classifier was rewritten. Two raw
+   generator checks each returned nine selection-oriented questions across all
+   five confirmed areas instead of another tutorial-heavy set. The complete
+   production path then produced seven mechanically valid candidates; the
+   whole-set critic removed two (one duplicate situation and one
+   general-knowledge question), leaving five strong questions across all five
+   areas.
+3. `selectionScore`, its three dead model judgements, the threshold/separation
+   machinery, the per-family allocation loop and `PROMPTS_PER_FAMILY` were
+   deleted. The remaining critic accepts or rejects the complete set for only
+   the four reasons in §11. It does not score, rank, rewrite or reclassify.
+4. The critic stays for launch. It removed 2/7 BringBack candidates and, in an
+   unrelated invoicing-product smoke test, removed four duplicate situations
+   from eight candidates. That is material work, not a ceremonial second call.
+
+The unrelated-brand check also covered the multi-tenant risk created by using a
+photo-product calibration set. The surviving invoicing questions covered all
+four supplied invoicing areas and contained no photo, restoration, family-member
+or BringBack vocabulary. One first pass bundled several product areas into an
+all-in-one request; generation was tightened to require one primary problem per
+question, and the repeat returned four clean single-area questions.
+
+The product contract is now **1–25 reviewed, distinct questions**, not exactly
+40 and not exactly 25. Confirmation stores the exact reviewed set, checkout and
+measurement accept that set, and the UI states “up to 25.” The forward migration
+is `20260821_variable_prompt_sets.sql`; it must be applied with this deployment.
+
+The development calibration harness still reports its raw disagreements. When
+the 16 positive examples are reviewed together, it correctly prunes repeated
+buyer situations but also rejects three polished questions as synthetic; it
+accepts three of the 36 historical negatives. That overlap is recorded rather
+than hidden or converted into another threshold. The live generated-set checks
+above are why the critic remains, and the founder review screen remains the last
+gate before prompts become durable.
+
+Per-area regeneration is not a customer feature. It would create another paid
+model-and-critic run without adding a new measurement capability. Customers can
+edit, remove, or write a replacement question themselves before confirmation;
+the UI and generation endpoint expose no family-regeneration path.

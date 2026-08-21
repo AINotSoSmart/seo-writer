@@ -30,7 +30,7 @@ const PricingSection: React.FC = () => (
                     </h2>
                 </div>
                 <p className="max-w-xl text-lg leading-relaxed text-stone-500">
-                    One recurring plan measures 40 confirmed buyer questions, shows the evidence, and turns the highest-priority gaps into a complete draft batch.
+                    One recurring plan measures up to 25 distinct buyer questions, shows the evidence, and turns the highest-priority gaps into a complete draft batch.
                 </p>
             </div>
 

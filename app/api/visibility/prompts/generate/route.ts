@@ -30,10 +30,6 @@ interface GeneratePromptsRequest {
     /** What the product actually does, so a prompt can name a real constraint. */
     coreFeatures?: string[]
     maxPrompts?: number
-    /** Questions retained outside a regenerated family; never paraphrase them. */
-    excludeQuestions?: string[]
-    /** Optional: regenerate prompts for a single scope family only */
-    familyId?: string
 }
 
 function normalizeScopeFamilies(
@@ -72,21 +68,10 @@ export async function POST(req: NextRequest) {
             )
         }
 
-        let families = normalizeScopeFamilies(body.scopeFamilies)
+        const families = normalizeScopeFamilies(body.scopeFamilies)
 
-        if (body.familyId) {
-            families = families.filter((f) => f.id === body.familyId)
-            if (families.length === 0) {
-                return NextResponse.json(
-                    { error: `Scope family ${body.familyId} not found` },
-                    { status: 404 },
-                )
-            }
-        }
-
-        // Only the customer's own name is contraband. Competitors are material:
-        // a buyer asking for a tool frames it against one they already use, and
-        // banning every rival name is what produced abstract category questions.
+        // The customer's own name is rejected separately because supplying it
+        // would turn an unprompted recommendation measurement into a recall test.
         const subjectTokens: string[] = []
         if (body.productName?.trim()) {
             subjectTokens.push(body.productName.trim())
@@ -111,12 +96,6 @@ export async function POST(req: NextRequest) {
                 audience: body.audience?.trim() || undefined,
             },
             maxPrompts: body.maxPrompts,
-            questionsToAvoid: Array.isArray(body.excludeQuestions)
-                ? body.excludeQuestions
-                      .map((question) => String(question).trim())
-                      .filter(Boolean)
-                      .slice(0, 60)
-                : [],
         })
 
         return NextResponse.json({

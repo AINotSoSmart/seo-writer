@@ -38,7 +38,7 @@ export default function PricingPage() {
 
                 <ul className="mt-8 grid gap-3 text-sm text-stone-700 sm:grid-cols-2">
                     <li>One website</li>
-                    <li>{PRODUCT_TRUTH.trackedPromptAllowance} tracked buyer questions</li>
+                    <li>Up to {PRODUCT_TRUTH.trackedPromptAllowance} tracked buyer questions</li>
                     <li>ChatGPT + Google AI Mode</li>
                     <li>Up to {PRODUCT_TRUTH.actionAllowance} create/refresh actions per cycle</li>
                     <li>Visible findings and backlog</li>

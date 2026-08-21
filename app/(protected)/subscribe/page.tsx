@@ -152,8 +152,8 @@ export default async function SubscribePage() {
         Boolean(process.env.DODO_FOUNDING_DISCOUNT_CODE?.trim())
     const disabledReason = !brand
         ? "Complete onboarding for exactly one website before checkout."
-        : promptCount !== PRODUCT_TRUTH.trackedPromptAllowance
-          ? `Confirm exactly ${PRODUCT_TRUTH.trackedPromptAllowance} buyer questions first (${promptCount} currently active).`
+        : promptCount === 0 || promptCount > PRODUCT_TRUTH.trackedPromptAllowance
+          ? `Confirm up to ${PRODUCT_TRUTH.trackedPromptAllowance} buyer questions first (${promptCount} currently active).`
           : !checkoutConfigured
             ? "Checkout is code-complete but remains closed until the sandbox price phase is configured and verified."
             : null
@@ -169,7 +169,7 @@ export default async function SubscribePage() {
                         One recurring plan, built around measured work
                     </h1>
                     <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-stone-600 sm:text-base">
-                        One site, 40 tracked buyer questions, ChatGPT and Google AI Mode,
+                        One site, up to {PRODUCT_TRUTH.trackedPromptAllowance} tracked buyer questions, ChatGPT and Google AI Mode,
                         and up to eight prioritised create or refresh actions in each
                         billing cycle. Findings that cannot be solved with owned content
                         remain visible without consuming a production slot.

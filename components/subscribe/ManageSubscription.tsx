@@ -92,7 +92,7 @@ export default function ManageSubscription({
             yearlyPrice: String((p.price ?? 0) * 12),
             buttonText: 'Select',
             features: [
-                { name: '40 tracked buyer questions', icon: 'check' },
+                { name: 'Up to 25 tracked buyer questions', icon: 'check' },
                 { name: 'ChatGPT and Google AI Mode measurement', icon: 'check' },
                 { name: 'Up to eight create or refresh actions per cycle', icon: 'check' },
                 { name: 'One complete draft batch', icon: 'check' },

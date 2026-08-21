@@ -16,19 +16,25 @@ import {
 import { createClient } from "@/utils/supabase/server"
 import { bindPromptCapability } from "@/lib/visibility/capability-binding"
 import type { CapabilityContract } from "@/lib/writer/article-contract"
+import {
+    isSelectionClass,
+    UNKNOWN_SELECTION_CLASS,
+    type SelectionClass,
+} from "@/lib/visibility/selection-class"
 
 interface ConfirmPromptInput {
     text?: string
     scopeFamilyId?: string
     intent?: PromptIntentKey
     sourceSeed?: string
+    selectionClass?: SelectionClass
 }
 
 const articleTypeByIntent = Object.fromEntries(
     PROMPT_INTENTS.map((intent) => [intent.key, intent.articleType]),
 ) as Record<PromptIntentKey, "commercial" | "informational" | "howto">
 
-/** Commits the exact launch-size set the customer reviewed. */
+/** Commits the exact variable-size set the customer reviewed. */
 export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const {
@@ -48,10 +54,14 @@ export async function POST(req: NextRequest) {
     if (!body.brandId) {
         return NextResponse.json({ error: "brandId is required" }, { status: 400 })
     }
-    if (!Array.isArray(body.prompts) || body.prompts.length !== DEFAULT_PROMPTS_PER_RUN) {
+    if (
+        !Array.isArray(body.prompts) ||
+        body.prompts.length === 0 ||
+        body.prompts.length > DEFAULT_PROMPTS_PER_RUN
+    ) {
         return NextResponse.json(
             {
-                error: `Confirm exactly ${DEFAULT_PROMPTS_PER_RUN} buyer questions before continuing.`,
+                error: `Confirm between 1 and ${DEFAULT_PROMPTS_PER_RUN} buyer questions before continuing.`,
                 reason: "wrong_prompt_count",
             },
             { status: 400 },
@@ -93,6 +103,9 @@ export async function POST(req: NextRequest) {
         const intent = inferPromptIntent(text, fallback)
         const scopeFamilyId = (prompt.scopeFamilyId ?? "").trim()
         const sourceSeed = (prompt.sourceSeed ?? "").trim()
+        const selectionClass = isSelectionClass(prompt.selectionClass)
+            ? prompt.selectionClass
+            : UNKNOWN_SELECTION_CLASS
         const bound = bindPromptCapability({
             scopeFamilyId,
             prompt: text,
@@ -106,6 +119,7 @@ export async function POST(req: NextRequest) {
             intent,
             article_type: articleTypeByIntent[intent],
             source_seed: sourceSeed,
+            selection_class: selectionClass,
             intent_binding: bound.binding,
         }
     })
@@ -130,7 +144,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
             {
                 error:
-                    "Discovery questions cannot name your own brand. Ask what buyers would type before knowing you exist.",
+                    "Buyer questions cannot name your own brand because the measurement requires an unprompted recommendation.",
                 reason: "subject_named_in_prompt",
             },
             { status: 400 },

@@ -23,7 +23,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { AlertTriangle, RefreshCw, Sparkles } from "lucide-react"
 
-import { DEFAULT_PROMPTS_PER_RUN } from "@/lib/visibility/prompt-config"
 import { cn } from "@/lib/utils"
 
 interface ProbeConsoleProps {
@@ -335,7 +334,7 @@ export function ProbeConsole({
                     Your questions are saved
                 </h3>
                 <p className="mx-auto mt-3 max-w-lg text-base leading-relaxed text-stone-500">
-                    We&apos;ll ask all {DEFAULT_PROMPTS_PER_RUN} confirmed buyer questions in
+                    We&apos;ll ask every confirmed buyer question in
                     ChatGPT and Google AI Mode, then save every answer behind your report.
                 </p>
 
@@ -557,7 +556,7 @@ export function ProbeConsole({
             </ol>
 
             <p className="mx-auto mt-10 max-w-sm border-t border-stone-100 pt-6 text-center text-xs leading-relaxed text-stone-400">
-                Your {DEFAULT_PROMPTS_PER_RUN} confirmed questions are being asked of the real
+                Your confirmed questions are being asked of the real
                 consumer apps. This usually takes a few minutes — you can leave this page
                 open.
             </p>

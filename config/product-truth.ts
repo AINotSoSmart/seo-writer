@@ -6,7 +6,7 @@ export const PRODUCT_TRUTH = {
     introductoryPrice: 99,
     introductoryPeriods: 3,
     continuingPrice: 189,
-    trackedPromptAllowance: 40,
+    trackedPromptAllowance: 25,
     actionAllowance: 8,
     sites: 1,
     engines: ["ChatGPT", "Google AI Mode"] as const,

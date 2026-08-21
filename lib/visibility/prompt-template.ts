@@ -1,14 +1,13 @@
 /**
  * Pure input contract and prompt text for buyer-question generation.
  *
- * Kept separate from `prompt-builder.ts`, which owns Gemini calls and retries,
- * so the exact production instruction can be exercised by contract tests and
- * the live verification script without importing a server client.
+ * Kept separate from `prompt-builder.ts`, which owns the Gemini call, so the
+ * production instruction remains directly testable without a server client.
  */
 
 import { languageName } from "../target-market.ts"
 import { getCurrentDateContext } from "../utils/date-context.ts"
-import { PROMPT_INTENTS, PROMPTS_PER_FAMILY } from "./prompt-config.ts"
+import { BRINGBACK_CALIBRATION } from "./selection-calibration-set.ts"
 import { SELECTION_CLASSES } from "./selection-class.ts"
 
 /** Only the confirmed fields question generation actually reads. */
@@ -28,82 +27,87 @@ export interface PromptBrandContext {
     coreFeatures?: string[]
     /** Who has the problem. Background for situations, never a label to quote. */
     audience?: string
-    /**
-     * There is deliberately no `incumbents` field.
-     *
-     * Rival names used to be handed to the model as "tools some of them already
-     * use", and up to 15% of the set was allowed to name one. Both are gone —
-     * see the naming rule in the instruction below. Rivals now reach the builder
-     * as a rejection list only (`rivalBrands` in `buildBuyerPrompts`), never as
-     * context, so the model cannot be led into writing them.
-     */
 }
 
-export function buildFamilyPrompt(
-    family: BuyerPromptFamily,
+function exampleBlock(): string {
+    const accepted = BRINGBACK_CALIBRATION.positives
+        .map((question) => `ACCEPT — ${question}`)
+        .join("\n")
+    const rejected = BRINGBACK_CALIBRATION.negatives
+        .map((question) => `REJECT — ${question}`)
+        .join("\n")
+    return `${accepted}\n${rejected}`
+}
+
+/**
+ * One prompt for the whole company. Product areas remain explicit ownership
+ * choices, but they no longer receive equal quotas that force narrow areas to
+ * manufacture filler.
+ */
+export function buildCompanyPrompt(
+    families: BuyerPromptFamily[],
     context: PromptBrandContext,
     language: string,
     questionsToAvoid: string[] = [],
 ): string {
     const features = (context.coreFeatures || []).filter(Boolean).slice(0, 8)
-    const intents = PROMPT_INTENTS.map((intent) => `- ${intent.key}: ${intent.label}`).join("\n")
-
-    const classes = SELECTION_CLASSES.map(
-        (entry) =>
-            `- ${entry.key}${entry.countsAsSelection ? " (WANTED)" : " (avoid)"}: ${entry.label} — e.g. "${entry.example}"`,
-    ).join("\n")
-
-    const priorQuestions = questionsToAvoid.filter(Boolean).slice(-40)
+    const priorQuestions = questionsToAvoid.filter(Boolean).slice(-60)
+    const wantedClasses = SELECTION_CLASSES.filter((entry) => entry.countsAsSelection)
+        .map((entry) => `- ${entry.key}: ${entry.label} — e.g. "${entry.example}"`)
+        .join("\n")
+    const areas = families
+        .map(
+            (family) => `- id: ${family.id}
+  name: ${family.name}
+  description: ${family.description}
+  customer wording: ${family.seedKeywords.join(", ")}`,
+        )
+        .join("\n")
 
     return `${getCurrentDateContext()}
 
-Below is a real product. Write the questions real people type into ChatGPT **at the moment they are deciding what to use**. The real users use messy, direct, functional language.
+Generate natural questions that real people would type into ChatGPT or Gemini when they have a problem this company can solve and are trying to FIND OR CHOOSE a solution.
 
-THE ONE TEST EVERY QUESTION MUST PASS
-A good answer to your question must have to NAME PRODUCTS. Ask yourself: could an assistant answer this completely and helpfully without recommending any tool, app or service? If yes, the question is useless here — throw it away and write a different one.
+This is an AI recommendation measurement. Every question must create a real selection event: a useful answer should naturally need to name external products, tools, apps, services, or providers. If an assistant can answer completely with general knowledge, an explanation, or step-by-step technique, do not include that question.
 
-"how do I remove scratches from a scanned photo" fails: the answer is technique — scan at high resolution, use a healing brush. No product gets named, so it measures nothing.
-"what can I actually use to fix a badly scratched photo of my grandfather" passes: the answer has to be a list of tools.
-
-Write from the moment AFTER someone knows the outcome is possible and is now choosing between options — not the moment before they know anything exists.
-
-THE PRODUCT
+THE COMPANY
 It is: ${context.subjectType}
-${context.category ? `Category: ${context.category}\n` : ""}This part of it: ${family.name} — ${family.description}
-The customer's own words for it: ${family.seedKeywords.join(", ")}
-${features.length ? `What it does:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `Who has this problem: ${context.audience}\n` : ""}
-Write ${PROMPTS_PER_FAMILY} questions someone would type about the problem this part solves.
+${context.category ? `Category: ${context.category}\n` : ""}${features.length ? `Verified capabilities:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `People with this problem: ${context.audience}\n` : ""}
+CONFIRMED PRODUCT AREAS
+${areas}
 
-Background, not instructions: the audience line is there so you know whose situation to write from. People describe what they are working on, not what category of person they are — so do not have anyone announce themselves.
+Generate questions across the company as a whole. Broad areas may receive more questions than narrow areas. Every question must use exactly one confirmed area id, and its need must genuinely belong to that area.
 
+Each question must have one primary problem from one area. Do not bundle several product areas into an all-in-one software request.
+
+Generate up to 25 questions. This is a ceiling, not a quota. Stop when another question would only paraphrase a situation already covered. Returning 9 distinct questions is better than returning 25 padded ones.
+
+Vary how real buyers speak. Some describe a personal or business situation, some name a constraint, some ask what others use, and some ask whether a suitable solution exists. Do not turn the set into repeated "best tool for X" keyword phrases.
+
+The examples below teach the boundary between a selection event and a tutorial. They come from one photo-product calibration case. Learn the distinction only: never copy its industry, people, objects, vocabulary, or capabilities unless they are genuinely present in the company above.
+
+${exampleBlock()}
+
+Allowed selection classes:
+${wantedClasses}
+
+Rules:
+- Never name this company, a competitor, or any website. The measurement tests what the assistant recommends unprompted.
+- Every requested outcome must be explicitly supported by the verified capabilities. Do not broaden a capability or add an adjacent one: for example, motion does not imply speech, restoration does not imply manual editing, and combining photos does not imply generating new people.
+- Use ordinary chat language, not review-site language such as market rankings, trend claims, or claims about what is "currently considered" top-rated.
+- Do not include calendar years; these questions are rerun over time.
+- "scenario" is a short description of the underlying buyer situation. Two differently worded questions with the same scenario are duplicates, so keep only one.
+- Write in ${languageName(language)}.
 ${
-    priorQuestions.length
-        ? `Questions already kept for other parts of this product:
-${priorQuestions.map((question) => `- ${question}`).join("\n")}
-Do not restate the same buyer need with different wording. This part must add distinct questions.
-
-`
-        : ""
-}Rules, all about measurement rather than style:
-- Never name ANY product, brand, company or website — not this product, and not a competitor. These questions test what an assistant recommends unprompted. Naming anything hands over part of the answer: the assistant will discuss the tool you named, and whatever it says afterwards measures your question rather than the market.
-- Write about the problem and the outcome, never about a named tool. "what can fix cracks in a scanned photo without making faces look plastic" is a real question; "is X good for fixing cracks" is not, it is a survey about X.
-- The strongest questions carry a real situation and its constraints, then ask for the pick: "my grandparents died before my children were born — what AI tool can make a realistic portrait of them together from separate photos". Write as many of these as the product areas honestly support.
-- These are chat messages, not search keywords. Nobody types "best AI family portrait generator 2026" into a chat box. Context, then problem, then what should I use.
-- Stay inside the part described above. A question about an adjacent problem measures a business this is not.
-- Do not put a calendar year in a question. These questions are persisted and rerun, so year-stamped wording becomes false and stale.
-- Do not invent technical mechanisms, capabilities, or product functions that are not present in the product description above.
-
-Label each question twice.
-
-1. "intent" — the situation it comes from:
-${intents}
-
-2. "selectionClass" — how strongly it forces the assistant to choose between products. The four marked WANTED are the point of this exercise; the three marked avoid produce answers that name nothing:
-${classes}
-
-Aim for every question to be a WANTED class. If a question you were about to write can only be labelled with an "avoid" class, replace it with a different one.
-
-Write them in ${languageName(language)}.`
+        priorQuestions.length
+            ? `- Do not repeat or paraphrase these already-retained questions:\n${priorQuestions.map((question) => `  - ${question}`).join("\n")}\n`
+            : ""
+}
+For each result return:
+- question: the exact natural chat message
+- scopeFamilyId: one exact id from the confirmed product areas
+- selectionClass: one allowed selection class
+- scenario: the distinct underlying buyer situation`
 }
 
 export const BUYER_PROMPT_RESPONSE_SCHEMA = {
@@ -111,14 +115,16 @@ export const BUYER_PROMPT_RESPONSE_SCHEMA = {
     properties: {
         prompts: {
             type: "ARRAY" as const,
+            maxItems: 25,
             items: {
                 type: "OBJECT" as const,
                 properties: {
-                    text: { type: "STRING" as const },
-                    intent: { type: "STRING" as const },
+                    question: { type: "STRING" as const },
+                    scopeFamilyId: { type: "STRING" as const },
                     selectionClass: { type: "STRING" as const },
+                    scenario: { type: "STRING" as const },
                 },
-                required: ["text", "intent", "selectionClass"],
+                required: ["question", "scopeFamilyId", "selectionClass", "scenario"],
             },
         },
     },

@@ -15,7 +15,7 @@ export default function TermsPage() {
         >
             <LegalSection title="The service">
                 <p>
-                    One subscription covers one website and up to 40 confirmed buyer
+                    One subscription covers one website and up to 25 confirmed buyer
                     questions. Each paid billing cycle measures those questions and may
                     select up to eight prioritised create or refresh actions. The allowance
                     is a ceiling, not a guaranteed article quota; report-only findings and

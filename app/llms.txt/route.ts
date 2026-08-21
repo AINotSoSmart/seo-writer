@@ -15,7 +15,7 @@ export function GET() {
         "",
         "## Product contract",
         "",
-        `- One website and ${PRODUCT_TRUTH.trackedPromptAllowance} confirmed buyer questions.`,
+        `- One website and up to ${PRODUCT_TRUTH.trackedPromptAllowance} confirmed buyer questions.`,
         `- Questions are remeasured in ${PRODUCT_TRUTH.engines.join(" and ")} each paid billing cycle.`,
         `- Each cycle can select up to ${PRODUCT_TRUTH.actionAllowance} create or refresh actions; the allowance is a ceiling, never a filler quota.`,
         "- Findings that do not justify a draft remain visible as report-only evidence.",

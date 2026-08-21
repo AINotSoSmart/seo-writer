@@ -1,10 +1,11 @@
 # From a finite article program to a tracked-question subscription
 
-> Product contract and implementation ledger. Revised 2026-08-17 against the
+> Product contract and implementation ledger. Revised 2026-08-21 against the
 > repository and the completed BringBack visibility run. The original phases
-> remain below as history; the 2026-08-17 correction in §7 is authoritative.
-> Its three forward migrations are code-complete but must ship with the matching
-> application deployment before another paid measurement is started.
+> remain below as history. The current contract in §§1-2 and §9, the 2026-08-17
+> correction in §7, and `PROMPT_QUALITY_PLAN.md` §11 onward are authoritative.
+> Their forward migrations must ship with the matching application deployment
+> before another paid measurement is started.
 >
 > Commercial decisions are labelled separately from launch hypotheses. Nothing
 > becomes validated merely because it appears in this document.
@@ -23,7 +24,7 @@ finds.
 
 It makes three separate guarantees:
 
-1. **Findings are conserved.** Within the customer's 40 tracked questions,
+1. **Findings are conserved.** Within the customer's 1–25 reviewed tracked questions,
    every losing result and its classification is preserved and shown. Nothing is
    silently discarded because it failed a cluster-size rule.
 2. **Production is capped.** Up to eight eligible create or refresh actions are
@@ -34,7 +35,7 @@ It makes three separate guarantees:
    together. There is no drip-feeding or intra-month delivery schedule.
 
 ```
-40 stable buyer questions
+1–25 stable buyer questions
       ↓ asked monthly of ChatGPT + Google AI Mode
 per-question results and evidence
       ↓ reconcile with prior cycles
@@ -92,7 +93,7 @@ The first ceiling is already a property of the visibility pipeline:
 Therefore:
 
 ```
-losing findings ≤ active tracked questions ≤ 40
+losing findings ≤ active tracked questions ≤ 25
 candidate create/refresh actions ≤ losing findings
 ```
 
@@ -249,7 +250,7 @@ cycle delivered together. It must not expose half a cycle if a worker fails.
 Launch one plan:
 
 > **Founding beta**
-> One site · 40 tracked buyer questions · ChatGPT + Google AI Mode · up to 8
+> One site · up to 25 reviewed buyer questions · ChatGPT + Google AI Mode · up to 8
 > prioritised create/refresh actions per cycle · one complete batch · visible
 > findings and backlog · cancel anytime.
 
@@ -833,9 +834,10 @@ The required sandbox configuration is:
 4. Apply `20260816_phase8_checkout_contract.sql`, deploy the code, then set
    `FOUNDING_CHECKOUT_ENABLED=true` only for the sandbox journey.
 5. For the first credit-bounded pipeline test only, deploy
-   `CLORO_SANDBOX_ENGINE=google-aimode`. The server will still measure all 40
-   durable questions, but on one 4-credit surface (160 credits total) instead
-   of the 11-credit production pair (440 credits total). Browser requests cannot
+   `CLORO_SANDBOX_ENGINE=google-aimode`. The server will still measure the full
+   reviewed set of up to 25 durable questions, but on one 4-credit surface (100
+   credits at the cap) instead of the 11-credit production pair (275 credits at
+   the cap). Browser requests cannot
    choose their own engines. This one-engine result proves orchestration only;
    it is not a customer baseline. Remove the variable before live billing.
 6. Complete checkout → activation → paid probe → sitemap inventory → grouped
@@ -941,7 +943,8 @@ building a perfect universal classifier before asking anyone to pay.
 
 The refactor is not complete until these behaviours are verified:
 
-1. A brand cannot have more than 40 active tracked questions on the launch plan.
+1. A brand must have 1–25 active tracked questions on the launch plan; the set is
+   never padded to its ceiling.
 2. Re-running a tracked question creates a new observation, not a new tracked
    question.
 3. Every losing observation reconciles one durable opportunity; no cluster floor

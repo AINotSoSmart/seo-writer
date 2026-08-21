@@ -17,7 +17,7 @@ export type FeatureTruth = {
  * engineering vocabulary is correct and stays in docs/PIVOT.md — it just does
  * not belong on a page whose whole job is to be understood in ten seconds.
  *
- * The launch contract is 40 tracked questions and up to eight selected actions
+ * The launch contract is up to 25 tracked questions and eight selected actions
  * per cycle. Eight is always a ceiling, never a filler quota.
  */
 export const features: Record<string, FeatureTruth> = {
@@ -28,7 +28,7 @@ export const features: Record<string, FeatureTruth> = {
             "We ask your confirmed buyer questions in ChatGPT and Google AI Mode, then retain the answers, mentions and citations behind every verdict.",
         promise:
             "You can open each result and inspect what the engine returned. Unresolved evidence is labelled for review rather than quietly converted into production work.",
-        inputs: ["Your public website", "40 confirmed buyer questions", "Up to four competitors"],
+        inputs: ["Your public website", "Up to 25 confirmed buyer questions", "Up to four competitors"],
         outputs: [
             "Per-question presence or absence evidence",
             "Observed competitors, mentions and citations",

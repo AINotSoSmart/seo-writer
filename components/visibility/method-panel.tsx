@@ -27,7 +27,7 @@ import { Sigma, X } from "lucide-react"
 
 // From the import-free config module, not the builder: this is a client
 // component and the builder pulls in the server-side Gemini client.
-import { PROMPT_INTENTS, PROMPTS_PER_FAMILY } from "@/lib/visibility/prompt-config"
+import { MAX_GENERATED_PROMPTS, PROMPT_INTENTS } from "@/lib/visibility/prompt-config"
 import {
     SOURCE_TYPE_LABELS,
     type SourceType,
@@ -173,11 +173,11 @@ export function MethodPanel({
 
                             <Section title="Where the questions come from">
                                 <p>
-                                    For each confirmed business area we write {PROMPTS_PER_FAMILY}{" "}
-                                    candidate questions, from that area&apos;s own description, what
-                                    the product does, and your own words for it — never invented
-                                    topics. We do not dictate their phrasing; each is labelled with
-                                    the situation it came from:
+                                    We write up to {MAX_GENERATED_PROMPTS} distinct questions across
+                                    the company as a whole, from confirmed business areas, verified
+                                    capabilities and the customer&apos;s own words. Narrow areas are not
+                                    padded to match broad ones. Each question is labelled with the
+                                    situation it came from:
                                 </p>
                                 <ul className="list-disc space-y-1 pl-5">
                                     {PROMPT_INTENTS.map((intent) => (
@@ -194,10 +194,9 @@ export function MethodPanel({
                                     <strong className="font-medium text-[var(--viz-ink)]">
                                         {promptCount}
                                     </strong>{" "}
-                                    of those candidates. When there are more candidates than the
-                                    run&apos;s budget, they are taken one area at a time in turn —
-                                    so a run measures the business rather than whichever area
-                                    happened to generate the most questions.
+                                    of those questions. Each one must naturally lead a useful answer
+                                    to name products or services; tutorials that can be answered from
+                                    general knowledge are excluded from recommendation visibility.
                                 </p>
                                 <p>
                                     No question names any brand, including yours. A question that

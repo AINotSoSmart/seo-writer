@@ -5139,3 +5139,28 @@ fixed and always ship with an icon and a text label, never colour alone.
 41. **Never re-run a probe as a retry.** `runProbeTask` is `maxAttempts: 1`
     deliberately: a retry re-submits every Cloro task and bills the credits a
     second time for a run whose partial answers are already stored.
+
+## 2026-08-21 — buyer questions now measure selection events
+
+`PROMPT_QUALITY_PLAN.md` §11 onward supersedes the old forty-question generation
+contract. Prompt generation is one whole-company call with all confirmed product
+areas, a clear find-or-choose objective, the founder-labelled BringBack boundary
+examples and structured scenario ownership. It may return **1–25 distinct
+questions** and must stop rather than pad the set.
+
+BringBack was regenerated before downstream machinery changed. The production
+path produced seven valid candidates and the single whole-set critic removed two,
+leaving five selection questions across all five confirmed areas. An unrelated
+invoicing smoke test produced clean questions across all four supplied areas with
+no photo-product vocabulary leakage. The critic remains because it materially
+removes duplicate situations; the old score, threshold, per-question judgements
+and per-family quota are deleted.
+
+The exact reviewed set is now the durable subscription set. UI, confirmation,
+checkout and measurement accept 1–25, and
+`20260821_variable_prompt_sets.sql` carries the forward database contract.
+
+Per-area regeneration was removed from the customer surface and from the prompt
+generation API contract. A customer who wants different wording can edit,
+delete, or add a question directly without buying another generator-and-critic
+run for the same area.

@@ -1,5 +1,5 @@
 /**
- * Hand-labelled buyer questions, for calibrating the selection threshold.
+ * Hand-labelled buyer questions for checking the selection-event boundary.
  *
  * MUST STAY DEPENDENCY-FREE — imported by the contract suite under plain node.
  *
@@ -17,12 +17,9 @@
  *
  * ## What this is for
  *
- * CLAUDE.md: *"Never hand-tune a matching threshold. Use the calibration
- * harness with hand-labelled positives and negatives. If the populations
- * overlap, the method is wrong — report that instead of picking a midpoint."*
- *
- * `POST /api/visibility/calibrate-prompts` scores both populations and reports
- * whether they separate. Nothing here chooses a threshold.
+ * `POST /api/visibility/calibrate-prompts` runs the same whole-set critic over
+ * both populations and reports concrete disagreements. It does not score,
+ * suggest a threshold, or silently relabel this founder-reviewed evidence.
  */
 
 export interface CalibrationSet {
@@ -107,56 +104,4 @@ export const BRINGBACK_CALIBRATION: CalibrationSet = {
         "what is the secret to making a family photo look like everyone was together when they weren't",
         "how do I edit a person into a family portrait without making the image look distorted",
     ],
-}
-
-/**
- * Separation report for two scored populations.
- *
- * `separates` is the only field that matters: when the worst positive scores at
- * or below the best negative, no threshold can split them and the method is
- * wrong. Reporting that is required; picking the midpoint anyway is the thing
- * CLAUDE.md forbids.
- */
-export interface SeparationReport {
-    positiveCount: number
-    negativeCount: number
-    minPositive: number
-    maxNegative: number
-    separates: boolean
-    /** Midpoint of the gap — only meaningful when `separates` is true. */
-    suggestedThreshold: number | null
-    /** Positives scoring at or below the best negative. */
-    positiveFailures: Array<{ text: string; score: number }>
-    /** Negatives scoring at or above the worst positive. */
-    negativeLeaks: Array<{ text: string; score: number }>
-}
-
-export function separationReport(
-    positives: Array<{ text: string; score: number }>,
-    negatives: Array<{ text: string; score: number }>,
-): SeparationReport {
-    const minPositive = positives.length
-        ? Math.min(...positives.map((row) => row.score))
-        : 0
-    const maxNegative = negatives.length
-        ? Math.max(...negatives.map((row) => row.score))
-        : 0
-    const separates = positives.length > 0 && negatives.length > 0 && minPositive > maxNegative
-
-    return {
-        positiveCount: positives.length,
-        negativeCount: negatives.length,
-        minPositive,
-        maxNegative,
-        separates,
-        suggestedThreshold: separates
-            ? Math.round(((minPositive + maxNegative) / 2) * 1000) / 1000
-            : null,
-        positiveFailures: positives
-            .filter((row) => row.score <= maxNegative)
-            .sort((a, b) => a.score - b.score),
-        negativeLeaks: negatives
-            .filter((row) => row.score >= minPositive)
-            .sort((a, b) => b.score - a.score),
-    }
 }
