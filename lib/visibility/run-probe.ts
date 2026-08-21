@@ -439,13 +439,17 @@ export async function runVisibilityProbe(
             prompt_norm: prompt.textNorm,
             intent: prompt.intent,
             article_type: prompt.articleType,
+            // Frozen onto the run. A question reclassified next month must not
+            // retroactively move an old run between denominators — the run
+            // reports the class it was actually measured under.
+            selection_class: prompt.selectionClass,
             source_seed: prompt.sourceSeed,
         }))
         const { data: insertedPrompts, error: promptError } = await supabase
             .from("ai_probe_prompts")
             .insert(promptRows)
             .select(
-                "id, tracked_prompt_id, prompt, prompt_norm, scope_family_id, intent, article_type, source_seed",
+                "id, tracked_prompt_id, prompt, prompt_norm, scope_family_id, intent, article_type, source_seed, selection_class",
             )
         if (promptError || !insertedPrompts) {
             throw new Error(`Could not persist prompts: ${promptError?.message ?? "unknown"}`)

@@ -33,9 +33,11 @@ import {
     type VisibilityResultFact,
 } from "@/lib/visibility/visibility-summary"
 import { extractHostname, type CompetitorMention } from "@/lib/visibility/answer-parser"
+import { isSelectionClass } from "@/lib/visibility/selection-class"
 
 type ProbePromptRow = DashboardPrompt & {
     tracked_prompt_id: string | null
+    selection_class: string | null
 }
 
 interface ProbeResultRow {
@@ -113,7 +115,7 @@ export default async function VisibilityPage() {
         admin
             .from("ai_probe_prompts")
             .select(
-                "id, tracked_prompt_id, prompt, intent, verdict, answers_total, answers_present, mean_mention_position",
+                "id, tracked_prompt_id, prompt, intent, verdict, answers_total, answers_present, mean_mention_position, selection_class",
             )
             .eq("run_id", run.id),
         // Counted facts only — the answer text is never loaded here, only when
@@ -240,6 +242,9 @@ export default async function VisibilityPage() {
         prompts: observedPrompts.map((prompt) => ({
             id: prompt.id,
             prompt: prompt.prompt,
+            selectionClass: isSelectionClass(prompt.selection_class)
+                ? prompt.selection_class
+                : undefined,
         })),
         results: [...factsByPrompt.values()].flat(),
         competitors: trackedCompetitors,

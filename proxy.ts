@@ -129,6 +129,9 @@ export async function proxy(request: NextRequest) {
     // Inspects what the article writer receives for a real planned article.
     // Reads only; calls no paid API and generates nothing.
     '/api/writer/dry-run',
+    // Scores hand-labelled buyer questions to derive the selection threshold.
+    // Costs two flash-lite calls; writes nothing.
+    '/api/visibility/calibrate-prompts',
   ]
   const isDevHarvestRoute =
     process.env.NODE_ENV !== 'production' &&

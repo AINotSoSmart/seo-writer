@@ -37,6 +37,13 @@ import {
     type BuyerPromptFamily,
     type PromptBrandContext,
 } from "./prompt-template"
+import { judgeSelectionPrompts } from "./selection-classifier"
+import {
+    acceptsSelectionPrompt,
+    selectionRejections,
+    NATURALNESS_FLOOR,
+} from "./selection-judgement"
+import { UNKNOWN_SELECTION_CLASS, type SelectionClass } from "./selection-class"
 import {
     containsCalendarYear,
     incumbentNeedles,
@@ -63,6 +70,12 @@ export interface BuyerPrompt {
     scopeFamilyId: string
     intent: PromptIntentKey
     articleType: "commercial" | "informational" | "howto"
+    /**
+     * How strongly this question forces an assistant to choose between
+     * products. Orthogonal to `intent`, which decides `articleType` for the
+     * writer. See lib/visibility/selection-class.ts.
+     */
+    selectionClass: SelectionClass
     /** The confirmed seed this prompt was built around — its provenance. */
     sourceSeed: string
 }
@@ -78,6 +91,15 @@ export interface PromptBuildReport {
      * the run nearly ran out of usable questions.
      */
     rivalNamedRejected: number
+    /**
+     * Candidates discarded because an assistant would answer them without
+     * naming any product. A high number is the generator drifting back toward
+     * tutorials; a number equal to the candidate count means the run produced
+     * nothing measurable and the caller must not pretend otherwise.
+     */
+    weakSelectionRejected: number
+    /** Why they were discarded, most common first. Diagnosis, not decoration. */
+    selectionRejectionReasons: Record<string, number>
     errors: string[]
 }
 
@@ -181,6 +203,8 @@ export async function buildBuyerPrompts(
     let callsAttempted = 0
     let callsSucceeded = 0
     const rivalTokens = incumbentNeedles(options.rivalBrands || [])
+    let weakSelectionRejected = 0
+    const selectionRejectionReasons: Record<string, number> = {}
     const externalQuestions = (options.questionsToAvoid || [])
         .map((question) => question.trim())
         .filter(Boolean)
@@ -271,6 +295,11 @@ export async function buildBuyerPrompts(
                             scopeFamilyId: family.id,
                             intent: resolvedIntent,
                             articleType: intent.articleType,
+                            // Provisional. The classifier below decides the real
+                            // one; the model's own label is never trusted,
+                            // because the model that wrote a tutorial is the
+                            // same model being asked whether it wrote one.
+                            selectionClass: UNKNOWN_SELECTION_CLASS,
                             sourceSeed: family.seedKeywords[0] ?? family.name,
                         }
                     })
@@ -301,7 +330,57 @@ export async function buildBuyerPrompts(
             }
         }
 
-        if (accepted.length > 0) byFamily.set(family.id, accepted)
+        /**
+         * THE GATE. Nothing reaches a customer unjudged.
+         *
+         * Every check above this line is mechanical — length, duplicates, brand
+         * names, calendar years. None of them can tell a tutorial from a
+         * selection question, which is why 32 of 40 tutorials shipped. This is
+         * the only semantic filter in the pipeline.
+         *
+         * One call per family, after its candidates are collected, rather than
+         * one per attempt or one per question.
+         */
+        if (accepted.length > 0) {
+            const { judged, error } = await judgeSelectionPrompts(
+                accepted.map((prompt) => prompt.text),
+                {
+                    subjectType: options.subjectType,
+                    category: options.context?.category,
+                    coreFeatures: options.context?.coreFeatures,
+                },
+            )
+            if (error) errors.push(`${family.name}: selection judgement failed — ${error}`)
+
+            const judgementByText = new Map(
+                judged.map((row) => [row.text, row.judgement]),
+            )
+            const survivors: BuyerPrompt[] = []
+            for (const candidate of accepted) {
+                const judgement = judgementByText.get(candidate.text)
+                if (!judgement || !acceptsSelectionPrompt(judgement, NATURALNESS_FLOOR)) {
+                    weakSelectionRejected++
+                    for (const reason of judgement
+                        ? selectionRejections(judgement)
+                        : ["unjudged"]) {
+                        selectionRejectionReasons[reason] =
+                            (selectionRejectionReasons[reason] ?? 0) + 1
+                    }
+                    continue
+                }
+                survivors.push({ ...candidate, selectionClass: judgement.selectionClass })
+            }
+
+            // Reported, never padded. A family that yields four selection
+            // questions contributes four; topping it back up to forty with the
+            // tutorials just rejected would restore the exact defect.
+            if (survivors.length === 0) {
+                errors.push(
+                    `${family.name}: every candidate was answerable without naming a product`,
+                )
+            }
+            if (survivors.length > 0) byFamily.set(family.id, survivors)
+        }
     }
 
     // Round-robin across families up to the cap, so a family that produced 10
@@ -353,6 +432,8 @@ export async function buildBuyerPrompts(
             callsSucceeded,
             familiesCovered: byFamily.size,
             rivalNamedRejected,
+            weakSelectionRejected,
+            selectionRejectionReasons,
             errors: errors.slice(0, 5),
         },
     }

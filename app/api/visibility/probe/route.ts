@@ -51,6 +51,10 @@ import {
     type BuyerPrompt,
 } from "@/lib/visibility/prompt-builder"
 import { bindPromptsToAuditScope } from "@/lib/visibility/prompt-binding"
+import {
+    isSelectionClass,
+    UNKNOWN_SELECTION_CLASS,
+} from "@/lib/visibility/selection-class"
 import { resolveLanguage, resolveRegion } from "@/lib/target-market"
 import {
     decodeProbeFailureCode,
@@ -77,19 +81,40 @@ interface ProbeRequest {
     brandId?: string
     engines?: AiEngine[]
     /**
-     * Opt in to the provider APIs when no Cloro key exists. Off by default:
-     * the API surface diverges from the consumer app by up to 32 points, so
-     * silently falling back to it would quietly replace the measurement the
-     * customer is paying for with a materially different one.
+     * Rejected, not read. Kept in the type so the guard below has something to
+     * name, and so nobody re-adds it as a working field.
+     *
+     * It used to opt this run into the provider APIs. That made engine choice a
+     * browser-controlled input ten lines after the route declared engine choice
+     * is "deployment configuration, never a browser-controlled input" — the
+     * same rule enforced at one door and left open at the one beside it.
      */
-    allowApiSurface?: boolean
+    allowApiSurface?: never
 }
 
-function resolveProbeEngines(allowApiSurface: boolean | undefined): {
+/**
+ * Self-hosters without a Cloro key opt into the provider APIs here, in the
+ * deployment, where the other engine configuration already lives.
+ *
+ * WHY THIS IS NOT A REQUEST FIELD. Without it, a missing `CLORO_API_KEY` yields
+ * an empty engine list and the route returns 503 before anything is created —
+ * a loud, correct refusal. Read from the request body, the same missing key
+ * instead produced a *successful* run on a surface that diverges from the
+ * consumer app by up to 32 points. That converts a loud failure into a quiet
+ * wrong answer, and because tracked questions are durable and re-run monthly,
+ * the wrong answer becomes the baseline every later cycle is compared against.
+ */
+function apiSurfaceAllowedByDeployment(): boolean {
+    return String(process.env.PROBE_ALLOW_API_SURFACE || "").trim() === "true"
+}
+
+function resolveProbeEngines(): {
     engines: AiEngine[]
     configurationError?: string
 } {
-    const normalEngines = configuredEngines({ allowApiSurface })
+    const normalEngines = configuredEngines({
+        allowApiSurface: apiSurfaceAllowedByDeployment(),
+    })
     const sandboxEngine = String(process.env.CLORO_SANDBOX_ENGINE || "").trim()
     if (!sandboxEngine) return { engines: normalEngines }
 
@@ -130,6 +155,7 @@ interface ActiveTrackedPromptRow {
     article_type: BuyerPrompt["articleType"]
     source_seed: string
     position: number
+    selection_class: string | null
 }
 
 function hostOf(url: string): string | null {
@@ -355,17 +381,22 @@ export async function POST(req: NextRequest) {
 
     // Engine choice changes both the evidence contract and provider spend. It
     // is deployment configuration, never a browser-controlled input.
-    if (Object.prototype.hasOwnProperty.call(body, "engines")) {
-        return NextResponse.json(
-            {
-                error: "Answer engines are configured by the service.",
-                reason: "client_engines_forbidden",
-            },
-            { status: 400 },
-        )
+    // `allowApiSurface` sits here beside `engines` because it does the same
+    // thing: it changes which engines run. Blocking one and reading the other
+    // made the rule above false.
+    for (const forbidden of ["engines", "allowApiSurface"] as const) {
+        if (Object.prototype.hasOwnProperty.call(body, forbidden)) {
+            return NextResponse.json(
+                {
+                    error: "Answer engines are configured by the service.",
+                    reason: "client_engines_forbidden",
+                },
+                { status: 400 },
+            )
+        }
     }
 
-    const engineConfiguration = resolveProbeEngines(body.allowApiSurface)
+    const engineConfiguration = resolveProbeEngines()
     const engines = engineConfiguration.engines
 
     if (engineConfiguration.configurationError) {
@@ -526,7 +557,7 @@ export async function POST(req: NextRequest) {
     const { data: trackedRows, error: trackedError } = await admin
         .from("tracked_prompts")
         .select(
-            "id, scope_family_id, prompt, prompt_norm, intent, article_type, source_seed, position",
+            "id, scope_family_id, prompt, prompt_norm, intent, article_type, source_seed, position, selection_class",
         )
         .eq("brand_id", brand.id)
         .eq("user_id", user.id)
@@ -586,6 +617,12 @@ export async function POST(req: NextRequest) {
             scopeFamilyId: row.scope_family_id,
             intent: row.intent,
             articleType: row.article_type,
+            // The class the question was classified under when confirmed. A run
+            // keeps the class it was measured with, so reclassifying a question
+            // later cannot retroactively move an old run between denominators.
+            selectionClass: isSelectionClass(row.selection_class)
+                ? row.selection_class
+                : UNKNOWN_SELECTION_CLASS,
             sourceSeed: row.source_seed,
         }),
     )

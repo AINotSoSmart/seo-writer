@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { UNKNOWN_SELECTION_CLASS } from "@/lib/visibility/selection-class"
 import { normalizeQuery } from "@/lib/harvest/types"
 import type { BuyerPrompt } from "@/lib/visibility/prompt-builder"
 import { DEFAULT_PROMPTS_PER_RUN, PROMPT_INTENTS } from "@/lib/visibility/prompt-config"
@@ -184,6 +185,12 @@ export function PromptsStep({
             scopeFamilyId: familyId,
             intent,
             articleType,
+            // A question the founder typed by hand has not been through the
+            // selection classifier, so it starts in the weakest class and is
+            // excluded from the recommendation denominator until it is judged.
+            // Guessing a strong class here would let hand-written tutorials do
+            // exactly what the classifier exists to prevent.
+            selectionClass: UNKNOWN_SELECTION_CLASS,
             sourceSeed: familyName,
             isCustom: true,
         }

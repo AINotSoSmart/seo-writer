@@ -1,4 +1,5 @@
 import type { CompetitorMention } from "./answer-parser"
+import { countsAsSelection, type SelectionClass } from "./selection-class.ts"
 
 export const VISIBILITY_SUMMARY_VERSION = 2 as const
 
@@ -11,6 +12,13 @@ export interface VisibilityCompetitor {
 export interface VisibilityPromptFact {
     id: string
     prompt: string
+    /**
+     * Which denominator this question belongs to. Absent on runs measured
+     * before the class existed — those fall back to the weakest class, so an
+     * unclassified history reports honest zeros for recommendation visibility
+     * rather than borrowing the old pooled number.
+     */
+    selectionClass?: SelectionClass
 }
 
 export interface VisibilityResultFact {
@@ -63,6 +71,20 @@ export interface VisibilitySummaryV2 {
          * Reported so the correction is visible rather than silent.
          */
         promptInducedRankCorrections: number
+        /**
+         * THE HEADLINE. Questions that actually create a selection set, and how
+         * often the brand was named and named first within them.
+         *
+         * `selectionQuestions === 0` means this run measured no buying moment
+         * at all. That is a finding about the question set, not a score of
+         * zero, and the report must say so rather than printing 0%.
+         */
+        selectionQuestions: number
+        selectionNamedQuestions: number
+        selectionLedQuestions: number
+        /** The other half: broader questions where a mention is earned awareness. */
+        organicQuestions: number
+        organicNamedQuestions: number
     }
     competitorVisibility: {
         trackedCount: number
@@ -211,6 +233,27 @@ export function deriveVisibilitySummaryV2(input: {
     let namedNeverFirstQuestions = 0
     let notNamedQuestions = 0
     let promptInducedRankCorrections = 0
+
+    /**
+     * THE SPLIT. Two denominators, because a miss means two different things.
+     *
+     * A question an assistant answers without naming any product ("how do I
+     * remove scratches from a scanned photo") cannot produce a recommendation,
+     * so the brand's absence from it is not a competitive loss. Pooling it with
+     * "what's the best tool for restoring old photos" produced the number the
+     * founder could not act on: 4 of 40, where an unknown share of the 40 were
+     * tutorials about Photoshop.
+     *
+     * `selection*` counts only questions that create a selection set.
+     * `organic*` counts the rest, where a spontaneous mention is real earned
+     * awareness and a miss is not a loss.
+     */
+    let selectionQuestions = 0
+    let selectionLedQuestions = 0
+    let selectionNamedQuestions = 0
+    let organicQuestions = 0
+    let organicNamedQuestions = 0
+
     for (const promptId of usablePromptIds) {
         const answers = resultsByPrompt.get(promptId) ?? []
         const prompt = promptById.get(promptId)
@@ -226,6 +269,15 @@ export function deriveVisibilitySummaryV2(input: {
         if (led) ledQuestions++
         else if (named) namedNeverFirstQuestions++
         else notNamedQuestions++
+
+        if (countsAsSelection(prompt?.selectionClass)) {
+            selectionQuestions++
+            if (named) selectionNamedQuestions++
+            if (led) selectionLedQuestions++
+        } else {
+            organicQuestions++
+            if (named) organicNamedQuestions++
+        }
     }
 
     let namedAndCitedAnswers = 0
@@ -382,6 +434,11 @@ export function deriveVisibilitySummaryV2(input: {
             namedNeverFirstQuestions,
             notNamedQuestions,
             promptInducedRankCorrections,
+            selectionQuestions,
+            selectionNamedQuestions,
+            selectionLedQuestions,
+            organicQuestions,
+            organicNamedQuestions,
         },
         competitorVisibility: {
             trackedCount: input.competitors.length,

@@ -119,6 +119,16 @@ test("visibility summary keeps question and answer math exact", () => {
         namedNeverFirstQuestions: 0,
         notNamedQuestions: 36,
         promptInducedRankCorrections: 2,
+        // This fixture predates selection classes, so every question falls to
+        // the weakest class and NONE of them counts as a buying moment. That is
+        // the honest result for an unclassified history: recommendation
+        // visibility has no denominator, rather than inheriting the old pooled
+        // number and pretending 4/40 was a competitive measurement.
+        selectionQuestions: 0,
+        selectionNamedQuestions: 0,
+        selectionLedQuestions: 0,
+        organicQuestions: 40,
+        organicNamedQuestions: 4,
     })
     // Citations from a prompt-induced answer are now discarded too, on the same
     // rule the naming side already used. Asking "how does Kinpict compare?"
@@ -3718,6 +3728,23 @@ test("the sandbox probe preserves forty durable questions while bounding provide
 
     assert.match(engines, /"chatgpt-web":[\s\S]{0,500}credits: 7/)
     assert.match(engines, /"google-aimode":[\s\S]{0,220}credits: 4/)
+    // Engine choice is deployment configuration. The route already rejected a
+    // client-supplied `engines` key on exactly that reasoning, then read
+    // `body.allowApiSurface` ten lines later — the same rule enforced at one
+    // door and left open at the one beside it.
+    //
+    // Why it mattered: without the flag, a missing CLORO_API_KEY yields an
+    // empty engine list and the route 503s before anything is created. Read
+    // from the body, the same missing key produced a SUCCESSFUL run on the
+    // provider APIs, a surface that diverges from the consumer app by up to 32
+    // points. A loud refusal became a quiet wrong answer — and tracked
+    // questions are durable, so that answer becomes the baseline every later
+    // cycle is compared against.
+    assert.match(route, /\["engines", "allowApiSurface"\] as const/)
+    assert.match(route, /allowApiSurface\?: never/)
+    assert.doesNotMatch(route, /resolveProbeEngines\(body\./)
+    // Self-hosters opt in through the deployment, beside the other engine config.
+    assert.match(route, /process\.env\.PROBE_ALLOW_API_SURFACE/)
     assert.match(route, /process\.env\.CLORO_SANDBOX_ENGINE/)
     assert.match(route, /process\.env\.DODO_ENVIRONMENT !== "test_mode"/)
     assert.match(route, /client_engines_forbidden/)
@@ -5173,7 +5200,10 @@ test("prompt generation is given context and a goal, never a form", async () => 
     // frozen contract.
     assert.match(config, /articleType: "commercial" as const/)
     assert.match(builder, /articleType: intent\.articleType/)
-    assert.match(template, /Label each question with the situation it comes from/)
+    // Two labels now: the SEO intent that drives articleType, and the
+    // selection class that decides which denominator the question lands in.
+    assert.match(template, /Label each question twice/)
+    assert.match(template, /"selectionClass"/)
 
     // Three checks survive, and none of them judges style. A style filter can
     // only delete: the last one shrank a set of ten to six and skewed what
@@ -5648,6 +5678,154 @@ test("standing explanation lives in hints, and the report is not one scroll", as
     assert.match(dashboard, /setFocus\(null\)/)
     // The cross-link narrows on a second axis; it must not replace losing/all.
     assert.match(dashboard, /filter === "losing"/)
+})
+
+test("a buyer question must create a selection event", async () => {
+    const { countsAsSelection, SELECTION_CLASSES } = await import(
+        "../lib/visibility/selection-class.ts"
+    )
+    const { selectionScore, selectionRejections, normaliseJudgement } = await import(
+        "../lib/visibility/selection-judgement.ts"
+    )
+    const [template, builder, overview] = await Promise.all([
+        text("lib/visibility/prompt-template.ts"),
+        text("lib/visibility/prompt-builder.ts"),
+        text("components/visibility/visibility-overview.tsx"),
+    ])
+
+    // THE DEFECT. A live BringBack set returned 32 tutorials out of 40 — "how
+    // do I remove scratches and dust from scanned family pictures". An
+    // assistant answers that with technique and names no product, so the
+    // brand's absence proved nothing, yet all 40 sat in one denominator and the
+    // report printed "10% visibility".
+    //
+    // The instruction itself caused most of it: it asked for questions people
+    // type "before they know this product, or ANY product, exists" — precisely
+    // the half of the funnel where no product ever gets named.
+    assert.doesNotMatch(template, /before they know this product/)
+    assert.match(template, /THE ONE TEST EVERY QUESTION MUST PASS/)
+    assert.match(template, /must have to NAME PRODUCTS/)
+    assert.match(template, /selectionClass/)
+
+    // Only the four strongest classes are a competitive selection set. A miss on
+    // an instruction question is not a loss and must never be counted as one.
+    assert.equal(countsAsSelection("constrained"), true)
+    assert.equal(countsAsSelection("recommendation"), true)
+    assert.equal(countsAsSelection("discovery"), true)
+    assert.equal(countsAsSelection("solution"), true)
+    assert.equal(countsAsSelection("instruction"), false)
+    assert.equal(countsAsSelection("knowledge"), false)
+    assert.equal(countsAsSelection("exploration"), false)
+    assert.equal(SELECTION_CLASSES.filter((c) => c.countsAsSelection).length, 4)
+
+    // The score is MULTIPLICATIVE. Any one factor at zero takes it to zero — a
+    // question that is natural, commercial and squarely in the brand's
+    // wheelhouse still scores 0 if an assistant would answer it without naming
+    // anything, because that question cannot produce the event being measured.
+    const strong = {
+        answerableWithoutProduct: false,
+        benefitsFromNamingProducts: true,
+        brandCanSatisfy: true,
+        naturalness: 0.9,
+        selectionClass: "constrained",
+    }
+    assert.equal(selectionScore(strong), 0.9)
+    assert.equal(selectionScore({ ...strong, answerableWithoutProduct: true }), 0)
+    assert.equal(selectionScore({ ...strong, brandCanSatisfy: false }), 0)
+    assert.deepEqual(
+        selectionRejections({ ...strong, answerableWithoutProduct: true }),
+        ["answerable_without_product"],
+    )
+
+    // A malformed or missing model response FAILS CLOSED. An unjudged question
+    // is treated as answerable-without-a-product and outside the brand, so an
+    // outage rejects candidates rather than silently admitting tutorials.
+    assert.equal(selectionScore(normaliseJudgement(null)), 0)
+    assert.equal(normaliseJudgement({}).answerableWithoutProduct, true)
+    assert.equal(normaliseJudgement({}).brandCanSatisfy, false)
+
+    // The gate runs in the builder, and a family that yields nothing is
+    // reported rather than padded back up with the tutorials just rejected.
+    assert.match(builder, /judgeSelectionPrompts\(/)
+    assert.match(builder, /weakSelectionRejected\+\+/)
+    assert.match(builder, /every candidate was answerable without naming a product/)
+
+    // The headline is recommendation visibility, over the selection denominator
+    // only — never named-answers over everything.
+    assert.match(overview, /brand\.selectionQuestions > 0 \?/)
+    assert.match(overview, /rate\(brand\.selectionLedQuestions, brand\.selectionQuestions\)/)
+    // Zero selection questions is a finding about the question set, not a 0%.
+    assert.match(overview, /No buying moment measured/)
+})
+
+test("the selection threshold is calibrated, never chosen by eye", async () => {
+    const { separationReport, BRINGBACK_CALIBRATION } = await import(
+        "../lib/visibility/selection-calibration-set.ts"
+    )
+    const [route, proxy] = await Promise.all([
+        text("app/api/visibility/calibrate-prompts/route.ts"),
+        text("proxy.ts"),
+    ])
+
+    // CLAUDE.md: never hand-tune a matching threshold; if the populations
+    // overlap the method is wrong and that must be REPORTED, not split.
+    const overlapping = separationReport(
+        [{ text: "p", score: 0.4 }],
+        [{ text: "n", score: 0.6 }],
+    )
+    assert.equal(overlapping.separates, false)
+    assert.equal(overlapping.suggestedThreshold, null, "must not suggest a midpoint")
+    assert.equal(overlapping.negativeLeaks.length, 1)
+
+    const clean = separationReport(
+        [{ text: "p", score: 0.8 }],
+        [{ text: "n", score: 0.2 }],
+    )
+    assert.equal(clean.separates, true)
+    assert.equal(clean.suggestedThreshold, 0.5)
+
+    // The labelled set is the REAL failure, not invented examples.
+    assert.ok(BRINGBACK_CALIBRATION.negatives.length >= 30)
+    assert.ok(BRINGBACK_CALIBRATION.positives.length >= 12)
+    assert.ok(
+        BRINGBACK_CALIBRATION.negatives.includes(
+            "how do I remove scratches and dust from scanned family pictures",
+        ),
+        "the calibration negatives must be the questions that actually shipped",
+    )
+
+    // Dev-only, both by env check and by the proxy allowlist.
+    assert.match(route, /NODE_ENV === "production"/)
+    assert.match(proxy, /\/api\/visibility\/calibrate-prompts/)
+    // It reports; it never writes a threshold anywhere.
+    assert.match(route, /OVERLAP/)
+})
+
+test("selection class is persisted and frozen onto the run", async () => {
+    const [migration, runProbe, probeRoute, summary] = await Promise.all([
+        text("supabase/migrations/20260817_prompt_selection_class.sql"),
+        text("lib/visibility/run-probe.ts"),
+        text("app/api/visibility/probe/route.ts"),
+        text("lib/visibility/visibility-summary.ts"),
+    ])
+
+    // Forward-only and re-runnable, per the repo's migration rule.
+    assert.match(migration, /ADD COLUMN IF NOT EXISTS selection_class/)
+    // Defaults to the WEAKEST class: an unclassified question must not be able
+    // to inflate the headline, and pre-existing rows are genuinely unclassified.
+    assert.match(migration, /DEFAULT 'knowledge'/)
+    assert.match(migration, /CHECK \(selection_class IN/)
+
+    // Frozen onto the run, so reclassifying a question next month cannot
+    // retroactively move an old run between denominators.
+    assert.match(runProbe, /selection_class: prompt\.selectionClass/)
+    assert.match(probeRoute, /selectionClass: isSelectionClass\(row\.selection_class\)/)
+
+    // Two denominators, and the organic half is kept rather than discarded —
+    // an unprompted mention there is earned awareness, just not a win.
+    assert.match(summary, /selectionQuestions\+\+/)
+    assert.match(summary, /organicQuestions\+\+/)
+    assert.match(summary, /countsAsSelection\(prompt\?\.selectionClass\)/)
 })
 
 test("a probe honors four confirmed rivals before it asks anything", async () => {

@@ -100,12 +100,59 @@ export function VisibilityOverview({
                 <div className="rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-6">
                     <div className="flex flex-wrap items-end gap-6">
                         <div>
-                            <div className="text-5xl font-semibold leading-none tabular-nums text-[var(--viz-ink)]">
-                                {rate(brand.namedAnswers, brand.answersTotal)}
-                            </div>
-                            <p className="mt-2 text-sm text-[var(--viz-ink-secondary)]">
-                                of answers named {subjectName}
-                            </p>
+                            {/*
+                              * THE HEADLINE IS RECOMMENDATION VISIBILITY.
+                              *
+                              * It used to be named-answers over ALL answers. A
+                              * live run scored 10% that way, and an unknown
+                              * share of the denominator were tutorials an
+                              * assistant answers without naming any product —
+                              * questions where the brand had no chance to be
+                              * chosen because nothing was being chosen.
+                              *
+                              * Now the denominator is only the questions that
+                              * create a selection set. Zero of those is a fact
+                              * about the question set, not a score, so it says
+                              * so instead of printing 0%.
+                              */}
+                            {brand.selectionQuestions > 0 ? (
+                                <>
+                                    <div className="text-5xl font-semibold leading-none tabular-nums text-[var(--viz-ink)]">
+                                        {rate(brand.selectionLedQuestions, brand.selectionQuestions)}
+                                    </div>
+                                    <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--viz-ink-secondary)]">
+                                        recommendation visibility
+                                        <InfoHint label="What recommendation visibility measures">
+                                            <p>
+                                                Of the {brand.selectionQuestions} questions where a
+                                                buyer was actually choosing a tool,{" "}
+                                                {subjectName} was named first in{" "}
+                                                {brand.selectionLedQuestions} and named at all in{" "}
+                                                {brand.selectionNamedQuestions}.
+                                            </p>
+                                            <p className="mt-2">
+                                                The other {brand.organicQuestions} questions can be
+                                                answered without naming any product — an assistant
+                                                replies with technique. Being absent from those is
+                                                not a competitive loss, so they are counted
+                                                separately and never in this number.
+                                            </p>
+                                        </InfoHint>
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="text-3xl font-semibold leading-tight text-[var(--viz-ink)]">
+                                        No buying moment measured
+                                    </div>
+                                    <p className="mt-2 max-w-md text-sm text-[var(--viz-ink-secondary)]">
+                                        None of these {brand.questionsTotal} questions makes an
+                                        assistant choose between products, so this run cannot say
+                                        whether {subjectName} would be recommended. Regenerate the
+                                        question set.
+                                    </p>
+                                </>
+                            )}
                         </div>
                         <div className="text-sm leading-relaxed text-[var(--viz-ink-secondary)] sm:ml-auto sm:text-right">
                             <div className="flex items-center gap-1.5 sm:justify-end">
@@ -138,6 +185,14 @@ export function VisibilityOverview({
                             <div>
                                 Cited in <strong className="text-[var(--viz-ink)]">{brand.citedAnswers}/{brand.answersTotal}</strong> answers
                             </div>
+                            {brand.organicQuestions > 0 && (
+                                <div className="mt-1 text-[var(--viz-ink-muted)]">
+                                    Organic mentions{" "}
+                                    <strong className="text-[var(--viz-ink-secondary)]">
+                                        {brand.organicNamedQuestions}/{brand.organicQuestions}
+                                    </strong>
+                                </div>
+                            )}
                         </div>
                     </div>
 

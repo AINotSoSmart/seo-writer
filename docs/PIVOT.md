@@ -1253,6 +1253,54 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-17 (twenty-eighth pass) — engine choice leaves the request body
+
+**Two engines are wanted again.** The single-engine restriction was never in
+code — `DEFAULT_ENGINES` has always been `["chatgpt-web", "google-aimode"]` and
+`configuredEngines()` returns both whenever `CLORO_API_KEY` is set. The whole
+restriction was one deployment variable, `CLORO_SANDBOX_ENGINE=google-aimode`,
+whose gate (`DODO_ENVIRONMENT=test_mode`) was satisfied. Commented out locally;
+**it must also be deleted from Vercel**, or deployed probes stay single-engine.
+Back to 440 credits per 40-question run instead of 160.
+
+The flag's code is kept. It is fail-closed outside `test_mode`, refuses without
+a Cloro key, and refuses an engine name outside `DEFAULT_ENGINES` — and it earns
+its place the next time a full checkout-to-batch journey needs exercising
+without buying a two-engine baseline. Its one sharp edge is stated here so it
+does not have to be rediscovered: **while the deployment is in `test_mode`,
+leaving the variable set silently halves the measurement.** It fails loudly in
+production and quietly in the environment actually being used, which is exactly
+how it stayed on.
+
+**`allowApiSurface` is no longer a request field.** The route rejected a
+client-supplied `engines` key with the comment *"Engine choice changes both the
+evidence contract and provider spend. It is deployment configuration, never a
+browser-controlled input"* — and then read `body.allowApiSurface` ten lines
+later, which changes the engine set. The same rule enforced at one door and left
+open at the one beside it, for the fourth time this week.
+
+It was inert while `CLORO_API_KEY` existed, because `configuredEngines()`
+short-circuits on Cloro before the API branch is reachable. The cost was in the
+failure path:
+
+| `CLORO_API_KEY` missing | before | after |
+|---|---|---|
+| normal request | 503 `no_engines` | 503 `no_engines` |
+| `allowApiSurface: true` | **202, runs on provider APIs** | 400 `client_engines_forbidden` |
+
+The provider APIs diverge from the consumer surfaces by up to 32 points, so that
+row turned a loud, correct refusal into a successful run carrying a materially
+different measurement — and because tracked questions are durable and re-run
+monthly, that wrong number becomes the baseline every later cycle is compared
+against. Precisely the failure `run-probe.ts` opens by warning about.
+
+Self-hosters without Cloro now opt in through `PROBE_ALLOW_API_SURFACE=true`,
+in the deployment, beside the engine configuration it belongs with.
+
+122/122 contract tests, `tsc --noEmit` clean. No migration.
+
+
+
 ### 2026-08-17 (twenty-seventh pass) — explanation on demand, and four views instead of one scroll
 
 **Standing prose moved into hints.** Every section carried a paragraph of
