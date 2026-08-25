@@ -11,11 +11,11 @@ import {
     Search,
 } from "lucide-react"
 
-import {
-    PAGE_SHAPE_LABELS,
-    type PageShape,
-} from "@/lib/visibility/citation-classifier"
-import type { SourceReport, SourceReportPage } from "@/lib/visibility/source-report"
+import type {
+    DeclaredPageKind,
+    SourceReport,
+    SourceReportPage,
+} from "@/lib/visibility/source-report"
 import {
     Sheet,
     SheetContent,
@@ -30,18 +30,21 @@ const PAGE_SIZE = 12
 
 type OwnershipFilter = "all" | "owned" | "external" | "competitor"
 
-function routeLabel(page: SourceReportPage): string {
-    if (page.sourceType === "owned") return "Publish"
-    if (page.sourceType === "competitor") return "Answer better"
-    if (page.actionability === "review") return "Verify"
-    return "Earn placement"
+const DECLARED_KIND_LABELS: Record<DeclaredPageKind, string> = {
+    "best-of": "Best-of title",
+    comparison: "Comparison title",
+    review: "Review title",
+}
+
+function relationshipLabel(page: SourceReportPage): string {
+    if (page.relationship === "owned") return "Your domain"
+    if (page.relationship === "competitor") return "Tracked competitor"
+    return "External"
 }
 
 function ownershipMatches(page: SourceReportPage, filter: OwnershipFilter): boolean {
     if (filter === "all") return true
-    if (filter === "owned") return page.sourceType === "owned"
-    if (filter === "competitor") return page.sourceType === "competitor"
-    return page.sourceType !== "owned" && page.sourceType !== "competitor"
+    return page.relationship === filter
 }
 
 export function VisibilityLists({
@@ -53,7 +56,7 @@ export function VisibilityLists({
     engineLabels: Record<string, string>
     onFocusQuestions: (questionIds: string[], label: string) => void
 }) {
-    const [shape, setShape] = useState<PageShape | "all">("all")
+    const [shape, setShape] = useState<DeclaredPageKind | "all">("all")
     const [ownership, setOwnership] = useState<OwnershipFilter>("all")
     const [onlyNoCooccurrence, setOnlyNoCooccurrence] = useState(false)
     const [search, setSearch] = useState("")
@@ -62,30 +65,30 @@ export function VisibilityLists({
 
     const filteredPages = useMemo(() => {
         const query = search.trim().toLowerCase()
-        return report.listPages.filter(
+        return report.explicitlyShapedPages.filter(
             (item) =>
-                (shape === "all" || item.pageShape === shape) &&
+                (shape === "all" || item.declaredKind === shape) &&
                 ownershipMatches(item, ownership) &&
                 (!onlyNoCooccurrence || item.namingAnswerCount === 0) &&
                 (!query ||
                     item.host.toLowerCase().includes(query) ||
                     item.title.toLowerCase().includes(query)),
         )
-    }, [onlyNoCooccurrence, ownership, report.listPages, search, shape])
+    }, [onlyNoCooccurrence, ownership, report.explicitlyShapedPages, search, shape])
 
     const pageCount = Math.max(1, Math.ceil(filteredPages.length / PAGE_SIZE))
     const visiblePages = filteredPages.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-    const distinctPublishers = new Set(report.listPages.map((item) => item.host)).size
-    const citationInstances = report.listPages.reduce(
+    const distinctSites = new Set(report.explicitlyShapedPages.map((item) => item.host)).size
+    const citationInstances = report.explicitlyShapedPages.reduce(
         (sum, item) => sum + item.citationCount,
         0,
     )
-    const noCooccurrence = report.listPages.filter(
-        (item) => item.namingAnswerCount === 0,
-    ).length
+    const losingQuestions = new Set(
+        report.explicitlyShapedPages.flatMap((item) => item.losingQuestionIds),
+    ).size
     const maxCitations = Math.max(
         1,
-        ...report.listPages.map((item) => item.citationCount),
+        ...report.explicitlyShapedPages.map((item) => item.citationCount),
     )
 
     return (
@@ -93,31 +96,31 @@ export function VisibilityLists({
             <section>
                 <SectionHeading
                     title="The lists the engines read"
-                    sub="Best-of, comparison and review pages that repeatedly shaped recommendations."
-                    hintLabel="What these pages prove"
+                    sub="Pages whose stored citation titles explicitly say best-of, comparison or review."
+                    hintLabel="Why this list is deliberately narrow"
                     hint={
                         <p>
-                            These pages were cited by stored answers. The report has not fetched
-                            their contents, so brand presence is described only for the answers
-                            that cited them—not for the pages themselves.
+                            The system uses only words already present in the stored title. It does
+                            not fetch the page or guess its type from the domain. Pages without
+                            explicit title wording remain visible in Sources, not hidden or rejected.
                         </p>
                     }
                 >
                     <span className="text-xs tabular-nums text-[var(--viz-ink-muted)]">
-                        {report.listPages.length} pages
+                        {report.explicitlyShapedPages.length} pages
                     </span>
                 </SectionHeading>
 
                 <div className="viz-card mt-5 grid overflow-hidden sm:grid-cols-2 lg:grid-cols-4">
                     <ListFact
-                        value={report.listPages.length}
-                        label="shaped pages"
-                        detail="Lists, comparisons and reviews"
+                        value={report.explicitlyShapedPages.length}
+                        label="explicit titles"
+                        detail="Best-of, comparison or review"
                     />
                     <ListFact
-                        value={distinctPublishers}
-                        label="publishers"
-                        detail="Distinct sites carrying those pages"
+                        value={distinctSites}
+                        label="distinct sites"
+                        detail="Domains carrying those pages"
                     />
                     <ListFact
                         value={citationInstances}
@@ -125,9 +128,9 @@ export function VisibilityLists({
                         detail="Source occurrences across answers"
                     />
                     <ListFact
-                        value={noCooccurrence}
-                        label="zero co-occurrence"
-                        detail="No citing answer named your brand"
+                        value={losingQuestions}
+                        label="losing questions"
+                        detail="Weak-visibility questions citing these pages"
                     />
                 </div>
             </section>
@@ -140,7 +143,7 @@ export function VisibilityLists({
                                 <ListFilter className="size-4" aria-hidden />
                             </span>
                             <div>
-                                <h2 className="text-sm font-semibold">Influential page directory</h2>
+                                <h2 className="text-sm font-semibold">Explicit-title page directory</h2>
                                 <p className="mt-0.5 text-xs text-[var(--viz-ink-muted)]">
                                     {filteredPages.length} pages in this view
                                 </p>
@@ -158,8 +161,8 @@ export function VisibilityLists({
                                         setSearch(event.target.value)
                                         setPage(1)
                                     }}
-                                    placeholder="Find a page or publisher"
-                                    aria-label="Find a list page or publisher"
+                                    placeholder="Find a page or site"
+                                    aria-label="Find a titled page or site"
                                     className="h-9 w-full rounded-lg border border-[var(--viz-hairline)] bg-white pl-9 pr-3 text-xs outline-none placeholder:text-[var(--viz-ink-muted)] focus:border-[var(--viz-baseline)] sm:w-56"
                                 />
                             </div>
@@ -187,13 +190,13 @@ export function VisibilityLists({
                             label="Page"
                             values={[
                                 ["all", "All"],
-                                ["listicle", "Best-of"],
+                                ["best-of", "Best-of"],
                                 ["comparison", "Comparisons"],
                                 ["review", "Reviews"],
                             ]}
                             active={shape}
                             onChange={(value) => {
-                                setShape(value as PageShape | "all")
+                                setShape(value as DeclaredPageKind | "all")
                                 setPage(1)
                             }}
                         />
@@ -201,7 +204,7 @@ export function VisibilityLists({
                             label="Owner"
                             values={[
                                 ["all", "All"],
-                                ["external", "Independent"],
+                                ["external", "External"],
                                 ["competitor", "Competitor"],
                                 ["owned", "Yours"],
                             ]}
@@ -223,7 +226,7 @@ export function VisibilityLists({
                                 <th className="px-4 py-2.5 text-left font-medium">Kind</th>
                                 <th className="w-44 px-4 py-2.5 text-left font-medium">Used by answers</th>
                                 <th className="px-4 py-2.5 text-right font-medium">Brand named</th>
-                                <th className="px-4 py-2.5 text-left font-medium">Route</th>
+                                <th className="px-4 py-2.5 text-left font-medium">Relationship</th>
                                 <th className="px-5 py-2.5 text-right font-medium">Next</th>
                             </tr>
                         </thead>
@@ -243,8 +246,8 @@ export function VisibilityLists({
                                             className="flex w-full min-w-0 items-start gap-2.5 text-left"
                                         >
                                             <Badge
-                                                label={item.host}
-                                                own={item.sourceType === "owned"}
+                                                 label={item.host}
+                                                 own={item.relationship === "owned"}
                                             />
                                             <span className="min-w-0">
                                                 <span className="block truncate font-medium hover:text-[var(--viz-series-1)]">
@@ -258,7 +261,7 @@ export function VisibilityLists({
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className="rounded-full border border-[var(--viz-hairline)] px-2 py-1 text-[10px]">
-                                            {PAGE_SHAPE_LABELS[item.pageShape]}
+                                            {item.declaredKind ? DECLARED_KIND_LABELS[item.declaredKind] : ""}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
@@ -286,7 +289,7 @@ export function VisibilityLists({
                                         {item.namingAnswerCount} / {item.answerCount}
                                     </td>
                                     <td className="px-4 py-3 text-xs text-[var(--viz-ink-secondary)]">
-                                        {routeLabel(item)}
+                                        {relationshipLabel(item)}
                                     </td>
                                     <td className="px-5 py-3 text-right">
                                         <button
@@ -430,7 +433,7 @@ function PageSheet({
                     <>
                         <SheetHeader className="border-b border-[var(--viz-hairline)] px-6 py-5 pr-12">
                             <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.08em] text-[var(--viz-ink-muted)]">
-                                <span>{PAGE_SHAPE_LABELS[page.pageShape]}</span>
+                                <span>{page.declaredKind ? DECLARED_KIND_LABELS[page.declaredKind] : "Explicit title"}</span>
                                 <span aria-hidden>·</span>
                                 <span>{page.host}</span>
                             </div>
@@ -438,8 +441,8 @@ function PageSheet({
                                 {page.title || page.url}
                             </SheetTitle>
                             <SheetDescription className="text-left">
-                                A cited page worth checking directly—not a claim about what the
-                                page currently says.
+                                Included because its stored citation title explicitly identifies
+                                the format—not because the system classified the site.
                             </SheetDescription>
                         </SheetHeader>
                         <div className="space-y-6 p-6">
@@ -467,9 +470,9 @@ function PageSheet({
                             </div>
 
                             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-[var(--viz-ink-secondary)]">
-                                &ldquo;None named you&rdquo; describes the answers, not the page — we
-                                haven&apos;t fetched these pages. Open the source and verify the
-                                placement before treating it as an outreach target.
+                                Brand co-occurrence describes the answers that cited this page, not
+                                the page itself. Open the source if you want to inspect its current
+                                contents.
                             </div>
 
                             <div className="grid gap-2 sm:grid-cols-2">
@@ -479,7 +482,7 @@ function PageSheet({
                                     rel="noopener noreferrer nofollow"
                                     className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--viz-ink)] px-4 text-xs font-semibold text-white"
                                 >
-                                    Open and verify
+                                    Open source
                                     <ArrowUpRight className="size-3.5" aria-hidden />
                                 </a>
                                 <button

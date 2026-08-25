@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-    AlertTriangle,
     ArrowRight,
-    ArrowUpRight,
     ChevronLeft,
     ChevronRight,
     Info,
@@ -12,13 +10,8 @@ import {
     Search,
 } from "lucide-react"
 
-import {
-    SOURCE_TYPE_LABELS,
-    type Actionability,
-    type CitationBreakdown,
-} from "@/lib/visibility/citation-classifier"
 import { blindSpots, type FanOutSummary } from "@/lib/visibility/fan-out"
-import type { SourceReport } from "@/lib/visibility/source-report"
+import type { SourceRelationship, SourceReport } from "@/lib/visibility/source-report"
 import {
     Sheet,
     SheetContent,
@@ -31,33 +24,27 @@ import { SectionHeading } from "./info-hint"
 
 const PAGE_SIZE = 10
 
-const ACTION_META: Record<
-    Actionability,
+const RELATIONSHIP_META: Record<
+    SourceRelationship,
     { label: string; description: string; color: string; tint: string }
 > = {
-    publish: {
-        label: "Publish",
-        description: "Pages you control or can answer directly on your site.",
+    owned: {
+        label: "Your domain",
+        description: "Citations that point to the confirmed customer domain.",
         color: "var(--viz-series-1)",
         tint: "#eff6ff",
     },
-    earn: {
-        label: "Earn",
-        description: "Placement, coverage or recommendation must come from someone else.",
-        color: "var(--viz-seq-350)",
-        tint: "#eff6ff",
+    competitor: {
+        label: "Tracked competitors",
+        description: "Citations that point to a domain already in the rival set.",
+        color: "var(--viz-warning)",
+        tint: "#fff8e8",
     },
-    none: {
-        label: "Observe",
-        description: "Reference material worth understanding, but not a production target.",
+    external: {
+        label: "External sources",
+        description: "Every other cited domain, without guessing what kind of site it is.",
         color: "var(--viz-muted-mark)",
         tint: "var(--viz-plane)",
-    },
-    review: {
-        label: "Review",
-        description: "Different in kind: excluded until a person classifies the page.",
-        color: "var(--viz-baseline)",
-        tint: "var(--viz-track)",
     },
 }
 
@@ -66,16 +53,8 @@ function percentage(part: number, whole: number): string {
     return `${Math.round((part / whole) * 100)}%`
 }
 
-function sourceRoute(actionability: Actionability): string {
-    if (actionability === "publish") return "Publish"
-    if (actionability === "earn") return "Earn"
-    if (actionability === "review") return "Review"
-    return "Observe"
-}
-
 export function VisibilitySources({
     report,
-    breakdown,
     fanOut,
     promptCount,
     engineLabels,
@@ -84,7 +63,6 @@ export function VisibilitySources({
     onOpenLists,
 }: {
     report: SourceReport
-    breakdown?: CitationBreakdown
     fanOut?: FanOutSummary
     promptCount: number
     engineLabels: Record<string, string>
@@ -92,16 +70,15 @@ export function VisibilitySources({
     onFocusHost: (host: string) => void
     onOpenLists: () => void
 }) {
-    const [actionFilter, setActionFilter] = useState<Actionability | "all">("all")
+    const [relationshipFilter, setRelationshipFilter] = useState<SourceRelationship | "all">("all")
     const [search, setSearch] = useState("")
     const [page, setPage] = useState(1)
     const [showSearchPaths, setShowSearchPaths] = useState(false)
-    const [showReview, setShowReview] = useState(false)
 
     useEffect(() => {
         if (focusHost) {
             setSearch(focusHost)
-            setActionFilter("all")
+            setRelationshipFilter("all")
             setPage(1)
         }
     }, [focusHost])
@@ -110,15 +87,14 @@ export function VisibilitySources({
         const query = search.trim().toLowerCase()
         return report.hosts.filter(
             (host) =>
-                (actionFilter === "all" || host.actionability === actionFilter) &&
+                (relationshipFilter === "all" || host.relationship === relationshipFilter) &&
                 (!query || host.host.toLowerCase().includes(query)),
         )
-    }, [actionFilter, report.hosts, search])
+    }, [relationshipFilter, report.hosts, search])
 
     const pageCount = Math.max(1, Math.ceil(filteredHosts.length / PAGE_SIZE))
     const visibleHosts = filteredHosts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     const searchBlindSpots = fanOut ? blindSpots(fanOut) : []
-    const actionableCitations = report.actionCounts.publish + report.actionCounts.earn
 
     if (report.totalCitations === 0) {
         return (
@@ -135,9 +111,9 @@ export function VisibilitySources({
         <div className="mt-5 space-y-5">
             <section>
                 <SectionHeading
-                    title="What shaped the answers"
-                    sub="Every cited domain, organised by the route available to you."
-                    hintLabel="What a source can and cannot prove"
+                    title="Sources behind the measured answers"
+                    sub="Every cited domain, connected to the questions and engines where it appeared."
+                    hintLabel="What this evidence can and cannot prove"
                     hint={
                         <p>
                             A citation proves that an answer used a page as a source. It does not
@@ -146,13 +122,13 @@ export function VisibilitySources({
                         </p>
                     }
                 >
-                    {report.listPages.length > 0 && (
+                    {report.explicitlyShapedPages.length > 0 && (
                         <button
                             type="button"
                             onClick={onOpenLists}
                             className="inline-flex items-center gap-1 text-xs font-medium text-[var(--viz-series-1)] hover:underline"
                         >
-                            {report.listPages.length} shaped pages
+                            {report.explicitlyShapedPages.length} named lists or reviews
                             <ArrowRight className="size-3" aria-hidden />
                         </button>
                     )}
@@ -170,54 +146,43 @@ export function VisibilitySources({
                         detail="Domains used across the run"
                     />
                     <SummaryFact
-                        value={percentage(actionableCitations, report.totalCitations)}
-                        label="actionable"
-                        detail="Publish or earn a place"
+                        value={report.relationshipCounts.owned}
+                        label="citations to your domain"
+                        detail="A factual ownership match"
                     />
-                    <button
-                        type="button"
-                        onClick={() => setShowReview(true)}
-                        className="border-t border-[var(--viz-hairline)] p-4 text-left hover:bg-[var(--viz-plane)] sm:border-l sm:border-t-0"
-                    >
-                        <div className="text-[24px] font-semibold leading-none tabular-nums">
-                            {report.reviewPages.length}
-                        </div>
-                        <div className="mt-2 text-xs font-medium">pages need review</div>
-                        <div className="mt-1 text-[11px] text-[var(--viz-ink-muted)]">
-                            Excluded from production
-                        </div>
-                    </button>
+                    <SummaryFact
+                        value={report.relationshipCounts.external}
+                        label="external citations"
+                        detail="Shown without guessing the site type"
+                    />
                 </div>
             </section>
 
             <section className="viz-card p-5 sm:p-[22px]">
                 <SectionHeading
                     size="card"
-                    title="Source control map"
-                    sub="The same citations, separated by what you can actually do next."
+                    title="Where the citations point"
+                    sub="Three relationships we can state from confirmed domains—no action or quality assumptions."
                 />
-                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {(["publish", "earn", "none", "review"] as const).map((action) => {
-                        const meta = ACTION_META[action]
-                        const count = report.actionCounts[action]
-                        const types = (breakdown?.byType ?? []).filter(
-                            (row) => row.actionability === action,
-                        )
+                <div className="mt-5 grid gap-3 md:grid-cols-3">
+                    {(["owned", "competitor", "external"] as const).map((relationship) => {
+                        const meta = RELATIONSHIP_META[relationship]
+                        const count = report.relationshipCounts[relationship]
                         return (
                             <button
-                                key={action}
+                                key={relationship}
                                 type="button"
                                 onClick={() => {
-                                    setActionFilter(action)
+                                    setRelationshipFilter(relationship)
                                     setSearch("")
                                     setPage(1)
                                 }}
                                 className={`min-w-0 rounded-xl border p-4 text-left transition-colors hover:border-[var(--viz-baseline)] ${
-                                    actionFilter === action
+                                    relationshipFilter === relationship
                                         ? "border-[var(--viz-ink)]"
                                         : "border-[var(--viz-hairline)]"
-                                } ${action === "review" ? "viz-hatch" : ""}`}
-                                style={action === "review" ? undefined : { background: meta.tint }}
+                                }`}
+                                style={{ background: meta.tint }}
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <span className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -238,21 +203,6 @@ export function VisibilitySources({
                                 <p className="mt-3 min-h-10 text-xs leading-5 text-[var(--viz-ink-secondary)]">
                                     {meta.description}
                                 </p>
-                                <div className="mt-3 flex min-h-12 flex-wrap content-start gap-1.5 border-t border-black/5 pt-3">
-                                    {types.map((type) => (
-                                        <span
-                                            key={type.sourceType}
-                                            className="rounded-full border border-black/5 bg-white/75 px-2 py-0.5 text-[10px] text-[var(--viz-ink-secondary)]"
-                                        >
-                                            {type.label} · {type.citations}
-                                        </span>
-                                    ))}
-                                    {types.length === 0 && (
-                                        <span className="text-[10px] text-[var(--viz-ink-muted)]">
-                                            No citations in this route
-                                        </span>
-                                    )}
-                                </div>
                             </button>
                         )
                     })}
@@ -265,7 +215,7 @@ export function VisibilitySources({
                         <h2 className="text-sm font-semibold">Cited-site directory</h2>
                         <p className="mt-1 text-xs text-[var(--viz-ink-muted)]">
                             {filteredHosts.length} {filteredHosts.length === 1 ? "site" : "sites"}
-                            {actionFilter !== "all" ? ` in ${ACTION_META[actionFilter].label}` : ""}
+                            {relationshipFilter !== "all" ? ` in ${RELATIONSHIP_META[relationshipFilter].label}` : ""}
                         </p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -285,23 +235,23 @@ export function VisibilitySources({
                                 className="h-9 w-full rounded-lg border border-[var(--viz-hairline)] bg-white pl-9 pr-3 text-xs outline-none placeholder:text-[var(--viz-ink-muted)] focus:border-[var(--viz-baseline)] sm:w-48"
                             />
                         </div>
-                        <div className="flex gap-1 overflow-x-auto" aria-label="Filter source route">
-                            {(["all", "publish", "earn", "none", "review"] as const).map(
-                                (action) => (
+                        <div className="flex gap-1 overflow-x-auto" aria-label="Filter source relationship">
+                            {(["all", "owned", "competitor", "external"] as const).map(
+                                (relationship) => (
                                     <button
-                                        key={action}
+                                        key={relationship}
                                         type="button"
                                         onClick={() => {
-                                            setActionFilter(action)
+                                            setRelationshipFilter(relationship)
                                             setPage(1)
                                         }}
                                         className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px] font-medium ${
-                                            actionFilter === action
+                                            relationshipFilter === relationship
                                                 ? "bg-[var(--viz-ink)] text-white"
                                                 : "bg-[var(--viz-track)] text-[var(--viz-ink-secondary)] hover:text-[var(--viz-ink)]"
                                         }`}
                                     >
-                                        {action === "all" ? "All" : ACTION_META[action].label}
+                                        {relationship === "all" ? "All" : RELATIONSHIP_META[relationship].label}
                                     </button>
                                 ),
                             )}
@@ -314,8 +264,9 @@ export function VisibilitySources({
                         <thead className="bg-[var(--viz-plane)] text-[11px] text-[var(--viz-ink-muted)]">
                             <tr>
                                 <th className="px-5 py-2.5 text-left font-medium">Site</th>
-                                <th className="px-4 py-2.5 text-left font-medium">Route</th>
+                                <th className="px-4 py-2.5 text-left font-medium">Relationship</th>
                                 <th className="px-4 py-2.5 text-right font-medium">Citations</th>
+                                <th className="px-4 py-2.5 text-right font-medium">Losing questions</th>
                                 <th className="px-4 py-2.5 text-right font-medium">Questions</th>
                                 <th className="px-4 py-2.5 text-right font-medium">
                                     Brand named
@@ -332,27 +283,30 @@ export function VisibilitySources({
                                     <td className="px-5 py-3">
                                         <div className="flex min-w-0 items-center gap-2.5">
                                             <Badge
-                                                label={host.host}
-                                                own={host.sourceType === "owned"}
+                                                 label={host.host}
+                                                 own={host.relationship === "owned"}
                                             />
                                             <div className="min-w-0">
                                                 <div className="truncate font-medium">
                                                     {host.host}
-                                                    {host.sourceType === "owned" ? " (yours)" : ""}
+                                                    {host.relationship === "owned" ? " (yours)" : ""}
                                                 </div>
                                                 <div className="mt-0.5 truncate text-[10px] text-[var(--viz-ink-muted)]">
-                                                    {SOURCE_TYPE_LABELS[host.sourceType]}
+                                                    {host.engines.map((engine) => engineLabels[engine] ?? engine).join(" · ")}
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className="rounded-full border border-[var(--viz-hairline)] px-2 py-1 text-[10px] font-medium">
-                                            {sourceRoute(host.actionability)}
+                                            {RELATIONSHIP_META[host.relationship].label}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-right font-semibold tabular-nums">
                                         {host.citationCount}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-semibold tabular-nums text-[var(--viz-critical)]">
+                                        {host.losingQuestionIds.length}
                                     </td>
                                     <td className="px-4 py-3 text-right tabular-nums text-[var(--viz-ink-secondary)]">
                                         {host.questionIds.length}
@@ -374,7 +328,7 @@ export function VisibilitySources({
                             {visibleHosts.length === 0 && (
                                 <tr>
                                     <td
-                                        colSpan={6}
+                                        colSpan={7}
                                         className="px-5 py-10 text-center text-sm text-[var(--viz-ink-muted)]"
                                     >
                                         No cited sites match this view.
@@ -471,11 +425,6 @@ export function VisibilitySources({
                 onOpenChange={setShowSearchPaths}
                 fanOut={fanOut}
                 engineLabels={engineLabels}
-            />
-            <ReviewSheet
-                open={showReview}
-                onOpenChange={setShowReview}
-                report={report}
             />
         </div>
     )
@@ -579,57 +528,6 @@ function SearchPathsSheet({
                         This is what the engines did, not how many people searched. It is not a
                         search-volume figure and cannot be read as one.
                     </p>
-                </div>
-            </SheetContent>
-        </Sheet>
-    )
-}
-
-function ReviewSheet({
-    open,
-    onOpenChange,
-    report,
-}: {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    report: SourceReport
-}) {
-    return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-xl">
-                <SheetHeader className="border-b border-[var(--viz-hairline)] px-6 py-5">
-                    <SheetTitle className="flex items-center gap-2">
-                        <AlertTriangle className="size-4 text-[var(--viz-warning-ink)]" aria-hidden />
-                        Sources awaiting founder review
-                    </SheetTitle>
-                    <SheetDescription>
-                        These exact pages remain excluded from production until a person reviews
-                        them.
-                    </SheetDescription>
-                </SheetHeader>
-                <div className="divide-y divide-[var(--viz-hairline)]">
-                    {report.reviewPages.map((page) => (
-                        <div key={page.url} className="p-5">
-                            <a
-                                href={page.url}
-                                target="_blank"
-                                rel="noopener noreferrer nofollow"
-                                className="inline-flex max-w-full items-center gap-1.5 text-sm font-medium text-[var(--viz-series-1)] hover:underline"
-                            >
-                                <span className="truncate">{page.title || page.url}</span>
-                                <ArrowUpRight className="size-3.5 shrink-0" aria-hidden />
-                            </a>
-                            <p className="mt-1.5 text-xs text-[var(--viz-ink-muted)]">
-                                {page.host} · {page.citationCount} citation
-                                {page.citationCount === 1 ? "" : "s"}
-                            </p>
-                        </div>
-                    ))}
-                    {report.reviewPages.length === 0 && (
-                        <p className="p-6 text-sm text-[var(--viz-ink-muted)]">
-                            No sources require classification in this run.
-                        </p>
-                    )}
                 </div>
             </SheetContent>
         </Sheet>

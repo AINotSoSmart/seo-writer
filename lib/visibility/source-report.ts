@@ -1,26 +1,22 @@
-import {
-    actionabilityOf,
-    classifyCitation,
-    type Actionability,
-    type PageShape,
-    type SourceType,
-} from "./citation-classifier"
+export type SourceRelationship = "owned" | "competitor" | "external"
+export type DeclaredPageKind = "best-of" | "comparison" | "review"
 
 export interface SourceReportInput {
     promptId: string
     engine: string
     namedBrand: boolean
+    losingQuestion: boolean
     citations: unknown
 }
 
 export interface SourceReportHost {
     host: string
-    sourceType: SourceType
-    actionability: Actionability
+    relationship: SourceRelationship
     citationCount: number
     answerCount: number
     namingAnswerCount: number
     questionIds: string[]
+    losingQuestionIds: string[]
     engines: string[]
 }
 
@@ -28,121 +24,149 @@ export interface SourceReportPage {
     url: string
     title: string
     host: string
-    pageShape: PageShape
-    sourceType: SourceType
-    actionability: Actionability
+    relationship: SourceRelationship
+    declaredKind: DeclaredPageKind | null
     citationCount: number
     answerCount: number
     namingAnswerCount: number
     questionIds: string[]
+    losingQuestionIds: string[]
     engines: string[]
 }
 
 export interface SourceReport {
     totalCitations: number
     distinctSites: number
-    topThreeShare: number
-    actionCounts: Record<Actionability, number>
+    relationshipCounts: Record<SourceRelationship, number>
     hosts: SourceReportHost[]
-    listPages: SourceReportPage[]
-    reviewPages: SourceReportPage[]
+    explicitlyShapedPages: SourceReportPage[]
 }
 
-interface SourceAccumulator {
+interface EvidenceAccumulator {
     citationCount: number
     answerKeys: Set<string>
     namingAnswerKeys: Set<string>
     questionIds: Set<string>
+    losingQuestionIds: Set<string>
     engines: Set<string>
-    sourceTypes: Map<SourceType, number>
 }
 
-interface PageAccumulator extends SourceAccumulator {
+interface PageAccumulator extends EvidenceAccumulator {
     url: string
     title: string
     host: string
-    pageShape: PageShape
+    relationship: SourceRelationship
+    declaredKind: DeclaredPageKind | null
 }
 
-function sourceAccumulator(): SourceAccumulator {
+function evidenceAccumulator(): EvidenceAccumulator {
     return {
         citationCount: 0,
         answerKeys: new Set<string>(),
         namingAnswerKeys: new Set<string>(),
         questionIds: new Set<string>(),
+        losingQuestionIds: new Set<string>(),
         engines: new Set<string>(),
-        sourceTypes: new Map<SourceType, number>(),
     }
 }
 
-function dominantSourceType(counts: Map<SourceType, number>): SourceType {
-    return (
-        [...counts.entries()].sort(
-            (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-        )[0]?.[0] ?? "unclassified"
-    )
+function normalizeHost(value: string): string {
+    try {
+        return new URL(value.includes("://") ? value : `https://${value}`)
+            .hostname.toLowerCase().replace(/^www\./, "")
+    } catch {
+        return value.toLowerCase().replace(/^www\./, "").replace(/\/$/, "")
+    }
 }
 
-function normalizeSourceUrl(rawUrl: string): string | null {
+function relationshipOf(
+    host: string,
+    context: { subjectDomains: string[]; competitorDomains: string[] },
+): SourceRelationship {
+    const matches = (domains: string[]) =>
+        domains.some((domain) => {
+            const known = normalizeHost(domain)
+            return host === known || host.endsWith(`.${known}`)
+        })
+    if (matches(context.subjectDomains)) return "owned"
+    if (matches(context.competitorDomains)) return "competitor"
+    return "external"
+}
+
+function normalizeSourceUrl(rawUrl: string): { url: string; host: string } | null {
     try {
         const url = new URL(rawUrl)
         url.hash = ""
         if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/$/, "")
-        return url.toString()
+        return {
+            url: url.toString(),
+            host: url.hostname.toLowerCase().replace(/^www\./, ""),
+        }
     } catch {
         return null
     }
 }
 
+/**
+ * A narrow statement about words already present in the stored citation title.
+ * This does not fetch the page or infer a publisher/category taxonomy.
+ */
+function declaredPageKind(title: string): DeclaredPageKind | null {
+    if (/\b(vs\.?|versus|comparison|alternatives?)\b/i.test(title)) return "comparison"
+    if (/\breviews?\b/i.test(title)) return "review"
+    if (/\b(?:\d+\s+(?:best|top)|(?:best|top)\s+\d+)\b/i.test(title)) return "best-of"
+    return null
+}
+
 function recordEvidence(
-    entry: SourceAccumulator,
+    entry: EvidenceAccumulator,
     input: SourceReportInput,
     answerKey: string,
-    sourceType: SourceType,
 ) {
     entry.citationCount++
     entry.answerKeys.add(answerKey)
     if (input.namedBrand) entry.namingAnswerKeys.add(answerKey)
     entry.questionIds.add(input.promptId)
+    if (input.losingQuestion) entry.losingQuestionIds.add(input.promptId)
     entry.engines.add(input.engine)
-    entry.sourceTypes.set(sourceType, (entry.sourceTypes.get(sourceType) ?? 0) + 1)
 }
 
 function toPage(entry: PageAccumulator): SourceReportPage {
-    const sourceType = dominantSourceType(entry.sourceTypes)
     return {
         url: entry.url,
         title: entry.title,
         host: entry.host,
-        pageShape: entry.pageShape,
-        sourceType,
-        actionability: actionabilityOf(sourceType),
+        relationship: entry.relationship,
+        declaredKind: entry.declaredKind,
         citationCount: entry.citationCount,
         answerCount: entry.answerKeys.size,
         namingAnswerCount: entry.namingAnswerKeys.size,
         questionIds: [...entry.questionIds],
+        losingQuestionIds: [...entry.losingQuestionIds],
         engines: [...entry.engines].sort(),
     }
 }
 
 /**
- * Builds the page-facing source model from the immutable answer rows.
+ * Builds factual source evidence from immutable answer rows.
  *
- * Citation occurrences, citing answers and questions are deliberately separate
- * measures. One answer can cite two pages on the same host, so using a citation
- * count as an answer count would overstate the evidence in both directories.
+ * The only grouping is ownership already confirmed by the customer/audit:
+ * customer, tracked competitor, or external. Unknown external sites are not a
+ * failure state and never receive a production or next-step classification.
  */
 export function buildSourceReport(
     rows: SourceReportInput[],
     context: { subjectDomains: string[]; competitorDomains: string[] },
 ): SourceReport {
-    const hosts = new Map<string, SourceAccumulator>()
+    const hosts = new Map<
+        string,
+        EvidenceAccumulator & { relationship: SourceRelationship }
+    >()
     const pages = new Map<string, PageAccumulator>()
-    const actionCounts: Record<Actionability, number> = {
-        publish: 0,
-        earn: 0,
-        none: 0,
-        review: 0,
+    const relationshipCounts: Record<SourceRelationship, number> = {
+        owned: 0,
+        competitor: 0,
+        external: 0,
     }
     let totalCitations = 0
 
@@ -152,70 +176,68 @@ export function buildSourceReport(
 
         for (const rawCitation of input.citations) {
             const raw = rawCitation as { url?: unknown; title?: unknown }
-            const url = normalizeSourceUrl(String(raw?.url ?? ""))
-            if (!url) continue
+            const normalized = normalizeSourceUrl(String(raw?.url ?? ""))
+            if (!normalized) continue
             const title = String(raw?.title ?? "").trim()
-            const classified = classifyCitation(url, context, title)
-            if (!classified.host) continue
+            const relationship = relationshipOf(normalized.host, context)
 
             totalCitations++
-            actionCounts[classified.actionability]++
+            relationshipCounts[relationship]++
 
-            const host = hosts.get(classified.host) ?? sourceAccumulator()
-            recordEvidence(host, input, answerKey, classified.sourceType)
-            hosts.set(classified.host, host)
-
-            const page = pages.get(url) ?? {
-                ...sourceAccumulator(),
-                url,
-                title,
-                host: classified.host,
-                pageShape: classified.pageShape,
+            const host = hosts.get(normalized.host) ?? {
+                ...evidenceAccumulator(),
+                relationship,
             }
-            if (!page.title && title) page.title = title
-            recordEvidence(page, input, answerKey, classified.sourceType)
-            pages.set(url, page)
+            recordEvidence(host, input, answerKey)
+            hosts.set(normalized.host, host)
+
+            const page = pages.get(normalized.url) ?? {
+                ...evidenceAccumulator(),
+                url: normalized.url,
+                title,
+                host: normalized.host,
+                relationship,
+                declaredKind: declaredPageKind(title),
+            }
+            if (!page.title && title) {
+                page.title = title
+                page.declaredKind = declaredPageKind(title)
+            }
+            recordEvidence(page, input, answerKey)
+            pages.set(normalized.url, page)
         }
     }
 
-    const hostRows = [...hosts.entries()]
-        .map(([host, entry]): SourceReportHost => {
-            const sourceType = dominantSourceType(entry.sourceTypes)
-            return {
-                host,
-                sourceType,
-                actionability: actionabilityOf(sourceType),
-                citationCount: entry.citationCount,
-                answerCount: entry.answerKeys.size,
-                namingAnswerCount: entry.namingAnswerKeys.size,
-                questionIds: [...entry.questionIds],
-                engines: [...entry.engines].sort(),
-            }
-        })
-        .sort((a, b) => b.citationCount - a.citationCount || a.host.localeCompare(b.host))
-
-    const pageRows = [...pages.values()].map(toPage)
-    const byInfluence = (a: SourceReportPage, b: SourceReportPage) =>
+    const byEvidence = <T extends { losingQuestionIds: string[]; questionIds: string[]; citationCount: number; host: string }>(
+        a: T,
+        b: T,
+    ) =>
+        b.losingQuestionIds.length - a.losingQuestionIds.length ||
+        b.questionIds.length - a.questionIds.length ||
         b.citationCount - a.citationCount ||
-        a.namingAnswerCount - b.namingAnswerCount ||
         a.host.localeCompare(b.host)
 
-    const topThreeCitations = hostRows
-        .slice(0, 3)
-        .reduce((sum, host) => sum + host.citationCount, 0)
+    const hostRows: SourceReportHost[] = [...hosts.entries()]
+        .map(([host, entry]) => ({
+            host,
+            relationship: entry.relationship,
+            citationCount: entry.citationCount,
+            answerCount: entry.answerKeys.size,
+            namingAnswerCount: entry.namingAnswerKeys.size,
+            questionIds: [...entry.questionIds],
+            losingQuestionIds: [...entry.losingQuestionIds],
+            engines: [...entry.engines].sort(),
+        }))
+        .sort(byEvidence)
 
     return {
         totalCitations,
         distinctSites: hostRows.length,
-        topThreeShare:
-            totalCitations > 0 ? Math.round((topThreeCitations / totalCitations) * 100) : 0,
-        actionCounts,
+        relationshipCounts,
         hosts: hostRows,
-        listPages: pageRows
-            .filter((page) => ["listicle", "comparison", "review"].includes(page.pageShape))
-            .sort(byInfluence),
-        reviewPages: pageRows
-            .filter((page) => page.actionability === "review")
-            .sort(byInfluence),
+        explicitlyShapedPages: [...pages.values()]
+            .map(toPage)
+            .filter((page) => page.declaredKind !== null)
+            .sort(byEvidence),
     }
 }

@@ -7,15 +7,14 @@
  * Adapted from Ansvisor's `_formula-dialog.tsx`, and their best idea: the
  * weights in their dialog are *imported from the scoring module*, so the
  * explanation cannot drift from the implementation. That constraint is kept
- * here — `PROMPT_INTENTS`, `SOURCE_TYPE_LABELS` and the engine specs are read
- * from the modules that compute with them, so a change to the code changes this
- * panel automatically or fails the build.
+ * here — `PROMPT_INTENTS` is read from the module that computes with it, so a
+ * change to the code changes this panel automatically or fails the build.
  *
  * Where this diverges: they use it to make a weighted 0-100 composite
  * auditable. We have no composite to audit — every number on this report is a
  * count or a plain proportion — so the panel spends its space on the two things
  * that actually limit the measurement: what a verdict means precisely, and
- * where the citation classifier stops being able to tell.
+ * what the source evidence can and cannot establish.
  *
  * A panel that only justified the numbers would be marketing. This one is
  * expected to state the limits, because the reader who checks is the reader who
@@ -28,10 +27,6 @@ import { Sigma, X } from "lucide-react"
 // From the import-free config module, not the builder: this is a client
 // component and the builder pulls in the server-side Gemini client.
 import { MAX_GENERATED_PROMPTS, PROMPT_INTENTS } from "@/lib/visibility/prompt-config"
-import {
-    SOURCE_TYPE_LABELS,
-    type SourceType,
-} from "@/lib/visibility/citation-classifier"
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
@@ -52,16 +47,11 @@ function Formula({ children }: { children: React.ReactNode }) {
     )
 }
 
-/** Classifier categories that come from the audit rather than a word list. */
-const FACT_TYPES: SourceType[] = ["owned", "competitor"]
-
 export function MethodPanel({
     subjectName,
-    unclassifiedShare,
     promptCount,
 }: {
     subjectName: string
-    unclassifiedShare: number
     /**
      * Questions this run actually asked. Stated rather than implied: the
      * per-area candidate count and the run's budget are different numbers, and
@@ -206,54 +196,27 @@ export function MethodPanel({
                                 </p>
                             </Section>
 
-                            <Section title="How sources are categorised, and where that stops working">
-                                <p>Categories are decided in this order:</p>
-                                <ol className="list-decimal space-y-1 pl-5">
-                                    <li>
-                                        <strong className="font-medium text-[var(--viz-ink)]">
-                                            Facts from your audit
-                                        </strong>{" "}
-                                        — {FACT_TYPES.map((type) => SOURCE_TYPE_LABELS[type]).join(" and ")}
-                                        . These are never guesses.
-                                    </li>
-                                    <li>
-                                        <strong className="font-medium text-[var(--viz-ink)]">
-                                            Stored page evidence
-                                        </strong>{" "}
-                                        — <code>.edu</code>/<code>.gov</code>, plus recommendation
-                                        and documentation shapes in the citation URL or title.
-                                        These work on sites nobody has catalogued: recommendation
-                                        pages are earned placements; third-party docs are report
-                                        only.
-                                    </li>
-                                    <li>
-                                        <strong className="font-medium text-[var(--viz-ink)]">
-                                            A short list of well-known hosts
-                                        </strong>{" "}
-                                        — Reddit, YouTube, G2 and a handful of others.
-                                    </li>
-                                    <li>
-                                        <strong className="font-medium text-[var(--viz-ink)]">
-                                            Everything else requires founder review.
-                                        </strong>{" "}
-                                        We do not guess at the nearest-looking category, and an
-                                        unresolved source cannot enter article production.
-                                    </li>
-                                </ol>
-                                <p
-                                    className={
-                                        unclassifiedShare >= 33
-                                            ? "rounded-md border border-[var(--viz-warning)]/40 bg-[var(--viz-warning)]/10 p-3"
-                                            : ""
-                                    }
-                                >
-                                    <strong className="font-medium text-[var(--viz-ink)]">
-                                        {unclassifiedShare}% of citations in this run are
-                                        uncategorised.
-                                    </strong>{" "}
-                                    {unclassifiedShare >= 33
-                                        ? "That is high enough to require reading the frozen founder-review queue before making a production decision."
-                                        : "The unresolved rows remain visible for founder review."}
+                            <Section title="How source relationships are stated">
+                                <p>
+                                    Citations are evidence attached to stored answers. The report
+                                    preserves every valid source URL and makes only three factual
+                                    ownership statements:
+                                </p>
+                                <ul className="list-disc space-y-1 pl-5">
+                                    <li>Your domain comes from the confirmed customer domain.</li>
+                                    <li>Tracked competitor comes from the confirmed rival set.</li>
+                                    <li>Every other cited domain is called external.</li>
+                                </ul>
+                                <p>
+                                    External does not mean low quality, unactionable or unresolved.
+                                    The report does not guess a publisher type, ask you to classify
+                                    unfamiliar sites, or use citation categories to approve or block
+                                    production.
+                                </p>
+                                <p>
+                                    The Lists view is narrower: it includes a page only when its
+                                    stored citation title explicitly says best-of, comparison or
+                                    review. All other pages remain available in Sources.
                                 </p>
                             </Section>
 

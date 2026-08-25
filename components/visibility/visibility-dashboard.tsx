@@ -51,11 +51,6 @@ import type {
     DashboardQuestionAction,
 } from "./dashboard-model"
 import type { VisibilitySummaryV2 } from "@/lib/visibility/visibility-summary"
-import {
-    type CitationBreakdown,
-    type PageShape,
-    type SourceType,
-} from "@/lib/visibility/citation-classifier"
 import type { FanOutSummary } from "@/lib/visibility/fan-out"
 import type { SourceReport } from "@/lib/visibility/source-report"
 import { formatRunDate } from "@/lib/visibility/format-date"
@@ -114,29 +109,7 @@ export interface DashboardSummary extends VisibilitySummaryV2 {
         discoveryAttempted: boolean
         discoveryFailed: boolean
     }
-    citedHosts: Array<{
-        host: string
-        count: number
-        answersNaming: number
-        sourceType: SourceType
-    }>
-    citationBreakdown?: CitationBreakdown
-    citationReviewQueue?: Array<{
-        url: string
-        title: string
-        host: string
-        count: number
-    }>
     fanOut?: FanOutSummary
-    keyPages?: Array<{
-        url: string
-        title: string
-        host: string
-        pageShape: PageShape
-        sourceType: SourceType
-        count: number
-        answersNaming: number
-    }>
 }
 
 export interface DashboardProps {
@@ -291,7 +264,6 @@ export function VisibilityDashboard(props: DashboardProps) {
     const brandRank = rankField.findIndex((row) => row.own) + 1
     const rankLeader = rankField[0]
 
-    const breakdown = summary.citationBreakdown
     const fanOut = summary.fanOut
 
     const rivalNames = Object.fromEntries(
@@ -369,7 +341,6 @@ export function VisibilityDashboard(props: DashboardProps) {
                     <span className="ml-auto flex items-center text-xs text-[var(--viz-ink-muted)]">
                         <MethodPanel
                             subjectName={subjectName}
-                            unclassifiedShare={breakdown?.unclassifiedShare ?? 0}
                             promptCount={summary.promptCount}
                         />
                     </span>
@@ -606,7 +577,7 @@ export function VisibilityDashboard(props: DashboardProps) {
                             <TabsTrigger value="lists" className={TAB_CLASS}>
                                 Lists they read
                                 <span className="rounded-full bg-[var(--viz-track)] px-1.5 py-px text-[11px] tabular-nums text-[var(--viz-ink-muted)]">
-                                    {sourceReport.listPages.length}
+                                    {sourceReport.explicitlyShapedPages.length}
                                 </span>
                             </TabsTrigger>
                         </TabsList>
@@ -628,7 +599,6 @@ export function VisibilityDashboard(props: DashboardProps) {
                             subjectName={subjectName}
                             summary={summary}
                             actionSummary={actionSummary}
-                            citationBreakdown={breakdown}
                             sourceReport={sourceReport}
                             onOpenSource={openSources}
                             onFocusRival={(competitorId, label) =>
@@ -641,7 +611,6 @@ export function VisibilityDashboard(props: DashboardProps) {
                     <VisibilitySources
                         report={sourceReport}
                         promptCount={summary.promptCount}
-                        breakdown={breakdown}
                         fanOut={fanOut}
                         engineLabels={engineLabels}
                         focusHost={sourceFocusHost}

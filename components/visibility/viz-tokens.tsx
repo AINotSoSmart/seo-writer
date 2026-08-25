@@ -95,9 +95,7 @@ export const VIZ_TOKENS_CSS = `
   overflow: hidden;
 }
 
-/* Diagonal hatch: "this segment is a different kind of thing".
-   Used for citations we could not classify, which are excluded from production
-   — a plain grey fill reads as a small category, hatching reads as not counted. */
+/* Diagonal hatch for deliberately unavailable or non-comparable values. */
 .viz-hatch {
   background-image: repeating-linear-gradient(
     135deg,

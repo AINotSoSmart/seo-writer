@@ -36,7 +36,6 @@ import {
 } from "../lib/harvest/billing-period.ts"
 import { bindPromptCapability } from "../lib/visibility/capability-binding.ts"
 import { matchExistingPage } from "../lib/visibility/site-coverage-match.ts"
-import { assessPromptRemedy } from "../lib/visibility/prompt-remedy.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const text = (relativePath) => readFile(path.join(root, relativePath), "utf8")
@@ -256,36 +255,12 @@ test("capability binding rejects ambiguous claims and repairs malformed customer
     assert.deepEqual(result.capabilityFactIds, ["f1"])
 })
 
-test("citation evidence cannot be laundered into filler article production", () => {
-    const context = {
-        subjectDomains: ["bringback.pro"],
-        competitorDomains: ["kinpict.com"],
-    }
-    assert.equal(
-        assessPromptRemedy({
-            ...context,
-            citations: [{ url: "https://example.com/best-photo-restoration-tools" }],
-        }).kind,
-        "report_only",
-    )
-    assert.equal(
-        assessPromptRemedy({
-            ...context,
-            citations: [{ url: "https://unknown.example/something" }],
-        }).kind,
-        "founder_review",
-    )
-    assert.equal(
-        assessPromptRemedy({
-            ...context,
-            citations: [{ url: "https://kinpict.com/restore-old-photos" }],
-        }).kind,
-        "content",
-    )
-    assert.equal(
-        assessPromptRemedy({ ...context, citations: [] }).kind,
-        "content",
-    )
+test("citation evidence cannot approve or block article production", async () => {
+    const planner = await text("lib/visibility/action-proposal-planner.ts")
+    assert.doesNotMatch(planner, /assessPromptRemedy|prompt-remedy|citationsByTracked/)
+    assert.doesNotMatch(planner, /founder_review|citationActionability/)
+    assert.match(planner, /bindPromptCapability/)
+    assert.match(planner, /matchExistingPage/)
 })
 
 /**
@@ -4219,134 +4194,46 @@ test("the dashboard shows the evidence, not just the verdict", async () => {
     assert.match(questions, /<meta\.Icon/)
 })
 
-test("the citation classifier ages by structure, not by a growing domain list", async () => {
-    // Upstream's classifier is a curated domain list, and it shows exactly how
-    // that decays: its "editorial" list carries motortrend.com, caranddriver.com
-    // and jalopnik.com, and its "forum" list carries bimmerpost.com and
-    // teslamotorsclub.com — one automotive customer's report, patched host by
-    // host. This repo already learned that lesson twice with content-quality
-    // regex lists: each round catches the previous examples and misses the next.
-    //
-    // So the ordering is load-bearing: facts, then structure, then a short list,
-    // then an honest "unclassified".
-    const classifier = await text("lib/visibility/citation-classifier.ts")
-    const { classifyCitation, summariseCitations } = await import(
-        "../lib/visibility/citation-classifier.ts"
-    )
-    const emptyContext = { subjectDomains: [], competitorDomains: [] }
-
-    // Facts from the audit come first and are not list-driven.
-    assert.match(
-        classifier,
-        /if \(isSameOrSubdomain\(host, context\.subjectDomains\)\) return "owned"/,
-    )
-    assert.match(
-        classifier,
-        /if \(isSameOrSubdomain\(host, context\.competitorDomains\)\) return "competitor"/,
-    )
-
-    // Structural rules exist and do not depend on any list.
-    assert.match(classifier, /INSTITUTIONAL_TLD\s*=\s*\//)
-    assert.match(classifier, /LISTICLE_PATH\s*=\s*\//)
-    assert.match(classifier, /COMPARISON_PATH\s*=\s*\//)
-
-    // The honest default is a real category, and its share is reported.
-    assert.match(classifier, /return "unclassified"/)
-    assert.match(classifier, /unclassifiedShare/)
-
-    // The real Drawgle run exposed why URL shape cannot be calculated and then
-    // ignored: niche recommendation pages made up a large part of its 81%
-    // unclassified bucket. URL and stored title evidence can resolve those
-    // without teaching the classifier a list of design-tool hosts.
-    const listicle = classifyCitation(
-        "https://tapui.app/blog/best-ai-design-tool-ios",
-        emptyContext,
-        "The Best AI Design Tools for iOS App UI",
-    )
-    assert.equal(listicle.sourceType, "recommendation_page")
-    assert.equal(listicle.actionability, "earn")
-
-    const titleOnlyList = classifyCitation(
-        "https://aidesigner.ai/blog/mobile-app-design-tools",
-        emptyContext,
-        "12 Best AI Mobile App Design Tools",
-    )
-    assert.equal(titleOnlyList.sourceType, "recommendation_page")
-
-    const documentation = classifyCitation(
-        "https://help.figma.com/hc/en-us/articles/360041003114",
-        emptyContext,
-        "Import files — Figma Help Center",
-    )
-    assert.equal(documentation.sourceType, "documentation")
-    assert.equal(documentation.actionability, "none")
-
-    // A vendor/product page with no supported structural signal stays in the
-    // founder queue. It must never become a publish action by analogy.
-    const unresolved = classifyCitation(
-        "https://figma.com/solutions/ai-app-builder",
-        emptyContext,
-        "Free AI App Builder",
-    )
-    assert.equal(unresolved.sourceType, "unclassified")
-    assert.equal(unresolved.actionability, "review")
-
-    // Audit facts still outrank shape. A tracked rival's best-of page is an
-    // owned-content publishing signal, not an earned third-party placement.
-    const knownRival = classifyCitation(
-        "https://figma.com/blog/best-ai-design-tools",
-        { subjectDomains: [], competitorDomains: ["figma.com"] },
-        "12 Best AI Design Tools",
-    )
-    assert.equal(knownRival.sourceType, "competitor")
-    assert.equal(knownRival.actionability, "publish")
-
-    const breakdown = summariseCitations([
-        listicle,
-        documentation,
-        unresolved,
-        knownRival,
-    ])
-    assert.equal(breakdown.publishShare, 25)
-    assert.equal(breakdown.earnShare, 25)
-    assert.equal(breakdown.reportOnlyShare, 25)
-    assert.equal(breakdown.reviewShare, 25)
-
-    // Curated lists stay small. A list that grows past this is the signal that
-    // the rule is wrong, not that the list is short.
-    for (const listName of [
-        "COMMUNITY_HOSTS",
-        "SOCIAL_VIDEO_HOSTS",
-        "REVIEW_MARKETPLACE_HOSTS",
-        "PUBLISHER_HOSTS",
-    ]) {
-        const block = classifier.match(new RegExp(`const ${listName} = \\[([\\s\\S]*?)\\]`))
-        assert.ok(block, `${listName} is missing`)
-        const entries = block[1].split(",").filter((line) => line.trim().length > 0)
-        assert.ok(
-            entries.length <= 15,
-            `${listName} has ${entries.length} entries — curated lists must stay small; add a structural signal instead`,
-        )
-    }
-
-    // Every category carries an action. A count with no next step is trivia.
-    assert.match(classifier, /SOURCE_TYPE_ACTIONS/)
-    assert.match(classifier, /export function actionabilityOf/)
-})
-
-test("unresolved citations are frozen into a founder-review queue", async () => {
-    const [mapper, sources, panel] = await Promise.all([
+test("source reporting uses factual relationships and preserves unfamiliar domains", async () => {
+    const [model, mapper, sources, panel] = await Promise.all([
+        text("lib/visibility/source-report.ts"),
         text("lib/visibility/gap-mapper.ts"),
         text("components/visibility/visibility-sources.tsx"),
         text("components/visibility/method-panel.tsx"),
     ])
+    const { buildSourceReport } = await import("../lib/visibility/source-report.ts")
+    const report = buildSourceReport(
+        [
+            {
+                promptId: "q1",
+                engine: "chatgpt",
+                namedBrand: false,
+                losingQuestion: true,
+                citations: [
+                    { url: "https://bringback.pro/restore", title: "Restore photos" },
+                    { url: "https://kinpict.com/restore", title: "Restore photos" },
+                    { url: "https://unknown.example/page", title: "Useful reference" },
+                ],
+            },
+        ],
+        { subjectDomains: ["bringback.pro"], competitorDomains: ["kinpict.com"] },
+    )
 
-    assert.match(mapper, /citationReviewQueue/)
-    assert.match(mapper, /citation\.actionability === "review"/)
-    assert.match(mapper, /\.slice\(0, 25\)/)
-    assert.match(sources, /Sources awaiting founder review/)
-    assert.match(sources, /excluded from production until a\s+person reviews\s+them/)
-    assert.match(panel, /unresolved source cannot enter article production/)
+    assert.deepEqual(
+        report.hosts.map((host) => [host.host, host.relationship]),
+        [
+            ["bringback.pro", "owned"],
+            ["kinpict.com", "competitor"],
+            ["unknown.example", "external"],
+        ],
+    )
+    assert.equal(report.totalCitations, 3)
+    assert.equal(report.hosts.find((host) => host.host === "unknown.example")?.losingQuestionIds.length, 1)
+    assert.match(model, /return "external"/)
+    assert.doesNotMatch(model, /actionability|founder_review|unclassified/)
+    assert.doesNotMatch(mapper, /citationReviewQueue|classifyCitation|citationBreakdown/)
+    assert.doesNotMatch(sources, /founder review|Excluded from production|You can publish this/i)
+    assert.match(panel, /Every other cited domain is called external/)
 })
 
 test("cited sources report co-occurrence, never a claim about the page", async () => {
@@ -4362,8 +4249,8 @@ test("cited sources report co-occurrence, never a claim about the page", async (
     assert.match(mapper, /co-occurrence/)
     // The UI states the limit next to the claim. Whitespace-tolerant: this is
     // prose inside JSX and the formatter is free to wrap it anywhere.
-    assert.match(lists, /describes the answers, not the\s+page/)
-    assert.match(lists, /haven&apos;t fetched these pages/)
+    assert.match(lists, /describes the answers that cited this page, not\s+the page itself/)
+    assert.match(lists, /does\s+not fetch the page/)
 })
 
 test("the method panel reads its values from the code that computes them", async () => {
@@ -4376,7 +4263,7 @@ test("the method panel reads its values from the code that computes them", async
         panel,
         /import \{ MAX_GENERATED_PROMPTS, PROMPT_INTENTS \} from "@\/lib\/visibility\/prompt-config"/,
     )
-    assert.match(panel, /from "@\/lib\/visibility\/citation-classifier"/)
+    assert.doesNotMatch(panel, /citation-classifier/)
     assert.match(panel, /PROMPT_INTENTS\.map/)
     // It describes labels the model applies, not a quota it is held to — the
     // weighted mix it used to explain no longer exists.
@@ -4387,7 +4274,7 @@ test("the method panel reads its values from the code that computes them", async
     // It must state limits, not only justify numbers.
     assert.match(panel, /What this measurement cannot tell you/)
     assert.match(panel, /we do not show a trend line/)
-    assert.match(panel, /uncategorised/)
+    assert.match(panel, /does not guess a publisher type/)
 
     // And it must not invent a composite score to explain.
     assert.match(panel, /There is no visibility score/)
@@ -4839,7 +4726,8 @@ test("customers confirm grouped site-aware work and only that batch is frozen", 
     assert.match(schema, /status TEXT NOT NULL DEFAULT 'suggested'/)
     assert.doesNotMatch(planner, /status:\s*"confirmed"/)
     assert.match(planner, /deliveredCreateOpportunityIds/)
-    assert.match(planner, /resolutionType:\s*"report_only"/)
+    assert.doesNotMatch(planner, /resolutionType:\s*"report_only"/)
+    assert.doesNotMatch(planner, /citations|founder_review|prompt-remedy/)
 
     // Confirmation is authenticated, belongs to one completed measurement, and
     // rejects more than the cycle's frozen allowance (8 at launch).
@@ -5579,13 +5467,14 @@ test("sources and influential lists are separate evidence workflows", async () =
     assert.match(dashboard, /<TabsTrigger value="lists"/)
     assert.match(dashboard, /Lists they read/)
     assert.match(dashboard, /<VisibilityLists/)
-    assert.match(overview, /title="Most-cited sites"/)
-    assert.match(sources, /title="Source control map"/)
+    assert.match(overview, /title="Sources recurring in lost answers"/)
+    assert.match(sources, /title="Where the citations point"/)
     assert.match(sources, /Cited-site directory/)
     assert.match(sources, /Inspect all search paths/)
     assert.doesNotMatch(sources, /title="The lists the engines read"/)
     assert.match(lists, /title="The lists the engines read"/)
     assert.match(lists, /No brand co-occurrence/)
+    assert.match(lists, /stored citation title explicitly identifies/)
 })
 
 test("standing explanation lives in hints, and the report is not one scroll", async () => {

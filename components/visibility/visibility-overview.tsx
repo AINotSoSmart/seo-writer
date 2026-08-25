@@ -1,4 +1,3 @@
-import type { CitationBreakdown } from "@/lib/visibility/citation-classifier"
 import type { SourceReport } from "@/lib/visibility/source-report"
 import type { VisibilitySummaryV2 } from "@/lib/visibility/visibility-summary"
 import { ArrowRight } from "lucide-react"
@@ -12,7 +11,6 @@ interface VisibilityOverviewProps {
     actionSummary: DashboardActionSummary
     onFocusRival?: (competitorId: string, label: string) => void
     onOpenSource?: (host?: string) => void
-    citationBreakdown?: CitationBreakdown
     sourceReport: SourceReport
 }
 
@@ -90,7 +88,6 @@ export function VisibilityOverview({
     actionSummary,
     onFocusRival,
     onOpenSource,
-    citationBreakdown,
     sourceReport,
 }: VisibilityOverviewProps) {
     const brand = summary.brandVisibility
@@ -137,32 +134,16 @@ export function VisibilityOverview({
         competitors.promptInducedNamedAnswersExcluded +
         competitors.promptInducedCitedAnswersExcluded
 
-    const citationCounts = citationBreakdown
-        ? citationBreakdown.byType.reduce(
-              (totals, row) => {
-                  if (row.actionability === "publish") totals.publish += row.citations
-                  else if (row.actionability === "earn") totals.earn += row.citations
-                  else totals.excluded += row.citations
-                  return totals
-              },
-              { publish: 0, earn: 0, excluded: 0 },
-          )
-        : { publish: 0, earn: 0, excluded: 0 }
-    const excludedCitationShare = citationBreakdown
-        ? Math.max(0, citationBreakdown.reportOnlyShare + citationBreakdown.reviewShare)
-        : 0
     const cycle = actionPhase(actionSummary)
     const capacityTotal = Math.max(
         actionSummary.eligibleCount,
         actionSummary.selectedCount + actionSummary.backlogCount,
     )
-    const citedHostMax = Math.max(
+    const losingHosts = sourceReport.hosts.filter((host) => host.losingQuestionIds.length > 0)
+    const losingHostMax = Math.max(
         1,
-        ...sourceReport.hosts.slice(0, 5).map((host) => host.citationCount),
+        ...losingHosts.slice(0, 6).map((host) => host.losingQuestionIds.length),
     )
-    const ownedCitations = sourceReport.hosts
-        .filter((host) => host.sourceType === "owned")
-        .reduce((sum, host) => sum + host.citationCount, 0)
 
     return (
         <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
@@ -308,77 +289,7 @@ export function VisibilityOverview({
                 )}
             </Panel>
 
-            <Panel>
-                <SectionHeading
-                    size="card"
-                    title="What the answers were built from"
-                    sub="Cited sources, by whether you could publish into them."
-                    hintLabel="How citations become production decisions"
-                    hint={
-                        <p>
-                            Owned and competitor pages point to publishing work; external lists,
-                            communities and press require earned placement. Report-only and
-                            unresolved sources are excluded from automatic production and shown as
-                            hatching because they are different in kind.
-                        </p>
-                    }
-                >
-                    <Meta>{citationBreakdown?.totalCitations ?? 0} citations</Meta>
-                </SectionHeading>
-
-                {citationBreakdown && citationBreakdown.totalCitations > 0 ? (
-                    <>
-                        <div className="mt-[22px]">
-                            <StackedPill
-                                segments={[
-                                    {
-                                        value: citationBreakdown.publishShare,
-                                        color: "var(--viz-series-1)",
-                                        labelInk: "#ffffff",
-                                        label: `${citationBreakdown.publishShare}%`,
-                                    },
-                                    {
-                                        value: citationBreakdown.earnShare,
-                                        color: "var(--viz-seq-200)",
-                                        labelInk: "#14375f",
-                                        label: `${citationBreakdown.earnShare}%`,
-                                    },
-                                    {
-                                        value: excludedCitationShare,
-                                        color: "",
-                                        labelInk: "var(--viz-ink-secondary)",
-                                        label: `${excludedCitationShare}%`,
-                                        hatched: true,
-                                    },
-                                ]}
-                            />
-                        </div>
-                        <div className="mt-5 flex flex-col gap-[11px]">
-                            <LegendRow
-                                color="var(--viz-series-1)"
-                                label="You can publish this"
-                                value={`${citationCounts.publish} citations`}
-                            />
-                            <LegendRow
-                                color="var(--viz-seq-200)"
-                                label="You have to earn this"
-                                value={`${citationCounts.earn} citations`}
-                            />
-                            <LegendRow
-                                hatched
-                                label="Excluded from production"
-                                value={`${citationCounts.excluded} citations`}
-                            />
-                        </div>
-                    </>
-                ) : (
-                    <p className="mt-8 text-sm text-[var(--viz-ink-muted)]">
-                        No cited sources were returned in this run.
-                    </p>
-                )}
-            </Panel>
-
-            <Panel>
+            <Panel className="lg:col-span-2">
                 <SectionHeading
                     size="card"
                     title="This cycle's actions"
@@ -390,7 +301,7 @@ export function VisibilityOverview({
                                 A losing question is evidence about an AI answer, not proof that
                                 your site needs another article. Existing-page coverage and grouped
                                 target review decide whether the remedy is a refresh, a new page, or
-                                report-only.
+                                a confirmed publishing action.
                             </p>
                             <p className="mt-2">
                                 Only confirmed grouped create/refresh actions consume production
@@ -455,14 +366,14 @@ export function VisibilityOverview({
             <Panel className="lg:col-span-2">
                 <SectionHeading
                     size="card"
-                    title="Most-cited sites"
-                    sub="The domains the engines returned to most often while building these answers."
-                    hintLabel="How site citations are counted"
+                    title="Sources recurring in lost answers"
+                    sub="Domains cited across questions where you were absent or another brand ranked ahead."
+                    hintLabel="What this ranking means"
                     hint={
                         <p>
-                            A citation is one stored source occurrence. A single answer can cite
-                            more than one page from the same site, so citation counts are kept
-                            separate from citing-answer and question counts in the source detail.
+                            Sites are ranked by the number of losing questions they appeared in,
+                            not by raw citation volume. This keeps the view tied to a customer
+                            problem: which sources repeatedly appear when your visibility is weak.
                         </p>
                     }
                 >
@@ -476,72 +387,41 @@ export function VisibilityOverview({
                     </button>
                 </SectionHeading>
 
-                {sourceReport.hosts.length > 0 ? (
-                    <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(240px,.55fr)]">
-                        <div className="space-y-3">
-                            {sourceReport.hosts.slice(0, 5).map((host) => (
+                {losingHosts.length > 0 ? (
+                    <div className="mt-5 grid gap-x-8 gap-y-3 lg:grid-cols-2">
+                            {losingHosts.slice(0, 6).map((host) => (
                                 <button
                                     key={host.host}
                                     type="button"
                                     onClick={() => onOpenSource?.(host.host)}
-                                    className="grid w-full grid-cols-[22px_minmax(7rem,12rem)_minmax(9rem,1fr)_3rem] items-center gap-3 text-left"
+                                    className="grid w-full grid-cols-[22px_minmax(8rem,13rem)_minmax(7rem,1fr)_4.5rem] items-center gap-3 text-left"
                                 >
-                                    <Badge label={host.host} own={host.sourceType === "owned"} />
+                                    <Badge label={host.host} own={host.relationship === "owned"} />
                                     <span className="truncate text-[13px] font-medium text-[var(--viz-ink-secondary)] hover:text-[var(--viz-ink)]">
-                                        {host.sourceType === "owned"
+                                        {host.relationship === "owned"
                                             ? `${host.host} (yours)`
                                             : host.host}
                                     </span>
                                     <Bar
-                                        value={host.citationCount}
-                                        max={citedHostMax}
+                                        value={host.losingQuestionIds.length}
+                                        max={losingHostMax}
                                         color={
-                                            host.sourceType === "owned"
+                                            host.relationship === "owned"
                                                 ? "var(--viz-series-1)"
                                                 : "var(--viz-seq-350)"
                                         }
-                                        label={percent(
-                                            host.citationCount,
-                                            sourceReport.totalCitations,
-                                        )}
-                                        emptyReason="not cited"
+                                        label={`${host.losingQuestionIds.length}`}
+                                        emptyReason="no losing questions"
                                     />
                                     <span className="text-right text-xs font-semibold tabular-nums">
-                                        {host.citationCount}
+                                        {host.citationCount} cites
                                     </span>
                                 </button>
                             ))}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-hairline)] lg:grid-cols-1">
-                            <div className="bg-[var(--viz-plane)] p-4">
-                                <div className="text-[26px] font-semibold leading-none tabular-nums">
-                                    {sourceReport.topThreeShare}%
-                                </div>
-                                <p className="mt-1.5 text-xs leading-5 text-[var(--viz-ink-secondary)]">
-                                    of citations came from the top three sites
-                                </p>
-                            </div>
-                            <div className="bg-[var(--viz-plane)] p-4">
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-[26px] font-semibold leading-none tabular-nums">
-                                        {sourceReport.distinctSites}
-                                    </span>
-                                    <span className="text-xs text-[var(--viz-ink-muted)]">
-                                        sites
-                                    </span>
-                                </div>
-                                <p className="mt-1.5 text-xs leading-5 text-[var(--viz-ink-secondary)]">
-                                    {ownedCitations > 0
-                                        ? `${ownedCitations} citations pointed to your site`
-                                        : "none of the citations pointed to your site"}
-                                </p>
-                            </div>
-                        </div>
                     </div>
                 ) : (
                     <p className="mt-8 text-sm text-[var(--viz-ink-muted)]">
-                        No cited sites were returned in this run.
+                        No cited domains were connected to a losing question in this run.
                     </p>
                 )}
             </Panel>

@@ -419,11 +419,17 @@ export default async function VisibilityPage() {
         results: [...factsByPrompt.values()].flat(),
         competitors: trackedCompetitors,
     })
+    const losingQuestionIds = new Set(
+        dashboardPrompts
+            .filter((prompt) => prompt.verdict !== "present")
+            .map((prompt) => prompt.id),
+    )
     const sourceReport = buildSourceReport(
         observedResults.map((result) => ({
             promptId: result.prompt_id,
             engine: result.engine,
             namedBrand: result.mention_count > 0,
+            losingQuestion: losingQuestionIds.has(result.prompt_id),
             citations: result.citations,
         })),
         {

@@ -35,14 +35,6 @@ import type { GapItem } from "@/lib/harvest/gap-engine"
 import type { ArticleType } from "@/lib/harvest/cluster-types"
 import type { AiEngine } from "./engines"
 import { ENGINE_LABELS } from "./engines"
-import {
-    classifyCitation,
-    summariseCitations,
-    type CitationBreakdown,
-    type ClassifiedCitation,
-    type PageShape,
-    type SourceType,
-} from "./citation-classifier"
 import type { ParsedAnswer } from "./answer-parser"
 import { meanMentionPosition } from "./answer-parser"
 import { summariseFanOut, type FanOutSummary } from "./fan-out"
@@ -86,10 +78,6 @@ export interface PromptOutcome {
      * only that the answers built on it did not mention it.
      */
     citedHosts: Array<{ host: string; count: number; answersNaming: number }>
-    /** Every citation for this prompt, classified. */
-    citations: Array<
-        ClassifiedCitation & { title: string; namedInCitingAnswer: boolean }
-    >
 }
 
 /**
@@ -122,10 +110,6 @@ function hostOf(url: string): string | null {
 export function summarisePrompt(
     prompt: ProbedPrompt,
     citationsByEngine: Map<AiEngine, Array<{ url: string; title?: string }>>,
-    context: { subjectDomains: string[]; competitorDomains: string[] } = {
-        subjectDomains: [],
-        competitorDomains: [],
-    },
 ): PromptOutcome {
     const parsed = prompt.answers.map((answer) => answer.parsed)
 
@@ -165,28 +149,16 @@ export function summarisePrompt(
         }
     }
 
-    // Citations, classified, and tagged with whether the answer that cited them
-    // actually named the brand. That second fact is what makes the source list
-    // actionable rather than decorative: a host the engines lean on across ten
-    // answers that never named you is a different problem from one that did.
+    // Preserve only the factual host and co-occurrence counts needed on the
+    // question outcome. Source relationships and page evidence are built from
+    // the immutable result rows by source-report.ts; no source taxonomy belongs
+    // in the production summary.
     const hostCounts = new Map<string, { count: number; answersNaming: number }>()
-    const citations: PromptOutcome["citations"] = []
 
     for (const answer of prompt.answers) {
         const named = answer.parsed.mentionCount > 0
         for (const citation of citationsByEngine.get(answer.engine) || []) {
-            const classified = classifyCitation(
-                citation.url,
-                context,
-                citation.title ?? "",
-            )
-            citations.push({
-                ...classified,
-                title: citation.title ?? "",
-                namedInCitingAnswer: named,
-            })
-
-            const host = classified.host || hostOf(citation.url)
+            const host = hostOf(citation.url)
             if (!host) continue
             const entry = hostCounts.get(host) ?? { count: 0, answersNaming: 0 }
             entry.count++
@@ -212,7 +184,6 @@ export function summarisePrompt(
             }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 10),
-        citations,
     }
 }
 
@@ -381,49 +352,10 @@ export interface RunSummary {
         discoveryFailed: boolean
     }
     /**
-     * Domains the engines cited most across the whole run.
-     *
-     * `answersNaming` counts the citing answers that also named the brand —
-     * co-occurrence, not a claim about the page's contents.
-     */
-    citedHosts: Array<{
-        host: string
-        count: number
-        answersNaming: number
-        sourceType: SourceType
-    }>
-    /** Citations grouped by what kind of source they are. */
-    citationBreakdown: CitationBreakdown
-    /**
-     * Unresolved citation pages requiring a person before production.
-     * Frozen with the run so founder review starts from the exact evidence the
-     * customer saw, never a later reclassification of an immutable report.
-     */
-    citationReviewQueue: Array<{
-        url: string
-        title: string
-        host: string
-        count: number
-    }>
-    /**
      * The sub-queries the engines actually ran. Observed behaviour on the AI
      * surface — never a volume estimate. See `fan-out.ts`.
      */
     fanOut: FanOutSummary
-    /**
-     * The shaped pages the engines leaned on — best-of lists, comparisons and
-     * reviews. These are how an engine assembles a recommendation, so they are
-     * the most directly actionable rows in the whole report.
-     */
-    keyPages: Array<{
-        url: string
-        title: string
-        host: string
-        pageShape: PageShape
-        sourceType: SourceType
-        count: number
-        answersNaming: number
-    }>
 }
 
 export function summariseRun(
@@ -434,82 +366,11 @@ export function summariseRun(
     const presentAnswerCount = outcomes.reduce((total, o) => total + o.answersPresent, 0)
 
     const rivals = new Map<string, { name: string; url: string; promptsNaming: number }>()
-    const hosts = new Map<
-        string,
-        { count: number; answersNaming: number; sourceType: SourceType }
-    >()
-    const pages = new Map<
-        string,
-        {
-            url: string
-            title: string
-            host: string
-            pageShape: PageShape
-            sourceType: SourceType
-            count: number
-            answersNaming: number
-        }
-    >()
-    const reviewPages = new Map<
-        string,
-        { url: string; title: string; host: string; count: number }
-    >()
-    const allCitations: ClassifiedCitation[] = []
-
     for (const outcome of outcomes) {
         for (const rival of outcome.rivals) {
             const existing = rivals.get(rival.name)
             if (existing) existing.promptsNaming++
             else rivals.set(rival.name, { name: rival.name, url: rival.url, promptsNaming: 1 })
-        }
-
-        for (const citation of outcome.citations) {
-            allCitations.push(citation)
-            if (!citation.host) continue
-
-            const host = hosts.get(citation.host) ?? {
-                count: 0,
-                answersNaming: 0,
-                sourceType: citation.sourceType,
-            }
-            host.count++
-            if (citation.namedInCitingAnswer) host.answersNaming++
-            hosts.set(citation.host, host)
-
-            if (citation.actionability === "review") {
-                const review = reviewPages.get(citation.url) ?? {
-                    url: citation.url,
-                    title: citation.title,
-                    host: citation.host,
-                    count: 0,
-                }
-                review.count++
-                if (!review.title && citation.title) review.title = citation.title
-                reviewPages.set(citation.url, review)
-            }
-
-            // Only shaped pages are worth listing individually — a homepage
-            // cited once is noise, a "best X" page cited across six answers is
-            // the thing to go and get onto.
-            if (
-                citation.pageShape === "listicle" ||
-                citation.pageShape === "comparison" ||
-                citation.pageShape === "review"
-            ) {
-                const page = pages.get(citation.url) ?? {
-                    url: citation.url,
-                    title: citation.title,
-                    host: citation.host,
-                    pageShape: citation.pageShape,
-                    sourceType: citation.sourceType,
-                    count: 0,
-                    answersNaming: 0,
-                }
-                page.count++
-                if (citation.namedInCitingAnswer) page.answersNaming++
-                if (!page.title && citation.title) page.title = citation.title
-                pages.set(citation.url, page)
-            }
         }
     }
 
@@ -529,19 +390,6 @@ export function summariseRun(
         rivalLeaderboard: [...rivals.values()].sort(
             (a, b) => b.promptsNaming - a.promptsNaming,
         ),
-        citedHosts: [...hosts.entries()]
-            .map(([host, entry]) => ({
-                host,
-                count: entry.count,
-                answersNaming: entry.answersNaming,
-                sourceType: entry.sourceType,
-            }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 20),
-        citationBreakdown: summariseCitations(allCitations),
-        citationReviewQueue: [...reviewPages.values()]
-            .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host))
-            .slice(0, 25),
         fanOut: summariseFanOut(
             prompts.map((prompt) => ({
                 promptId: prompt.id,
@@ -552,11 +400,5 @@ export function summariseRun(
                 })),
             })),
         ),
-        // Most-cited first, then the ones that never coincided with the brand —
-        // a page the engines trust and you are absent from outranks one you
-        // already appear alongside.
-        keyPages: [...pages.values()]
-            .sort((a, b) => b.count - a.count || a.answersNaming - b.answersNaming)
-            .slice(0, 15),
     }
 }

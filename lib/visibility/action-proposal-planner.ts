@@ -4,7 +4,6 @@ import "server-only"
 import { normalizeQuery } from "@/lib/harvest/types"
 import type { CapabilityContract, QueryIntentBinding } from "@/lib/writer/article-contract"
 import { bindPromptCapability } from "./capability-binding"
-import { assessPromptRemedy, type PromptRemedyAssessment, type StoredCitation } from "./prompt-remedy"
 import { syncSiteInventory, type InventoryPage } from "./site-inventory"
 import { matchExistingPage } from "./site-coverage-match"
 
@@ -27,12 +26,11 @@ type PlanningPrompt = {
     binding: QueryIntentBinding
     customerJob: string
     capabilityFactIds: string[]
-    remedy: PromptRemedyAssessment
 }
 
 type Candidate = {
-    resolutionType: "create" | "refresh" | "report_only"
-    deliverableType: "full_article" | "full_page_replacement" | "section_patch" | "report_only"
+    resolutionType: "create" | "refresh"
+    deliverableType: "full_article" | "full_page_replacement" | "section_patch"
     title: string
     targetUrl: string | null
     targetPageKind: InventoryPage["pageKind"] | null
@@ -46,16 +44,8 @@ type Candidate = {
 function groupCandidates(prompts: PlanningPrompt[], pages: InventoryPage[]): Candidate[] {
     const refresh = new Map<string, { match: ReturnType<typeof matchExistingPage>; prompts: PlanningPrompt[] }>()
     const creates = new Map<string, PlanningPrompt[]>()
-    const reports = new Map<string, PlanningPrompt[]>()
 
     for (const prompt of prompts.sort((a, b) => b.priority - a.priority)) {
-        if (prompt.remedy.kind !== "content") {
-            const reportKey = `${prompt.scopeFamilyId}:${prompt.remedy.kind}`
-            const group = reports.get(reportKey) ?? []
-            group.push(prompt)
-            reports.set(reportKey, group)
-            continue
-        }
         // Include the confirmed scope seed and operation-shaped customer job.
         // This gives synonymous buyer wording a chance to match a real page
         // without accepting a generic category page on one shared token.
@@ -120,27 +110,6 @@ function groupCandidates(prompts: PlanningPrompt[], pages: InventoryPage[]): Can
             },
         })
     }
-    for (const grouped of reports.values()) {
-        const lead = grouped[0]
-        const review = grouped.some((prompt) => prompt.remedy.kind === "founder_review")
-        candidates.push({
-            resolutionType: "report_only",
-            deliverableType: "report_only",
-            title: review ? `Founder review: ${articleTitle(lead.prompt)}` : `Earned placement: ${articleTitle(lead.prompt)}`,
-            targetUrl: null,
-            targetPageKind: null,
-            priority: Math.round(Math.max(...grouped.map((prompt) => prompt.priority))),
-            reason: review
-                ? `${grouped.length} measured buyer question${grouped.length === 1 ? " has" : "s have"} unresolved citation evidence. It cannot enter production until reviewed.`
-                : `${grouped.length} measured buyer question${grouped.length === 1 ? " points" : "s point"} to third-party placement work, not another owned article.`,
-            prompts: grouped,
-            binding: commonBinding(grouped),
-            evidence: {
-                remedyReasons: unique(grouped.map((prompt) => prompt.remedy.reason)),
-                citationActionability: grouped.map((prompt) => prompt.remedy.counts),
-            },
-        })
-    }
     return candidates.sort((a, b) => b.priority - a.priority || a.title.localeCompare(b.title))
 }
 
@@ -168,7 +137,7 @@ export async function buildActionProposalsForRun(input: {
     const { supabase, runId } = input
     const { data: run, error: runError } = await supabase
         .from("ai_probe_runs")
-        .select("id, user_id, brand_id, status, subject_domains, competitors")
+        .select("id, user_id, brand_id, status")
         .eq("id", runId)
         .single()
     if (runError || !run || run.status !== "completed") {
@@ -247,44 +216,6 @@ export async function buildActionProposalsForRun(input: {
         : { data: [], error: null }
     if (trackedError) throw new Error(trackedError.message)
 
-    const { data: observationRows, error: observationError } = trackedIds.length
-        ? await supabase
-              .from("ai_probe_prompts")
-              .select("id, tracked_prompt_id")
-              .eq("run_id", runId)
-              .in("tracked_prompt_id", trackedIds)
-        : { data: [], error: null }
-    if (observationError) throw new Error(observationError.message)
-    const observationIds = (observationRows ?? []).map((row: any) => row.id)
-    const { data: resultRows, error: resultError } = observationIds.length
-        ? await supabase
-              .from("ai_probe_results")
-              .select("prompt_id, citations")
-              .eq("run_id", runId)
-              .in("prompt_id", observationIds)
-        : { data: [], error: null }
-    if (resultError) throw new Error(resultError.message)
-    const trackedByObservation = new Map<string, string>(
-        (observationRows ?? []).map((row: any) => [row.id, row.tracked_prompt_id]),
-    )
-    const citationsByTracked = new Map<string, StoredCitation[]>()
-    for (const result of resultRows ?? []) {
-        const trackedId = trackedByObservation.get(result.prompt_id)
-        if (!trackedId) continue
-        const citations = citationsByTracked.get(trackedId) ?? []
-        if (Array.isArray(result.citations)) {
-            citations.push(
-                ...result.citations.filter(
-                    (citation: unknown): citation is StoredCitation =>
-                        Boolean(citation) &&
-                        typeof citation === "object" &&
-                        typeof (citation as StoredCitation).url === "string",
-                ),
-            )
-        }
-        citationsByTracked.set(trackedId, citations)
-    }
-
     const familyIds = unique((trackedRows ?? []).map((row: any) => row.scope_family_id))
     const { data: familyRows } = familyIds.length
         ? await supabase
@@ -298,11 +229,6 @@ export async function buildActionProposalsForRun(input: {
     const opportunityByPrompt = new Map<string, any>(
         plannableOpportunityRows.map((row: any) => [row.tracked_prompt_id, row]),
     )
-    const competitorDomains = Array.isArray(run.competitors)
-        ? run.competitors
-              .map((competitor: any) => competitor?.domain)
-              .filter((domain: unknown): domain is string => typeof domain === "string")
-        : []
     const planningPrompts: PlanningPrompt[] = (trackedRows ?? []).map((row: any) => {
         const opportunity = opportunityByPrompt.get(row.id)
         const bound = bindPromptCapability({
@@ -319,11 +245,6 @@ export async function buildActionProposalsForRun(input: {
             sourceSeed: row.source_seed,
             priority: Math.max(0, Math.min(100, Math.round(opportunity.last_priority ?? 0))),
             reason: opportunity.last_reason,
-            remedy: assessPromptRemedy({
-                citations: citationsByTracked.get(row.id) ?? [],
-                subjectDomains: run.subject_domains ?? [],
-                competitorDomains,
-            }),
             ...bound,
         }
     })

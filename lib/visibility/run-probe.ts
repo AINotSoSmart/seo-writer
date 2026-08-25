@@ -681,12 +681,6 @@ export async function runVisibilityProbe(
         }
 
         const prompts = [...byPrompt.values()]
-        const classifyContext = {
-            subjectDomains: options.subjectDomains,
-            competitorDomains: competitors
-                .map((competitor) => competitor.domain)
-                .filter((domain): domain is string => Boolean(domain)),
-        }
         const outcomes = new Map<string, PromptOutcome>()
         for (const prompt of prompts) {
             outcomes.set(
@@ -694,7 +688,6 @@ export async function runVisibilityProbe(
                 summarisePrompt(
                     prompt,
                     citationsByPromptEngine.get(prompt.id)!,
-                    classifyContext,
                 ),
             )
         }
