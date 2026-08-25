@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, type MouseEvent } from "react"
 import Link from "next/link"
 import {
     Activity,
@@ -112,6 +112,16 @@ export function VisibilityQuestions({
         })
     }
 
+    const toggleExpandedFromRow = (
+        event: MouseEvent<HTMLTableRowElement>,
+        id: string,
+    ) => {
+        const target = event.target as HTMLElement
+        if (target.closest("button, a, input, select, label")) return
+        if (window.getSelection()?.toString()) return
+        toggleExpanded(id)
+    }
+
     const toggleSelected = (id: string) => {
         setSelected((current) => {
             const next = new Set(current)
@@ -166,7 +176,7 @@ export function VisibilityQuestions({
     }
 
     return (
-        <section className="mt-5 overflow-hidden rounded-[14px] border border-[var(--viz-hairline)] bg-white shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
+        <section className="mt-5 min-w-0 max-w-full overflow-hidden rounded-[14px] border border-[var(--viz-hairline)] bg-white shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
             <div className="flex flex-col gap-4 border-b border-[var(--viz-hairline)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div>
                     <h2 className="text-lg font-semibold tracking-[-0.01em]">Questions</h2>
@@ -229,21 +239,11 @@ export function VisibilityQuestions({
                 </span>
             </div>
 
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[1020px] table-fixed text-left">
-                    <colgroup>
-                        <col className="w-12" />
-                        <col />
-                        <col className="w-[130px]" />
-                        <col className="w-[116px]" />
-                        <col className="w-[90px]" />
-                        <col className="w-[128px]" />
-                        <col className="w-[132px]" />
-                        <col className="w-12" />
-                    </colgroup>
-                    <thead className="border-b border-[var(--viz-hairline)] text-[11px] uppercase tracking-[0.04em] text-[var(--viz-ink-muted)]">
-                        <tr>
-                            <th className="px-4 py-2.5 font-medium sm:pl-5">
+            <div className="max-w-full overflow-x-hidden lg:overflow-x-auto">
+                <table className="block w-full min-w-0 text-left lg:table lg:min-w-[1020px] lg:table-fixed">
+                    <thead className="block border-b border-[var(--viz-hairline)] text-[11px] uppercase tracking-[0.04em] text-[var(--viz-ink-muted)] lg:table-header-group">
+                        <tr className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] lg:table-row">
+                            <th className="block w-10 px-3 py-2.5 font-medium lg:table-cell lg:w-12 lg:px-4 lg:pl-5">
                                 <input
                                     type="checkbox"
                                     checked={allVisibleSelected}
@@ -252,25 +252,25 @@ export function VisibilityQuestions({
                                     className="size-3.5 rounded border-stone-300 accent-stone-900"
                                 />
                             </th>
-                            <th className="py-2.5 pr-5 font-medium">Question</th>
-                            <th className="py-2.5 font-medium">Verdict</th>
-                            <th className="py-2.5 font-medium">Named in</th>
-                            <th className="py-2.5 font-medium">Cited</th>
-                            <th className="py-2.5 font-medium">Named instead</th>
-                            <th className="py-2.5 font-medium">Action</th>
-                            <th className="py-2.5 font-medium" />
+                            <th className="block min-w-0 py-2.5 pr-2 font-medium lg:table-cell lg:pr-5">Question</th>
+                            <th className="hidden w-[130px] py-2.5 font-medium lg:table-cell">Verdict</th>
+                            <th className="hidden w-[116px] py-2.5 font-medium lg:table-cell">Named in</th>
+                            <th className="hidden w-[90px] py-2.5 font-medium lg:table-cell">Cited</th>
+                            <th className="hidden w-[128px] py-2.5 font-medium lg:table-cell">Named instead</th>
+                            <th className="hidden w-[132px] py-2.5 font-medium lg:table-cell">Action</th>
+                            <th className="block w-10 py-2.5 font-medium lg:table-cell lg:w-12" />
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="block lg:table-row-group">
                         {groups.map(([groupName, rows], groupIndex) => {
                             const namedCount = rows.filter(
                                 (row) => row.verdict !== "absent",
                             ).length
                             return [
-                                <tr key={`${groupName}-heading`}>
+                                <tr key={`${groupName}-heading`} className="block lg:table-row">
                                     <th
                                         colSpan={8}
-                                        className="border-b border-[var(--viz-hairline)] bg-[var(--viz-plane)] px-4 py-2.5 text-xs font-semibold sm:px-5"
+                                        className="block border-b border-[var(--viz-hairline)] bg-[var(--viz-plane)] px-4 py-2.5 text-xs font-semibold sm:px-5 lg:table-cell"
                                     >
                                         <span
                                             className="mr-2.5 inline-block size-2 rounded-[2px]"
@@ -298,9 +298,16 @@ export function VisibilityQuestions({
                                     return (
                                         <tr
                                             key={prompt.id}
-                                            className="border-b border-[var(--viz-hairline)] align-middle transition hover:bg-[var(--viz-plane)]"
+                                            onClick={(event) =>
+                                                toggleExpandedFromRow(event, prompt.id)
+                                            }
+                                            className={`grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] cursor-pointer border-b border-[var(--viz-hairline)] align-middle transition lg:table-row ${
+                                                isOpen
+                                                    ? "bg-blue-50/40"
+                                                    : "hover:bg-[var(--viz-plane)]"
+                                            }`}
                                         >
-                                            <td className="px-4 py-3.5 sm:pl-5">
+                                            <td className="block px-3 py-3.5 lg:table-cell lg:px-4 lg:pl-5">
                                                 <input
                                                     type="checkbox"
                                                     checked={selected.has(prompt.id)}
@@ -309,10 +316,53 @@ export function VisibilityQuestions({
                                                     className="size-3.5 rounded border-stone-300 accent-stone-900"
                                                 />
                                             </td>
-                                            <td className="py-3.5 pr-6 text-[13px] leading-relaxed text-[var(--viz-ink)]">
-                                                {prompt.prompt}
+                                            <td className="block min-w-0 py-3.5 pr-2 text-[13px] leading-relaxed text-[var(--viz-ink)] lg:table-cell lg:pr-6">
+                                                <div className="break-words [overflow-wrap:anywhere]">
+                                                    {prompt.prompt}
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap items-center gap-1.5 lg:hidden">
+                                                    <span
+                                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.chip}`}
+                                                    >
+                                                        <meta.Icon className="size-3" aria-hidden />
+                                                        {meta.label}
+                                                    </span>
+                                                    <span className="rounded-full bg-[var(--viz-track)] px-2 py-0.5 text-[10px] tabular-nums text-[var(--viz-ink-secondary)]">
+                                                        {prompt.answers_present}/{prompt.answers_total} answers
+                                                    </span>
+                                                    <span className="rounded-full bg-[var(--viz-track)] px-2 py-0.5 text-[10px] tabular-nums text-[var(--viz-ink-secondary)]">
+                                                        {prompt.citationCount} {prompt.citationCount === 1 ? "citation" : "citations"}
+                                                    </span>
+                                                    {action && prompt.action && (
+                                                        <span
+                                                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${action.className}`}
+                                                            title={
+                                                                prompt.action.status === "suggested"
+                                                                    ? "Suggested; awaiting confirmation"
+                                                                    : prompt.action.title
+                                                            }
+                                                        >
+                                                            {action.label}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {rivals.length > 0 && (
+                                                    <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1 lg:hidden">
+                                                        <span className="mr-0.5 text-[10px] text-[var(--viz-ink-muted)]">
+                                                            Named instead
+                                                        </span>
+                                                        {rivals.slice(0, 3).map((name) => (
+                                                            <Badge key={name} label={name} />
+                                                        ))}
+                                                        {rivals.length > 3 && (
+                                                            <span className="text-[10px] tabular-nums text-[var(--viz-ink-muted)]">
+                                                                +{rivals.length - 3}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
-                                            <td className="py-3.5">
+                                            <td className="hidden py-3.5 lg:table-cell">
                                                 <span
                                                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.chip}`}
                                                 >
@@ -320,15 +370,15 @@ export function VisibilityQuestions({
                                                     {meta.label}
                                                 </span>
                                             </td>
-                                            <td className="py-3.5 text-[13px] tabular-nums text-[var(--viz-ink-secondary)]">
+                                            <td className="hidden py-3.5 text-[13px] tabular-nums text-[var(--viz-ink-secondary)] lg:table-cell">
                                                 {prompt.answers_present} / {prompt.answers_total}
                                             </td>
-                                            <td className="py-3.5 text-[13px] tabular-nums text-[var(--viz-ink-secondary)]">
+                                            <td className="hidden py-3.5 text-[13px] tabular-nums text-[var(--viz-ink-secondary)] lg:table-cell">
                                                 {prompt.citationCount > 0
                                                     ? prompt.citationCount
                                                     : <span className="text-[var(--viz-ink-muted)]">&mdash;</span>}
                                             </td>
-                                            <td className="py-3.5">
+                                            <td className="hidden py-3.5 lg:table-cell">
                                                 {rivals.length ? (
                                                     <span className="flex items-center gap-1">
                                                         {rivals.slice(0, 3).map((name) => (
@@ -344,7 +394,7 @@ export function VisibilityQuestions({
                                                     <span className="text-[13px] text-[var(--viz-ink-muted)]">&mdash;</span>
                                                 )}
                                             </td>
-                                            <td className="py-3.5">
+                                            <td className="hidden py-3.5 lg:table-cell">
                                                 {action && prompt.action ? (
                                                     <span
                                                         className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${action.className}`}
@@ -360,13 +410,18 @@ export function VisibilityQuestions({
                                                     <span className="text-[13px] text-[var(--viz-ink-muted)]">&mdash;</span>
                                                 )}
                                             </td>
-                                            <td className="py-3.5 pr-4 text-right">
+                                            <td className="block py-3.5 pr-2 text-right lg:table-cell lg:pr-4">
                                                 <button
                                                     type="button"
                                                     onClick={() => toggleExpanded(prompt.id)}
                                                     aria-label={`${isOpen ? "Close" : "Open"} answers for ${prompt.prompt}`}
                                                     aria-expanded={isOpen}
-                                                    className="rounded-md p-1 text-[var(--viz-ink-muted)] transition hover:bg-stone-100 hover:text-[var(--viz-ink)]"
+                                                    aria-controls={`question-evidence-${prompt.id}`}
+                                                    className={`rounded-md p-1.5 transition ${
+                                                        isOpen
+                                                            ? "bg-blue-100 text-[var(--viz-series-1)]"
+                                                            : "text-[var(--viz-ink-muted)] hover:bg-stone-100 hover:text-[var(--viz-ink)]"
+                                                    }`}
                                                 >
                                                     {isOpen ? (
                                                         <ChevronDown className="size-4" aria-hidden />
@@ -385,18 +440,24 @@ export function VisibilityQuestions({
                                     if (!expanded.has(promptId)) return [row]
                                     return [
                                         row,
-                                        <tr key={`${promptId}-answers`}>
+                                        <tr key={`${promptId}-answers`} className="block lg:table-row">
                                             <td
                                                 colSpan={8}
-                                                className="border-b border-[var(--viz-hairline)] bg-[var(--viz-plane)] px-5"
+                                                id={`question-evidence-${promptId}`}
+                                                className="block min-w-0 max-w-full overflow-hidden border-b border-[var(--viz-hairline)] bg-[#fbfbfa] px-3 sm:px-5 lg:table-cell lg:max-w-0"
                                             >
-                                                <AnswerEvidence
-                                                    promptId={promptId}
-                                                    engineLabels={engineLabels}
-                                                    subjectName={subjectName}
-                                                    subjectDomains={subjectDomains}
-                                                />
-                                                <div className="pb-4">
+                                                <div className="min-w-0 max-w-full overflow-hidden">
+                                                    <AnswerEvidence
+                                                        promptId={promptId}
+                                                        engineLabels={engineLabels}
+                                                        subjectName={subjectName}
+                                                        subjectDomains={subjectDomains}
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-2 border-t border-[var(--viz-hairline)] py-3 sm:flex-row sm:items-center sm:justify-between">
+                                                    <span className="text-[10px] text-[var(--viz-ink-muted)]">
+                                                        Exact captured evidence · stored unedited
+                                                    </span>
                                                     <Link
                                                         href={`/evidence/ai-answer/${runId}/${promptId}`}
                                                         className="inline-flex items-center gap-1 text-xs font-medium text-[var(--viz-series-1)] hover:underline"
@@ -412,10 +473,10 @@ export function VisibilityQuestions({
                             ]
                         })}
                         {visible.length === 0 && (
-                            <tr>
+                            <tr className="block lg:table-row">
                                 <td
                                     colSpan={8}
-                                    className="px-5 py-12 text-center text-sm text-[var(--viz-ink-muted)]"
+                                    className="block px-5 py-12 text-center text-sm text-[var(--viz-ink-muted)] lg:table-cell"
                                 >
                                     No questions match this verdict filter.
                                 </td>

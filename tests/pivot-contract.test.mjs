@@ -4183,7 +4183,22 @@ test("the dashboard shows the evidence, not just the verdict", async () => {
     ])
 
     assert.match(questions, /AnswerEvidence/)
+    assert.match(questions, /toggleExpandedFromRow/)
+    assert.match(questions, /target\.closest\("button, a, input, select, label"\)/)
+    assert.match(questions, /onClick=\{\(event\) =>\s*toggleExpandedFromRow/)
+    // The desktop analytics table must not turn the phone into a 1020px-wide
+    // canvas. Mobile keeps only selection, question and disclosure as columns;
+    // the remaining facts move under the question.
+    assert.match(questions, /overflow-x-hidden lg:overflow-x-auto/)
+    assert.match(questions, /block w-full min-w-0 text-left lg:table lg:min-w-\[1020px\] lg:table-fixed/)
+    assert.doesNotMatch(questions, /<colgroup>/)
+    assert.match(questions, /hidden w-\[130px\][^\"]*lg:table-cell/)
+    assert.match(questions, /grid-cols-\[2\.5rem_minmax\(0,1fr\)_2\.5rem\]/)
+    assert.match(questions, /Named instead[\s\S]*lg:hidden/)
     assert.match(evidence, /answer\.answer_text/)
+    assert.match(evidence, /ReactMarkdown/)
+    assert.match(evidence, /Captured answer/)
+    assert.match(evidence, /Sources cited/)
     // Captured third-party text is rendered as text, never as HTML. Assert on
     // the JSX usage, not the word — the comment explaining why an engine's
     // output must never be injected is the part worth keeping.

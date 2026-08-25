@@ -388,36 +388,36 @@ export function VisibilityOverview({
                 </SectionHeading>
 
                 {losingHosts.length > 0 ? (
-                    <div className="mt-5 grid gap-x-8 gap-y-3 lg:grid-cols-2">
-                            {losingHosts.slice(0, 6).map((host) => (
-                                <button
-                                    key={host.host}
-                                    type="button"
-                                    onClick={() => onOpenSource?.(host.host)}
-                                    className="grid w-full grid-cols-[22px_minmax(8rem,13rem)_minmax(7rem,1fr)_4.5rem] items-center gap-3 text-left"
-                                >
-                                    <Badge label={host.host} own={host.relationship === "owned"} />
-                                    <span className="truncate text-[13px] font-medium text-[var(--viz-ink-secondary)] hover:text-[var(--viz-ink)]">
-                                        {host.relationship === "owned"
-                                            ? `${host.host} (yours)`
-                                            : host.host}
-                                    </span>
-                                    <Bar
-                                        value={host.losingQuestionIds.length}
-                                        max={losingHostMax}
-                                        color={
-                                            host.relationship === "owned"
-                                                ? "var(--viz-series-1)"
-                                                : "var(--viz-seq-350)"
-                                        }
-                                        label={`${host.losingQuestionIds.length}`}
-                                        emptyReason="no losing questions"
-                                    />
-                                    <span className="text-right text-xs font-semibold tabular-nums">
-                                        {host.citationCount} cites
-                                    </span>
-                                </button>
-                            ))}
+                    <div className="mt-5 grid gap-y-3">
+                        {losingHosts.slice(0, 6).map((host) => (
+                            <button
+                                key={host.host}
+                                type="button"
+                                onClick={() => onOpenSource?.(host.host)}
+                                className="grid min-w-0 w-full grid-cols-[22px_minmax(0,1fr)_minmax(7rem,11rem)_auto] items-center gap-3 text-left"
+                            >
+                                <Badge label={host.host} own={host.relationship === "owned"} />
+                                <span className="min-w-0 truncate text-[13px] font-medium text-[var(--viz-ink-secondary)] hover:text-[var(--viz-ink)]">
+                                    {host.relationship === "owned"
+                                        ? `${host.host} (yours)`
+                                        : host.host}
+                                </span>
+                                <Bar
+                                    value={host.losingQuestionIds.length}
+                                    max={losingHostMax}
+                                    color={
+                                        host.relationship === "owned"
+                                            ? "var(--viz-series-1)"
+                                            : "var(--viz-seq-350)"
+                                    }
+                                    label={`${host.losingQuestionIds.length}`}
+                                    emptyReason="no losing questions"
+                                />
+                                <span className="shrink-0 whitespace-nowrap text-right text-xs font-semibold tabular-nums">
+                                    {host.citationCount} cites
+                                </span>
+                            </button>
+                        ))}
                     </div>
                 ) : (
                     <p className="mt-8 text-sm text-[var(--viz-ink-muted)]">
