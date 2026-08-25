@@ -1,0 +1,11 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Overview", "x": 0, "y": 0, "w": 1440, "h": 980 },
+    { "file": "Questions.dc.html", "title": "Questions", "x": 1540, "y": 0, "w": 1440, "h": 820 }
+  ],
+  "annotations": [
+    { "id": "note-density", "x": 0, "y": -140, "w": 460, "text": "Data-first: every explanation moved behind an info icon. Nothing on this page is a paragraph you have to read before you can see a number." },
+    { "id": "note-table", "x": 1540, "y": -140, "w": 520, "text": "The Questions tab as a spreadsheet, not a reading list: group by topic, filter by verdict, verdict + action as chips, rivals as a favicon stack, em-dash for empty, chevron into the stored answers." }
+  ],
+  "launch": { "view": "canvas" }
+}

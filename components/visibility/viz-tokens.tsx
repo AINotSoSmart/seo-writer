@@ -75,6 +75,36 @@ export const VIZ_TOKENS_CSS = `
   border-radius: 0 4px 4px 0;
   height: 10px;
 }
+
+/* Panel chrome. One definition so every card on the page has the same weight —
+   the previous mix of rounded-lg and rounded-xl at two border colours read as
+   two designs sharing a page. */
+.viz-card {
+  background: var(--viz-surface);
+  border: 1px solid var(--viz-hairline);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgb(28 25 23 / 0.04);
+}
+
+/* A fully rounded track for ranked comparisons, as opposed to .viz-track
+   above, which is square at the baseline because its bars grow from an axis. */
+.viz-track-pill {
+  display: block;
+  background: var(--viz-track);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+/* Diagonal hatch: "this segment is a different kind of thing".
+   Used for citations we could not classify, which are excluded from production
+   — a plain grey fill reads as a small category, hatching reads as not counted. */
+.viz-hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--viz-baseline) 0 5px,
+    var(--viz-track) 5px 10px
+  );
+}
 `
 
 export function VizTokens() {

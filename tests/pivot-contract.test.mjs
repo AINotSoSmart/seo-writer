@@ -4138,12 +4138,12 @@ test("visibility measures the consumer surface, never silently the API", async (
     //
     // So: Cloro is the default, the API path is opt-in, and every stored answer
     // carries the surface it came from.
-    const [engines, probe, route, surfaces, dashboard] = await Promise.all([
+    const [engines, probe, route, surfaces, surfacesPanel] = await Promise.all([
         text("lib/visibility/engines.ts"),
         text("lib/visibility/run-probe.ts"),
         text("app/api/visibility/probe/route.ts"),
         text("supabase/migrations/20260815_ai_visibility_surfaces.sql"),
-        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-surfaces.tsx"),
     ])
 
     // The default pair is the two consumer surfaces.
@@ -4164,7 +4164,7 @@ test("visibility measures the consumer surface, never silently the API", async (
     assert.match(surfaces, /CHECK \(surface IN \('consumer_app', 'api'\)\)/)
 
     // And the dashboard reports per surface rather than averaging across kinds.
-    assert.match(dashboard, /never averaged together/)
+    assert.match(surfacesPanel, /never averaged together/)
 })
 
 test("a Cloro probe runs as a background task, not inside a request", async () => {
@@ -4202,12 +4202,12 @@ test("the dashboard shows the evidence, not just the verdict", async () => {
     // A founder told "you are absent from 26 questions" reasonably suspects a
     // made-up number. The answer that produced each verdict has to be reachable
     // without leaving the page, unedited.
-    const [dashboard, evidence] = await Promise.all([
-        text("components/visibility/visibility-dashboard.tsx"),
+    const [questions, evidence] = await Promise.all([
+        text("components/visibility/visibility-questions.tsx"),
         text("components/visibility/answer-evidence.tsx"),
     ])
 
-    assert.match(dashboard, /AnswerEvidence/)
+    assert.match(questions, /AnswerEvidence/)
     assert.match(evidence, /answer\.answer_text/)
     // Captured third-party text is rendered as text, never as HTML. Assert on
     // the JSX usage, not the word — the comment explaining why an engine's
@@ -4215,8 +4215,8 @@ test("the dashboard shows the evidence, not just the verdict", async () => {
     assert.doesNotMatch(evidence, /dangerouslySetInnerHTML=\{/)
     assert.match(evidence, /<mark/)
     // Status is never carried by colour alone.
-    assert.match(dashboard, /Icon: AlertCircle/)
-    assert.match(dashboard, /<meta\.Icon/)
+    assert.match(questions, /Icon: AlertCircle/)
+    assert.match(questions, /<meta\.Icon/)
 })
 
 test("the citation classifier ages by structure, not by a growing domain list", async () => {
@@ -4335,17 +4335,17 @@ test("the citation classifier ages by structure, not by a growing domain list", 
 })
 
 test("unresolved citations are frozen into a founder-review queue", async () => {
-    const [mapper, dashboard, panel] = await Promise.all([
+    const [mapper, sources, panel] = await Promise.all([
         text("lib/visibility/gap-mapper.ts"),
-        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-sources.tsx"),
         text("components/visibility/method-panel.tsx"),
     ])
 
     assert.match(mapper, /citationReviewQueue/)
     assert.match(mapper, /citation\.actionability === "review"/)
     assert.match(mapper, /\.slice\(0, 25\)/)
-    assert.match(dashboard, /Sources awaiting founder review/)
-    assert.match(dashboard, /excluded from production until a\s+person reviews them/)
+    assert.match(sources, /Sources awaiting founder review/)
+    assert.match(sources, /excluded from production until a\s+person reviews them/)
     assert.match(panel, /unresolved source cannot enter article production/)
 })
 
@@ -4353,17 +4353,17 @@ test("cited sources report co-occurrence, never a claim about the page", async (
     // We have not fetched the cited pages, so "this listicle omits you" is a
     // claim the data cannot support. What IS supportable is that the answers
     // citing it did not name you. The wording has to keep those apart.
-    const [mapper, dashboard] = await Promise.all([
+    const [mapper, sources] = await Promise.all([
         text("lib/visibility/gap-mapper.ts"),
-        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-sources.tsx"),
     ])
 
     assert.match(mapper, /answersNaming/)
     assert.match(mapper, /co-occurrence/)
     // The UI states the limit next to the claim. Whitespace-tolerant: this is
     // prose inside JSX and the formatter is free to wrap it anywhere.
-    assert.match(dashboard, /describes the answers, not the\s+page/)
-    assert.match(dashboard, /haven&apos;t fetched these pages/)
+    assert.match(sources, /describes the answers, not the\s+page/)
+    assert.match(sources, /haven&apos;t fetched these pages/)
 })
 
 test("the method panel reads its values from the code that computes them", async () => {
@@ -4481,16 +4481,16 @@ test("query fan-out counts what the engines did, and never implies volume", asyn
 })
 
 test("fan-out is never presented as search volume", async () => {
-    const [fanOut, dashboard, panel] = await Promise.all([
+    const [fanOut, sources, panel] = await Promise.all([
         text("lib/visibility/fan-out.ts"),
-        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-sources.tsx"),
         text("components/visibility/method-panel.tsx"),
     ])
 
     // The module states the rule, and both surfaces that render it repeat it
     // where the reader is looking at the number.
     assert.match(fanOut, /never be rendered as volume/)
-    assert.match(dashboard, /not how many people searched|not a search-volume figure/)
+    assert.match(sources, /not how many people searched|not a search-volume figure/)
     assert.match(panel, /not search volume/)
 
     // And no vendor crept back in.
@@ -4996,9 +4996,11 @@ test("the visibility report lives in the dashboard and looks like it", async () 
     assert.match(page, /\.eq\("status", "completed"\)/)
     assert.match(page, /\.order\("started_at", \{ ascending: false \}\)/)
 
-    // Same header language as /audit — eyebrow, serif title, one explanation.
-    assert.match(page, /text-brand-600/)
-    assert.match(page, /font-serif text-3xl text-stone-900/)
+    // The approved report header belongs to the report: brand name, measurement
+    // context and the real action count remain together in embedded mode.
+    assert.match(dashboard, /AI visibility/)
+    assert.match(dashboard, /font-serif text-\[30px\]/)
+    assert.match(dashboard, /actionSummary\.selectedCount/)
 
     // NO DARK BRANCH. This dashboard was the only surface in the product with
     // one, so on a dark-OS machine the report inverted to near-black while the
@@ -5009,10 +5011,10 @@ test("the visibility report lives in the dashboard and looks like it", async () 
     assert.match(tokens, /--viz-plane: #fafaf9/)
     assert.match(tokens, /--viz-ink: #1c1917/)
 
-    // Inside the shell the host owns width, padding and the page header;
-    // repeating them produced two titles and a card inside a card.
+    // Embedded mode keeps the app shell's padding but allows the approved wide
+    // two-column report canvas rather than forcing the former 5xl reading width.
     assert.match(dashboard, /embedded\?: boolean/)
-    assert.match(dashboard, /embedded \? "" : "mx-auto max-w-5xl px-6 py-12"/)
+    assert.match(dashboard, /embedded[\s\S]{0,180}max-w-\[1376px\]/)
 })
 
 test("a rival named as a word is still a rival", async () => {
@@ -5552,10 +5554,13 @@ test("a probe measures the customer's market, not a default one", async () => {
 })
 
 test("standing explanation lives in hints, and the report is not one scroll", async () => {
-    const [hint, dashboard, overview] = await Promise.all([
+    const [hint, dashboard, overview, questions, sources, surfaces] = await Promise.all([
         text("components/visibility/info-hint.tsx"),
         text("components/visibility/visibility-dashboard.tsx"),
         text("components/visibility/visibility-overview.tsx"),
+        text("components/visibility/visibility-questions.tsx"),
+        text("components/visibility/visibility-sources.tsx"),
+        text("components/visibility/visibility-surfaces.tsx"),
     ])
 
     // THE HINT MUST WORK ON A PHONE. Every screenshot of this report has been
@@ -5575,8 +5580,9 @@ test("standing explanation lives in hints, and the report is not one scroll", as
     // not occupy the first screen. Each section's explanation is a hint on its
     // heading, so a new section cannot quietly reintroduce a wall of text.
     for (const [name, source] of [
-        ["dashboard", dashboard],
         ["overview", overview],
+        ["sources", sources],
+        ["surfaces", surfaces],
     ]) {
         assert.match(source, /SectionHeading/, `${name} must use the shared heading`)
     }
@@ -5599,11 +5605,12 @@ test("standing explanation lives in hints, and the report is not one scroll", as
     for (const value of ["overview", "sources", "questions"]) {
         assert.match(dashboard, new RegExp(`<TabsContent value="${value}">`))
     }
-    // The next action stays reachable from every panel rather than living in one.
+    // Capacity is a peer in the approved Overview grid, while the header action
+    // remains reachable from every tab.
+    assert.match(overview, /title="This cycle's actions"/)
     assert.ok(
-        dashboard.indexOf("</Tabs>") <
-            dashboard.indexOf("From findings to content work"),
-        "the production-boundary CTA must sit outside the tabs",
+        dashboard.indexOf('href="/content-plan"') < dashboard.indexOf("<Tabs"),
+        "the delivery CTA must remain above the tab panels",
     )
 
     // A number is a link to the questions behind it. "pixreunion.com — 6
@@ -5623,10 +5630,12 @@ test("standing explanation lives in hints, and the report is not one scroll", as
     assert.match(dashboard, /focus\.kind === "host"/)
     assert.match(overview, /onFocusRival/)
     // A filter the reader cannot see or undo reads as missing data.
-    assert.match(dashboard, /Clear/)
+    assert.match(questions, /Clear question focus/)
     assert.match(dashboard, /setFocus\(null\)/)
-    // The cross-link narrows on a second axis; it must not replace losing/all.
-    assert.match(dashboard, /filter === "losing"/)
+    // The cross-link narrows first; verdict filtering stays a separate control
+    // inside the spreadsheet view.
+    assert.match(questions, /value="losing"/)
+    assert.match(questions, /setFilter/)
 })
 
 test("a buyer question must create a selection event", async () => {
@@ -5682,12 +5691,12 @@ test("a buyer question must create a selection event", async () => {
     assert.match(builder, /criticRejected\+\+/)
     assert.match(builder, /every generated question was rejected/)
 
-    // The headline is recommendation visibility, over the selection denominator
-    // only — never named-answers over everything.
-    assert.match(overview, /brand\.selectionQuestions > 0 \?/)
-    assert.match(overview, /rate\(brand\.selectionLedQuestions, brand\.selectionQuestions\)/)
-    // Zero selection questions is a finding about the question set, not a 0%.
-    assert.match(overview, /No buying moment measured/)
+    // The approved overview does not invent a second score. It partitions the
+    // complete question set into mutually exclusive, checkable verdicts.
+    assert.match(overview, /value: brand\.ledQuestions/)
+    assert.match(overview, /value: brand\.namedNeverFirstQuestions/)
+    assert.match(overview, /value: brand\.notNamedQuestions/)
+    assert.match(overview, /All \$\{brand\.questionsTotal\} questions/)
 })
 
 test("the selection critic is checked against the real BringBack boundary set", async () => {
@@ -5782,24 +5791,15 @@ test("a probe honors four confirmed rivals before it asks anything", async () =>
         "rivals must be resolved before prompts are built",
     )
 
-    // A tracked zero is STATED, not left as an empty table for the reader to
-    // interpret. "None of your rivals was recommended by name" is a finding;
-    // four rows of zeros is a page that looks broken.
+    // A tracked zero is STATED inside its fixed track. It is absence, not a 0%
+    // measurement and not a missing row.
     assert.match(mapper, /competitorTracking\?:/)
-    assert.match(overview, /unpromptedTotal === 0/)
-    assert.match(overview, /recommended by name/)
+    assert.match(overview, /emptyReason="never named"/)
+    assert.match(overview, /competitors\.trackedCount/)
 
-    // The two rival tables are one. They shared a key, split nine columns
-    // between them, and duplicated four of those columns on any single-engine
-    // run — `namedQuestions` equalled `namedAnswers` and `citingQuestions`
-    // equalled `citingAnswers`, because 40 questions produced 40 answers. Two
-    // columns that never disagree read as a defect.
-    // Headings are `SectionHeading` props now, so the explanation that used to
-    // sit under each one is a hint rather than a paragraph. Match the prop; the
-    // comments above the replacement quote the old headings deliberately, to
-    // record what merged into what.
-    assert.match(overview, /title="How your rivals showed up"/)
-    assert.doesNotMatch(overview, />Who was named instead</)
+    // The overview carries one ranked naming comparison; citation detail stays
+    // in Sources instead of duplicating a second leaderboard.
+    assert.match(overview, /title="Who was named instead"/)
     assert.doesNotMatch(overview, />Who was cited instead</)
     // Everything is per answer: a question does not cite or name anything.
     assert.doesNotMatch(overview, />Citing questions</)
@@ -5927,9 +5927,10 @@ test("visibility dashboard keeps evidence separate from confirmed delivery work"
     // compared it, so the report rendered for anyone holding a run id. A test
     // that pins the shape of a leak keeps the leak. The CTA assertions survive;
     // the public-rendering ones are replaced by their opposites below.
-    const [page, dashboard] = await Promise.all([
+    const [page, dashboard, overview] = await Promise.all([
         text("app/(protected)/visibility/page.tsx"),
         text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-overview.tsx"),
     ])
 
     // 1. The report is resolved from the signed-in user's own newest run.
@@ -5939,8 +5940,10 @@ test("visibility dashboard keeps evidence separate from confirmed delivery work"
 
     // 2. A losing question is not sold as an article. The report links to the
     // grouped confirmation surface without reviving legacy cluster output.
-    assert.match(dashboard, /A losing question is evidence about an AI answer/)
-    assert.match(dashboard, /Only confirmed grouped create\/refresh actions/)
+    assert.match(overview, /A losing question is evidence about an AI answer/)
+    assert.match(overview, /Only confirmed grouped create\/refresh actions/)
+    assert.match(page, /from\("action_proposal_sets"\)/)
+    assert.match(page, /from\("cycle_actions"\)/)
     assert.match(dashboard, /href="\/content-plan"/)
 })
 

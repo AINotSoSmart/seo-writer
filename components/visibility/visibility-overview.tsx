@@ -1,82 +1,97 @@
+import type { CitationBreakdown } from "@/lib/visibility/citation-classifier"
 import type { VisibilitySummaryV2 } from "@/lib/visibility/visibility-summary"
-import { InfoHint, SectionHeading } from "./info-hint"
+import type { DashboardActionKind, DashboardActionSummary } from "./dashboard-model"
+import { SectionHeading } from "./info-hint"
+import { Badge, Bar, CapacityStrip, LegendRow, StackedPill } from "./marks"
 
 interface VisibilityOverviewProps {
     subjectName: string
     summary: VisibilitySummaryV2
-    /**
-     * Turns a rival row into a link to the questions behind it.
-     *
-     * Optional so this component stays renderable on its own; when absent the
-     * name is plain text rather than a control that does nothing.
-     */
+    actionSummary: DashboardActionSummary
     onFocusRival?: (competitorId: string, label: string) => void
+    citationBreakdown?: CitationBreakdown
 }
 
-function rate(part: number, whole: number): string {
-    if (whole === 0) return "0%"
-    return `${Math.round((part / whole) * 1000) / 10}%`
+function percent(part: number, whole: number): string {
+    if (whole === 0) return "0.0%"
+    return `${((part / whole) * 100).toFixed(1)}%`
 }
 
-function Metric({ value, label }: { value: string; label: string }) {
+function Panel({ children }: { children: React.ReactNode }) {
+    return <section className="viz-card min-w-0 p-5 sm:p-[22px]">{children}</section>
+}
+
+function Meta({ children }: { children: React.ReactNode }) {
     return (
-        <div className="rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-4">
-            <div className="text-2xl font-semibold tabular-nums text-[var(--viz-ink)]">
-                {value}
-            </div>
-            <div className="mt-1 text-xs leading-snug text-[var(--viz-ink-secondary)]">
-                {label}
-            </div>
-        </div>
+        <span className="shrink-0 text-xs tabular-nums text-[var(--viz-ink-muted)]">
+            {children}
+        </span>
     )
+}
+
+function actionLabel(kind: DashboardActionKind): string {
+    if (kind === "report_only") return "Report"
+    return kind === "refresh" ? "Refresh" : "Create"
+}
+
+function actionChip(kind: DashboardActionKind): string {
+    if (kind === "create") return "bg-emerald-50 text-emerald-800"
+    if (kind === "refresh") return "bg-blue-50 text-blue-800"
+    return "bg-stone-100 text-stone-600"
+}
+
+function actionPhase(summary: DashboardActionSummary): {
+    value: number
+    label: string
+    backlogLabel: string | null
+} {
+    if (summary.phase === "review") {
+        return { value: summary.eligibleCount, label: "ready to review", backlogLabel: null }
+    }
+    if (summary.phase === "ready") {
+        return {
+            value: summary.selectedCount,
+            label: "ready for release",
+            backlogLabel: `${summary.backlogCount} in backlog`,
+        }
+    }
+    if (summary.phase === "delivered") {
+        return {
+            value: summary.selectedCount,
+            label: "delivered",
+            backlogLabel: `${summary.backlogCount} in backlog`,
+        }
+    }
+    if (summary.phase === "producing") {
+        return {
+            value: summary.selectedCount,
+            label: "producing now",
+            backlogLabel: `${summary.backlogCount} in backlog`,
+        }
+    }
+    return {
+        value: 0,
+        label: summary.phase === "failed" ? "planning needs attention" : "not planned yet",
+        backlogLabel: null,
+    }
 }
 
 export function VisibilityOverview({
     subjectName,
     summary,
+    actionSummary,
     onFocusRival,
+    citationBreakdown,
 }: VisibilityOverviewProps) {
     const brand = summary.brandVisibility
     const competitors = summary.competitorVisibility
-    /**
-     * How many times a tracked rival was recommended by name, in answers.
-     *
-     * Summed over `namedAnswers`, not `namedQuestions`: everything on this page
-     * is counted per answer, because an answer is what names or cites anything.
-     * It is a count of occurrences rather than distinct answers — two rivals in
-     * one answer is two recommendations — so the copy says "times", not
-     * "answers".
-     */
-    const unpromptedTotal = competitors.namedRows.reduce(
-        (total, row) => total + row.namedAnswers,
-        0,
-    )
-    /** Questions where any answer named the brand, first or not. */
-    const namedQuestions = brand.ledQuestions + brand.namedNeverFirstQuestions
-
-    /**
-     * One row per tracked rival, joining the naming and citation views.
-     *
-     * They were two tables keyed by the same competitor id, which forced the
-     * reader to cross-reference by name to answer "how did this rival do?".
-     * `namedRows` and `citedRows` are both derived from `input.competitors`, so
-     * they always contain the same ids — joining is safe, and the fallback
-     * keeps a row visible if that ever stops being true.
-     */
     const citedById = new Map(competitors.citedRows.map((row) => [row.id, row]))
+
     const rivalRows = competitors.namedRows
-        .map((named) => {
-            const cited = citedById.get(named.id)
-            return {
-                id: named.id,
-                name: named.name,
-                domain: named.domain,
-                namedAnswers: named.namedAnswers,
-                citingAnswers: cited?.citingAnswers ?? 0,
-                citationOccurrences: cited?.citationOccurrences ?? 0,
-                brandNamedAlongsideAnswers: cited?.brandNamedAlongsideAnswers ?? 0,
-            }
-        })
+        .map((row) => ({
+            ...row,
+            citationOccurrences: citedById.get(row.id)?.citationOccurrences ?? 0,
+        }))
         .sort(
             (a, b) =>
                 b.namedAnswers - a.namedAnswers ||
@@ -84,356 +99,331 @@ export function VisibilityOverview({
                 a.name.localeCompare(b.name),
         )
 
-    const citedCompetitorCount = competitors.citedCompetitorCount
-    const citedCompetitorNames = competitors.citedRows
-        .filter((row) => row.citationOccurrences > 0)
-        .map((row) => row.name)
-        .join(", ")
-    /** Answers discounted on either axis because our own question named the rival. */
-    const excludedTotal =
+    const leaderboard = [
+        {
+            id: "__brand__",
+            name: subjectName,
+            namedAnswers: brand.namedAnswers,
+            own: true,
+        },
+        ...rivalRows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            namedAnswers: row.namedAnswers,
+            own: false,
+        })),
+    ].sort((a, b) => b.namedAnswers - a.namedAnswers || a.name.localeCompare(b.name))
+
+    const leaderMax = Math.max(1, ...leaderboard.map((row) => row.namedAnswers))
+    const excludedMentions =
         competitors.promptInducedNamedAnswersExcluded +
         competitors.promptInducedCitedAnswersExcluded
 
+    const citationCounts = citationBreakdown
+        ? citationBreakdown.byType.reduce(
+              (totals, row) => {
+                  if (row.actionability === "publish") totals.publish += row.citations
+                  else if (row.actionability === "earn") totals.earn += row.citations
+                  else totals.excluded += row.citations
+                  return totals
+              },
+              { publish: 0, earn: 0, excluded: 0 },
+          )
+        : { publish: 0, earn: 0, excluded: 0 }
+    const excludedCitationShare = citationBreakdown
+        ? Math.max(0, citationBreakdown.reportOnlyShare + citationBreakdown.reviewShare)
+        : 0
+    const cycle = actionPhase(actionSummary)
+    const capacityTotal = Math.max(
+        actionSummary.eligibleCount,
+        actionSummary.selectedCount + actionSummary.backlogCount,
+    )
+
     return (
-        <>
-            <section className="mt-10">
-                <div className="rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-surface)] p-6">
-                    <div className="flex flex-wrap items-end gap-6">
-                        <div>
-                            {/*
-                              * THE HEADLINE IS RECOMMENDATION VISIBILITY.
-                              *
-                              * It used to be named-answers over ALL answers. A
-                              * live run scored 10% that way, and an unknown
-                              * share of the denominator were tutorials an
-                              * assistant answers without naming any product —
-                              * questions where the brand had no chance to be
-                              * chosen because nothing was being chosen.
-                              *
-                              * Now the denominator is only the questions that
-                              * create a selection set. Zero of those is a fact
-                              * about the question set, not a score, so it says
-                              * so instead of printing 0%.
-                              */}
-                            {brand.selectionQuestions > 0 ? (
-                                <>
-                                    <div className="text-5xl font-semibold leading-none tabular-nums text-[var(--viz-ink)]">
-                                        {rate(brand.selectionLedQuestions, brand.selectionQuestions)}
-                                    </div>
-                                    <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--viz-ink-secondary)]">
-                                        recommendation visibility
-                                        <InfoHint label="What recommendation visibility measures">
-                                            <p>
-                                                Of the {brand.selectionQuestions} questions where a
-                                                buyer was actually choosing a tool,{" "}
-                                                {subjectName} was named first in{" "}
-                                                {brand.selectionLedQuestions} and named at all in{" "}
-                                                {brand.selectionNamedQuestions}.
-                                            </p>
-                                            <p className="mt-2">
-                                                The other {brand.organicQuestions} questions can be
-                                                answered without naming any product — an assistant
-                                                replies with technique. Being absent from those is
-                                                not a competitive loss, so they are counted
-                                                separately and never in this number.
-                                            </p>
-                                        </InfoHint>
-                                    </p>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="text-3xl font-semibold leading-tight text-[var(--viz-ink)]">
-                                        No buying moment measured
-                                    </div>
-                                    <p className="mt-2 max-w-md text-sm text-[var(--viz-ink-secondary)]">
-                                        None of these {brand.questionsTotal} questions makes an
-                                        assistant choose between products, so this run cannot say
-                                        whether {subjectName} would be recommended. Regenerate the
-                                        question set.
-                                    </p>
-                                </>
-                            )}
-                        </div>
-                        <div className="text-sm leading-relaxed text-[var(--viz-ink-secondary)] sm:ml-auto sm:text-right">
-                            <div className="flex items-center gap-1.5 sm:justify-end">
-                                <span>
-                                    Named in <strong className="text-[var(--viz-ink)]">{brand.namedAnswers}/{brand.answersTotal}</strong> answers
-                                </span>
-                                <InfoHint
-                                    align="end"
-                                    label="What named and cited mean, and why they differ"
-                                >
-                                    <p>
-                                        <strong className="text-[var(--viz-ink)]">Named</strong> —
-                                        the answer says your brand name in its text.
-                                    </p>
-                                    <p className="mt-2">
-                                        <strong className="text-[var(--viz-ink)]">Cited</strong> —
-                                        the answer links to a page on your site as a source.
-                                    </p>
-                                    <p className="mt-2">
-                                        These are independent: an answer can do either without the
-                                        other, so the two figures are not two slices of one total
-                                        and are not meant to add up.
-                                    </p>
-                                    <p className="mt-2">
-                                        Both count answers rather than questions, because an
-                                        answer is what does the naming and the linking.
-                                    </p>
-                                </InfoHint>
-                            </div>
-                            <div>
-                                Cited in <strong className="text-[var(--viz-ink)]">{brand.citedAnswers}/{brand.answersTotal}</strong> answers
-                            </div>
-                            {brand.organicQuestions > 0 && (
-                                <div className="mt-1 text-[var(--viz-ink-muted)]">
-                                    Organic mentions{" "}
-                                    <strong className="text-[var(--viz-ink-secondary)]">
-                                        {brand.organicNamedQuestions}/{brand.organicQuestions}
-                                    </strong>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/*
-                      * Two plain sentences, not two equations.
-                      *
-                      * This was `40 questions = 2 + 2 + 36` stacked on top of
-                      * `40 answers = 3 + 1 + 1 + 35`, annotated with
-                      * "denominator" and "mutually exclusive". The founder could
-                      * not read their own report: naming and citing are
-                      * independent axes, and presenting them as two partitions
-                      * of the same 40 makes a reader try to reconcile numbers
-                      * that were never meant to reconcile.
-                      *
-                      * So: say what happened, then say plainly that the two
-                      * things are counted separately. Every figure is still
-                      * exact and still checkable against the rows below.
-                      */}
-                    <div className="mt-5 space-y-3 border-t border-[var(--viz-hairline)] pt-4 text-sm leading-relaxed text-[var(--viz-ink-secondary)]">
-                        <p>
-                            An assistant named {subjectName} in{" "}
-                            <strong className="text-[var(--viz-ink)]">
-                                {namedQuestions} of the {brand.questionsTotal} questions
-                            </strong>
-                            {namedQuestions > 0 && (
-                                brand.namedNeverFirstQuestions === 0
-                                    ? <> — and named you <strong className="text-[var(--viz-ink)]">first</strong> every time</>
-                                    : <> — naming you first in <strong className="text-[var(--viz-ink)]">{brand.ledQuestions}</strong>, and after a rival in {brand.namedNeverFirstQuestions}</>
-                            )}
-                            . The other {brand.notNamedQuestions} never named you.
-                        </p>
-                        {/*
-                          * The "named vs linked are different things" explanation
-                          * moved to the hint on the Named/Cited figures above.
-                          * It is standing information — true on every run, read
-                          * once — and it was pushing the numbers below the fold.
-                          * What stays here is this run's actual breakdown.
-                          */}
-                        <p>
-                            {brand.namedAndCitedAnswers > 0 && (
-                                <>
-                                    <strong className="text-[var(--viz-ink)]">{brand.namedAndCitedAnswers}</strong>{" "}
-                                    {brand.namedAndCitedAnswers === 1 ? "answer" : "answers"} did both
-                                    {brand.namedOnlyAnswers + brand.citedOnlyAnswers > 0 ? ", " : ". "}
-                                </>
-                            )}
-                            {brand.namedOnlyAnswers > 0 && (
-                                <>
-                                    <strong className="text-[var(--viz-ink)]">{brand.namedOnlyAnswers}</strong> named you
-                                    without linking{brand.citedOnlyAnswers > 0 ? ", and " : ". "}
-                                </>
-                            )}
-                            {brand.citedOnlyAnswers > 0 && (
-                                <>
-                                    <strong className="text-[var(--viz-ink)]">{brand.citedOnlyAnswers}</strong> linked to
-                                    your site without naming you.{" "}
-                                </>
-                            )}
-                            The remaining {brand.neitherAnswers} did neither.
-                        </p>
-                    </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <Metric
-                        value={`${brand.namedAnswers}/${brand.answersTotal}`}
-                        label={`answers naming ${subjectName}`}
-                    />
-                    <Metric
-                        value={`${brand.citedAnswers}/${brand.answersTotal}`}
-                        label="answers citing your site"
-                    />
-                    <Metric
-                        value={`${brand.ledQuestions}/${brand.questionsTotal}`}
-                        label="questions where you were named first"
-                    />
-                    <Metric
-                        value={`${brand.namedNeverFirstQuestions}/${brand.questionsTotal}`}
-                        label="questions where you were named, never first"
-                    />
-                </div>
-            </section>
-
-            {/*
-              * ONE section, not two.
-              *
-              * This was "Who was named instead" and "Who was cited instead":
-              * nine columns across two tables, four of which duplicated each
-              * other on any single-engine run (`namedQuestions` = `namedAnswers`,
-              * `citingQuestions` = `citingAnswers`, because 40 questions produced
-              * 40 answers). A reader hunting for the difference between two
-              * identical columns concludes the report is unreliable, and the
-              * founder did.
-              *
-              * The two tables also read as a contradiction — an all-zero naming
-              * table beside a citation table full of numbers — because they
-              * applied OPPOSITE exclusion rules. That is fixed upstream in
-              * `visibility-summary.ts`; both halves now discount evidence our
-              * own question caused, and the discarded total is stated once here
-              * instead of as two conflicting footnotes.
-              *
-              * Everything is counted per ANSWER. A question does not cite or
-              * name anything; the answer to it does. "Citing questions" was a
-              * category error as well as a duplicate.
-              */}
-            <section className="mt-12">
+        <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
+            <Panel>
                 <SectionHeading
-                    title="How your rivals showed up"
-                    hintLabel="What recommended and used as a source mean"
+                    size="card"
+                    title="Where you stand"
+                    sub={`All ${brand.questionsTotal} questions, by how the answers treated you.`}
+                    hintLabel="How the question verdicts are counted"
+                    hint={
+                        <p>
+                            Each question gets one verdict after every stored answer is checked.
+                            Named first, named but never first, and not named are mutually exclusive,
+                            so the bar is a complete partition of the measured set.
+                        </p>
+                    }
+                >
+                    <Meta>{brand.questionsTotal} questions</Meta>
+                </SectionHeading>
+
+                {brand.questionsTotal > 0 ? (
+                    <>
+                        <div className="mt-[22px]">
+                            <StackedPill
+                                segments={[
+                                    {
+                                        value: brand.ledQuestions,
+                                        color: "var(--viz-good)",
+                                        labelInk: "#ffffff",
+                                        label: `${brand.ledQuestions} named first`,
+                                    },
+                                    {
+                                        value: brand.namedNeverFirstQuestions,
+                                        color: "var(--viz-warning)",
+                                        labelInk: "#3d2900",
+                                        label: `${brand.namedNeverFirstQuestions} not first`,
+                                    },
+                                    {
+                                        value: brand.notNamedQuestions,
+                                        color: "var(--viz-critical)",
+                                        labelInk: "#ffffff",
+                                        label: `${brand.notNamedQuestions} not named`,
+                                    },
+                                ]}
+                            />
+                        </div>
+                        <div className="mt-5 flex flex-col gap-[11px]">
+                            <LegendRow
+                                color="var(--viz-good)"
+                                label="Named first"
+                                value={String(brand.ledQuestions)}
+                                share={percent(brand.ledQuestions, brand.questionsTotal)}
+                            />
+                            <LegendRow
+                                color="var(--viz-warning)"
+                                label="Named, never first"
+                                value={String(brand.namedNeverFirstQuestions)}
+                                share={percent(
+                                    brand.namedNeverFirstQuestions,
+                                    brand.questionsTotal,
+                                )}
+                            />
+                            <LegendRow
+                                color="var(--viz-critical)"
+                                label="Not named in any answer"
+                                value={String(brand.notNamedQuestions)}
+                                share={percent(brand.notNamedQuestions, brand.questionsTotal)}
+                                emphasis
+                            />
+                        </div>
+                    </>
+                ) : (
+                    <p className="mt-8 text-sm text-[var(--viz-ink-muted)]">
+                        No questions were measured in this run.
+                    </p>
+                )}
+            </Panel>
+
+            <Panel>
+                <SectionHeading
+                    size="card"
+                    title="Who was named instead"
+                    sub="Tracked rivals. Mentions our own question caused are excluded."
+                    hintLabel="How rival recommendations are counted"
+                    hint={
+                        <p>
+                            Bars share one fixed scale: the most-named brand fills the track and
+                            every other bar is sized against it. An empty track means the brand was
+                            never named, not that a measured rate rounded down to zero.
+                        </p>
+                    }
+                >
+                    <Meta>{competitors.trackedCount} tracked</Meta>
+                </SectionHeading>
+
+                <div className="mt-5 flex flex-col gap-2.5">
+                    {leaderboard.map((row) => (
+                        <div key={row.id} className="flex min-w-0 items-center gap-2.5">
+                            <Badge label={row.name} own={row.own} />
+                            {onFocusRival && !row.own ? (
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        onFocusRival(row.id, `answers involving ${row.name}`)
+                                    }
+                                    className="w-[5.25rem] shrink-0 truncate text-left text-[13px] text-[var(--viz-ink-secondary)] underline decoration-dotted underline-offset-4 transition hover:text-[var(--viz-series-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--viz-series-1)]"
+                                >
+                                    {row.name}
+                                </button>
+                            ) : (
+                                <span
+                                    className={`w-[5.25rem] shrink-0 truncate text-[13px] ${
+                                        row.own
+                                            ? "font-semibold text-[var(--viz-ink)]"
+                                            : "text-[var(--viz-ink-secondary)]"
+                                    }`}
+                                >
+                                    {row.name}
+                                </span>
+                            )}
+                            <span className="min-w-0 flex-1">
+                                <Bar
+                                    value={row.namedAnswers}
+                                    max={leaderMax}
+                                    label={percent(row.namedAnswers, brand.answersTotal)}
+                                    color={
+                                        row.own ? "var(--viz-series-1)" : "var(--viz-warning)"
+                                    }
+                                    labelInk={row.own ? "#ffffff" : "#3d2900"}
+                                    emptyReason="never named"
+                                />
+                            </span>
+                        </div>
+                    ))}
+                </div>
+
+                {excludedMentions > 0 && (
+                    <p className="mt-4 border-t border-[var(--viz-hairline)] pt-3 text-[11px] text-[var(--viz-ink-muted)]">
+                        {excludedMentions} prompt-induced {excludedMentions === 1 ? "mention" : "mentions"} excluded from this table.
+                    </p>
+                )}
+            </Panel>
+
+            <Panel>
+                <SectionHeading
+                    size="card"
+                    title="What the answers were built from"
+                    sub="Cited sources, by whether you could publish into them."
+                    hintLabel="How citations become production decisions"
+                    hint={
+                        <p>
+                            Owned and competitor pages point to publishing work; external lists,
+                            communities and press require earned placement. Report-only and
+                            unresolved sources are excluded from automatic production and shown as
+                            hatching because they are different in kind.
+                        </p>
+                    }
+                >
+                    <Meta>{citationBreakdown?.totalCitations ?? 0} citations</Meta>
+                </SectionHeading>
+
+                {citationBreakdown && citationBreakdown.totalCitations > 0 ? (
+                    <>
+                        <div className="mt-[22px]">
+                            <StackedPill
+                                segments={[
+                                    {
+                                        value: citationBreakdown.publishShare,
+                                        color: "var(--viz-series-1)",
+                                        labelInk: "#ffffff",
+                                        label: `${citationBreakdown.publishShare}%`,
+                                    },
+                                    {
+                                        value: citationBreakdown.earnShare,
+                                        color: "var(--viz-seq-200)",
+                                        labelInk: "#14375f",
+                                        label: `${citationBreakdown.earnShare}%`,
+                                    },
+                                    {
+                                        value: excludedCitationShare,
+                                        color: "",
+                                        labelInk: "var(--viz-ink-secondary)",
+                                        label: `${excludedCitationShare}%`,
+                                        hatched: true,
+                                    },
+                                ]}
+                            />
+                        </div>
+                        <div className="mt-5 flex flex-col gap-[11px]">
+                            <LegendRow
+                                color="var(--viz-series-1)"
+                                label="You can publish this"
+                                value={`${citationCounts.publish} citations`}
+                            />
+                            <LegendRow
+                                color="var(--viz-seq-200)"
+                                label="You have to earn this"
+                                value={`${citationCounts.earn} citations`}
+                            />
+                            <LegendRow
+                                hatched
+                                label="Excluded from production"
+                                value={`${citationCounts.excluded} citations`}
+                            />
+                        </div>
+                    </>
+                ) : (
+                    <p className="mt-8 text-sm text-[var(--viz-ink-muted)]">
+                        No cited sources were returned in this run.
+                    </p>
+                )}
+            </Panel>
+
+            <Panel>
+                <SectionHeading
+                    size="card"
+                    title="This cycle's actions"
+                    sub={`Site-aware create and refresh groups. Up to ${actionSummary.allowance} selected.`}
+                    hintLabel="Why a losing question is not automatically an article"
                     hint={
                         <>
                             <p>
-                                Two different things, and a rival can do either without the
-                                other.
+                                A losing question is evidence about an AI answer, not proof that
+                                your site needs another article. Existing-page coverage and grouped
+                                target review decide whether the remedy is a refresh, a new page, or
+                                report-only.
                             </p>
                             <p className="mt-2">
-                                <strong className="text-[var(--viz-ink)]">Recommended</strong> —
-                                an answer named them to your buyer.
-                            </p>
-                            <p className="mt-2">
-                                <strong className="text-[var(--viz-ink)]">
-                                    Used as a source
-                                </strong>{" "}
-                                — the engine read one of their pages to build the answer. Their
-                                content is feeding the machine even when their name never
-                                appears, which is usually the more actionable of the two.
-                            </p>
-                            <p className="mt-2">
-                                Both are counted per answer. A question does not name or cite
-                                anything; the answer to it does.
+                                Only confirmed grouped create/refresh actions consume production
+                                capacity. Suggestions waiting for review are not described as
+                                producing.
                             </p>
                         </>
                     }
-                />
+                >
+                    <Meta>{actionSummary.eligibleCount} found</Meta>
+                </SectionHeading>
 
-                <p className="mt-4 max-w-3xl rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-plane)] p-4 text-sm leading-relaxed text-[var(--viz-ink-secondary)]">
-                    {unpromptedTotal === 0 ? (
-                        <>
-                            Across all {brand.answersTotal} answers,{" "}
-                            <strong className="text-[var(--viz-ink)]">
-                                none of your {competitors.trackedCount} tracked rivals was
-                                recommended by name
-                            </strong>
-                            .{" "}
-                        </>
-                    ) : (
-                        <>
-                            Your tracked rivals were recommended by name{" "}
-                            <strong className="text-[var(--viz-ink)]">{unpromptedTotal}</strong>{" "}
-                            {unpromptedTotal === 1 ? "time" : "times"}.{" "}
-                        </>
+                <div className="mt-[18px] flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-[32px] font-semibold leading-none tabular-nums tracking-[-0.02em]">
+                        {cycle.value}
+                    </span>
+                    <span className="text-[13px] text-[var(--viz-ink-secondary)]">
+                        {cycle.label}
+                    </span>
+                    {cycle.backlogLabel && (
+                        <span className="ml-auto text-[13px] tabular-nums text-[var(--viz-ink-muted)]">
+                            {cycle.backlogLabel}
+                        </span>
                     )}
-                    {competitors.citingAnswers > 0 ? (
-                        <>
-                            {citedCompetitorNames} {citedCompetitorCount === 1 ? "was" : "were"}{" "}
-                            used as a source in{" "}
-                            <strong className="text-[var(--viz-ink)]">
-                                {competitors.citingAnswers}
-                            </strong>{" "}
-                            of them.
-                        </>
-                    ) : (
-                        <>No tracked rival was used as a source either.</>
-                    )}
-                    {excludedTotal > 0 && (
-                        <>
-                            {" "}
-                            <span className="text-[var(--viz-ink-muted)]">
-                                {excludedTotal} further {excludedTotal === 1 ? "answer" : "answers"}{" "}
-                                mentioned or cited a rival only because our own question named it;
-                                those are excluded from every number here.
-                            </span>
-                        </>
-                    )}
-                </p>
-
-                <div className="mt-5 overflow-x-auto rounded-lg border border-[var(--viz-hairline)] bg-[var(--viz-surface)]">
-                    <table className="w-full min-w-[560px] text-sm">
-                        <thead className="border-b border-[var(--viz-hairline)] text-left text-xs text-[var(--viz-ink-muted)]">
-                            <tr>
-                                <th className="px-4 py-3 font-medium">Tracked rival</th>
-                                <th className="px-4 py-3 text-right font-medium">
-                                    Recommended
-                                    <span className="block font-normal opacity-70">answers</span>
-                                </th>
-                                <th className="px-4 py-3 text-right font-medium">
-                                    Used as a source
-                                    <span className="block font-normal opacity-70">answers</span>
-                                </th>
-                                <th className="px-4 py-3 text-right font-medium">
-                                    Pages cited
-                                    <span className="block font-normal opacity-70">total</span>
-                                </th>
-                                <th className="px-4 py-3 text-right font-medium">
-                                    You appeared too
-                                    <span className="block font-normal opacity-70">answers</span>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[var(--viz-hairline)]">
-                            {rivalRows.map((row) => (
-                                <tr key={row.id}>
-                                    <td className="px-4 py-3">
-                                        {onFocusRival ? (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    onFocusRival(
-                                                        row.id,
-                                                        `answers involving ${row.name}`,
-                                                    )
-                                                }
-                                                className="text-left font-medium text-[var(--viz-ink)] underline decoration-dotted underline-offset-4 transition hover:text-[var(--viz-series-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--viz-series-1)]"
-                                            >
-                                                {row.name}
-                                            </button>
-                                        ) : (
-                                            <div className="font-medium text-[var(--viz-ink)]">{row.name}</div>
-                                        )}
-                                        {row.domain && row.domain !== row.name && (
-                                            <div className="text-xs text-[var(--viz-ink-muted)]">{row.domain}</div>
-                                        )}
-                                    </td>
-                                    <td className="px-4 py-3 text-right tabular-nums">{row.namedAnswers}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums">{row.citingAnswers}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums">{row.citationOccurrences}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums">{row.brandNamedAlongsideAnswers}</td>
-                                </tr>
-                            ))}
-                            {rivalRows.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="px-4 py-5 text-center text-[var(--viz-ink-muted)]">
-                                        No competitors were tracked, so rival visibility could not be
-                                        measured.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
                 </div>
-            </section>
-        </>
+
+                {capacityTotal > 0 && capacityTotal <= 60 && (
+                    <div className="mt-4">
+                        <CapacityStrip
+                            filled={actionSummary.selectedCount}
+                            total={capacityTotal}
+                            filledColor="#7c3aed"
+                            restColor="#ede9fe"
+                        />
+                    </div>
+                )}
+
+                <div className="mt-[18px] flex flex-col gap-2 border-t border-[var(--viz-hairline)] pt-[15px]">
+                    {actionSummary.items.slice(0, 3).map((item) => (
+                        <div key={item.id} className="flex min-w-0 items-center gap-2 text-[13px]">
+                            <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${actionChip(item.kind)}`}
+                            >
+                                {actionLabel(item.kind)}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-[var(--viz-ink-secondary)]">
+                                {item.targetUrl || item.title}
+                            </span>
+                            <span className="shrink-0 tabular-nums text-[var(--viz-ink-muted)]">
+                                {item.questionCount} {item.questionCount === 1 ? "question" : "questions"}
+                            </span>
+                        </div>
+                    ))}
+                    {actionSummary.items.length === 0 && (
+                        <p className="text-xs text-[var(--viz-ink-muted)]">
+                            No grouped action record exists for this measurement yet.
+                        </p>
+                    )}
+                </div>
+            </Panel>
+        </div>
     )
 }

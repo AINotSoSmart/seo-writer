@@ -16,7 +16,6 @@
  */
 
 import Link from "next/link"
-import { ArrowRight, Sparkles } from "lucide-react"
 
 import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
@@ -26,6 +25,11 @@ import {
     type DashboardEngine,
     type DashboardPrompt,
 } from "@/components/visibility/visibility-dashboard"
+import type {
+    DashboardActionItem,
+    DashboardActionSummary,
+    DashboardQuestionAction,
+} from "@/components/visibility/dashboard-model"
 import { PaidProbeConsole } from "@/components/visibility/paid-probe-console"
 import {
     deriveQuestionVerdict,
@@ -35,8 +39,12 @@ import {
 import { extractHostname, type CompetitorMention } from "@/lib/visibility/answer-parser"
 import { isSelectionClass } from "@/lib/visibility/selection-class"
 
-type ProbePromptRow = DashboardPrompt & {
+type ProbePromptRow = Omit<
+    DashboardPrompt,
+    "scopeFamilyName" | "citationCount" | "action"
+> & {
     tracked_prompt_id: string | null
+    scope_family_id: string
     selection_class: string | null
 }
 
@@ -65,6 +73,29 @@ interface TrackedCompetitorRow {
     domain?: unknown
 }
 
+interface ActionProposalRow {
+    id: string
+    resolution_type: "create" | "refresh" | "report_only"
+    title: string
+    target_url: string | null
+    status: "suggested" | "confirmed" | "rejected"
+    priority: number
+}
+
+interface ProposalPromptLinkRow {
+    proposal_id: string
+    tracked_prompt_id: string
+}
+
+interface CycleActionRow {
+    id: string
+    proposal_id: string | null
+    resolution_type: "create" | "refresh"
+    state: string
+    rank: number
+    target_url: string | null
+}
+
 export default async function VisibilityPage() {
     const supabase = await createClient()
     const {
@@ -80,7 +111,7 @@ export default async function VisibilityPage() {
         admin
             .from("ai_probe_runs")
             .select(
-                "id, brand_id, subject_name, subject_domains, competitors, status, engines, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id",
+                "id, brand_id, subject_name, subject_domains, competitors, status, engines, country_code, prompt_count, answer_count, credits_used, engine_ledger, summary, clusters, started_at, audit_id",
             )
             .eq("user_id", user.id)
             .eq("status", "completed")
@@ -111,11 +142,17 @@ export default async function VisibilityPage() {
         )
     }
 
-    const [{ data: promptRows }, { data: resultRows }] = await Promise.all([
+    const [
+        { data: promptRows },
+        { data: resultRows },
+        { data: scopeFamilyRows },
+        { data: proposalSet },
+        { data: cycle },
+    ] = await Promise.all([
         admin
             .from("ai_probe_prompts")
             .select(
-                "id, tracked_prompt_id, prompt, intent, verdict, answers_total, answers_present, mean_mention_position, selection_class",
+                "id, tracked_prompt_id, scope_family_id, prompt, intent, verdict, answers_total, answers_present, mean_mention_position, selection_class",
             )
             .eq("run_id", run.id),
         // Counted facts only — the answer text is never loaded here, only when
@@ -126,10 +163,58 @@ export default async function VisibilityPage() {
                 "prompt_id, engine, surface, mention_count, citation_count, mention_position, competitor_mentions, citations",
             )
             .eq("run_id", run.id),
+        run.audit_id
+            ? admin
+                  .from("audit_scope_families")
+                  .select("id, name")
+                  .eq("audit_id", run.audit_id)
+            : Promise.resolve({ data: [] }),
+        admin
+            .from("action_proposal_sets")
+            .select("id, state")
+            .eq("measurement_run_id", run.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        admin
+            .from("subscription_cycles")
+            .select(
+                "id, state, action_allowance, eligible_action_groups, backlog_action_groups",
+            )
+            .eq("measurement_run_id", run.id)
+            .maybeSingle(),
     ])
 
     const observedPrompts = (promptRows || []) as ProbePromptRow[]
     const observedResults = (resultRows || []) as ProbeResultRow[]
+
+    const [{ data: actionProposalRows }, { data: cycleActionRows }] = await Promise.all([
+        proposalSet
+            ? admin
+                  .from("action_proposals")
+                  .select("id, resolution_type, title, target_url, status, priority")
+                  .eq("proposal_set_id", proposalSet.id)
+                  .order("priority", { ascending: false })
+            : Promise.resolve({ data: [] }),
+        cycle
+            ? admin
+                  .from("cycle_actions")
+                  .select("id, proposal_id, resolution_type, state, rank, target_url")
+                  .eq("cycle_id", cycle.id)
+                  .order("rank", { ascending: true })
+            : Promise.resolve({ data: [] }),
+    ])
+
+    const proposals = (actionProposalRows || []) as ActionProposalRow[]
+    const cycleActions = (cycleActionRows || []) as CycleActionRow[]
+    const proposalIds = proposals.map((proposal) => proposal.id)
+    const { data: proposalPromptLinkRows } = proposalIds.length
+        ? await admin
+              .from("action_proposal_prompts")
+              .select("proposal_id, tracked_prompt_id")
+              .in("proposal_id", proposalIds)
+        : { data: [] }
+    const proposalPromptLinks = (proposalPromptLinkRows || []) as ProposalPromptLinkRow[]
 
     const trackedCompetitors = Array.isArray(run.competitors)
         ? (run.competitors as TrackedCompetitorRow[]).map((competitor) => ({
@@ -152,6 +237,81 @@ export default async function VisibilityPage() {
                 : [],
         })
         factsByPrompt.set(result.prompt_id, rows)
+    }
+
+    const scopeFamilyNameById = new Map<string, string>(
+        (scopeFamilyRows || []).map((family: { id: string; name: string }) => [
+            family.id,
+            family.name,
+        ]),
+    )
+    const proposalById = new Map(proposals.map((proposal) => [proposal.id, proposal]))
+    const cycleActionByProposalId = new Map(
+        cycleActions
+            .filter((action) => action.proposal_id)
+            .map((action) => [action.proposal_id as string, action]),
+    )
+    const linksByProposalId = new Map<string, ProposalPromptLinkRow[]>()
+    const questionActionByTrackedId = new Map<string, DashboardQuestionAction>()
+    for (const link of proposalPromptLinks) {
+        const links = linksByProposalId.get(link.proposal_id) ?? []
+        links.push(link)
+        linksByProposalId.set(link.proposal_id, links)
+
+        const proposal = proposalById.get(link.proposal_id)
+        if (!proposal || proposal.status === "rejected") continue
+        questionActionByTrackedId.set(link.tracked_prompt_id, {
+            id: proposal.id,
+            kind: proposal.resolution_type,
+            title: proposal.title,
+            targetUrl: proposal.target_url,
+            status: proposal.status,
+        })
+    }
+
+    const activeProposals = proposals.filter((proposal) => proposal.status !== "rejected")
+    const productionProposals = activeProposals.filter(
+        (proposal) => proposal.resolution_type !== "report_only",
+    )
+    const actionItems: DashboardActionItem[] = activeProposals.map((proposal) => ({
+        id: proposal.id,
+        kind: proposal.resolution_type,
+        title: proposal.title,
+        targetUrl: proposal.target_url,
+        status: proposal.status,
+        questionCount: linksByProposalId.get(proposal.id)?.length ?? 0,
+        productionState: cycleActionByProposalId.get(proposal.id)?.state ?? null,
+    }))
+    const selectedCount = cycleActions.length
+    const eligibleCount = Math.max(
+        Number(cycle?.eligible_action_groups ?? 0),
+        productionProposals.length,
+    )
+    const backlogCount = cycle
+        ? Number(cycle.backlog_action_groups ?? 0)
+        : Math.max(eligibleCount - selectedCount, 0)
+    const actionPhase: DashboardActionSummary["phase"] =
+        proposalSet?.state === "review"
+            ? "review"
+            : cycle?.state === "producing"
+              ? "producing"
+              : cycle?.state === "ready"
+                ? "ready"
+                : cycle?.state === "delivered"
+                  ? "delivered"
+                  : cycle?.state === "failed" || proposalSet?.state === "failed"
+                    ? "failed"
+                    : "none"
+    const actionSummary: DashboardActionSummary = {
+        phase: actionPhase,
+        allowance: Number(cycle?.action_allowance ?? 8),
+        eligibleCount,
+        selectedCount,
+        backlogCount,
+        reportOnlyCount: activeProposals.filter(
+            (proposal) => proposal.resolution_type === "report_only",
+        ).length,
+        items: actionItems,
     }
 
     /**
@@ -196,6 +356,12 @@ export default async function VisibilityPage() {
 
     const dashboardPrompts: DashboardPrompt[] = observedPrompts.map((prompt) => ({
         ...prompt,
+        scopeFamilyName:
+            scopeFamilyNameById.get(prompt.scope_family_id) || "Other questions",
+        citationCount: (factsByPrompt.get(prompt.id) ?? []).reduce(
+            (total, fact) => total + fact.citationCount,
+            0,
+        ),
         verdict: deriveQuestionVerdict(
             factsByPrompt.get(prompt.id) ?? [],
             prompt.prompt,
@@ -203,6 +369,9 @@ export default async function VisibilityPage() {
         ),
         citedHosts: [...(citedHostsByPrompt.get(prompt.id) ?? [])],
         rivalIds: [...(rivalsByPrompt.get(prompt.id) ?? [])],
+        action: prompt.tracked_prompt_id
+            ? questionActionByTrackedId.get(prompt.tracked_prompt_id)
+            : undefined,
     }))
 
     const perEngineMap = new Map<
@@ -251,48 +420,39 @@ export default async function VisibilityPage() {
     })
 
     return (
-        <main className="mx-auto w-full max-w-6xl py-6">
-            <header className="mb-8 flex flex-col gap-5 border-b border-stone-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-600">
-                        <Sparkles className="h-4 w-4" />
-                        AI visibility
-                    </div>
-                    <h1 className="mt-2 font-serif text-3xl text-stone-900">
-                        What AI assistants say when buyers ask
-                    </h1>
-                    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-stone-600">
-                        Your confirmed buyer questions, put to the real ChatGPT and Google
-                        AI Mode. Every number below expands to the answer it came from —
-                        nothing here is a score you have to take on trust.
-                    </p>
-                </div>
-                <Link
-                    href="/content-plan"
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
-                >
-                    Review the delivery plan
-                    <ArrowRight className="h-4 w-4" />
-                </Link>
-            </header>
-
+        <main className="mx-auto w-full py-6">
             <VisibilityDashboard
                 runId={run.id}
                 subjectName={run.subject_name}
                 subjectDomains={run.subject_domains || []}
                 startedAt={run.started_at}
                 creditsUsed={run.credits_used ?? 0}
+                marketName={countryName(run.country_code)}
                 summary={{ ...(run.summary || {}), ...summaryV2 }}
                 prompts={dashboardPrompts}
                 engines={ledger}
                 clusters={run.clusters || []}
                 perEngine={[...perEngineMap.values()]}
                 auditId={run.audit_id}
+                actionSummary={actionSummary}
                 isAuthenticated
                 embedded
             />
         </main>
     )
+}
+
+function countryName(countryCode: string | null): string {
+    if (!countryCode) return "Global"
+    try {
+        return (
+            new Intl.DisplayNames(["en"], { type: "region" }).of(
+                countryCode.toUpperCase(),
+            ) || countryCode.toUpperCase()
+        )
+    } catch {
+        return countryCode.toUpperCase()
+    }
 }
 
 function NoRun() {

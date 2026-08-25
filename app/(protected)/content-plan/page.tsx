@@ -45,7 +45,7 @@ export default async function ContentPlanPage() {
         if (!scope) return <NoProgram />
 
         return (
-            <main className="mx-auto w-full max-w-6xl py-6">
+            <main className="mx-auto w-full py-6">
                 <header className="mb-7 flex items-start justify-between border-b border-stone-200 pb-6">
                     <div>
                         <h1 className="font-serif text-3xl text-stone-900">Proposed content work</h1>
@@ -144,7 +144,7 @@ export default async function ContentPlanPage() {
     const delivered = allActions.filter((action: any) => action.state === "delivered").length
 
     return (
-        <main className="mx-auto w-full max-w-6xl py-6">
+        <main className="mx-auto w-full py-6">
             <header className="flex items-start justify-between border-b border-stone-200 pb-6">
                 <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">

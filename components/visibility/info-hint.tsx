@@ -113,20 +113,54 @@ export function SectionHeading({
     title,
     hintLabel,
     hint,
+    sub,
+    size = "section",
     children,
 }: {
     title: string
     hintLabel?: string
     hint?: React.ReactNode
+    /**
+     * One line under the title saying what the panel is counting.
+     *
+     * Card headers carry it; full sections generally do not, because a section
+     * has room for its explanation to be a hint the reader opens.
+     */
+    sub?: string
+    /**
+     * `"card"` is the header of a panel inside a grid, `"section"` is the
+     * header of a whole region of the report.
+     *
+     * Two sizes rather than two components, so a panel promoted to a section
+     * (or demoted) keeps its hint, its title and its trailing slot, and only
+     * the type scale moves.
+     */
+    size?: "section" | "card"
     /** Optional trailing content, e.g. a filter control, right-aligned. */
     children?: React.ReactNode
 }) {
+    const card = size === "card"
     return (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="flex items-center gap-1.5 text-xl font-semibold text-[var(--viz-ink)]">
-                {title}
-                {hint && <InfoHint label={hintLabel ?? `About ${title}`}>{hint}</InfoHint>}
-            </h2>
+        <div
+            className={`flex flex-wrap gap-3 ${
+                card ? "items-baseline justify-between" : "items-center justify-between"
+            }`}
+        >
+            <div className="min-w-0">
+                <h2
+                    className={`flex items-center gap-1.5 font-semibold text-[var(--viz-ink)] ${
+                        card ? "text-sm" : "text-xl"
+                    }`}
+                >
+                    {title}
+                    {hint && <InfoHint label={hintLabel ?? `About ${title}`}>{hint}</InfoHint>}
+                </h2>
+                {sub && (
+                    <p className="mt-1 text-xs leading-snug text-[var(--viz-ink-secondary)]">
+                        {sub}
+                    </p>
+                )}
+            </div>
             {children}
         </div>
     )

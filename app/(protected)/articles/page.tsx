@@ -49,7 +49,7 @@ export default async function ArticlesPage() {
     })
 
     return (
-        <main className="mx-auto w-full max-w-6xl py-6">
+        <main className="mx-auto w-full py-6">
             <header className="mb-7">
                 <h1 className="font-serif text-3xl text-stone-900">Delivered articles</h1>
                 <p className="mt-2 text-sm text-stone-600">
