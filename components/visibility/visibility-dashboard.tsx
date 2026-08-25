@@ -44,7 +44,8 @@ import { VizTokens } from "./viz-tokens"
 import { VisibilityOverview } from "./visibility-overview"
 import { VisibilityQuestions } from "./visibility-questions"
 import { VisibilitySources } from "./visibility-sources"
-import { VisibilitySurfaces } from "./visibility-surfaces"
+import { VisibilityLists } from "./visibility-lists"
+import { VisibilitySurfacesSheet } from "./visibility-surfaces"
 import type {
     DashboardActionSummary,
     DashboardQuestionAction,
@@ -56,6 +57,7 @@ import {
     type SourceType,
 } from "@/lib/visibility/citation-classifier"
 import type { FanOutSummary } from "@/lib/visibility/fan-out"
+import type { SourceReport } from "@/lib/visibility/source-report"
 import { formatRunDate } from "@/lib/visibility/format-date"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -151,6 +153,7 @@ export interface DashboardProps {
     creditsUsed: number
     marketName: string
     summary: DashboardSummary
+    sourceReport: SourceReport
     prompts: DashboardPrompt[]
     engines: DashboardEngine[]
     clusters: DashboardCluster[]
@@ -206,6 +209,7 @@ export function VisibilityDashboard(props: DashboardProps) {
         creditsUsed,
         marketName,
         summary,
+        sourceReport,
         prompts,
         engines,
         perEngine,
@@ -235,22 +239,37 @@ export function VisibilityDashboard(props: DashboardProps) {
      * reachable and is usually the interesting set.
      */
     const [focus, setFocus] = useState<
-        { kind: "host" | "rival"; value: string; label: string } | null
+        | { kind: "host"; value: string; label: string }
+        | { kind: "rival"; value: string; label: string }
+        | { kind: "prompts"; values: string[]; label: string }
+        | null
     >(null)
     const [tab, setTab] = useState("overview")
+    const [sourceFocusHost, setSourceFocusHost] = useState<string | null>(null)
+    const [showSurfaces, setShowSurfaces] = useState(false)
 
     const focusOn = (kind: "host" | "rival", value: string, label: string) => {
         setFocus({ kind, value, label })
         setTab("questions")
     }
 
+    const openSources = (host?: string) => {
+        setSourceFocusHost(host ?? null)
+        setTab("sources")
+    }
+
+    const focusOnPrompts = (values: string[], label: string) => {
+        setFocus({ kind: "prompts", values, label })
+        setTab("questions")
+    }
+
     const questionPrompts = useMemo(() => {
         if (!focus) return prompts
-        return prompts.filter((prompt) =>
-            focus.kind === "host"
-                ? (prompt.citedHosts ?? []).includes(focus.value)
-                : (prompt.rivalIds ?? []).includes(focus.value),
-        )
+        return prompts.filter((prompt) => {
+            if (focus.kind === "host") return (prompt.citedHosts ?? []).includes(focus.value)
+            if (focus.kind === "rival") return (prompt.rivalIds ?? []).includes(focus.value)
+            return focus.values.includes(prompt.id)
+        })
     }, [prompts, focus])
 
     const brandV = summary.brandVisibility
@@ -273,8 +292,6 @@ export function VisibilityDashboard(props: DashboardProps) {
     const rankLeader = rankField[0]
 
     const breakdown = summary.citationBreakdown
-    const citationReviewQueue = summary.citationReviewQueue ?? []
-    const keyPages = summary.keyPages ?? []
     const fanOut = summary.fanOut
 
     const rivalNames = Object.fromEntries(
@@ -569,25 +586,42 @@ export function VisibilityDashboard(props: DashboardProps) {
                       * it lets the panel below start at the rule instead of
                       * below a floating chip.
                       */}
-                    <TabsList className="h-auto w-full justify-start gap-0.5 overflow-x-auto rounded-none border-b border-[var(--viz-hairline)] bg-transparent p-0">
-                        <TabsTrigger value="overview" className={TAB_CLASS}>
-                            Overview
-                        </TabsTrigger>
-                        {perEngine.length > 1 && (
-                            <TabsTrigger value="surfaces" className={TAB_CLASS}>
-                                Surfaces
+                    <div className="flex items-end border-b border-[var(--viz-hairline)]">
+                        <TabsList className="h-auto min-w-0 flex-1 justify-start gap-0.5 overflow-x-auto rounded-none bg-transparent p-0">
+                            <TabsTrigger value="overview" className={TAB_CLASS}>
+                                Overview
                             </TabsTrigger>
+                            <TabsTrigger value="questions" className={TAB_CLASS}>
+                                Questions
+                                <span className="rounded-full bg-[var(--viz-track)] px-1.5 py-px text-[11px] tabular-nums text-[var(--viz-ink-muted)]">
+                                    {prompts.length}
+                                </span>
+                            </TabsTrigger>
+                            <TabsTrigger value="sources" className={TAB_CLASS}>
+                                Sources
+                                <span className="rounded-full bg-[var(--viz-track)] px-1.5 py-px text-[11px] tabular-nums text-[var(--viz-ink-muted)]">
+                                    {sourceReport.distinctSites}
+                                </span>
+                            </TabsTrigger>
+                            <TabsTrigger value="lists" className={TAB_CLASS}>
+                                Lists they read
+                                <span className="rounded-full bg-[var(--viz-track)] px-1.5 py-px text-[11px] tabular-nums text-[var(--viz-ink-muted)]">
+                                    {sourceReport.listPages.length}
+                                </span>
+                            </TabsTrigger>
+                        </TabsList>
+                        {perEngine.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={() => setShowSurfaces(true)}
+                                aria-label="Compare measured surfaces"
+                                className="inline-flex shrink-0 items-center gap-1.5 px-2 py-2.5 text-xs font-medium text-[var(--viz-ink-secondary)] hover:text-[var(--viz-ink)] sm:px-3"
+                            >
+                                <BarChart3 className="size-3.5" aria-hidden />
+                                <span className="hidden sm:inline">Compare surfaces</span>
+                            </button>
                         )}
-                        <TabsTrigger value="sources" className={TAB_CLASS}>
-                            Sources
-                        </TabsTrigger>
-                        <TabsTrigger value="questions" className={TAB_CLASS}>
-                            Questions
-                            <span className="rounded-full bg-[var(--viz-track)] px-1.5 py-px text-[11px] tabular-nums text-[var(--viz-ink-muted)]">
-                                {prompts.length}
-                            </span>
-                        </TabsTrigger>
-                    </TabsList>
+                    </div>
 
                     <TabsContent value="overview">
                         <VisibilityOverview
@@ -595,28 +629,34 @@ export function VisibilityDashboard(props: DashboardProps) {
                             summary={summary}
                             actionSummary={actionSummary}
                             citationBreakdown={breakdown}
+                            sourceReport={sourceReport}
+                            onOpenSource={openSources}
                             onFocusRival={(competitorId, label) =>
                                 focusOn("rival", competitorId, label)
                             }
                         />
                     </TabsContent>
 
-                <TabsContent value="surfaces">
-                    <VisibilitySurfaces rows={perEngine} />
-                </TabsContent>
-
                 <TabsContent value="sources">
                     <VisibilitySources
+                        report={sourceReport}
                         promptCount={summary.promptCount}
-                        citedHosts={summary.citedHosts}
                         breakdown={breakdown}
-                        citationReviewQueue={citationReviewQueue}
-                        keyPages={keyPages}
                         fanOut={fanOut}
                         engineLabels={engineLabels}
+                        focusHost={sourceFocusHost}
                         onFocusHost={(host) =>
                             focusOn("host", host, `answers citing ${host}`)
                         }
+                        onOpenLists={() => setTab("lists")}
+                    />
+                </TabsContent>
+
+                <TabsContent value="lists">
+                    <VisibilityLists
+                        report={sourceReport}
+                        engineLabels={engineLabels}
+                        onFocusQuestions={focusOnPrompts}
                     />
                 </TabsContent>
 
@@ -632,7 +672,14 @@ export function VisibilityDashboard(props: DashboardProps) {
                         onClearFocus={() => setFocus(null)}
                     />
                 </TabsContent>
+
                 </Tabs>
+
+                <VisibilitySurfacesSheet
+                    rows={perEngine}
+                    open={showSurfaces}
+                    onOpenChange={setShowSurfaces}
+                />
 
                 {/* ── Method note ──────────────────────────────────────── */}
                 {/*

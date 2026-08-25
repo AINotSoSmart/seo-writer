@@ -4345,7 +4345,7 @@ test("unresolved citations are frozen into a founder-review queue", async () => 
     assert.match(mapper, /citation\.actionability === "review"/)
     assert.match(mapper, /\.slice\(0, 25\)/)
     assert.match(sources, /Sources awaiting founder review/)
-    assert.match(sources, /excluded from production until a\s+person reviews them/)
+    assert.match(sources, /excluded from production until a\s+person reviews\s+them/)
     assert.match(panel, /unresolved source cannot enter article production/)
 })
 
@@ -4353,17 +4353,17 @@ test("cited sources report co-occurrence, never a claim about the page", async (
     // We have not fetched the cited pages, so "this listicle omits you" is a
     // claim the data cannot support. What IS supportable is that the answers
     // citing it did not name you. The wording has to keep those apart.
-    const [mapper, sources] = await Promise.all([
+    const [mapper, lists] = await Promise.all([
         text("lib/visibility/gap-mapper.ts"),
-        text("components/visibility/visibility-sources.tsx"),
+        text("components/visibility/visibility-lists.tsx"),
     ])
 
     assert.match(mapper, /answersNaming/)
     assert.match(mapper, /co-occurrence/)
     // The UI states the limit next to the claim. Whitespace-tolerant: this is
     // prose inside JSX and the formatter is free to wrap it anywhere.
-    assert.match(sources, /describes the answers, not the\s+page/)
-    assert.match(sources, /haven&apos;t fetched these pages/)
+    assert.match(lists, /describes the answers, not the\s+page/)
+    assert.match(lists, /haven&apos;t fetched these pages/)
 })
 
 test("the method panel reads its values from the code that computes them", async () => {
@@ -5553,6 +5553,41 @@ test("a probe measures the customer's market, not a default one", async () => {
     assert.doesNotMatch(profile, /target_language/)
 })
 
+test("source reporting keeps citations, answers, and questions as separate facts", async () => {
+    const [model, page] = await Promise.all([
+        text("lib/visibility/source-report.ts"),
+        text("app/(protected)/visibility/page.tsx"),
+    ])
+
+    assert.match(model, /citationCount/)
+    assert.match(model, /answerKeys: Set<string>/)
+    assert.match(model, /questionIds: Set<string>/)
+    assert.match(model, /namingAnswerKeys: Set<string>/)
+    assert.match(model, /buildSourceReport/)
+    assert.match(page, /sourceReport = buildSourceReport/)
+    assert.match(page, /sourceReport=\{sourceReport\}/)
+})
+
+test("sources and influential lists are separate evidence workflows", async () => {
+    const [dashboard, overview, sources, lists] = await Promise.all([
+        text("components/visibility/visibility-dashboard.tsx"),
+        text("components/visibility/visibility-overview.tsx"),
+        text("components/visibility/visibility-sources.tsx"),
+        text("components/visibility/visibility-lists.tsx"),
+    ])
+
+    assert.match(dashboard, /<TabsTrigger value="lists"/)
+    assert.match(dashboard, /Lists they read/)
+    assert.match(dashboard, /<VisibilityLists/)
+    assert.match(overview, /title="Most-cited sites"/)
+    assert.match(sources, /title="Source control map"/)
+    assert.match(sources, /Cited-site directory/)
+    assert.match(sources, /Inspect all search paths/)
+    assert.doesNotMatch(sources, /title="The lists the engines read"/)
+    assert.match(lists, /title="The lists the engines read"/)
+    assert.match(lists, /No brand co-occurrence/)
+})
+
 test("standing explanation lives in hints, and the report is not one scroll", async () => {
     const [hint, dashboard, overview, questions, sources, surfaces] = await Promise.all([
         text("components/visibility/info-hint.tsx"),
@@ -5796,6 +5831,12 @@ test("a probe honors four confirmed rivals before it asks anything", async () =>
     assert.match(mapper, /competitorTracking\?:/)
     assert.match(overview, /emptyReason="never named"/)
     assert.match(overview, /competitors\.trackedCount/)
+    // The longest ordinary domain owns the shared label column, while the
+    // flexible track continues to use the leader-relative value scale.
+    assert.match(overview, /const rivalLabelWidth/)
+    assert.match(overview, /style=\{\{ width: rivalLabelWidth \}\}/)
+    assert.match(overview, /max=\{leaderMax\}/)
+    assert.doesNotMatch(overview, /w-\[5\.25rem\]/)
 
     // The overview carries one ranked naming comparison; citation detail stays
     // in Sources instead of duplicating a second leaderboard.

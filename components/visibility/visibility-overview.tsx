@@ -1,5 +1,7 @@
 import type { CitationBreakdown } from "@/lib/visibility/citation-classifier"
+import type { SourceReport } from "@/lib/visibility/source-report"
 import type { VisibilitySummaryV2 } from "@/lib/visibility/visibility-summary"
+import { ArrowRight } from "lucide-react"
 import type { DashboardActionKind, DashboardActionSummary } from "./dashboard-model"
 import { SectionHeading } from "./info-hint"
 import { Badge, Bar, CapacityStrip, LegendRow, StackedPill } from "./marks"
@@ -9,7 +11,9 @@ interface VisibilityOverviewProps {
     summary: VisibilitySummaryV2
     actionSummary: DashboardActionSummary
     onFocusRival?: (competitorId: string, label: string) => void
+    onOpenSource?: (host?: string) => void
     citationBreakdown?: CitationBreakdown
+    sourceReport: SourceReport
 }
 
 function percent(part: number, whole: number): string {
@@ -17,8 +21,12 @@ function percent(part: number, whole: number): string {
     return `${((part / whole) * 100).toFixed(1)}%`
 }
 
-function Panel({ children }: { children: React.ReactNode }) {
-    return <section className="viz-card min-w-0 p-5 sm:p-[22px]">{children}</section>
+function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+    return (
+        <section className={`viz-card min-w-0 p-5 sm:p-[22px] ${className}`}>
+            {children}
+        </section>
+    )
 }
 
 function Meta({ children }: { children: React.ReactNode }) {
@@ -81,7 +89,9 @@ export function VisibilityOverview({
     summary,
     actionSummary,
     onFocusRival,
+    onOpenSource,
     citationBreakdown,
+    sourceReport,
 }: VisibilityOverviewProps) {
     const brand = summary.brandVisibility
     const competitors = summary.competitorVisibility
@@ -115,6 +125,14 @@ export function VisibilityOverview({
     ].sort((a, b) => b.namedAnswers - a.namedAnswers || a.name.localeCompare(b.name))
 
     const leaderMax = Math.max(1, ...leaderboard.map((row) => row.namedAnswers))
+    // One shared, content-aware identity column keeps every track on the same
+    // baseline without clipping ordinary domains. The bar remains the flexible
+    // column, so its fill math stays `value / leaderMax` regardless of how much
+    // room the longest label needs.
+    const rivalLabelWidth = `${Math.min(
+        28,
+        Math.max(12, ...leaderboard.map((row) => [...row.name].length + 2)),
+    )}ch`
     const excludedMentions =
         competitors.promptInducedNamedAnswersExcluded +
         competitors.promptInducedCitedAnswersExcluded
@@ -138,6 +156,13 @@ export function VisibilityOverview({
         actionSummary.eligibleCount,
         actionSummary.selectedCount + actionSummary.backlogCount,
     )
+    const citedHostMax = Math.max(
+        1,
+        ...sourceReport.hosts.slice(0, 5).map((host) => host.citationCount),
+    )
+    const ownedCitations = sourceReport.hosts
+        .filter((host) => host.sourceType === "owned")
+        .reduce((sum, host) => sum + host.citationCount, 0)
 
     return (
         <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
@@ -243,17 +268,19 @@ export function VisibilityOverview({
                                     onClick={() =>
                                         onFocusRival(row.id, `answers involving ${row.name}`)
                                     }
-                                    className="w-[5.25rem] shrink-0 truncate text-left text-[13px] text-[var(--viz-ink-secondary)] underline decoration-dotted underline-offset-4 transition hover:text-[var(--viz-series-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--viz-series-1)]"
+                                    className="shrink-0 whitespace-nowrap text-left text-[13px] text-[var(--viz-ink-secondary)] underline decoration-dotted underline-offset-4 transition hover:text-[var(--viz-series-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--viz-series-1)]"
+                                    style={{ width: rivalLabelWidth }}
                                 >
                                     {row.name}
                                 </button>
                             ) : (
                                 <span
-                                    className={`w-[5.25rem] shrink-0 truncate text-[13px] ${
+                                    className={`shrink-0 whitespace-nowrap text-[13px] ${
                                         row.own
                                             ? "font-semibold text-[var(--viz-ink)]"
                                             : "text-[var(--viz-ink-secondary)]"
                                     }`}
+                                    style={{ width: rivalLabelWidth }}
                                 >
                                     {row.name}
                                 </span>
@@ -423,6 +450,100 @@ export function VisibilityOverview({
                         </p>
                     )}
                 </div>
+            </Panel>
+
+            <Panel className="lg:col-span-2">
+                <SectionHeading
+                    size="card"
+                    title="Most-cited sites"
+                    sub="The domains the engines returned to most often while building these answers."
+                    hintLabel="How site citations are counted"
+                    hint={
+                        <p>
+                            A citation is one stored source occurrence. A single answer can cite
+                            more than one page from the same site, so citation counts are kept
+                            separate from citing-answer and question counts in the source detail.
+                        </p>
+                    }
+                >
+                    <button
+                        type="button"
+                        onClick={() => onOpenSource?.()}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-[var(--viz-series-1)] hover:underline"
+                    >
+                        Explore all sources
+                        <ArrowRight className="size-3" aria-hidden />
+                    </button>
+                </SectionHeading>
+
+                {sourceReport.hosts.length > 0 ? (
+                    <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(240px,.55fr)]">
+                        <div className="space-y-3">
+                            {sourceReport.hosts.slice(0, 5).map((host) => (
+                                <button
+                                    key={host.host}
+                                    type="button"
+                                    onClick={() => onOpenSource?.(host.host)}
+                                    className="grid w-full grid-cols-[22px_minmax(7rem,12rem)_minmax(9rem,1fr)_3rem] items-center gap-3 text-left"
+                                >
+                                    <Badge label={host.host} own={host.sourceType === "owned"} />
+                                    <span className="truncate text-[13px] font-medium text-[var(--viz-ink-secondary)] hover:text-[var(--viz-ink)]">
+                                        {host.sourceType === "owned"
+                                            ? `${host.host} (yours)`
+                                            : host.host}
+                                    </span>
+                                    <Bar
+                                        value={host.citationCount}
+                                        max={citedHostMax}
+                                        color={
+                                            host.sourceType === "owned"
+                                                ? "var(--viz-series-1)"
+                                                : "var(--viz-seq-350)"
+                                        }
+                                        label={percent(
+                                            host.citationCount,
+                                            sourceReport.totalCitations,
+                                        )}
+                                        emptyReason="not cited"
+                                    />
+                                    <span className="text-right text-xs font-semibold tabular-nums">
+                                        {host.citationCount}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-hairline)] lg:grid-cols-1">
+                            <div className="bg-[var(--viz-plane)] p-4">
+                                <div className="text-[26px] font-semibold leading-none tabular-nums">
+                                    {sourceReport.topThreeShare}%
+                                </div>
+                                <p className="mt-1.5 text-xs leading-5 text-[var(--viz-ink-secondary)]">
+                                    of citations came from the top three sites
+                                </p>
+                            </div>
+                            <div className="bg-[var(--viz-plane)] p-4">
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-[26px] font-semibold leading-none tabular-nums">
+                                        {sourceReport.distinctSites}
+                                    </span>
+                                    <span className="text-xs text-[var(--viz-ink-muted)]">
+                                        sites
+                                    </span>
+                                </div>
+                                <p className="mt-1.5 text-xs leading-5 text-[var(--viz-ink-secondary)]">
+                                    {ownedCitations > 0
+                                        ? `${ownedCitations} citations pointed to your site`
+                                        : "none of the citations pointed to your site"}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="mt-8 text-sm text-[var(--viz-ink-muted)]">
+                        No cited sites were returned in this run.
+                    </p>
+                )}
             </Panel>
         </div>
     )

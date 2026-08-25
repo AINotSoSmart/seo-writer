@@ -1,3 +1,12 @@
+"use client"
+
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet"
 import { SectionHeading } from "./info-hint"
 
 export interface VisibilitySurfaceRow {
@@ -67,5 +76,31 @@ export function VisibilitySurfaces({ rows }: { rows: VisibilitySurfaceRow[] }) {
                 })}
             </div>
         </section>
+    )
+}
+
+export function VisibilitySurfacesSheet({
+    rows,
+    open,
+    onOpenChange,
+}: {
+    rows: VisibilitySurfaceRow[]
+    open: boolean
+    onOpenChange: (open: boolean) => void
+}) {
+    return (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+            <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+                <SheetHeader className="border-b border-[var(--viz-hairline)] px-6 py-5">
+                    <SheetTitle>Compare measured surfaces</SheetTitle>
+                    <SheetDescription>
+                        A contextual comparison kept separate from the four report workflows.
+                    </SheetDescription>
+                </SheetHeader>
+                <div className="p-6">
+                    <VisibilitySurfaces rows={rows} />
+                </div>
+            </SheetContent>
+        </Sheet>
     )
 }

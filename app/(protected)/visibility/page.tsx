@@ -38,6 +38,7 @@ import {
 } from "@/lib/visibility/visibility-summary"
 import { extractHostname, type CompetitorMention } from "@/lib/visibility/answer-parser"
 import { isSelectionClass } from "@/lib/visibility/selection-class"
+import { buildSourceReport } from "@/lib/visibility/source-report"
 
 type ProbePromptRow = Omit<
     DashboardPrompt,
@@ -418,6 +419,20 @@ export default async function VisibilityPage() {
         results: [...factsByPrompt.values()].flat(),
         competitors: trackedCompetitors,
     })
+    const sourceReport = buildSourceReport(
+        observedResults.map((result) => ({
+            promptId: result.prompt_id,
+            engine: result.engine,
+            namedBrand: result.mention_count > 0,
+            citations: result.citations,
+        })),
+        {
+            subjectDomains: (run.subject_domains || []).map(String),
+            competitorDomains: trackedCompetitors.flatMap((competitor) =>
+                competitor.domain ? [competitor.domain] : [],
+            ),
+        },
+    )
 
     return (
         <main className="mx-auto w-full py-6">
@@ -429,6 +444,7 @@ export default async function VisibilityPage() {
                 creditsUsed={run.credits_used ?? 0}
                 marketName={countryName(run.country_code)}
                 summary={{ ...(run.summary || {}), ...summaryV2 }}
+                sourceReport={sourceReport}
                 prompts={dashboardPrompts}
                 engines={ledger}
                 clusters={run.clusters || []}
