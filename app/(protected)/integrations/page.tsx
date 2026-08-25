@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, Plus, Trash2 } from "lucide-react"
+import { Check, Globe2, PlugZap, Plus, ShieldCheck, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -10,6 +10,14 @@ import {
     getWordPressConnections,
     setDefaultConnection,
 } from "@/actions/wordpress"
+import {
+    ProductHeader,
+    ProductMetric,
+    ProductPage,
+    ProductPanel,
+    primaryActionClass,
+    secondaryActionClass,
+} from "@/components/product/product-page"
 
 type Connection = {
     id: string
@@ -53,56 +61,95 @@ export default function IntegrationsPage() {
     }
 
     return (
-        <main className="mx-auto w-full max-w-4xl py-6">
-            <header className="mb-7">
-                <h1 className="font-serif text-3xl text-stone-900">Delivery integrations</h1>
-                <p className="mt-2 text-sm text-stone-600">
-                    WordPress draft creation is optional. Manual download and confirmed
-                    public URLs remain available without a CMS connection.
-                </p>
-            </header>
+        <ProductPage width="reading">
+            <ProductHeader
+                eyebrow="Delivery connections"
+                icon={PlugZap}
+                title="Integrations"
+                description="Connect the systems that receive finished work. WordPress is optional—manual download and confirmed public URLs remain available without it."
+            />
 
-            <section className="rounded-xl border border-stone-200 bg-white p-6">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h2 className="font-serif text-2xl">WordPress</h2>
-                        <p className="mt-1 text-sm text-stone-600">
+            <section className="grid gap-3 py-6 sm:grid-cols-2">
+                <ProductMetric
+                    icon={Globe2}
+                    iconTint="#dbeafe"
+                    iconColor="#1d4ed8"
+                    label="Connected sites"
+                    value={loading ? "—" : String(connections.length)}
+                    note="WordPress destinations available"
+                />
+                <ProductMetric
+                    icon={ShieldCheck}
+                    iconTint="#dcfce7"
+                    iconColor="#15803d"
+                    label="Default destination"
+                    value={connections.some((connection) => connection.is_default) ? "Set" : "None"}
+                    note="Used for new draft deliveries"
+                />
+            </section>
+
+            <ProductPanel>
+                <div className="flex flex-col gap-4 border-b border-[var(--viz-hairline)] p-5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-blue-50 text-blue-700">
+                            <Globe2 className="size-4" aria-hidden />
+                        </span>
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h2 className="text-base font-semibold text-[var(--viz-ink)]">WordPress delivery</h2>
+                                <span className="rounded-full bg-[var(--viz-track)] px-2 py-0.5 text-[10px] font-medium text-[var(--viz-ink-muted)]">
+                                    optional
+                                </span>
+                            </div>
+                            <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--viz-ink-secondary)]">
                             Connect with a WordPress application password. Program articles
                             are created as drafts first so the frozen permalink can be checked.
-                        </p>
+                            </p>
+                        </div>
                     </div>
                     <button
                         type="button"
                         onClick={() => setShowForm((value) => !value)}
-                        className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-stone-950 px-3 py-2 text-sm font-medium text-white"
+                        className={primaryActionClass}
                     >
                         <Plus className="h-4 w-4" /> Add site
                     </button>
                 </div>
 
                 {showForm && (
-                    <form onSubmit={(event) => void submit(event)} className="mt-6 grid gap-3 rounded-lg bg-stone-50 p-4">
-                        <input name="siteUrl" type="url" required placeholder="https://example.com" className="rounded-lg border px-3 py-2.5 text-sm" />
-                        <input name="username" required placeholder="WordPress username" className="rounded-lg border px-3 py-2.5 text-sm" />
-                        <input name="appPassword" type="password" required placeholder="Application password" className="rounded-lg border px-3 py-2.5 text-sm" />
-                        <button disabled={pending} className="rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                    <form onSubmit={(event) => void submit(event)} className="grid gap-4 border-b border-[var(--viz-hairline)] bg-[var(--viz-plane)] p-5">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <label className="grid gap-1.5 text-xs font-medium text-[var(--viz-ink-secondary)] sm:col-span-2">
+                                Site URL
+                                <input name="siteUrl" type="url" required placeholder="https://example.com" className="h-10 rounded-[9px] border border-[var(--viz-hairline)] bg-white px-3 text-sm outline-none focus:border-[var(--viz-baseline)]" />
+                            </label>
+                            <label className="grid gap-1.5 text-xs font-medium text-[var(--viz-ink-secondary)]">
+                                WordPress username
+                                <input name="username" required placeholder="Editor account" className="h-10 rounded-[9px] border border-[var(--viz-hairline)] bg-white px-3 text-sm outline-none focus:border-[var(--viz-baseline)]" />
+                            </label>
+                            <label className="grid gap-1.5 text-xs font-medium text-[var(--viz-ink-secondary)]">
+                                Application password
+                                <input name="appPassword" type="password" required placeholder="xxxx xxxx xxxx xxxx" className="h-10 rounded-[9px] border border-[var(--viz-hairline)] bg-white px-3 text-sm outline-none focus:border-[var(--viz-baseline)]" />
+                            </label>
+                        </div>
+                        <button disabled={pending} className={`${primaryActionClass} sm:w-fit`}>
                             {pending ? "Connecting…" : "Connect WordPress"}
                         </button>
                     </form>
                 )}
 
-                <div className="mt-6 space-y-3">
+                <div className="divide-y divide-[var(--viz-hairline)]">
                     {connections.map((connection) => (
-                        <div key={connection.id} className="flex items-center justify-between rounded-lg border border-stone-200 p-4">
-                            <div>
-                                <div className="font-medium text-stone-900">
+                        <div key={connection.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-[var(--viz-ink)]">
                                     {connection.site_name || connection.site_url}
                                 </div>
-                                <div className="text-xs text-stone-500">{connection.site_url}</div>
+                                <div className="mt-0.5 truncate text-xs text-[var(--viz-ink-muted)]">{connection.site_url}</div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 {connection.is_default ? (
-                                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                                         <Check className="h-3.5 w-3.5" /> Default
                                     </span>
                                 ) : (
@@ -111,7 +158,7 @@ export default function IntegrationsPage() {
                                             await setDefaultConnection(connection.id)
                                             await load()
                                         }}
-                                        className="text-xs underline"
+                                        className={secondaryActionClass}
                                     >
                                         Make default
                                     </button>
@@ -122,7 +169,7 @@ export default function IntegrationsPage() {
                                         await deleteWordPressConnection(connection.id)
                                         await load()
                                     }}
-                                    className="rounded border p-2"
+                                    className="inline-flex size-9 items-center justify-center rounded-[9px] border border-[var(--viz-hairline)] text-[var(--viz-ink-muted)] hover:bg-red-50 hover:text-red-700"
                                 >
                                     <Trash2 className="h-3.5 w-3.5" />
                                 </button>
@@ -130,10 +177,13 @@ export default function IntegrationsPage() {
                         </div>
                     ))}
                     {!loading && connections.length === 0 && (
-                        <p className="text-sm text-stone-500">No WordPress site connected.</p>
+                        <div className="px-5 py-10 text-center">
+                            <p className="text-sm font-medium text-[var(--viz-ink)]">No WordPress site connected</p>
+                            <p className="mt-1 text-xs text-[var(--viz-ink-muted)]">Manual delivery remains available from every article.</p>
+                        </div>
                     )}
                 </div>
-            </section>
-        </main>
+            </ProductPanel>
+        </ProductPage>
     )
 }

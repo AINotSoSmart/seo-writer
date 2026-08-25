@@ -2,7 +2,28 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { AccountDashboard } from '@/components/account/account-dashboard'
 import FeedbackForm from "@/components/FeedbackForm"
-import { GlobalCard } from '@/components/ui/global-card'
+import { UserRound } from 'lucide-react'
+import { ProductHeader, ProductPage } from '@/components/product/product-page'
+
+type SubscriptionRecord = {
+  dodo_subscription_id: string | null
+  status: string | null
+  cancel_at_period_end: boolean | null
+  next_billing_date: string | null
+  current_period_end: string | null
+  canceled_at: string | null
+  metadata: {
+    raw?: {
+      next_billing_date?: string
+      cancel_at_next_billing_date?: boolean
+    }
+    next_billing_date?: string
+    cancel_at_next_billing_date?: boolean
+  } | null
+  price_snapshot: number | null
+  currency_snapshot: string | null
+  dodo_pricing_plans: { name?: string | null } | { name?: string | null }[] | null
+}
 
 export default async function AccountPage() {
   const supabase = await createClient()
@@ -37,7 +58,12 @@ export default async function AccountPage() {
     .maybeSingle()
 
   // Normalize status to a strict union and coerce booleans
-  const rawStatus = String((activeSub as any)?.status ?? 'pending').toLowerCase()
+  const subscriptionRow = activeSub as unknown as SubscriptionRecord | null
+  const planRelation = subscriptionRow?.dodo_pricing_plans
+  const planName = Array.isArray(planRelation)
+    ? planRelation[0]?.name
+    : planRelation?.name
+  const rawStatus = String(subscriptionRow?.status ?? 'pending').toLowerCase()
   const normalizedStatus =
     rawStatus === 'active'
       ? 'active'
@@ -48,51 +74,50 @@ export default async function AccountPage() {
           : 'pending'
 
   const subscription =
-    activeSub
+    subscriptionRow
       ? {
-        subscription_id: String((activeSub as any)?.dodo_subscription_id || ''),
+        subscription_id: String(subscriptionRow.dodo_subscription_id || ''),
         status: normalizedStatus as 'pending' | 'active' | 'cancelled' | 'expired',
-        plan_name: (activeSub as any)?.dodo_pricing_plans?.name as string | undefined,
+        plan_name: planName || undefined,
         next_billing_date:
-          (activeSub as any)?.next_billing_date ||
-          (activeSub as any)?.metadata?.raw?.next_billing_date ||
-          (activeSub as any)?.metadata?.next_billing_date ||
+          subscriptionRow.next_billing_date ||
+          subscriptionRow.metadata?.raw?.next_billing_date ||
+          subscriptionRow.metadata?.next_billing_date ||
           undefined,
         cancel_at_period_end:
-          typeof (activeSub as any)?.cancel_at_period_end === 'boolean'
-            ? (activeSub as any).cancel_at_period_end
+          typeof subscriptionRow.cancel_at_period_end === 'boolean'
+            ? subscriptionRow.cancel_at_period_end
             : Boolean(
-              (activeSub as any)?.metadata?.raw?.cancel_at_next_billing_date ??
-              (activeSub as any)?.metadata?.cancel_at_next_billing_date ??
+              subscriptionRow.metadata?.raw?.cancel_at_next_billing_date ??
+              subscriptionRow.metadata?.cancel_at_next_billing_date ??
               false,
             ),
         current_period_end:
-          (activeSub as any)?.current_period_end || undefined,
+          subscriptionRow.current_period_end || undefined,
         canceled_at:
-          (activeSub as any)?.canceled_at || undefined,
-        price_snapshot: (activeSub as any)?.price_snapshot ?? null,
-        currency_snapshot: (activeSub as any)?.currency_snapshot ?? null,
+          subscriptionRow.canceled_at || undefined,
+        price_snapshot: subscriptionRow.price_snapshot ?? null,
+        currency_snapshot: subscriptionRow.currency_snapshot ?? null,
       }
       : null
 
   return (
-    <div className="container mx-auto">
-      <GlobalCard contentClassName="p-6">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">Account</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your profile, recurring subscription, and invoice history
-          </p>
-        </div>
-
+    <ProductPage width="reading">
+      <ProductHeader
+        eyebrow="Workspace administration"
+        icon={UserRound}
+        title="Account"
+        description="Manage your profile, recurring subscription, billing schedule, and invoice history."
+      />
+      <div className="mt-6">
         <AccountDashboard
           user={user}
           payments={payments || []}
           subscription={subscription}
         />
         <FeedbackForm userId={user.id} />
-      </GlobalCard>
-    </div>
+      </div>
+    </ProductPage>
   )
 }
 

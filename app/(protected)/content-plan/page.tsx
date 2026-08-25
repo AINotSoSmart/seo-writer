@@ -1,6 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- forward Phase 3 relations are absent from generated database types until migration. */
 import Link from "next/link"
-import { CheckCircle2, CircleDashed, Download, FileText } from "lucide-react"
+import {
+    CheckCircle2,
+    CircleDashed,
+    Download,
+    Layers3,
+    PackageCheck,
+    Truck,
+} from "lucide-react"
 
 import { getAuditScope, getGapEvidence, getPlannedArticles } from "@/actions/harvest"
 import { ScopeResults } from "@/components/audit/scope-results"
@@ -11,6 +18,13 @@ import {
     type ReviewProposal,
 } from "@/components/program/ActionProposalReview"
 import { createClient } from "@/utils/supabase/server"
+import {
+    ProductHeader,
+    ProductMetric,
+    ProductPage,
+    ProductPanel,
+    secondaryActionClass,
+} from "@/components/product/product-page"
 
 export default async function ContentPlanPage() {
     const supabase = await createClient()
@@ -45,25 +59,25 @@ export default async function ContentPlanPage() {
         if (!scope) return <NoProgram />
 
         return (
-            <main className="mx-auto w-full py-6">
-                <header className="mb-7 flex items-start justify-between border-b border-stone-200 pb-6">
-                    <div>
-                        <h1 className="font-serif text-3xl text-stone-900">Proposed content work</h1>
-                        <p className="mt-2 text-sm text-stone-600">
-                            This is audit evidence, not a purchased or scheduled batch.
-                        </p>
-                    </div>
-                    <Link href="/audit" className="rounded-lg border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800">
+            <ProductPage>
+                <ProductHeader
+                    eyebrow="Planning evidence"
+                    icon={Layers3}
+                    title="Proposed content work"
+                    description="Evidence-backed opportunities from the audit. Nothing here is purchased, scheduled, or presented as production work yet."
+                    actions={<Link href="/audit" className={secondaryActionClass}>
                         Open permanent audit
-                    </Link>
-                </header>
-                <ScopeResults
-                    scope={scope}
-                    gaps={gaps}
-                    articles={articles}
-                    brandName={(brand.brand_data as any)?.product_name || "Your Site"}
+                    </Link>}
                 />
-            </main>
+                <div className="mt-6">
+                    <ScopeResults
+                        scope={scope}
+                        gaps={gaps}
+                        articles={articles}
+                        brandName={(brand.brand_data as any)?.product_name || "Your Site"}
+                    />
+                </div>
+            </ProductPage>
         )
     }
 
@@ -144,24 +158,42 @@ export default async function ContentPlanPage() {
     const delivered = allActions.filter((action: any) => action.state === "delivered").length
 
     return (
-        <main className="mx-auto w-full py-6">
-            <header className="flex items-start justify-between border-b border-stone-200 pb-6">
-                <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-                        Founding beta · up to {program.action_allowance} actions per cycle
-                    </p>
-                    <h1 className="mt-1 font-serif text-3xl text-stone-900">Recurring delivery cycles</h1>
-                    <p className="mt-2 text-sm text-stone-600">
-                        Every cycle keeps its measurement, selected work and complete batch together.
-                    </p>
-                </div>
-                <ProgramDeliveryControls programId={program.id} status={program.status} />
-            </header>
+        <ProductPage>
+            <ProductHeader
+                eyebrow={`Delivery system · ${program.action_allowance} actions per cycle`}
+                icon={Layers3}
+                title="Content plan"
+                description="Every cycle keeps the measurement, selected work, production state, and delivered batch together as one traceable record."
+                actions={<ProgramDeliveryControls programId={program.id} status={program.status} />}
+            />
 
             <section className="grid gap-3 py-6 sm:grid-cols-3">
-                <ProgressCard label="Cycles" value={String((cycles || []).length)} />
-                <ProgressCard label="Outputs ready" value={`${ready}/${allActions.length}`} />
-                <ProgressCard label="Outputs delivered" value={`${delivered}/${allActions.length}`} />
+                <ProductMetric
+                    icon={Layers3}
+                    iconTint="#ede9fe"
+                    iconColor="#6d28d9"
+                    label="Delivery cycles"
+                    value={String((cycles || []).length)}
+                    note="Measurement periods retained"
+                />
+                <ProductMetric
+                    icon={PackageCheck}
+                    iconTint="#dbeafe"
+                    iconColor="#1d4ed8"
+                    label="Outputs ready"
+                    value={`${ready}/${allActions.length}`}
+                    progress={allActions.length ? ready / allActions.length : 0}
+                    note="Passed production validation"
+                />
+                <ProductMetric
+                    icon={Truck}
+                    iconTint="#dcfce7"
+                    iconColor="#15803d"
+                    label="Outputs delivered"
+                    value={`${delivered}/${allActions.length}`}
+                    progress={allActions.length ? delivered / allActions.length : 0}
+                    note="Released in complete batches"
+                />
             </section>
 
             <section className="space-y-4">
@@ -180,8 +212,8 @@ export default async function ContentPlanPage() {
                         cycle.measurement_run_id && (
                             <ActionProposalRetry runId={cycle.measurement_run_id} />
                         )}
-                    <article className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-                        <header className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-5 py-4">
+                    <ProductPanel>
+                        <header className="flex flex-col gap-3 border-b border-[var(--viz-hairline)] bg-[var(--viz-plane)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                             <div>
                                 <h2 className="font-medium text-stone-900">
                                     {formatPeriod(cycle.period_start, cycle.period_end)}
@@ -193,12 +225,12 @@ export default async function ContentPlanPage() {
                                         : ""}
                                 </p>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 {cycle.state === "delivered" &&
                                     (cycle.cycle_actions || []).length > 0 && (
                                     <a
                                         href={`/api/subscription-cycles/${cycle.id}/export`}
-                                        className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700"
+                                        className={secondaryActionClass}
                                     >
                                         <Download className="h-3.5 w-3.5" /> Download batch
                                     </a>
@@ -215,14 +247,14 @@ export default async function ContentPlanPage() {
                                             ? action.planned_articles[0]
                                             : action.planned_articles
                                         return (
-                                            <div key={action.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[2rem_1fr_auto]">
+                                            <div key={action.id} className="grid min-w-0 gap-3 px-4 py-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:px-5">
                                                 <span className="font-mono text-xs text-stone-400">{String(action.rank).padStart(2, "0")}</span>
                                                 <div>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                         <span className="rounded border border-stone-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-stone-500">
                                                             {action.resolution_type}
                                                         </span>
-                                                        <span className="text-sm font-medium text-stone-900">
+                                                        <span className="min-w-0 break-words text-sm font-medium text-stone-900 [overflow-wrap:anywhere]">
                                                             {output?.title || action.target_url || "Selected content action"}
                                                         </span>
                                                     </div>
@@ -246,22 +278,11 @@ export default async function ContentPlanPage() {
                                 Measurement may honestly produce a report-only cycle with no content actions.
                             </p>
                         )}
-                    </article>
+                    </ProductPanel>
                     </div>
                 ))}
             </section>
-        </main>
-    )
-}
-
-function ProgressCard({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
-                <FileText className="h-4 w-4" /> {label}
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-stone-900">{value}</div>
-        </div>
+        </ProductPage>
     )
 }
 
@@ -282,10 +303,19 @@ function formatPeriod(start: string, end: string) {
 
 function NoProgram() {
     return (
-        <main className="mx-auto max-w-2xl py-20 text-center">
-            <h1 className="font-serif text-3xl text-stone-900">No content plan yet</h1>
-            <p className="mt-3 text-sm text-stone-600">Complete onboarding to confirm the buyer questions your subscription will track.</p>
-            <Link href="/onboarding" className="mt-6 inline-flex rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white">Continue onboarding</Link>
-        </main>
+        <ProductPage width="reading" className="py-12 sm:py-16">
+            <ProductPanel className="px-6 py-12 text-center sm:px-10">
+                <span className="mx-auto inline-flex size-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
+                    <Layers3 className="size-5" aria-hidden />
+                </span>
+                <h1 className="mt-4 font-serif text-3xl text-stone-900">No content plan yet</h1>
+                <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-stone-600">
+                    Complete onboarding to confirm the buyer questions your subscription will track.
+                </p>
+                <Link href="/onboarding" className="mt-6 inline-flex rounded-[9px] bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white">
+                    Continue onboarding
+                </Link>
+            </ProductPanel>
+        </ProductPage>
     )
 }

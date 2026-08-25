@@ -55,7 +55,14 @@ export default async function DashboardLayout({
     .maybeSingle()
 
   const isSubscribed = !!subscription
-  const planName = (subscription?.dodo_pricing_plans as any)?.name || null
+  const planRelation = subscription?.dodo_pricing_plans as
+    | { name?: string | null }
+    | { name?: string | null }[]
+    | null
+    | undefined
+  const planName = Array.isArray(planRelation)
+    ? planRelation[0]?.name || null
+    : planRelation?.name || null
 
   return (
     <div className="protected-scope">
@@ -113,9 +120,9 @@ export default async function DashboardLayout({
           isSubscribed={isSubscribed}
           isFounder={isFounderUser(user.id)}
         />
-        <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 justify-between">
-            <div className="flex items-center gap-2 px-4">
+        <SidebarInset className="min-w-0 overflow-x-hidden bg-stone-50/60">
+          <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 bg-white/85 backdrop-blur-md">
+            <div className="flex min-w-0 items-center gap-2 px-3 sm:px-4">
               <SidebarTrigger className="-ml-1" />
               <Separator
                 orientation="vertical"
@@ -123,7 +130,7 @@ export default async function DashboardLayout({
               />
               <DynamicBreadcrumb />
             </div>
-            <div className="px-4">
+            <div className="shrink-0 px-3 sm:px-4">
               <HeaderUser
                 user={{
                   name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
@@ -134,7 +141,7 @@ export default async function DashboardLayout({
               />
             </div>
           </header>
-          <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 px-3 pb-6 sm:px-4 lg:px-6">
             <SubscriptionProvider isSubscribed={isSubscribed} planName={planName}>
               <LoadingProvider>
                 {children}

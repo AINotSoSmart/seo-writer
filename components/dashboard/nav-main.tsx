@@ -2,6 +2,7 @@
 
 import type { ComponentType } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -20,13 +21,19 @@ export function NavMain({
     isActive?: boolean
   }[]
 }) {
+  const pathname = usePathname()
+
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+      <SidebarGroupLabel>Workspace</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton asChild tooltip={item.title} isActive={item.isActive}>
+            <SidebarMenuButton
+              asChild
+              tooltip={item.title}
+              isActive={pathname === item.url || pathname.startsWith(`${item.url}/`)}
+            >
               <Link href={item.url} prefetch={false} className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors">
                 <item.icon size={18} />
                 <span>{item.title}</span>
@@ -38,4 +45,3 @@ export function NavMain({
     </SidebarGroup>
   )
 }
-

@@ -97,7 +97,6 @@ export function AppSidebar({
       title: "Content Plan",
       url: "/content-plan",
       icon: BookTextIcon,
-      isActive: true,
     },
     {
       title: "Articles",

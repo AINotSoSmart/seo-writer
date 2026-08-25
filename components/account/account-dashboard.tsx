@@ -1,6 +1,5 @@
 'use client'
 
-import { useState, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -82,10 +81,12 @@ export function AccountDashboard({ user, payments, subscription }: AccountDashbo
   return (
     <div className="space-y-6">
       {/* Profile Information */}
-      <Card>
+      <Card className="viz-card border-[var(--viz-hairline)] shadow-none">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserIcon className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <span className="inline-flex size-8 items-center justify-center rounded-[9px] bg-violet-50 text-violet-700">
+              <UserIcon className="h-4 w-4" />
+            </span>
             Profile Information
           </CardTitle>
           <CardDescription>
@@ -121,17 +122,19 @@ export function AccountDashboard({ user, payments, subscription }: AccountDashbo
       </Card>
 
       {/* Subscription */}
-      <Card>
+      <Card className="viz-card border-[var(--viz-hairline)] shadow-none">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserIcon className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <span className="inline-flex size-8 items-center justify-center rounded-[9px] bg-blue-50 text-blue-700">
+              <UserIcon className="h-4 w-4" />
+            </span>
             Subscription
           </CardTitle>
           <CardDescription>Manage your subscription and billing</CardDescription>
         </CardHeader>
         <CardContent>
           {subscription ? (
-            <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div className="flex flex-col gap-4 rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-plane)] p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Badge
@@ -170,7 +173,7 @@ export function AccountDashboard({ user, payments, subscription }: AccountDashbo
               <div className="flex gap-2">
                 <Link
                   href="/subscribe"
-                  className="cursor-pointer px-3 py-2 text-sm bg-stone-900 text-white rounded hover:bg-stone-800"
+                  className="inline-flex h-9 items-center rounded-[9px] bg-stone-950 px-3.5 text-xs font-semibold text-white hover:opacity-90"
                 >
                   Open billing
                 </Link>
@@ -185,10 +188,12 @@ export function AccountDashboard({ user, payments, subscription }: AccountDashbo
       </Card>
 
       {/* Invoice History */}
-      <Card>
+      <Card className="viz-card border-[var(--viz-hairline)] shadow-none">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <span className="inline-flex size-8 items-center justify-center rounded-[9px] bg-emerald-50 text-emerald-700">
+              <Activity className="h-4 w-4" />
+            </span>
             Invoice History
           </CardTitle>
           <CardDescription>

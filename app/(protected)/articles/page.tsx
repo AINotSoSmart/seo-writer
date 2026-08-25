@@ -1,5 +1,32 @@
+import Link from "next/link"
+import { FileCheck2, Files, Globe2 } from "lucide-react"
+
 import { DeliveredArticles } from "@/components/articles/DeliveredArticles"
+import {
+    ProductHeader,
+    ProductMetric,
+    ProductPage,
+    secondaryActionClass,
+} from "@/components/product/product-page"
 import { createClient } from "@/utils/supabase/server"
+
+type CycleActionRelation = { resolution_type: "create" | "refresh" | null }
+type PlannedArticleRelation = {
+    target_url: string | null
+    generation_status: string | null
+    delivery_status: string | null
+    publication_status: string | null
+    publication_url: string | null
+    cycle_actions: CycleActionRelation | CycleActionRelation[] | null
+}
+type ArticleRow = {
+    id: string
+    keyword: string
+    final_html: string | null
+    wordpress_post_url: string | null
+    planned_article_id: string | null
+    planned_articles: PlannedArticleRelation | PlannedArticleRelation[] | null
+}
 
 export default async function ArticlesPage() {
     const supabase = await createClient()
@@ -9,6 +36,8 @@ export default async function ArticlesPage() {
     if (!user) return null
 
     const [{ data: rows }, { data: connection }] = await Promise.all([
+        // Generated types do not yet include the forward delivery relations.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
             .from("articles")
             .select(
@@ -25,7 +54,7 @@ export default async function ArticlesPage() {
             .maybeSingle(),
     ])
 
-    const articles = (rows || []).map((row: any) => {
+    const articles = ((rows || []) as ArticleRow[]).map((row) => {
         const planned = Array.isArray(row.planned_articles)
             ? row.planned_articles[0]
             : row.planned_articles
@@ -47,20 +76,62 @@ export default async function ArticlesPage() {
                 : planned?.cycle_actions?.resolution_type || null,
         }
     })
+    const reviewReady = articles.filter((article) => article.finalHtml).length
+    const published = articles.filter(
+        (article) => article.publicationStatus === "published",
+    ).length
 
     return (
-        <main className="mx-auto w-full py-6">
-            <header className="mb-7">
-                <h1 className="font-serif text-3xl text-stone-900">Delivered articles</h1>
-                <p className="mt-2 text-sm text-stone-600">
-                    Generation, delivery, and publication are tracked separately. WordPress
-                    and confirmed manual publication are the only active delivery controls.
-                </p>
-            </header>
+        <ProductPage>
+            <ProductHeader
+                eyebrow="Production library"
+                icon={Files}
+                title="Articles"
+                description="Review delivered drafts and move them into publication. Generation, delivery, and publication remain separate so every state is explicit."
+                actions={
+                    <>
+                        <Link href="/content-plan" className={secondaryActionClass}>
+                            Open content plan
+                        </Link>
+                        <Link href="/integrations" className={secondaryActionClass}>
+                            {connection?.id ? "Manage WordPress" : "Connect WordPress"}
+                        </Link>
+                    </>
+                }
+            />
+
+            <section className="grid gap-3 py-6 sm:grid-cols-3">
+                <ProductMetric
+                    icon={Files}
+                    iconTint="#ede9fe"
+                    iconColor="#6d28d9"
+                    label="Delivered drafts"
+                    value={String(articles.length)}
+                    note="Complete outputs in your library"
+                />
+                <ProductMetric
+                    icon={FileCheck2}
+                    iconTint="#dbeafe"
+                    iconColor="#1d4ed8"
+                    label="Ready to review"
+                    value={`${reviewReady}/${articles.length}`}
+                    progress={articles.length ? reviewReady / articles.length : 0}
+                    note="Final HTML is available"
+                />
+                <ProductMetric
+                    icon={Globe2}
+                    iconTint="#dcfce7"
+                    iconColor="#15803d"
+                    label="Published"
+                    value={`${published}/${articles.length}`}
+                    progress={articles.length ? published / articles.length : 0}
+                    note="Confirmed on a public URL"
+                />
+            </section>
             <DeliveredArticles
                 initialArticles={articles}
                 wordpressConnectionId={connection?.id || null}
             />
-        </main>
+        </ProductPage>
     )
 }

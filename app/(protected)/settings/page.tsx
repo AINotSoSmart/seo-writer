@@ -1,30 +1,32 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { getUserBrandStatus } from "@/actions/brand"
-import { getUserDefaults, setDefaultBrand } from "@/actions/preferences"
+import { getUserDefaults } from "@/actions/preferences"
 import { createClient } from "@/utils/supabase/client"
-import { Check, Globe, Plus, Edit, Settings2, Loader2, ExternalLink, AlertCircle, Search } from "lucide-react"
+import { Edit, Search, Settings2 } from "lucide-react"
 import BrandOnboarding from "@/components/brand-onboarding"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { BrandDetails } from "@/lib/schemas/brand"
-import { GlobalCard } from "@/components/ui/global-card"
 import { CustomSpinner } from "@/components/CustomSpinner"
+import {
+  ProductHeader,
+  ProductPage,
+  ProductPanel,
+} from "@/components/product/product-page"
 
 type BrandInfo = { id: string; website_url: string; created_at: string; brand_data: BrandDetails }
 
 
 export default function SettingsPage() {
   const supabase = createClient()
-  const searchParams = useSearchParams()
   const router = useRouter()
 
   const [brands, setBrands] = useState<BrandInfo[]>([])
   const [defaultBrandId, setDefaultBrandId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [brandLimit, setBrandLimit] = useState(0)
   const [brandCount, setBrandCount] = useState(0)
   const [isCreatingBrand, setIsCreatingBrand] = useState(false)
@@ -42,13 +44,10 @@ export default function SettingsPage() {
           getUserBrandStatus(),
           getUserDefaults(),
         ])
-        // @ts-ignore
-        setBrands(status.brands)
-        // @ts-ignore
+        setBrands(status.brands as unknown as BrandInfo[])
         setBrandLimit(status.limit)
-        // @ts-ignore
         setBrandCount(status.count)
-        setDefaultBrandId((defaults as any).default_brand_id)
+        setDefaultBrandId(defaults.default_brand_id)
 
         // Redirect to onboarding if no brands
         if (!status.brands || (status.brands as BrandInfo[]).length === 0) {
@@ -64,11 +63,8 @@ export default function SettingsPage() {
 
   const refreshBrands = async () => {
     const status = await getUserBrandStatus()
-    // @ts-ignore
-    setBrands(status.brands)
-    // @ts-ignore
+    setBrands(status.brands as unknown as BrandInfo[])
     setBrandLimit(status.limit)
-    // @ts-ignore
     setBrandCount(status.count)
   }
 
@@ -85,8 +81,8 @@ export default function SettingsPage() {
       // Update local state
       setBrands(prev => prev.map(b => b.id === brandId ? { ...b, brand_data: updatedBrandData } : b))
       toast.success('Search preference updated')
-    } catch (err: any) {
-      toast.error('Failed to update: ' + (err.message || 'Unknown error'))
+    } catch (err: unknown) {
+      toast.error('Failed to update: ' + (err instanceof Error ? err.message : 'Unknown error'))
     }
   }
 
@@ -94,42 +90,37 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center font-sans">
+      <ProductPage width="reading" className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-stone-500">
           <CustomSpinner className="w-10 h-10" />
           <span className="text-sm font-medium">Loading settings...</span>
         </div>
-      </div>
+      </ProductPage>
     )
   }
 
   return (
-    <div className="w-full min-h-screen font-sans bg-stone-50/30 rounded-t-xl">
-      <GlobalCard className="w-full rounded-lg overflow-hidden bg-white  border border-stone-100 ">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b border-stone-100  bg-white/50 /50 backdrop-blur-sm rounded-t-xl">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-stone-100  flex items-center justify-center text-stone-500">
-              <Settings2 className="w-4 h-4 md:w-5 md:h-5" />
-            </div>
-            <div>
-              <h1 className="text-base md:text-lg font-bold text-stone-900  tracking-tight">
-                Settings
-              </h1>
-              <p className="text-xs text-stone-500 font-medium hidden sm:block">
-                Manage your brands
-              </p>
-            </div>
-          </div>
-        </div>
+    <ProductPage width="reading">
+      <ProductHeader
+        eyebrow="Measurement workspace"
+        icon={Settings2}
+        title="Brand settings"
+        description="Keep the identity and research context used across visibility measurement, content planning, and article production in one place."
+        actions={
+          <span className="rounded-full border border-[var(--viz-hairline)] bg-white px-3 py-1.5 text-xs tabular-nums text-[var(--viz-ink-secondary)]">
+            {brandCount} of {brandLimit} brands
+          </span>
+        }
+      />
 
-        <div className="p-4 md:p-6">
+      <ProductPanel className="mt-6">
+        <div className="p-4 sm:p-5 md:p-6">
           {/* Brand Settings */}
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
 
 
             {isCreatingBrand || editingBrand ? (
-              <div className="p-4 border border-stone-200  rounded-xl bg-stone-50/50 /50">
+                <div className="rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-plane)] p-4">
                 <BrandOnboarding
                   initialData={editingBrand?.brand_data}
                   initialUrl={editingBrand?.website_url}
@@ -156,10 +147,10 @@ export default function SettingsPage() {
                     <div
                       key={b.id}
                       className={`
-                        w-full rounded-xl border transition-all duration-200 overflow-hidden
+                        w-full rounded-[14px] border transition-all duration-200 overflow-hidden
                         ${isSelected
-                          ? 'bg-stone-50 /30 border-stone-300 ring-1 ring-stone-300'
-                          : 'bg-white border-stone-200  hover:border-stone-300'
+                          ? 'bg-blue-50/30 border-blue-200 ring-1 ring-blue-100'
+                          : 'bg-white border-[var(--viz-hairline)] hover:border-[var(--viz-baseline)]'
                         }
                       `}
                     >
@@ -167,20 +158,15 @@ export default function SettingsPage() {
                       <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
 
                         {/* Panel: Brand Identity */}
-                        <div className="p-4 bg-stone-50 rounded-lg border border-stone-200 md:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex flex-col gap-4 rounded-xl border border-[var(--viz-hairline)] bg-[var(--viz-plane)] p-4 sm:flex-row sm:items-center sm:justify-between md:col-span-2">
                           <div className="flex items-start sm:items-center gap-3">
-                            <div className="w-8 h-8 flex-shrink-0 rounded-md border border-stone-200 overflow-hidden bg-white shadow-sm">
-                              <img 
-                                src={`https://www.google.com/s2/favicons?domain=${b.website_url}&sz=128`} 
-                                alt="Favicon" 
-                                className="w-full h-full object-cover"
-                                onError={(e) => { e.currentTarget.src = "https://www.google.com/s2/favicons?domain=example.com&sz=128" }}
-                              />
+                            <div className="inline-flex size-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-violet-100 text-sm font-bold uppercase text-violet-700">
+                              {b.website_url.replace(/^https?:\/\//, "").charAt(0) || "B"}
                             </div>
                             <div>
-                              <div className="text-[10px] font-bold text-stone-900 uppercase tracking-wider mb-0.5">{b.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</div>
-                              <div className="text-xs text-stone-500 font-medium">
-                                Update your brand's audience, mission, core features, and tone of voice.
+                              <div className="mb-0.5 break-words text-sm font-semibold text-[var(--viz-ink)] [overflow-wrap:anywhere]">{b.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</div>
+                              <div className="text-xs leading-5 text-[var(--viz-ink-secondary)]">
+                                Update your brand&apos;s audience, mission, core features, and tone of voice.
                               </div>
                             </div>
                           </div>
@@ -197,12 +183,12 @@ export default function SettingsPage() {
                         </div>
 
                         {/* Panel: Research Context */}
-                        <div className="p-4 bg-white rounded-xl border border-stone-100 flex flex-col hover:border-stone-200 transition-colors">
+                        <div className="flex flex-col rounded-xl border border-[var(--viz-hairline)] bg-white p-4 transition-colors hover:border-[var(--viz-baseline)]">
                           <div className="flex items-center gap-2 mb-4">
                             <div className="p-1.5 bg-emerald-50 text-emerald-500 rounded-md">
                               <Search className="w-4 h-4" />
                             </div>
-                            <h3 className="text-[10px] font-bold text-stone-900 uppercase tracking-wider">Research Context</h3>
+                            <h3 className="text-xs font-semibold text-[var(--viz-ink)]">Research context</h3>
                           </div>
                           <div className="grid grid-cols-2 gap-3 flex-1 select-none">
                             <div>
@@ -278,7 +264,7 @@ export default function SettingsPage() {
 
           </div>
         </div>
-      </GlobalCard >
-    </div >
+      </ProductPanel>
+    </ProductPage>
   )
 }
