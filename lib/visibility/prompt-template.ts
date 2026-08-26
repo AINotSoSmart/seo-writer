@@ -90,6 +90,16 @@ export function buildCompanyPrompt(
     language: string,
     questionsToAvoid: string[] = [],
     /**
+     * How many questions ONE call may return.
+     *
+     * Not the size of the set the customer receives — that cap is applied after
+     * the critic, in `prompt-builder.ts`. This is the per-call ceiling, and it
+     * exists because the critic removes roughly a third: if a call can only
+     * return 25, reaching 35 candidates needs a second round trip. Raising the
+     * ceiling does the same work in one call instead of two.
+     */
+    ceiling: number = 25,
+    /**
      * Capabilities the set does not cover yet.
      *
      * Present only on the final coverage pass. This is the whole point of the
@@ -159,7 +169,7 @@ ${uncovered.map((capability) => `- ${capability}`).join("\n")}
 
 `
             : ""
-}Generate up to 25 questions. This is a ceiling, not a quota. Stop when another question would only paraphrase a situation already covered, and never pad: a question that restates a situation already in the set is worse than one you did not write. Within that rule, keep going while genuinely different buyer situations remain — most companies have far more of them than first come to mind.
+}Generate up to ${ceiling} questions. This is a ceiling, not a quota. Stop when another question would only paraphrase a situation already covered, and never pad: a question that restates a situation already in the set is worse than one you did not write. Within that rule, keep going while genuinely different buyer situations remain — most companies have far more of them than first come to mind.
 
 LENGTH IS PART OF THE VARIETY. Real chat messages are wildly uneven: plenty are five to ten words with no context at all, some are one line, a few run long because the situation genuinely matters. Write that spread. If every question in your set is a full sentence of background followed by "what tool can...", you have written one question twenty-five times.
 
@@ -201,6 +211,8 @@ export const BUYER_PROMPT_RESPONSE_SCHEMA = {
     properties: {
         prompts: {
             type: "ARRAY" as const,
+            // Must be at least the largest `ceiling` any caller passes, or the
+            // model is told one number and bounded by a smaller one.
             maxItems: 25,
             items: {
                 type: "OBJECT" as const,

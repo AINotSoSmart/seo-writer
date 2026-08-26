@@ -100,6 +100,8 @@ export interface PromptBuildReport {
     criticRejectionReasons: Record<string, number>
     /** What finally persisted. The number the customer sees. */
     survivors: number
+    /** Wall-clock for the whole build, so a timeout can be predicted not guessed. */
+    durationMs: number
     /** Verified capabilities the confirmed set asks about, and how many exist. */
     capabilitiesCovered: number
     capabilitiesTotal: number
@@ -193,6 +195,7 @@ export async function buildBuyerPrompts(
         questionsToAvoid?: string[]
     },
 ): Promise<PromptBuildResult> {
+    const startedAt = Date.now()
     const errors: string[] = []
     const criticRejectionReasons: Record<string, number> = {}
     const cap = Math.min(options.maxPrompts ?? MAX_GENERATED_PROMPTS, MAX_GENERATED_PROMPTS)
@@ -215,6 +218,9 @@ export async function buildBuyerPrompts(
     const generate = async (
         avoid: string[],
         uncovered: string[] = [],
+        // One call's ceiling. The schema refuses more than 25 (see above),
+        // so asking for the whole pool in one request is not available.
+        ceiling: number = 25,
     ): Promise<GeneratedPromptRow[]> => {
         const client = getGeminiClient()
         const response = await client.models.generateContent({
@@ -232,6 +238,7 @@ export async function buildBuyerPrompts(
                                 },
                                 options.language ?? DEFAULT_LANGUAGE,
                                 avoid,
+                                ceiling,
                                 uncovered,
                             ),
                         },
@@ -346,21 +353,40 @@ export async function buildBuyerPrompts(
     let passes = 0
     let modelReturned = 0
     try {
-        // Bounded, and it stops the moment the model runs dry. Three passes is
-        // where the returns died in testing: a pass that adds fewer than three
-        // genuinely new situations is a pass that has started paraphrasing, and
-        // padding is worse than a short set — the rule the instruction states
-        // and this loop must not quietly break.
-        for (let pass = 0; pass < 3 && candidates.length < candidateTarget; pass++) {
-            const before = candidates.length
-            const rows = await generate([
+        // TWO CALLS AT ONCE, NOT ONE AFTER THE OTHER.
+        //
+        // A single call cannot return more than 25 rows: with this response
+        // schema — six required fields per item — Gemini rejects `maxItems`
+        // above 25 outright with INVALID_ARGUMENT. Reaching a candidate pool
+        // large enough for the critic to cut from therefore needs two calls,
+        // and that is structural rather than a choice.
+        //
+        // What was a choice was running them in sequence. Each call takes about
+        // a minute against the full brand context, so the chain came to roughly
+        // 250 seconds and onboarding hit a gateway timeout. They do not depend
+        // on each other — at temperature 0.9 two runs of the same instruction
+        // diverge on their own, and `seenScenarios` merges whatever overlaps —
+        // so they run together and cost one call's worth of wall clock.
+        const [first, second] = await Promise.all([
+            generate(existingQuestions),
+            generate(existingQuestions),
+        ])
+        passes += 2
+        modelReturned += first.length + second.length
+        absorb(first)
+        absorb(second)
+
+        // Only if the pair genuinely fell short, and only once. This is the
+        // sequential case, so it is told what already exists: it is asking for
+        // what is missing rather than rolling the dice a third time.
+        if (candidates.length < candidateTarget) {
+            const third = await generate([
                 ...existingQuestions,
                 ...candidates.map((candidate) => candidate.text),
             ])
             passes++
-            modelReturned += rows.length
-            absorb(rows)
-            if (candidates.length - before < 3) break
+            modelReturned += third.length
+            absorb(third)
         }
 
         // ── Coverage: does the set ask about everything the brand sells? ──
@@ -382,6 +408,8 @@ export async function buildBuyerPrompts(
                 const rows = await generate(
                     [...existingQuestions, ...candidates.map((candidate) => candidate.text)],
                     uncoveredCapabilities,
+                    // One or two questions per gap is all this pass is for.
+                    Math.max(uncoveredCapabilities.length * 2, 4),
                 )
                 passes++
                 modelReturned += rows.length
@@ -454,6 +482,7 @@ export async function buildBuyerPrompts(
             criticRejected,
             criticRejectionReasons,
             survivors: survivors.length,
+            durationMs: Date.now() - startedAt,
             capabilitiesCovered,
             capabilitiesTotal,
             uncoveredCapabilities,

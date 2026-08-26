@@ -1253,6 +1253,59 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-26 (thirtieth pass) — onboarding timed out, and the cause was a quota queue
+
+**The symptom.** Prompt generation returned **504** and the founder saw
+`Unexpected token 'A', "An error o"... is not valid JSON` on the questions
+screen. Two bugs stacked: the route still declared `maxDuration = 60` from when
+generation was a single Gemini call, and the client ran `res.json()` *before*
+checking `res.ok`, so a gateway error page — plain text, not JSON — surfaced as
+a parse error instead of "the request timed out".
+
+**The cause was not the model.** Measured in isolation, every call is fast: a
+generation call is 9-14s, a critic call over fifteen real questions is 6s. The
+build was taking **249 seconds**.
+
+Instrumenting each stage found the critic alone at 197s, so the first guess was
+batch size. That was wrong, and chunking the critic changed nothing. Timing each
+chunk settled it: four equal chunks of twelve questions dispatched at the same
+instant, two returning in **2.8s and 6.6s** and the other two in **209s and
+214s**. Same model, same batch size, same moment. That is a quota queue, and the
+SDK's backoff turns a throttle into a multi-minute stall with no error to catch.
+
+`gemini-3-flash-preview` — a preview model with tight concurrency limits — was
+the critic's model. It had been chosen in the previous pass on the reasoning
+that the critic makes taste judgements and deserves a better model. That
+reasoning was sound and the choice was still wrong: the constraint that mattered
+was throughput, not capability, and nothing measured it before shipping.
+
+**What changed.**
+
+- The critic runs on `gemini-3.7-flash`, the model the generator already calls
+  twice per build without stalling. On a hand-checked set it returned the same
+  verdicts.
+- Critic concurrency is bounded to two in flight. Unbounded `Promise.all` over
+  the chunks is what exposed the queue in the first place.
+- The two generation calls run in parallel. They cannot be merged into one: with
+  this response schema — six required fields per item — Gemini rejects
+  `maxItems` above 25 outright with `INVALID_ARGUMENT`, so a candidate pool
+  bigger than 25 needs two calls and that is structural.
+- `maxDuration` is 300, matching `analyze-brand`, `analyze-brand/scope` and
+  `analyze-competitors`. Headroom, not a fix.
+- The client checks status before parsing, and names a timeout as a timeout.
+- `PromptBuildReport` carries `durationMs`, so the next regression is visible
+  rather than inferred.
+
+**Result: 249s → 24s**, with the output unchanged — 38 candidates, 25 confirmed
+questions, every verified capability covered. A second run measured 46s, so the
+queue has not vanished; it is simply no longer in the critical path.
+
+**The lesson worth keeping.** Latency here is a property of the *quota* attached
+to a model, not of the work being asked. A preview model can be the better
+judge and still be the wrong choice, and the only way to tell is to time
+concurrent calls before shipping — a single sequential probe of the same model
+looked completely healthy.
+
 ### 2026-08-26 (twenty-ninth pass) — six questions became twenty-five
 
 **The complaint.** A live Drawgle run produced **6 buyer questions**, nearly all

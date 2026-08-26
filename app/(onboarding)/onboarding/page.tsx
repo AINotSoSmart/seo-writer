@@ -700,10 +700,29 @@ export default function OnboardingPage() {
                 }),
             })
 
-            const data = (await res.json()) as GeneratePromptsResponse
+            // STATUS FIRST, THEN PARSE.
+            //
+            // This parsed before checking `res.ok`, so a gateway timeout — whose
+            // body is a plain-text error page, not JSON — surfaced to the
+            // founder as `Unexpected token 'A', "An error o"... is not valid
+            // JSON`. The real failure was a 504, and the screen said nothing
+            // about it.
             if (!res.ok) {
-                throw new Error(data.error || "Failed to generate candidate buyer questions")
+                const detail = await res.text().catch(() => "")
+                let message = ""
+                try {
+                    message = (JSON.parse(detail) as { error?: string }).error || ""
+                } catch {
+                    // Not JSON: an infrastructure error page. Say what happened.
+                }
+                throw new Error(
+                    message ||
+                        (res.status === 504 || res.status === 408
+                            ? "Writing your buyer questions took too long and the request timed out. Try again — the pages we already read are reused, so it will not start over."
+                            : `Failed to generate candidate buyer questions (${res.status}).`),
+                )
             }
+            const data = (await res.json()) as GeneratePromptsResponse
 
             const items: PromptItem[] = (data.prompts || []).map((p, idx) => ({
                 ...p,

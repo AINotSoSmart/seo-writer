@@ -28,14 +28,23 @@
 
 import { getGeminiClient } from "@/utils/gemini/geminiClient"
 
-// Was flash-lite. This call is the last gate before a question becomes a
-// durable, paid, monthly-measured row, and its remaining rejections are taste
-// judgements — is this a real chat message or a manufactured search phrase —
-// which is exactly what a lite model is worst at. It runs once per generation,
-// so the cost difference is a rounding error against the Cloro spend the
-// questions it approves will incur every cycle. Same model the scope extractor
-// already uses for the other consequential decision in this pipeline.
-const MODEL = "gemini-3-flash-preview"
+/**
+ * The same model the generator uses, chosen on measured throughput.
+ *
+ * This was `gemini-3-flash-preview`, and it made onboarding time out. Four
+ * equal chunks of twelve questions were dispatched at the same instant: two
+ * came back in 2.8s and 6.6s, and the other two took **209s and 214s**. Same
+ * model, same batch size, same moment — that is a quota queue, not a hard
+ * problem. Preview models carry tight concurrency limits, and the SDK's backoff
+ * turns a throttle into a multi-minute stall with no error to catch.
+ *
+ * `gemini-3.7-flash` is what the generator already calls twice per build
+ * without stalling, and on a hand-checked set it returned the same verdicts.
+ * Judgement quality was never the reason to leave flash-lite — the reason was
+ * that it over-rejected duplicates, and that job has since moved to the
+ * generator, which holds the brand context.
+ */
+const MODEL = "gemini-3.7-flash"
 // Production sends at most 25. The larger ceiling lets the development-only
 // regression harness review all 36 labelled negatives without truncating them.
 const MAX_BATCH = 60
@@ -127,6 +136,45 @@ async function reviewOnce(batch: string[]): Promise<Map<number, PromptCriticRevi
     return byIndex
 }
 
+/**
+ * Reviews one chunk and returns decisions keyed by the chunk's own indices.
+ *
+ * Retries once when the response comes back short. A decision missing from the
+ * response deletes that question as `invalid_critic_response`, which is the
+ * correct direction to fail — an unjudged question must not reach a paying
+ * customer — but without a retry a model that drops trailing array items is
+ * indistinguishable from a model that rejected those questions.
+ */
+async function reviewChunk(chunk: string[]): Promise<Map<number, PromptCriticReview>> {
+    const decisions = await reviewOnce(chunk)
+    if (decisions.size < chunk.length) {
+        const second = await reviewOnce(chunk)
+        for (const [index, review] of second) {
+            if (!decisions.has(index)) decisions.set(index, review)
+        }
+    }
+    return decisions
+}
+
+/**
+ * How many questions one critic call judges.
+ *
+ * MEASURED, not guessed. This call's latency is wildly superlinear in batch
+ * size once the questions are real: fifteen genuine buyer questions came back
+ * in about six seconds, while thirty-seven took **197 seconds** — enough on its
+ * own to blow the API route's timeout and hand a founder a gateway error
+ * halfway through onboarding.
+ *
+ * Chunking is also the semantically correct shape now. This critic used to
+ * judge `duplicate_buyer_situation`, which genuinely needed the whole set in
+ * one call. That job moved to the generator, which has the brand context and
+ * writes the `scenario` labels. What is left — is this answerable from general
+ * knowledge, does it lead anywhere external, is it a real chat message or a
+ * manufactured search phrase — is a judgement about one question's own text,
+ * which is exactly what the instruction now tells it to do.
+ */
+const CRITIC_CHUNK_SIZE = 12
+
 export async function reviewPromptSet(
     questions: string[],
 ): Promise<{ reviews: PromptCriticReview[]; error?: string }> {
@@ -134,22 +182,30 @@ export async function reviewPromptSet(
     const batch = questions.slice(0, MAX_BATCH)
 
     try {
-        // RETRY BEFORE FAILING CLOSED.
-        //
-        // A decision missing from the response means the question is deleted as
-        // `invalid_critic_response`. That is the correct direction to fail — an
-        // unjudged question must not reach a paying customer — but it made a
-        // model that dropped trailing array items indistinguishable from a model
-        // that rejected those questions. One retry separates flakiness from a
-        // verdict; a question still unjudged after two attempts is still failed
-        // closed, so the policy is unchanged.
-        const byIndex = await reviewOnce(batch)
-        if (byIndex.size < batch.length) {
-            const second = await reviewOnce(batch)
-            for (const [index, review] of second) {
-                if (!byIndex.has(index)) byIndex.set(index, review)
-            }
+        const chunks: string[][] = []
+        for (let start = 0; start < batch.length; start += CRITIC_CHUNK_SIZE) {
+            chunks.push(batch.slice(start, start + CRITIC_CHUNK_SIZE))
         }
+
+        // TWO AT A TIME, NOT ALL AT ONCE.
+        //
+        // Unbounded `Promise.all` over the chunks is what exposed the quota
+        // queue described above: four simultaneous requests had two of them
+        // parked for three and a half minutes. Two in flight keeps the wall
+        // clock roughly halved without ever presenting the API with a burst.
+        const results: Array<Map<number, PromptCriticReview>> = []
+        for (let index = 0; index < chunks.length; index += 2) {
+            const pair = await Promise.all(
+                chunks.slice(index, index + 2).map((chunk) => reviewChunk(chunk)),
+            )
+            results.push(...pair)
+        }
+
+        const byIndex = new Map<number, PromptCriticReview>()
+        results.forEach((decisions, chunkIndex) => {
+            const offset = chunkIndex * CRITIC_CHUNK_SIZE
+            for (const [local, review] of decisions) byIndex.set(offset + local, review)
+        })
 
         return {
             reviews: batch.map(

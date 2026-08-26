@@ -4,7 +4,18 @@ import { buildBuyerPrompts } from "@/lib/visibility/prompt-builder"
 import type { BuyerPromptFamily } from "@/lib/visibility/prompt-template"
 import { resolveLanguage } from "@/lib/target-market"
 
-export const maxDuration = 60
+/**
+ * Matches every other LLM stage in onboarding — analyze-brand, scope and
+ * analyze-competitors all run at 300.
+ *
+ * It was 60, set when generation was a single Gemini call. It is now a bounded
+ * loop: up to three generation passes, a capability-coverage pass when one is
+ * needed, and a critic that retries once if its response comes back short. Four
+ * to five sequential calls on `gemini-3-flash-preview`, each returning up to 25
+ * structured questions, does not fit in sixty seconds — the gateway returned
+ * 504 and onboarding showed the founder a JSON parse error.
+ */
+export const maxDuration = 300
 
 interface GeneratePromptsRequest {
     scopeFamilies: Array<{
