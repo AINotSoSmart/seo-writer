@@ -1,10 +1,10 @@
 /**
  * The chart marks this dashboard is allowed to draw.
  *
- * Four shapes, chosen because four is what the data needs — a parts-of-a-whole
- * split, a ranked comparison, a filled-vs-remaining capacity, and a headline
- * figure. Anything that cannot be said with one of these is a table, and the
- * ranked comparison is built to sit inside one.
+ * A parts-of-a-whole split, a ranked comparison, a filled-vs-remaining
+ * capacity, a countable tick row, a position in a field, and a headline figure.
+ * Anything that cannot be said with one of these is a table, and the ranked
+ * comparison is built to sit inside one.
  *
  * ## Two rules the marks enforce, so callers cannot forget them
  *
@@ -270,6 +270,121 @@ export function CapacityStrip({
 }
 
 /**
+ * Above this many items a tick is thinner than the gap beside it and the row
+ * turns into grey mush. The card's strip is roughly 200px wide, so sixty ticks
+ * is already about 1.3px each — past that the mark stops being countable, which
+ * is the only reason to draw it instead of a bar.
+ */
+const MAX_COUNTABLE_TICKS = 60
+
+/**
+ * One tick per item, lit for the ones that count.
+ *
+ * The KPI row's denominators are small and countable — forty answers, forty
+ * questions — so this mark IS the measurement: four lit ticks out of forty,
+ * which a reader can verify by eye. A solid bar is an abstraction of the same
+ * fact, and it is the same abstraction whether the total is forty or forty
+ * thousand. `CapacityStrip` already reaches for this idea for the backlog; this
+ * is the same instinct at KPI scale, with a thinner tick.
+ *
+ * Above `MAX_COUNTABLE_TICKS` it degrades to a proportional bar on purpose. A
+ * tick row nobody can count is worse than the bar it replaced, because it
+ * implies a precision the reader cannot check.
+ */
+export function TickTrack({
+    filled,
+    total,
+    color,
+    restColor = "var(--viz-baseline)",
+    height = 22,
+}: {
+    filled: number
+    total: number
+    color: string
+    restColor?: string
+    height?: number
+}) {
+    if (total <= 0) return null
+
+    if (total > MAX_COUNTABLE_TICKS) {
+        const share = Math.min(Math.max(filled / total, 0), 1)
+        return (
+            <div
+                className="viz-track-pill"
+                style={{ height: Math.min(height, 8) }}
+                aria-hidden
+            >
+                <span
+                    className="block h-full rounded-full"
+                    // Floored so a real but tiny value still leaves a mark; a
+                    // measured 1-in-400 must not render as an empty track.
+                    style={{ width: `${Math.max(share * 100, 1.5)}%`, background: color }}
+                />
+            </div>
+        )
+    }
+
+    const lit = Math.min(Math.max(filled, 0), total)
+    return (
+        <div className="flex gap-[2px]" style={{ height }} aria-hidden>
+            {Array.from({ length: total }, (_, index) => (
+                <span
+                    key={index}
+                    className="flex-1 rounded-[1px]"
+                    style={{ background: index < lit ? color : restColor }}
+                />
+            ))}
+        </div>
+    )
+}
+
+/**
+ * The ranked field as one cell per brand, with the subject's place lit.
+ *
+ * Rank is not a rate, so it gets no tick row: "2nd of 5" has no numerator to
+ * fill. What it has is a field of known size and a position inside it, and that
+ * is exactly what these cells say — five boxes, the second one yours. The
+ * ordinals are drawn inside while they fit, so the card states its own claim
+ * without the reader consulting the label above it.
+ */
+export function RankTicks({
+    position,
+    total,
+    color,
+    height = 22,
+}: {
+    /** 1-based place in the field. */
+    position: number
+    total: number
+    color: string
+    height?: number
+}) {
+    if (total <= 0 || position <= 0) return null
+    // Past eight cells an ordinal no longer fits without clipping, so the cells
+    // keep their width and lose their numbers rather than the reverse.
+    const showOrdinals = total <= 8
+    return (
+        <div className="flex gap-[3px]" style={{ height }} aria-hidden>
+            {Array.from({ length: total }, (_, index) => {
+                const own = index + 1 === position
+                return (
+                    <span
+                        key={index}
+                        className="flex flex-1 items-center justify-center rounded-[3px] text-[10px] font-bold tabular-nums"
+                        style={{
+                            background: own ? color : "var(--viz-track)",
+                            color: own ? "#ffffff" : "var(--viz-ink-muted)",
+                        }}
+                    >
+                        {showOrdinals ? index + 1 : null}
+                    </span>
+                )
+            })}
+        </div>
+    )
+}
+
+/**
  * The headline figure form: tinted icon, label with its own hint, one number,
  * and a proportion bar underneath so the ratio is visible without reading.
  */
@@ -281,7 +396,7 @@ export function StatCard({
     value,
     unit,
     footnote,
-    proportion,
+    mark,
 }: {
     icon: ReactNode
     iconTint: string
@@ -292,8 +407,15 @@ export function StatCard({
     /** Trailing detail shown smaller and muted: "%", "/ 40", "nd of 5". */
     unit?: string
     footnote: string
-    /** Segments for the strip beneath the number. Omit for no strip. */
-    proportion?: PillSegment[]
+    /**
+     * The shape beneath the number — a `TickTrack` for a rate, `RankTicks` for a
+     * position. Passed in rather than described by props, because the two are
+     * different marks with different arguments and a single `proportion` array
+     * could only express one of them; the rank card was forcing the leader's
+     * count and the brand's count into a stacked bar that summed to nothing
+     * meaningful.
+     */
+    mark?: ReactNode
 }) {
     return (
         <div className="viz-card p-5">
@@ -314,12 +436,13 @@ export function StatCard({
                     <span className="text-[19px] text-[var(--viz-ink-muted)]">{unit}</span>
                 ) : null}
             </div>
-            {proportion ? (
-                <div className="mt-3.5">
-                    <StackedPill segments={proportion} height={6} minLabelShare={2} />
-                </div>
-            ) : null}
-            <div className="mt-2 text-[11px] text-[var(--viz-ink-muted)]">{footnote}</div>
+            {mark ? <div className="mt-3.5">{mark}</div> : null}
+            {/* Separated by a rule: the number above is this run's measurement,
+                the line below says what it was counted out of. Running them
+                together read as one caption for both. */}
+            <div className="mt-3.5 border-t border-[var(--viz-hairline)] pt-2.5 text-[11px] text-[var(--viz-ink-muted)]">
+                {footnote}
+            </div>
         </div>
     )
 }

@@ -39,7 +39,7 @@ import {
 
 import { InfoHint } from "./info-hint"
 import { MethodPanel } from "./method-panel"
-import { StatCard } from "./marks"
+import { RankTicks, StatCard, TickTrack } from "./marks"
 import { VizTokens } from "./viz-tokens"
 import { VisibilityOverview } from "./visibility-overview"
 import { VisibilityQuestions } from "./visibility-questions"
@@ -430,13 +430,13 @@ export function VisibilityDashboard(props: DashboardProps) {
                         value={rateNumber(brandV.namedAnswers, brandV.answersTotal)}
                         unit="%"
                         footnote={`${brandV.namedAnswers} of ${brandV.answersTotal} answers named you`}
-                        proportion={[
-                            { value: brandV.namedAnswers, color: "var(--viz-series-1)" },
-                            {
-                                value: Math.max(brandV.answersTotal - brandV.namedAnswers, 0),
-                                color: "var(--viz-track)",
-                            },
-                        ]}
+                        mark={
+                            <TickTrack
+                                filled={brandV.namedAnswers}
+                                total={brandV.answersTotal}
+                                color="var(--viz-series-1)"
+                            />
+                        }
                     />
                     <StatCard
                         icon={<Check className="size-4 text-[var(--viz-good-ink)]" aria-hidden />}
@@ -454,16 +454,13 @@ export function VisibilityDashboard(props: DashboardProps) {
                         value={String(brandV.ledQuestions)}
                         unit={` / ${brandV.questionsTotal}`}
                         footnote="named first in an answer"
-                        proportion={[
-                            { value: brandV.ledQuestions, color: "var(--viz-good)" },
-                            {
-                                value: Math.max(
-                                    brandV.questionsTotal - brandV.ledQuestions,
-                                    0,
-                                ),
-                                color: "var(--viz-track)",
-                            },
-                        ]}
+                        mark={
+                            <TickTrack
+                                filled={brandV.ledQuestions}
+                                total={brandV.questionsTotal}
+                                color="var(--viz-good)"
+                            />
+                        }
                     />
                     <StatCard
                         icon={<Link2 className="size-4 text-[var(--viz-seq-550)]" aria-hidden />}
@@ -482,13 +479,13 @@ export function VisibilityDashboard(props: DashboardProps) {
                         value={rateNumber(brandV.citedAnswers, brandV.answersTotal)}
                         unit="%"
                         footnote={`${brandV.citedAnswers} answers linked to your site`}
-                        proportion={[
-                            { value: brandV.citedAnswers, color: "var(--viz-seq-350)" },
-                            {
-                                value: Math.max(brandV.answersTotal - brandV.citedAnswers, 0),
-                                color: "var(--viz-track)",
-                            },
-                        ]}
+                        mark={
+                            <TickTrack
+                                filled={brandV.citedAnswers}
+                                total={brandV.answersTotal}
+                                color="var(--viz-seq-350)"
+                            />
+                        }
                     />
                     {/*
                       * RANK, NOT A SCORE. Position among the brands this run
@@ -525,22 +522,13 @@ export function VisibilityDashboard(props: DashboardProps) {
                                   )}`
                                 : "no tracked rival was named more often"
                         }
-                        proportion={[
-                            {
-                                value: rankLeader?.namedAnswers ?? 0,
-                                color: "var(--viz-warning)",
-                            },
-                            { value: brandV.namedAnswers, color: "var(--viz-series-1)" },
-                            {
-                                value: Math.max(
-                                    brandV.answersTotal -
-                                        (rankLeader?.namedAnswers ?? 0) -
-                                        brandV.namedAnswers,
-                                    0,
-                                ),
-                                color: "var(--viz-track)",
-                            },
-                        ]}
+                        mark={
+                            <RankTicks
+                                position={brandRank}
+                                total={rankField.length}
+                                color="var(--viz-series-1)"
+                            />
+                        }
                     />
                 </div>
 
