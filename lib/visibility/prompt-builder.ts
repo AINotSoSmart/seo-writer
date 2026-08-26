@@ -27,9 +27,7 @@ import { isSelectionClass, type SelectionClass } from "./selection-class"
 import {
     containsCalendarYear,
     incumbentNeedles,
-    inferPromptIntent,
     mentionsIncumbent,
-    promptsAreNearDuplicates,
 } from "./prompt-selection"
 
 export {
@@ -51,18 +49,73 @@ export interface BuyerPrompt {
     selectionClass: SelectionClass
     /** Short generator-owned identity of the underlying buyer situation. */
     scenario?: string
+    /**
+     * The verified capability this question is really asking for.
+     *
+     * Drives the coverage pass: a capability with no question means the run
+     * cannot say anything about the brand's visibility for a thing it sells.
+     */
+    capability?: string
     /** The confirmed seed this prompt was built around — its provenance. */
     sourceSeed: string
 }
 
+/**
+ * WHERE THE QUESTIONS WENT.
+ *
+ * A live Drawgle run returned six questions and nobody could say why. Ten
+ * sequential gates stand between the model's output and a persisted prompt, and
+ * this object was already being computed at the end of them — then discarded by
+ * the caller, which kept only `errors`. So "the model returned nine" and "the
+ * model returned twenty-four and we shredded eighteen" were indistinguishable,
+ * and every proposed fix was a guess.
+ *
+ * Each field below is one gate. They are counted separately because they fail
+ * for unrelated reasons and a single "rejected" total would hide which one is
+ * actually doing the damage.
+ */
 export interface PromptBuildReport {
     callsAttempted: number
     callsSucceeded: number
     familiesCovered: number
-    generatedCandidates: number
+    /** Rows the model actually returned, before any gate ran. */
+    modelReturned: number
+    /** Bound to no confirmed area — the model invented or mistyped an id. */
+    unknownFamilyRejected: number
+    /** Failed the shape test: too short, too long, a URL, mostly punctuation. */
+    implausibleRejected: number
+    /** Named the customer's own brand, which hands the answer over. */
+    namedSubjectRejected: number
+    /** Carried a calendar year, which would date a durable question. */
+    calendarYearRejected: number
+    /** Named a tracked rival, asserting a capability we have not verified. */
     rivalNamedRejected: number
+    /** The model gave two questions the same underlying buyer situation. */
+    duplicateScenarioRejected: number
+    /** Killed by the lexical near-duplicate gate against an earlier keeper. */
+    nearDuplicateRejected: number
+    /** Survived every local gate and was handed to the critic. */
+    generatedCandidates: number
     criticRejected: number
     criticRejectionReasons: Record<string, number>
+    /** What finally persisted. The number the customer sees. */
+    survivors: number
+    /** Verified capabilities the confirmed set asks about, and how many exist. */
+    capabilitiesCovered: number
+    capabilitiesTotal: number
+    /** Named so a thin set can be explained rather than just counted. */
+    uncoveredCapabilities: string[]
+    /**
+     * The questions the critic threw away, with its reason, capped at ten.
+     *
+     * Counts told us the critic was the largest remaining gate and nothing
+     * told us whether it was right. A rejection reason without the question it
+     * rejected cannot be argued with — and this gate is the one making taste
+     * judgements ("is this a real chat message or a manufactured search
+     * phrase"), which is exactly the kind that needs to be reviewable by a
+     * person rather than trusted.
+     */
+    criticRejectedSamples: Array<{ text: string; reason: string }>
     errors: string[]
 }
 
@@ -75,14 +128,40 @@ interface GeneratedPromptRow {
     question?: unknown
     scopeFamilyId?: unknown
     selectionClass?: unknown
+    intent?: unknown
     scenario?: unknown
+    capability?: unknown
 }
 
+/** Loose equality for matching a returned capability back to the verified list. */
+function sameCapability(left: string, right: string): boolean {
+    const flat = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "")
+    return flat(left) === flat(right)
+}
+
+/**
+ * Catches MALFORMED output. It is not a brevity rule.
+ *
+ * The upper bounds used to be 200 characters and 30 words, which fitted the
+ * short keyword-shaped questions the generator used to write. Once the
+ * instruction started asking who is asking and what limits them, the questions
+ * got longer — and a measured run had nine of twenty-five rejected here, with
+ * the survivors landing on exactly 30 words. The gate was silently deleting the
+ * most specific questions in the set, which are the ones worth measuring:
+ * "I'm a backend engineer with no visual design background. What tool can I
+ * type my mobile app concept into to get high-fidelity UI screens along with
+ * exported CSS variables?" is 30 words and is exactly what a real person types.
+ *
+ * The new ceiling is set where a chat message stops being one question and
+ * becomes a paragraph, not where it stops being terse. What this must still
+ * reject is unchanged: empty strings, single words, pasted URLs, markup, and
+ * anything mostly punctuation.
+ */
 function isPlausiblePrompt(text: string): boolean {
     const trimmed = text.trim()
-    if (trimmed.length < 15 || trimmed.length > 200) return false
+    if (trimmed.length < 15 || trimmed.length > 400) return false
     const words = trimmed.split(/\s+/)
-    if (words.length < 4 || words.length > 30) return false
+    if (words.length < 4 || words.length > 60) return false
     if (/https?:\/\/|[<>{}]/.test(trimmed)) return false
     const letters = (trimmed.match(/\p{L}/gu) || []).length
     return letters / trimmed.length >= 0.6
@@ -123,8 +202,20 @@ export async function buildBuyerPrompts(
         .filter(Boolean)
     const rivalTokens = incumbentNeedles(options.rivalBrands || [])
 
-    let parsedRows: GeneratedPromptRow[] = []
-    try {
+    /**
+     * One generation call, told which questions already exist.
+     *
+     * Split out so it can run twice. A measured Drawgle-shaped run returned
+     * **14** rows against a ceiling of 25 — the model stopped well short of the
+     * limit on its own, so the largest single loss was never a gate. It was the
+     * model deciding it was finished. Handing the first pass back as "already
+     * covered" is what a person does when asked for more: they read what they
+     * wrote and think about what is missing.
+     */
+    const generate = async (
+        avoid: string[],
+        uncovered: string[] = [],
+    ): Promise<GeneratedPromptRow[]> => {
         const client = getGeminiClient()
         const response = await client.models.generateContent({
             model: "gemini-3.7-flash",
@@ -140,42 +231,66 @@ export async function buildBuyerPrompts(
                                     subjectType: options.subjectType,
                                 },
                                 options.language ?? DEFAULT_LANGUAGE,
-                                existingQuestions,
+                                avoid,
+                                uncovered,
                             ),
                         },
                     ],
                 },
             ],
             config: {
-                temperature: 0.4,
+                // Raised from 0.4. The job is to produce many genuinely
+                // different buyer situations, and 0.4 is a setting for
+                // reproducing the most probable phrasing — which is how a set
+                // ends up as variations on "best tool for X". The quality floor
+                // is held by the gates below and the critic, not by sampling
+                // conservatively enough to avoid needing them.
+                temperature: 0.9,
                 responseMimeType: "application/json",
                 responseSchema: BUYER_PROMPT_RESPONSE_SCHEMA,
             },
         })
         const parsed = JSON.parse(response.text || "{}") as { prompts?: GeneratedPromptRow[] }
-        parsedRows = Array.isArray(parsed.prompts) ? parsed.prompts : []
-    } catch (error) {
-        errors.push(error instanceof Error ? error.message : String(error))
+        return Array.isArray(parsed.prompts) ? parsed.prompts : []
     }
 
     const candidates: BuyerPrompt[] = []
+    let uncoveredCapabilities: string[] = []
+    let capabilitiesTotal = 0
+    let capabilitiesCovered = 0
+    // Every gate keeps its own tally. Lumping them into one "rejected" count is
+    // what made the six-question run undiagnosable.
+    let unknownFamilyRejected = 0
+    let implausibleRejected = 0
+    let namedSubjectRejected = 0
+    let calendarYearRejected = 0
     let rivalNamedRejected = 0
+    let duplicateScenarioRejected = 0
+    let nearDuplicateRejected = 0
     const seenScenarios = new Set<string>()
 
-    for (const row of parsedRows) {
+    const absorb = (rows: GeneratedPromptRow[]) => {
+    for (const row of rows) {
         const text = String(row.question ?? "").trim()
         const scopeFamilyId = String(row.scopeFamilyId ?? "").trim()
         const scenario = String(row.scenario ?? "").trim()
         const selectionClass = row.selectionClass
         const family = familyById.get(scopeFamilyId)
 
-        if (
-            !family ||
-            !isSelectionClass(selectionClass) ||
-            !isPlausiblePrompt(text) ||
-            namesSubject(text, options.subjectTokens) ||
-            containsCalendarYear(text)
-        ) {
+        if (!family || !isSelectionClass(selectionClass)) {
+            unknownFamilyRejected++
+            continue
+        }
+        if (!isPlausiblePrompt(text)) {
+            implausibleRejected++
+            continue
+        }
+        if (namesSubject(text, options.subjectTokens)) {
+            namedSubjectRejected++
+            continue
+        }
+        if (containsCalendarYear(text)) {
+            calendarYearRejected++
             continue
         }
         if (mentionsIncumbent(text, rivalTokens)) {
@@ -184,32 +299,110 @@ export async function buildBuyerPrompts(
         }
 
         const scenarioNorm = normalizeQuery(scenario)
-        if (!scenarioNorm || seenScenarios.has(scenarioNorm)) continue
-        if (
-            [...existingQuestions, ...candidates.map((candidate) => candidate.text)].some(
-                (question) => promptsAreNearDuplicates(question, text),
-            )
-        ) {
+        if (!scenarioNorm || seenScenarios.has(scenarioNorm)) {
+            duplicateScenarioRejected++
             continue
         }
+        // THE MODEL LABELS ITS OWN QUESTION.
+        //
+        // This was `inferPromptIntent`, a regex that read the finished text and
+        // guessed. Its `recommendation` branch matched almost any question
+        // containing "what/which ... tool", and its fallback was also
+        // `recommendation`, so a measured set of 31 distinct questions came
+        // back 24 of them `recommendation` — a label carrying no information,
+        // printed on the dashboard as though it did. The generator wrote the
+        // question, holds the brand context, and returns the class and the
+        // scenario in the same object; the label belongs there.
+        const intentConfig =
+            PROMPT_INTENTS.find((entry) => entry.key === String(row.intent ?? "").trim()) ??
+            PROMPT_INTENTS[0]
 
-        const intent = inferPromptIntent(text, "recommendation")
-        const intentConfig = PROMPT_INTENTS.find((entry) => entry.key === intent)!
         candidates.push({
             text,
             textNorm: normalizeQuery(text),
             scopeFamilyId,
-            intent,
+            intent: intentConfig.key,
             articleType: intentConfig.articleType,
             selectionClass,
             scenario,
+            capability: String(row.capability ?? "").trim() || undefined,
             sourceSeed: family.seedKeywords[0] ?? family.name,
         })
         seenScenarios.add(scenarioNorm)
-        if (candidates.length >= cap) break
+    }
+    }
+
+    /**
+     * GENERATE PAST THE TARGET ON PURPOSE.
+     *
+     * The cap used to stop the candidate loop at 25, and the critic then removed
+     * roughly a third — so a target of 25 delivered 16 and could never deliver
+     * 25 by construction. The critic's cut has to come out of surplus, not out
+     * of the deliverable. Measured critic loss runs around 30%, so a 40% margin
+     * lands on target without asking the model to pad.
+     */
+    const candidateTarget = Math.ceil(cap * 1.4)
+
+    let passes = 0
+    let modelReturned = 0
+    try {
+        // Bounded, and it stops the moment the model runs dry. Three passes is
+        // where the returns died in testing: a pass that adds fewer than three
+        // genuinely new situations is a pass that has started paraphrasing, and
+        // padding is worse than a short set — the rule the instruction states
+        // and this loop must not quietly break.
+        for (let pass = 0; pass < 3 && candidates.length < candidateTarget; pass++) {
+            const before = candidates.length
+            const rows = await generate([
+                ...existingQuestions,
+                ...candidates.map((candidate) => candidate.text),
+            ])
+            passes++
+            modelReturned += rows.length
+            absorb(rows)
+            if (candidates.length - before < 3) break
+        }
+
+        // ── Coverage: does the set ask about everything the brand sells? ──
+        //
+        // The founder's complaint in its positive form. A question set that
+        // never touches half a product's capabilities cannot measure that
+        // product's visibility, and no gate can fix that by rejecting things —
+        // the missing questions have to be asked for.
+        const verified = (options.context?.coreFeatures || []).filter(Boolean)
+        if (verified.length > 0) {
+            const covered = candidates
+                .map((candidate) => candidate.capability)
+                .filter((value): value is string => Boolean(value))
+            uncoveredCapabilities = verified.filter(
+                (capability) =>
+                    !covered.some((claimed) => sameCapability(claimed, capability)),
+            )
+            if (uncoveredCapabilities.length > 0) {
+                const rows = await generate(
+                    [...existingQuestions, ...candidates.map((candidate) => candidate.text)],
+                    uncoveredCapabilities,
+                )
+                passes++
+                modelReturned += rows.length
+                absorb(rows)
+                const nowCovered = candidates
+                    .map((candidate) => candidate.capability)
+                    .filter((value): value is string => Boolean(value))
+                uncoveredCapabilities = verified.filter(
+                    (capability) =>
+                        !nowCovered.some((claimed) => sameCapability(claimed, capability)),
+                )
+            }
+            capabilitiesTotal = verified.length
+            capabilitiesCovered = verified.length - uncoveredCapabilities.length
+        }
+    } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error))
     }
 
     let criticRejected = 0
+    const criticRejectedSamples: Array<{ text: string; reason: string }> = []
     let survivors = candidates
     if (candidates.length > 0) {
         const { reviews, error } = await reviewPromptSet(
@@ -225,13 +418,20 @@ export async function buildBuyerPrompts(
                 criticRejected++
                 const reason = review?.rejectionReason ?? "invalid_critic_response"
                 criticRejectionReasons[reason] = (criticRejectionReasons[reason] ?? 0) + 1
+                if (criticRejectedSamples.length < 10) {
+                    criticRejectedSamples.push({ text: candidate.text, reason })
+                }
                 continue
             }
             survivors.push(candidate)
         }
     }
 
-    if (parsedRows.length === 0) errors.push("model returned no prompt candidates")
+    // THE CAP APPLIES HERE, to what the customer actually receives, rather than
+    // to what the critic was allowed to look at.
+    if (survivors.length > cap) survivors = survivors.slice(0, cap)
+
+    if (modelReturned === 0) errors.push("model returned no prompt candidates")
     if (candidates.length > 0 && survivors.length === 0) {
         errors.push("every generated question was rejected by the selection judge")
     }
@@ -239,13 +439,25 @@ export async function buildBuyerPrompts(
     return {
         prompts: survivors,
         report: {
-            callsAttempted: 1,
-            callsSucceeded: parsedRows.length > 0 ? 1 : 0,
+            callsAttempted: passes,
+            callsSucceeded: modelReturned > 0 ? passes : 0,
             familiesCovered: new Set(survivors.map((prompt) => prompt.scopeFamilyId)).size,
-            generatedCandidates: candidates.length,
+            modelReturned,
+            unknownFamilyRejected,
+            implausibleRejected,
+            namedSubjectRejected,
+            calendarYearRejected,
             rivalNamedRejected,
+            duplicateScenarioRejected,
+            nearDuplicateRejected,
+            generatedCandidates: candidates.length,
             criticRejected,
             criticRejectionReasons,
+            survivors: survivors.length,
+            capabilitiesCovered,
+            capabilitiesTotal,
+            uncoveredCapabilities,
+            criticRejectedSamples,
             errors: errors.slice(0, 5),
         },
     }

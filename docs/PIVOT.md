@@ -1253,6 +1253,121 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-26 (twenty-ninth pass) — six questions became twenty-five
+
+**The complaint.** A live Drawgle run produced **6 buyer questions**, nearly all
+shaped "best &lt;keyword&gt; for &lt;person&gt;" and nearly all labelled
+`recommendation`. The founder's position was that the same product supports 25
+genuinely distinct questions, and that the generator was writing about *search
+areas* rather than about the product.
+
+**Why nobody could tell what happened.** The path from model output to a
+persisted question ran **ten sequential gates with no telemetry, no retry and no
+top-up**. `PromptBuildReport` was computed at the end and then discarded by
+`run-probe.ts`, which kept only `errors` — so "the model returned 9" and "the
+model returned 24 and we shredded 18" were indistinguishable, and every proposed
+fix was a guess. Telemetry came first; every change below rests on a measurement,
+not an argument.
+
+**What the measurements found.**
+
+- **The cap was on the wrong side of the critic.** `candidates.length >= cap`
+  stopped generation at 25 *candidates*; the critic then removed roughly a third.
+  A target of 25 could never deliver 25 by construction. The cap now applies to
+  the confirmed set, and generation overshoots by 40% so the critic's cut comes
+  out of surplus.
+- **The model stopped early on its own.** One call returned 14 of a possible 25.
+  Generation is now a bounded loop — at most three passes, each shown what the
+  previous produced, stopping the moment a pass adds fewer than three new
+  situations. The anti-padding rule is unchanged and still stated.
+- **The word cap was deleting the best questions.** `isPlausiblePrompt` capped at
+  30 words, and survivors landed on *exactly* 30 — the specific, situational
+  questions were being silently truncated out of the set. It is a malformation
+  guard, not a brevity rule: now 60 words / 400 characters. The confirm route's
+  200-character limit was raised to match, closing a gap where a question could
+  be generated, shown, confirmed, and then refused on submit.
+- **The few-shot examples were teaching the monotony.** 13 of the 16 calibration
+  positives contain "best", "which", "what tool" or "what app", and only 3 of 16
+  open from a person or situation. The instruction asked for variety while the
+  examples underneath demonstrated one sentence shape sixteen times. Generation
+  now shows the **negatives only** — they mark the tutorial boundary, which is
+  the job, and cannot anchor the output form. The positives are untouched in
+  `selection-calibration-set.ts` for `POST /api/visibility/calibrate-prompts`.
+- **Three separate judges were rejecting duplicates.** The generator declared all
+  25 scenarios distinct (`duplicateScenarioRejected: 0`) while the critic — a
+  smaller model reading a context-free list — rejected **nine** as duplicates.
+  Two judges disagreeing that sharply is one judge working without evidence, so
+  duplication is settled where the context lives.
+
+**Two regex gates deleted, because they were judging meaning.**
+
+- `inferPromptIntent` read a finished question and guessed its intent. Its
+  `recommendation` branch matched almost anything containing "what/which … tool"
+  and its fallback was `recommendation` too, so 24 of 31 distinct questions came
+  back `recommendation` — a badge with no information in it, rendered to the
+  customer as though there were. The generator now returns `intent` alongside
+  `selectionClass` and `scenario`, having read the brand. Editing a question's
+  wording no longer reclassifies it, and a hand-typed question is not guessed at.
+- `promptsAreNearDuplicates` is a lexical containment test whose own test cases
+  are cross-*topic* SEO paraphrases from the previous product. Inside one
+  product's set every question shares that product's vocabulary by construction:
+  measured against 25 hand-written Drawgle questions it rejected 8, about five of
+  them plainly distinct needs. Retuning the constants is the wrong move here (see
+  CLAUDE.md) — when the populations overlap, the method is wrong. It stays
+  exported for the confirm route, a different population.
+
+**Kept, because they check facts rather than make judgements:** `namesSubject`,
+`mentionsIncumbent`, `containsCalendarYear`, `isPlausiblePrompt`. "Does this
+string contain X" and "is this malformed" is what regex is correct for.
+
+**Coverage replaced rejection.** No stage had ever asked whether the set covers
+what the brand actually sells. After the passes, capabilities with no question
+get one targeted pass naming them, and `capabilitiesCovered / capabilitiesTotal`
+is reported. It never rejects anything — the missing questions are asked for.
+
+**Onboarding's most consequential call.** `analyze-brand` decides what the whole
+system believes a product *is*; scope families, questions and every downstream
+measurement inherit it, and it was running on `gemini-3.1-flash-lite`. Now
+`gemini-3-flash-preview`. Its Category instruction asked for "a professional
+industry category (e.g. 'SaaS for X')" and returned `SaaS for Product Design and
+Prototyping` for a mobile-only tool — the abstraction was the loss. It now asks
+for the label a buyer would use and forbids repeating the identity sentence.
+
+The prompt and schema moved to **`lib/brand-profile.ts`**. A prompt inside a
+request handler cannot be imported, so it could not be exercised without a
+session, a crawl and a stream — and a diagnostic harness holding a copy of it was
+measuring a prompt that had already drifted. Contract assertions about the
+prompt's content followed it there.
+
+**The critic no longer loses questions silently.** A decision missing from its
+response deleted that question as `invalid_critic_response`, which is the correct
+direction to fail but made a model dropping trailing array items
+indistinguishable from a verdict. One retry now separates flakiness from a
+rejection; still fails closed after two attempts. Rejected questions are recorded
+with their reason (`criticRejectedSamples`) so a taste judgement is reviewable
+rather than merely counted.
+
+**Measured end to end on three real brands** — full chain, crawl through
+questions:
+
+| brand | questions | capabilities covered | distinct openers |
+|---|---|---|---|
+| drawgle.com | 25 (was 6) | 5 / 5 | 23 of 25 |
+| sleek.design | 25 | 7 / 7 | 20 of 25 |
+| datafa.st | 25 | 5 / 5 | 20 of 25 |
+
+The critic's remaining rejections are correct: genuine keyword strings ("photo of
+a mobile app to editable vector UI converter"), commands rather than questions,
+and — on datafa.st — five `general_knowledge_answer` catches, which is the gate
+doing exactly the job the selection axis exists for.
+
+**Not changed, deliberately.** `MAX_GENERATED_PROMPTS` stays at 25 — the founder
+chose to fix quality rather than raise the ceiling, and the pipeline is now
+cap-bound rather than gate-bound, so raising it later would actually yield more.
+Informational and how-to questions remain excluded: the founder has tested them
+and an assistant answers them from training without naming any product, leaving
+nothing to track.
+
 ### 2026-08-17 (twenty-eighth pass) — engine choice leaves the request body
 
 **Two engines are wanted again.** The single-engine restriction was never in

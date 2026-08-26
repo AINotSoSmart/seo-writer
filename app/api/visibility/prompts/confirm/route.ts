@@ -9,7 +9,6 @@ import {
 import {
     containsCalendarYear,
     incumbentNeedles,
-    inferPromptIntent,
     mentionsIncumbent,
     promptsAreNearDuplicates,
 } from "@/lib/visibility/prompt-selection"
@@ -99,8 +98,14 @@ export async function POST(req: NextRequest) {
 
     const prompts = body.prompts.map((prompt) => {
         const text = (prompt.text ?? "").trim()
-        const fallback = prompt.intent ?? "problem"
-        const intent = inferPromptIntent(text, fallback)
+        // The label travels with the question instead of being re-derived from
+        // its wording. Generated questions carry the intent the generator chose
+        // while it had the brand in front of it; a question the founder typed
+        // carries whatever the form set. Re-inferring here used to silently
+        // overwrite both with a regex guess.
+        const intent = PROMPT_INTENTS.some((entry) => entry.key === prompt.intent)
+            ? (prompt.intent as PromptIntentKey)
+            : "problem"
         const scopeFamilyId = (prompt.scopeFamilyId ?? "").trim()
         const sourceSeed = (prompt.sourceSeed ?? "").trim()
         const selectionClass = isSelectionClass(prompt.selectionClass)
@@ -124,9 +129,9 @@ export async function POST(req: NextRequest) {
         }
     })
 
-    if (prompts.some((prompt) => prompt.prompt.length < 15 || prompt.prompt.length > 200)) {
+    if (prompts.some((prompt) => prompt.prompt.length < 15 || prompt.prompt.length > 400)) {
         return NextResponse.json(
-            { error: "Every buyer question must contain 15-200 characters." },
+            { error: "Every buyer question must contain 15-400 characters." },
             { status: 400 },
         )
     }

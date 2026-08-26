@@ -114,62 +114,19 @@ export function containsCalendarYear(text: string): boolean {
 }
 
 /**
- * Classifies the finished question instead of trusting a model label which may
- * collapse an entire batch to one value. This never changes the question; it
- * only selects the downstream article contract.
+ * `inferPromptIntent` USED TO LIVE HERE. It is deleted, not moved.
+ *
+ * It read a finished question with regexes and guessed which of five intents it
+ * was. Its `recommendation` branch matched essentially any question containing
+ * "what/which ... tool", and its fallback was `recommendation` too, so a
+ * measured set of 31 distinct questions came back with 24 labelled
+ * `recommendation` — a label with no information in it, printed on the customer's
+ * dashboard as though there were.
+ *
+ * It was introduced because a model had once collapsed a whole batch to one
+ * label. The answer to a model labelling badly is not a regex labelling worse;
+ * it is to ask the model that wrote the question, which holds the brand context
+ * and already returns `selectionClass` and `scenario` in the same object. See
+ * `prompt-template.ts` for the field and `prompt-builder.ts` for the fallback
+ * when it returns something unusable.
  */
-export function inferPromptIntent(text: string, fallback: PromptIntentKey): PromptIntentKey {
-    const value = text.toLowerCase()
-
-    if (
-        /\b(is|are) there (?:a|an|any)?\s*(tool|tools|software|platforms?|services?|apps?)\b/.test(
-            value,
-        ) ||
-        /\b(what|which) (?:is the )?(?:best )?(tool|software|platform|service|app)\b/.test(
-            value,
-        ) ||
-        /\bi need (?:a|an) (tool|software|platform|service|app)\b/.test(value) ||
-        /\b(best|top|recommend(?:ed|ation)?)\b.{0,35}\b(tool|tools|software|platform|service|app|option|options)\b/.test(
-            value,
-        )
-    ) {
-        return "recommendation"
-    }
-    if (
-        /\b(alternatives?|other than|replace|replacement|switch from|move away from|something else|something better|better way|what (?:else|should i use instead))\b/.test(
-            value,
-        ) ||
-        /\b(?:i (?:use|am using)|[a-z0-9.]+ is)\b.{0,80}\bwhat should i use\b/.test(
-            value,
-        )
-    ) {
-        return "alternatives"
-    }
-    if (
-        /\b(vs\.?|versus|compare|compared to|comparison|difference between|differ(?:s|ent)? from|better than)\b/.test(
-            value,
-        )
-    ) {
-        return "comparison"
-    }
-    if (
-        /\b(why (?:is|isn'?t|are|aren'?t)|isn'?t|aren'?t|can'?t|cannot|not ranking|not showing|not appearing|invisible|rankings? (?:are )?flat|ignoring)\b/.test(
-            value,
-        ) ||
-        /^\s*(?:my|i am|we are)\b.{0,60}\b(struggl|failing|wrong|problem)\b/.test(value) ||
-        /\bi have\b.{0,80}\b(?:but )?no\b/.test(
-            value,
-        )
-    ) {
-        return "problem"
-    }
-    if (
-        /\b(how do i|how can i|how to|can i|is there a way|what is the (?:best|fastest|most efficient|most effective) way|what's the best way|best practices?|techniques? for|strategies? for)\b/.test(
-            value,
-        )
-    ) {
-        return "howto"
-    }
-
-    return fallback
-}

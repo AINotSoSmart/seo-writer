@@ -375,6 +375,14 @@ export async function runVisibilityProbe(
 
         let promptsToUse: import("./prompt-builder").BuyerPrompt[] = []
         let promptBuildErrors: string[] = []
+        /**
+         * The generation funnel, frozen onto the run.
+         *
+         * Null when the caller supplied a confirmed set, because then no
+         * generation happened and a row of zeros would read as a failed build
+         * rather than a build that never ran.
+         */
+        let promptBuild: import("./prompt-builder").PromptBuildReport | null = null
 
         if (options.prompts && options.prompts.length > 0) {
             promptsToUse = options.prompts
@@ -416,6 +424,17 @@ export async function runVisibilityProbe(
             })
             promptsToUse = built.prompts
             promptBuildErrors = built.report.errors
+            promptBuild = built.report
+            // Logged as well as persisted: on a run that dies before completion
+            // the summary is never written, and that is exactly the run whose
+            // funnel someone needs to read.
+            console.log("[Probe] prompt funnel", JSON.stringify(promptBuild))
+            await report(
+                "building_prompts",
+                `model returned ${promptBuild.modelReturned}, ` +
+                    `${promptBuild.generatedCandidates} passed local gates, ` +
+                    `${promptBuild.survivors} survived the critic`,
+            )
         }
 
         if (promptsToUse.length === 0) {
@@ -893,7 +912,12 @@ export async function runVisibilityProbe(
                     (total, entry) => total + entry.creditsUsed,
                     0,
                 ),
-                summary,
+                // The funnel rides inside the summary rather than in a new
+                // column: it is run-scoped, frozen at completion, and read by
+                // operators exactly like every other number in here. Adding a
+                // column would need a migration applied by hand for a field
+                // whose only consumer is a diagnosis.
+                summary: { ...summary, promptBuild },
                 // Frozen with the run. The report reads this rather than
                 // re-clustering, so the plan a customer was shown is the plan
                 // that stays on screen.

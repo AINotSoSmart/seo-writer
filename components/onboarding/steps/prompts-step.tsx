@@ -17,8 +17,11 @@ import { Button } from "@/components/ui/button"
 import { UNKNOWN_SELECTION_CLASS } from "@/lib/visibility/selection-class"
 import { normalizeQuery } from "@/lib/harvest/types"
 import type { BuyerPrompt } from "@/lib/visibility/prompt-builder"
-import { DEFAULT_PROMPTS_PER_RUN, PROMPT_INTENTS } from "@/lib/visibility/prompt-config"
-import { inferPromptIntent } from "@/lib/visibility/prompt-selection"
+import {
+    DEFAULT_PROMPTS_PER_RUN,
+    PROMPT_INTENTS,
+    type PromptIntentKey,
+} from "@/lib/visibility/prompt-config"
 import type { ScopeFamily } from "@/lib/schemas/brand"
 
 export interface PromptItem extends BuyerPrompt {
@@ -130,7 +133,11 @@ export function PromptsStep({
         onPromptsChange(
             prompts.map((p) => {
                 if (p.id !== promptId) return p
-                const intent = inferPromptIntent(trimmed, p.intent)
+                // Editing the wording does not reclassify the question. It was
+                // re-inferred from the new text by a regex, so fixing a typo
+                // could silently move a question into a different article type.
+                // The founder changed how it reads, not what it is.
+                const intent = p.intent
                 const articleType = PROMPT_INTENTS.find(
                     (candidate) => candidate.key === intent,
                 )!.articleType
@@ -169,7 +176,12 @@ export function PromptsStep({
             return next
         })
 
-        const intent = inferPromptIntent(input, "problem")
+        // A hand-typed question is not classified by guessing at its wording.
+        // It starts in the same neutral label the confirm route falls back to,
+        // for the same reason the selection class below starts at its weakest
+        // value: nothing has judged this question yet, and inventing a
+        // confident label is worse than admitting that.
+        const intent: PromptIntentKey = "problem"
         const articleType = PROMPT_INTENTS.find(
             (candidate) => candidate.key === intent,
         )!.articleType

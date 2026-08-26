@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { tavily } from "@tavily/core"
-import { getGeminiClient } from "@/utils/gemini/geminiClient"
 import { jsonrepair } from "jsonrepair"
 import { MAX_TOTAL_SCOPE_SEEDS, normalizeSeed } from "@/lib/brand-scope"
 import { BrandDetailsSchema } from "@/lib/schemas/brand"
 // Scope extraction moved to ./scope/route.ts — this call now only reads the
 // brand's persona, and hands its crawl over so the next one need not repeat it.
 import { buildRankedBrandCorpus } from "@/lib/scope-extraction"
+import { requestBrandProfile } from "@/lib/brand-profile"
 import { selectRepresentativeBrandUrls } from "@/lib/brand/representative-pages"
 import { fetchAllSitemapUrls } from "@/lib/audit/site-scanner"
 import {
@@ -267,57 +267,6 @@ export async function POST(req: NextRequest) {
     // crawl_done already emitted with full { url, title, content } so a
     // refresh can checkpoint pages before the persona LLM finishes.
 
-    const client = getGeminiClient()
-
-    const prompt = `
-      You are an expert brand strategist and linguistic analyst. Analyze the following website content to extract a strategic brand identity and a robust writing style guide.
-      
-      Target Website: ${url}
-      
-      Website Content Samples (homepage, pricing, and product pages ranked first):
-      ${combinedContent}
-
-      Founder-provided target searches (authoritative direction, if any):
-      ${targetSeeds.length ? targetSeeds.map((seed) => `- ${seed}`).join("\n") : "- None supplied"}
-      
-      ## CRITICAL: NOISE FILTERING RULES
-      Before analyzing, you MUST filter out the following "noise" frequently found on websites:
-      1. **Personal Footers:** Ignore phrases like "Made with ☕️ by...", "Built by...", or personal thank-you notes.
-      2. **Transient Social Proof:** Ignore specific numbers that change (e.g., "Loved by 10,000+ users", "Joined by 500 people today"). Focus on the *fact* that they use social proof, not the numbers.
-      3. **Boilerplate:** Ignore standard footer links, copyright notices, and "Something missing? Suggest features" type of transient UI text.
-      
-      ## EXTRACTION GUIDE:
-      1. **Product Identity:** What is it literally (tool category), emotionally (the feeling), and what is it NOT (distinction).
-      2. **Category:** A professional industry category (e.g., "SaaS for X", "E-commerce for Y").
-      3. **Mission:** The core "Why".
-      4. **Audience:** Not just "users", but the specific psychology and role (e.g., "Overwhelmed small business owners looking for speed").
-      5. **Enemy:** What philosophical or practical problem is this product fighting (e.g., "Complexity", "Slow data", "High costs").
-      6. **Unique Value Proposition:** 3-5 distinct, permanent selling points.
-      7. **Core Features (The "Fixes"):** List permanent product capabilities, not transient UI features.
-      8. **Pricing:** Extract the real plans visible on the pages. Do NOT summarize as only "Subscription", "One-time", or "Free tier".
-         - When plan cards or pricing tables are visible, each pricing array item is ONE plan line:
-           "Plan name — $price / period — key perk 1; key perk 2; key perk 3"
-         - Copy dollar amounts and plan names from the page; never invent prices.
-         - If the site only states a model with no dollar amounts, use one item like
-           "Subscription — price not listed on crawled pages".
-         - Worked examples:
-           "Starter — $49 / month — one workspace; five team members"
-           "Business — $149 / month — unlimited projects; priority support"
-      9. **Brand Keywords:** Generate 4-5 SHORT search keywords (2-4 words each) that represent what a user would type into Google to find this type of product. NOT the brand name, NOT full sentences — just the search terms. Example: for a photo restoration app, keywords might be: "ai photo restoration", "restore old photos", "fix damaged photos", "old photo animation", "family photo repair".
-      10. **Style DNA (ROBUST LINGUISTIC GUIDE):**
-         Create a SINGLE paragraph that defines the LINGUISTIC STYLE. 
-         - **Perspective:** (e.g., Second-person addressing user, first-person plural for brand).
-         - **Rhetorical Patterns:** (e.g., Do they lead with benefits? Use rhetorical questions? Use active/command verbs?).
-         - **Vocabulary:** Describe the "vibe" of their words (e.g., "Outcome-oriented, minimalist, devoid of abstract fluff").
-         - **Formality:** Conversational vs Corporate vs Technical.
-         - **STRICT RULE:** DO NOT copy-paste specific strings from the website (like "Made with coffee"). Instead, define the *pattern* (e.g., "Uses personal, approachable touches in non-core areas").
-      
-      Example style_dna:
-      "The voice is direct, minimalist, and outcome-oriented. It adopts a conversational yet confident tone, using a second-person perspective ('you') to drive action while referring to the brand as 'we'. Sentences are punchy and start with command verbs. It avoids all corporate 'fluff' and abstract mission-speak, favoring instead clear, benefit-driven headlines and data-backed claims. The writing uses personal, approachable micro-copy to build community trust without losing professional authority."
-
-      Extract into JSON format.
-    `
-
     // Scope extraction is NOT run here — it is its own call, POST
     // /api/analyze-brand/scope, made after the founder has confirmed these brand
     // details. Onboarding is sequential so each screen waits only on its own
@@ -327,129 +276,9 @@ export async function POST(req: NextRequest) {
     // The second call re-uses this crawl (returned below), so it costs one LLM
     // call rather than another 20-60s of sitemap walking and extraction.
     const brandPromise = (async () => {
-      const response = await client.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          temperature: 0,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              product_name: { type: "STRING" },
-              product_identity: {
-                type: "OBJECT",
-                properties: {
-                  literally: { type: "STRING" },
-                  emotionally: { type: "STRING" },
-                  not: { type: "STRING" },
-                },
-                required: ["literally", "emotionally", "not"],
-              },
-              mission: { type: "STRING" },
-              audience: {
-                type: "OBJECT",
-                properties: {
-                  primary: { type: "STRING" },
-                  psychology: { type: "STRING" },
-                },
-                required: ["primary", "psychology"],
-              },
-              enemy: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-              },
-              category: {
-                type: "STRING",
-                description: "Product category, e.g., 'Privacy-First Web Analytics'",
-              },
-              uvp: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-                description: "Unique Value Propositions - detailed selling points",
-              },
-              core_features: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-              },
-              pricing: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-                description:
-                  "One string per plan: name — $price / period — key perks. Not a vague model label.",
-              },
-              how_it_works: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-              },
-              brand_keywords: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-                description:
-                  "4-5 short search keywords (2-4 words each) users would type to find this product type",
-              },
-              scope_families: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    name: { type: "STRING" },
-                    description: { type: "STRING" },
-                    seed_keywords: {
-                      type: "ARRAY",
-                      items: { type: "STRING" },
-                    },
-                    evidence: {
-                      type: "ARRAY",
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          url: { type: "STRING" },
-                          quote: { type: "STRING" },
-                        },
-                        required: ["url", "quote"],
-                      },
-                    },
-                    source: { type: "STRING", enum: ["extracted"] },
-                    priority: { type: "INTEGER" },
-                    enabled: { type: "BOOLEAN" },
-                  },
-                  required: [
-                    "name",
-                    "description",
-                    "seed_keywords",
-                    "evidence",
-                    "source",
-                    "priority",
-                    "enabled",
-                  ],
-                },
-              },
-              style_dna: {
-                type: "STRING",
-                description:
-                  "Complete writing voice and style guide as a single paragraph covering perspective, tone, sentence style, formality, patterns, and words to avoid",
-              },
-            },
-            required: [
-              "product_name",
-              "product_identity",
-              "mission",
-              "audience",
-              "enemy",
-              "category",
-              "uvp",
-              "core_features",
-              "pricing",
-              "how_it_works",
-              "brand_keywords",
-              "style_dna",
-            ],
-          },
-        },
-      })
-
-      const text = response.text || ""
+      // The instruction and schema live in lib/brand-profile.ts so they can be
+      // exercised without a session, a crawl and a stream. See the note there.
+      const text = await requestBrandProfile(url, combinedContent, targetSeeds)
       let brandData: Record<string, unknown> = {}
       try {
         brandData = JSON.parse(text || "{}")

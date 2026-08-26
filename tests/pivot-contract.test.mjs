@@ -1826,8 +1826,13 @@ test("scope role refinement folds delivery mechanics out of harvest seeds", asyn
 })
 
 test("scope extraction is its own call, not a field on the persona prompt", async () => {
-    const [route, scopeRoute, extraction] = await Promise.all([
+    // The persona prompt now lives in lib/brand-profile.ts — a prompt inside a
+    // request handler cannot be imported, so it could not be exercised without a
+    // session, a crawl and a stream. Assertions about its CONTENT follow it
+    // there; assertions about the route's BEHAVIOUR stay on the route.
+    const [route, profile, scopeRoute, extraction] = await Promise.all([
         text("app/api/analyze-brand/route.ts"),
+        text("lib/brand-profile.ts"),
         text("app/api/analyze-brand/scope/route.ts"),
         text("lib/scope-extraction.ts"),
     ])
@@ -1885,9 +1890,9 @@ test("scope extraction is its own call, not a field on the persona prompt", asyn
     assert.match(extraction, /even when\s+the founder did not name it/)
 
     // Pricing must extract real plan lines, not a vague billing model label.
-    assert.doesNotMatch(route, /High-level model \(Subscription, One-time, Free tier\)/)
-    assert.match(route, /Do NOT summarize as only "Subscription"/)
-    assert.match(route, /Plan name — \$price \/ period/)
+    assert.doesNotMatch(profile, /High-level model \(Subscription, One-time, Free tier\)/)
+    assert.match(profile, /Do NOT summarize as only "Subscription"/)
+    assert.match(profile, /Plan name — \$price \/ period/)
 })
 
 test("brand analyze streams real phases and unlocks scope before persona finishes", async () => {
@@ -3235,7 +3240,10 @@ test("confirmed business scope is the only production relevance contract", async
         text("lib/harvest/query-validation.ts"),
     ])
 
-    assert.match(analysis, /Founder-provided target searches/)
+    assert.match(
+        await text("lib/brand-profile.ts"),
+        /Founder-provided target searches/,
+    )
     // Scope extraction moved out of the persona prompt into its own call.
     const scopeExtraction = await text("lib/scope-extraction.ts")
     // The task is search markets, not an inventory of features. "Everything this
@@ -5127,7 +5135,6 @@ test("buyer-question selection fixes the three failures observed in the live Fli
         NAMED_BRAND_PROMPTS_ALLOWED,
         containsCalendarYear,
         incumbentNeedles,
-        inferPromptIntent,
         mentionsIncumbent,
         promptsAreNearDuplicates,
     } = await import("../lib/visibility/prompt-selection.ts")
@@ -5184,107 +5191,40 @@ test("buyer-question selection fixes the three failures observed in the live Fli
     assert.doesNotMatch(selection, /export const MAX_INCUMBENT_PROMPT_SHARE/)
     assert.doesNotMatch(builder, /incumbentCap/)
 
-    // The labels from the same live run must follow the finished question, not
-    // the model's repeated `alternatives` fallback.
-    assert.equal(
-        inferPromptIntent(
-            "How do I get my website content to show up as a source in Perplexity answers?",
-            "alternatives",
-        ),
-        "howto",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "What are the best tools to optimize my blog posts for AI search engines instead of just Google?",
-            "alternatives",
-        ),
-        "recommendation",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "Which software is best for tracking citations in ChatGPT?",
-            "alternatives",
-        ),
-        "recommendation",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "My Jasper content isn't ranking in AI overviews, what am I doing wrong?",
-            "alternatives",
-        ),
-        "problem",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "Jasper is great for one-off posts, but how do I build a cohesive topical authority map with it?",
-            "comparison",
-        ),
-        "howto",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "What is the best way to identify missing content clusters compared to my competitors?",
-            "problem",
-        ),
-        "comparison",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "Is there a way to make my B2B SaaS content more visible in AI search summaries?",
-            "problem",
-        ),
-        "howto",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "Why is ChatGPT citing my competitors instead of my own blog posts?",
-            "alternatives",
-        ),
-        "problem",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "Are there tools that provide a dashboard to track completed versus pending topics?",
-            "comparison",
-        ),
-        "recommendation",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "How do I perform a competitor gap analysis that generates the content I am missing?",
-            "problem",
-        ),
-        "howto",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "Are there platforms that specialize in optimizing content for generative AI search?",
-            "alternatives",
-        ),
-        "recommendation",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "How does optimizing for AI search differ from traditional keyword optimization?",
-            "problem",
-        ),
-        "comparison",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "Jasper is okay for social media, but what should I use to build actual domain authority?",
-            "comparison",
-        ),
-        "alternatives",
-    )
-    assert.equal(
-        inferPromptIntent(
-            "How can I audit my site to see which niche topics I am failing to cover?",
-            "problem",
-        ),
-        "howto",
-    )
-    assert.match(selection, /return "comparison"/)
+    // THE LABEL COMES FROM THE MODEL THAT WROTE THE QUESTION.
+    //
+    // This block used to assert `inferPromptIntent`, a regex that read a
+    // finished question and guessed its intent. It is deleted. Its
+    // `recommendation` branch matched almost any question containing
+    // "what/which ... tool" and its fallback was `recommendation` too, so a
+    // measured set of 31 distinct questions came back with 24 labelled
+    // `recommendation` — a badge with no information in it, rendered to the
+    // customer as though there were.
+    //
+    // The generator returns `intent` alongside `selectionClass` and `scenario`,
+    // having read the brand, the capabilities and the areas. These assertions
+    // pin that the label travels with the question and is never re-derived from
+    // its wording.
+    assert.doesNotMatch(selection, /export function inferPromptIntent/)
+    assert.match(selection, /`inferPromptIntent` USED TO LIVE HERE/)
+
+    // The generator is asked for it, and the schema requires it.
+    assert.match(template, /- intent: one allowed intent, judged from the question you just wrote/)
+    assert.match(template, /intent: \{ type: "STRING" as const \}/)
+    assert.match(template, /"intent",/)
+
+    // The builder reads the model's label and only falls back when it is
+    // unusable — it never inspects the question text to decide.
+    assert.match(builder, /PROMPT_INTENTS\.find\(\(entry\) => entry\.key === String\(row\.intent/)
+    // The comment above the replacement names the deleted function on purpose,
+    // to record what went and why, so assert the CALL is gone rather than the
+    // word — same convention as the MAX_INCUMBENT_PROMPT_SHARE assertion above.
+    assert.doesNotMatch(builder, /inferPromptIntent\(/)
+
+    // Editing wording in the review UI must not silently reclassify a question,
+    // and a hand-typed question is not guessed at either.
+    assert.doesNotMatch(review, /inferPromptIntent/)
+    assert.match(review, /const intent = p\.intent/)
 
     // The review UI must render the current PromptIntentKey vocabulary. It
     // previously carried retired keys and displayed every unknown current key
