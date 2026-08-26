@@ -60,16 +60,64 @@ export function isRefreshTarget(page: InventoryPage, blogRoot: string | null): b
     return !blogRoot && page.pageKind === "blog"
 }
 
+/**
+ * A non-article page that a losing question matched anyway.
+ *
+ * Reported rather than actioned. Ten measured questions matching a home page is
+ * a positioning finding — that page is what the site says it is about, and
+ * buyers asking those questions are not being sent to it — but it is not a
+ * writing task, and turning it into one is how a delivery system ends up
+ * proposing to patch someone's front door.
+ */
+export interface NonArticleMatch {
+    canonicalUrl: string
+    pageKind: InventoryPage["pageKind"]
+    confidence: number
+}
+
+/**
+ * The best non-article page for a prompt, when one exists.
+ *
+ * Deliberately separate from `matchExistingPage`: this can never produce an
+ * action, so it cannot be confused for one at the call site.
+ */
+export function matchNonArticlePage(
+    prompt: string,
+    pages: InventoryPage[],
+    blogRoot: string | null = null,
+): NonArticleMatch | null {
+    const ineligible = pages.filter((page) => !isRefreshTarget(page, blogRoot))
+    const best = rankPages(prompt, ineligible)
+    if (!best || !isSupported(best)) return null
+    return {
+        canonicalUrl: best.page.canonicalUrl,
+        pageKind: best.page.pageKind,
+        confidence: best.confidence,
+    }
+}
+
 export function matchExistingPage(
     prompt: string,
     pages: InventoryPage[],
     blogRoot: string | null = null,
 ): { page: InventoryPage; confidence: number } | null {
-    const query = meaningfulTokens(prompt)
-    if (query.size < 2) return null
     const eligible = pages.filter((page) => isRefreshTarget(page, blogRoot))
-    if (eligible.length === 0) return null
-    const ranked = eligible
+    const best = rankPages(prompt, eligible)
+    if (!best || !isSupported(best)) return null
+    return { page: best.page, confidence: best.confidence }
+}
+
+interface RankedPage {
+    page: InventoryPage
+    confidence: number
+    titleShared: number
+    bodyShared: number
+}
+
+function rankPages(prompt: string, pages: InventoryPage[]): RankedPage | null {
+    const query = meaningfulTokens(prompt)
+    if (query.size < 2 || pages.length === 0) return null
+    const ranked = pages
         .map((page) => {
             const title = meaningfulTokens(
                 `${page.title} ${new URL(page.canonicalUrl).pathname}`,
@@ -83,11 +131,13 @@ export function matchExistingPage(
             return { page, confidence, titleShared, bodyShared }
         })
         .sort((a, b) => b.confidence - a.confidence || b.titleShared - a.titleShared)
-    const best = ranked[0]
-    if (!best) return null
+    return ranked[0] ?? null
+}
 
-    const supported =
+/** The evidence bar a match must clear, shared by both matchers. */
+function isSupported(best: RankedPage): boolean {
+    return (
         (best.titleShared >= 2 && best.confidence >= 0.5) ||
         (best.titleShared >= 1 && best.bodyShared >= 4 && best.confidence >= 0.48)
-    return supported ? { page: best.page, confidence: best.confidence } : null
+    )
 }

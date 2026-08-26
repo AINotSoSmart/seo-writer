@@ -1253,6 +1253,52 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-26 (thirty-second pass) — a landing page is not a content action
+
+**The symptom.** A confirmed cycle proposed four actions for drawgle.com: one
+create, and three "Patch:" refreshes targeting the **home page**, a gallery, and
+a hub whose entire job is linking out. Ten measured buyer questions had been
+routed to the home page.
+
+**Why.** `matchExistingPage` ranked every crawled page. A home page mentions
+everything a product does, so it scores highest against almost any buyer
+question — and it is the least editable page on the site. The planner already
+knew these were not articles: non-blog matches were labelled
+`deliverableType: 'section_patch'`, which is where the "Patch:" titles came
+from. But nothing implements section patching. `complete_founder_assisted_refresh`
+takes a markdown body and stores it as an article, so a "patch" and a "full
+replacement" travel the identical path — the only available action for a home
+page was to hand it a document.
+
+**The rule, from the founder.** A gap is answered by writing an article. If an
+article already covers that gap, the article is refreshed. A landing page never
+is. That the brand's own domain was cited does not make its front page the
+remedy.
+
+**What changed.**
+
+- `matchExistingPage` now filters to refresh-eligible pages before ranking, and
+  a new `isRefreshTarget` decides that. A gap with no eligible article becomes a
+  `create`, which is the correct remedy.
+- Eligibility comes from `publication_url_pattern` — the blog root the founder
+  confirmed **at checkout** — not from `classifyInventoryPage`'s path regex.
+  That is a fact rather than an inference, and it is exactly the kind of
+  evidential test CLAUDE.md asks for in place of pattern guessing. The regex
+  survives only as a fallback for a brand with no confirmed pattern, where it
+  still never treats a home page as an article.
+- `matchNonArticlePage` keeps the discarded match as a **finding**. Ten
+  questions matching a home page says something real — that page is what the
+  site claims to be about, and buyers asking those questions are not being sent
+  there — but it is a positioning observation, not a writing task.
+
+Verified against the real inventory: `/`, `/showcase`, `/alternatives`,
+`/templates` and `/pricing` are all excluded; `/blog/*` remains refreshable.
+
+**Still open.** `section_patch` is a label the planner emits that nothing
+implements. With landing pages excluded it is now unreachable in practice, but
+it should either be built or removed rather than left as a deliverable type that
+resolves to "paste a whole document".
+
 ### 2026-08-26 (thirty-first pass) — a blocking gate that named nothing
 
 **The symptom.** Clicking "Ask these 25 questions" refused the whole submission

@@ -35,7 +35,11 @@ import {
     resolveBillingPeriod,
 } from "../lib/harvest/billing-period.ts"
 import { bindPromptCapability } from "../lib/visibility/capability-binding.ts"
-import { matchExistingPage } from "../lib/visibility/site-coverage-match.ts"
+import {
+    blogRootFromPublicationPattern,
+    matchExistingPage,
+    matchNonArticlePage,
+} from "../lib/visibility/site-coverage-match.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const text = (relativePath) => readFile(path.join(root, relativePath), "utf8")
@@ -192,13 +196,31 @@ test("billing cycles use Dodo renewal boundaries without synthetic 30-day math",
     )
 })
 
-test("site-aware planning refreshes a supported page and refuses category-only overlap", () => {
+test("only an article can be refreshed; landing pages are never a content action", () => {
     const pages = [
+        {
+            canonicalUrl: "https://bringback.pro/blog/restore-old-photos",
+            title: "Restore Old Photos Online",
+            titleSource: "html_title",
+            pageKind: "blog",
+            contentExcerpt:
+                "Repair scratches, restore faded family photographs, and colorize damaged images.",
+            fetchStatus: "fetched",
+        },
         {
             canonicalUrl: "https://bringback.pro/features/old-photo-restoration",
             title: "Restore Old Photos Online",
             titleSource: "html_title",
             pageKind: "feature",
+            contentExcerpt:
+                "Repair scratches, restore faded family photographs, and colorize damaged images.",
+            fetchStatus: "fetched",
+        },
+        {
+            canonicalUrl: "https://bringback.pro/",
+            title: "Restore Old Photos Online",
+            titleSource: "html_title",
+            pageKind: "home",
             contentExcerpt:
                 "Repair scratches, restore faded family photographs, and colorize damaged images.",
             fetchStatus: "fetched",
@@ -212,15 +234,51 @@ test("site-aware planning refreshes a supported page and refuses category-only o
             fetchStatus: "fetched",
         },
     ]
+    const blogRoot = blogRootFromPublicationPattern("https://bringback.pro/blog/{slug}")
+    assert.equal(blogRoot, "https://bringback.pro/blog/")
+
+    // THE ARTICLE WINS, THOUGH THE LANDING PAGES MATCH THE WORDS EQUALLY WELL.
+    //
+    // The first three pages carry identical copy on purpose: a home page
+    // mentions everything a product does, which makes it the highest-scoring
+    // and least editable page on any site. A live Drawgle run routed ten
+    // measured questions to the home page and proposed patching it, alongside a
+    // gallery and a hub whose whole job is linking out.
+    //
+    // A gap is answered by writing an article. If an article already covers it,
+    // that article is refreshed — a landing page never is.
     const match = matchExistingPage(
         "How can I restore an old damaged family photo online?",
         pages,
+        blogRoot,
     )
-    assert.equal(match?.page.canonicalUrl, pages[0].canonicalUrl)
+    assert.equal(match?.page.canonicalUrl, "https://bringback.pro/blog/restore-old-photos")
+
+    // With the article removed there is no refresh target at all, and the gap
+    // becomes a create rather than a patch of the home page.
     assert.equal(
-        matchExistingPage("Which account has the lowest monthly price?", pages),
+        matchExistingPage(
+            "How can I restore an old damaged family photo online?",
+            pages.filter((page) => page.pageKind !== "blog"),
+            blogRoot,
+        ),
         null,
     )
+
+    // Category-only overlap is still refused inside the blog itself.
+    assert.equal(
+        matchExistingPage("Which account has the lowest monthly price?", pages, blogRoot),
+        null,
+    )
+
+    // The same page is still reportable — "ten questions match your home page"
+    // is a positioning finding, it is simply not a writing task.
+    const reported = matchNonArticlePage(
+        "How can I restore an old damaged family photo online?",
+        pages,
+        blogRoot,
+    )
+    assert.ok(reported && reported.pageKind !== "blog")
 })
 
 test("capability binding rejects ambiguous claims and repairs malformed customer jobs", () => {
