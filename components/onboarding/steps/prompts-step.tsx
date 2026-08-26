@@ -95,10 +95,27 @@ export function PromptsStep({
 }) {
     const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
     const [editText, setEditText] = useState("")
-    const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
-    const [brandWarnings, setBrandWarnings] = useState<Record<string, string>>({})
+    const [customInput, setCustomInput] = useState("")
+    const [brandWarning, setBrandWarning] = useState("")
 
-    const activeFamilies = scopeFamilies.filter((f) => f.enabled !== false)
+    /**
+     * The questions, in the concern groups the generator produced.
+     *
+     * Insertion-ordered, so the reader sees them in the order they were
+     * written rather than alphabetised into a list that changes shape between
+     * runs. A question with no concern — one the founder typed — falls into a
+     * named group rather than disappearing.
+     */
+    const groupedByConcern = (() => {
+        const groups = new Map<string, PromptItem[]>()
+        for (const prompt of prompts) {
+            const key = prompt.concern?.trim() || "Your own questions"
+            const list = groups.get(key) ?? []
+            list.push(prompt)
+            groups.set(key, list)
+        }
+        return [...groups.entries()]
+    })()
 
     const checkBrandMention = (text: string): boolean => {
         if (!productName || productName.trim().length < 3) return false
@@ -120,13 +137,10 @@ export function PromptsStep({
             return
         }
 
-        const edited = prompts.find((prompt) => prompt.id === promptId)
-        if (edited && checkBrandMention(trimmed)) {
-            setBrandWarnings((current) => ({
-                ...current,
-                [edited.scopeFamilyId]:
-                    "Discovery questions should not name your brand. Test what buyers ask before knowing you exist.",
-            }))
+        if (checkBrandMention(trimmed)) {
+            setBrandWarning(
+                "Discovery questions should not name your brand. Test what buyers ask before knowing you exist.",
+            )
             return
         }
 
@@ -157,24 +171,17 @@ export function PromptsStep({
         onPromptsChange(prompts.filter((p) => p.id !== promptId))
     }
 
-    const handleAddCustomPrompt = (familyId: string, familyName: string) => {
-        const input = (customInputs[familyId] || "").trim()
+    const handleAddCustomPrompt = () => {
+        const input = customInput.trim()
         if (!input || prompts.length >= DEFAULT_PROMPTS_PER_RUN) return
 
         if (checkBrandMention(input)) {
-            setBrandWarnings((prev) => ({
-                ...prev,
-                [familyId]:
-                    "Buyer questions should not name your brand. Test whether AI recommends it unprompted.",
-            }))
+            setBrandWarning(
+                "Buyer questions should not name your brand. Test whether AI recommends it unprompted.",
+            )
             return
         }
-
-        setBrandWarnings((prev) => {
-            const next = { ...prev }
-            delete next[familyId]
-            return next
-        })
+        setBrandWarning("")
 
         // A hand-typed question is not classified by guessing at its wording.
         // It starts in the same neutral label the confirm route falls back to,
@@ -189,7 +196,10 @@ export function PromptsStep({
             id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             text: input,
             textNorm: normalizeQuery(input),
-            scopeFamilyId: familyId,
+            // Satisfies the NOT NULL column and nothing else; areas no longer
+            // influence generation, binding or grouping.
+            scopeFamilyId: scopeFamilies[0]?.id || scopeFamilies[0]?.name || "",
+            concern: "Your own questions",
             intent,
             articleType,
             // A question the founder typed by hand has not been through the
@@ -198,12 +208,12 @@ export function PromptsStep({
             // Guessing a strong class here would let hand-written tutorials do
             // exactly what the classifier exists to prevent.
             selectionClass: UNKNOWN_SELECTION_CLASS,
-            sourceSeed: familyName,
+            sourceSeed: "",
             isCustom: true,
         }
 
         onPromptsChange([...prompts, newPrompt])
-        setCustomInputs((prev) => ({ ...prev, [familyId]: "" }))
+        setCustomInput("")
     }
 
     const totalPrompts = prompts.length
@@ -254,175 +264,160 @@ export function PromptsStep({
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {activeFamilies.map((family) => {
-                        const familyId = family.id || family.name
-                        const familyPrompts = prompts.filter(
-                            (p) => p.scopeFamilyId === familyId || p.sourceSeed === family.name,
-                        )
-                        return (
-                            <div
-                                key={familyId}
-                                className="overflow-hidden rounded-xl border border-stone-200 bg-white"
-                            >
-                                {/* Family Header */}
-                                <div className="border-b border-stone-100 bg-stone-50/70 px-3.5 py-2.5">
-                                    <div className="space-y-0.5">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="text-xs font-semibold text-stone-900">
-                                                {family.name}
-                                            </h3>
-                                            <span className="text-[10px] text-stone-400">
-                                                ({familyPrompts.length}{" "}
-                                                {familyPrompts.length === 1 ? "question" : "questions"})
-                                            </span>
-                                        </div>
-                                        {family.seed_keywords && family.seed_keywords.length > 0 && (
-                                            <p className="text-[10px] text-stone-400">
-                                                Seeds: {family.seed_keywords.slice(0, 3).join(", ")}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Prompts List */}
-                                <div className="divide-y divide-stone-100 p-2">
-                                    {familyPrompts.length === 0 ? (
-                                        <div className="py-4 text-center text-xs text-stone-400">
-                                            No questions selected for this area. Add one below.
-                                        </div>
-                                    ) : (
-                                        familyPrompts.map((prompt) => {
-                                            const isEditing = editingPromptId === prompt.id
-                                            const badge =
-                                                prompt.isCustom
-                                                    ? INTENT_BADGES.custom
-                                                    : INTENT_BADGES[prompt.intent]
-
-                                            return (
-                                                <div
-                                                    key={prompt.id}
-                                                    className="group flex items-start gap-2.5 py-2 px-1 text-xs transition-colors hover:bg-stone-50/50"
-                                                >
-                                                    <span
-                                                        className={`mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase ${badge.bg} ${badge.text} ${badge.border}`}
-                                                    >
-                                                        {badge.label}
-                                                    </span>
-
-                                                    <div className="min-w-0 flex-1">
-                                                        {isEditing ? (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <input
-                                                                    type="text"
-                                                                    value={editText}
-                                                                    onChange={(e) => setEditText(e.target.value)}
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === "Enter") handleSaveEdit(prompt.id)
-                                                                        if (e.key === "Escape") setEditingPromptId(null)
-                                                                    }}
-                                                                    autoFocus
-                                                                    className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-xs text-stone-900 shadow-sm focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                                                                />
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    onClick={() => handleSaveEdit(prompt.id)}
-                                                                    className="h-6 w-6 p-0 text-stone-700 hover:text-stone-900"
-                                                                >
-                                                                    <Check className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            </div>
-                                                        ) : (
-                                                            <div
-                                                                onClick={() => handleStartEdit(prompt)}
-                                                                className="cursor-pointer leading-relaxed text-stone-700 transition-colors group-hover:text-stone-950"
-                                                                title="Click to edit prompt"
-                                                            >
-                                                                &ldquo;{prompt.text}&rdquo;
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
-                                                        {!isEditing && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleStartEdit(prompt)}
-                                                                className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                                                                title="Edit prompt text"
-                                                            >
-                                                                <Edit2 className="h-3 w-3" />
-                                                            </button>
-                                                        )}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDeletePrompt(prompt.id)}
-                                                            className="rounded p-1 text-stone-400 hover:bg-red-50 hover:text-red-600"
-                                                            title="Remove prompt"
-                                                        >
-                                                            <Trash2 className="h-3 w-3" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })
-                                    )}
-
-                                    {/* Add Custom Prompt Row */}
-                                    <div className="pt-2 px-1">
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                value={customInputs[familyId] || ""}
-                                                onChange={(e) => {
-                                                    const val = e.target.value
-                                                    setCustomInputs((prev) => ({
-                                                        ...prev,
-                                                        [familyId]: val,
-                                                    }))
-                                                    if (brandWarnings[familyId]) {
-                                                        setBrandWarnings((prev) => {
-                                                            const next = { ...prev }
-                                                            delete next[familyId]
-                                                            return next
-                                                        })
-                                                    }
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Enter") {
-                                                        e.preventDefault()
-                                                        handleAddCustomPrompt(familyId, family.name)
-                                                    }
-                                                }}
-                                                placeholder={`Add a question for ${family.name} (e.g. "best tools for...")`}
-                                                className="w-full rounded-md border border-dashed border-stone-300 bg-stone-50/50 px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-stone-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-stone-900"
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                disabled={
-                                                    totalPrompts >= DEFAULT_PROMPTS_PER_RUN ||
-                                                    !(customInputs[familyId] || "").trim()
-                                                }
-                                                onClick={() => handleAddCustomPrompt(familyId, family.name)}
-                                                className="h-8 shrink-0 text-xs"
-                                            >
-                                                <Plus className="mr-1 h-3 w-3" />
-                                                Add
-                                            </Button>
-                                        </div>
-
-                                        {brandWarnings[familyId] && (
-                                            <p className="mt-1 text-[10px] text-amber-600">
-                                                {brandWarnings[familyId]}
-                                            </p>
-                                        )}
-                                    </div>
+{/*
+                      * GROUPED BY BUYER CONCERN, NOT BY PRODUCT AREA.
+                      *
+                      * This iterated the confirmed scope families and filtered
+                      * questions by `scopeFamilyId`. Questions no longer carry a
+                      * meaningful area — generation is organised by the reason a
+                      * person goes looking, not by which keyword bucket owns the
+                      * feature — so that filter would have shown all of them
+                      * under the first topic and "no questions" under the rest.
+                      *
+                      * The concern is the more useful heading anyway. "Editing
+                      * without rerolling everything" is a reason someone
+                      * searches; "Mobile App Design Templates" is a keyword.
+                      */}
+                    {groupedByConcern.map(([concern, groupPrompts]) => (
+                        <div
+                            key={concern}
+                            className="overflow-hidden rounded-xl border border-stone-200 bg-white"
+                        >
+                            <div className="border-b border-stone-100 bg-stone-50/70 px-3.5 py-2.5">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-xs font-semibold text-stone-900">
+                                        {concern}
+                                    </h3>
+                                    <span className="text-[10px] text-stone-400">
+                                        ({groupPrompts.length}{" "}
+                                        {groupPrompts.length === 1 ? "question" : "questions"})
+                                    </span>
                                 </div>
                             </div>
-                        )
-                    })}
+
+                            <div className="divide-y divide-stone-100 p-2">
+                                {groupPrompts.map((prompt) => {
+                                    const isEditing = editingPromptId === prompt.id
+                                    const badge = prompt.isCustom
+                                        ? INTENT_BADGES.custom
+                                        : INTENT_BADGES[prompt.intent]
+
+                                    return (
+                                        <div
+                                            key={prompt.id}
+                                            className="group flex items-start gap-2.5 py-2 px-1 text-xs transition-colors hover:bg-stone-50/50"
+                                        >
+                                            <span
+                                                className={`mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase ${badge.bg} ${badge.text} ${badge.border}`}
+                                            >
+                                                {badge.label}
+                                            </span>
+
+                                            <div className="min-w-0 flex-1">
+                                                {isEditing ? (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <input
+                                                            type="text"
+                                                            value={editText}
+                                                            onChange={(e) => setEditText(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === "Enter") handleSaveEdit(prompt.id)
+                                                                if (e.key === "Escape") setEditingPromptId(null)
+                                                            }}
+                                                            autoFocus
+                                                            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-xs text-stone-900 shadow-sm focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => handleSaveEdit(prompt.id)}
+                                                            className="h-6 w-6 p-0 text-stone-700 hover:text-stone-900"
+                                                        >
+                                                            <Check className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <div
+                                                        onClick={() => handleStartEdit(prompt)}
+                                                        className="cursor-pointer leading-relaxed text-stone-700 transition-colors group-hover:text-stone-950"
+                                                        title="Click to edit prompt"
+                                                    >
+                                                        &ldquo;{prompt.text}&rdquo;
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                                                {!isEditing && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleStartEdit(prompt)}
+                                                        className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                                                        title="Edit prompt text"
+                                                    >
+                                                        <Edit2 className="h-3 w-3" />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeletePrompt(prompt.id)}
+                                                    className="rounded p-1 text-stone-400 hover:bg-red-50 hover:text-red-600"
+                                                    title="Remove prompt"
+                                                >
+                                                    <Trash2 className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    ))}
+
+                    {/*
+                      * ONE add control for the whole set.
+                      *
+                      * There used to be one per area, which only made sense
+                      * while a question had to belong to one. Concerns are
+                      * emergent, so a founder writing their own question is
+                      * adding it to the set rather than filing it in a bucket.
+                      */}
+                    <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50/50 p-3">
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="text"
+                                value={customInput}
+                                onChange={(event) => {
+                                    setCustomInput(event.target.value)
+                                    if (brandWarning) setBrandWarning("")
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                        event.preventDefault()
+                                        handleAddCustomPrompt()
+                                    }
+                                }}
+                                placeholder="Add a question of your own"
+                                className="w-full rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    totalPrompts >= DEFAULT_PROMPTS_PER_RUN || !customInput.trim()
+                                }
+                                onClick={() => handleAddCustomPrompt()}
+                                className="h-8 shrink-0 text-xs"
+                            >
+                                <Plus className="mr-1 h-3 w-3" />
+                                Add
+                            </Button>
+                        </div>
+                        {brandWarning && (
+                            <p className="mt-1 text-[10px] text-amber-600">{brandWarning}</p>
+                        )}
+                    </div>
                 </div>
             )}
 
