@@ -115,8 +115,10 @@ export default async function ArticlesPage() {
                     iconColor="#1d4ed8"
                     label="Ready to review"
                     value={`${reviewReady}/${articles.length}`}
-                    progress={articles.length ? reviewReady / articles.length : 0}
+                    filled={reviewReady}
+                    total={articles.length}
                     note="Final HTML is available"
+                    emptyNote="Nothing to review until a cycle is delivered"
                 />
                 <ProductMetric
                     icon={Globe2}
@@ -124,8 +126,10 @@ export default async function ArticlesPage() {
                     iconColor="#15803d"
                     label="Published"
                     value={`${published}/${articles.length}`}
-                    progress={articles.length ? published / articles.length : 0}
+                    filled={published}
+                    total={articles.length}
                     note="Confirmed on a public URL"
+                    emptyNote="Nothing published yet"
                 />
             </section>
             <DeliveredArticles

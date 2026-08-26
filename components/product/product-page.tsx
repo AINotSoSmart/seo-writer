@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react"
 
+import { TickTrack } from "@/components/visibility/marks"
 import { VizTokens } from "@/components/visibility/viz-tokens"
 
 export function ProductPage({
@@ -55,6 +56,17 @@ export function ProductHeader({
     )
 }
 
+/**
+ * A headline count for a product page, in the same language as the visibility
+ * report's `StatCard`.
+ *
+ * The two differences from that card are deliberate. It takes an `icon`
+ * component rather than a node, because these pages name their sections by
+ * icon and repeating the JSX at every call site invited drift. And it takes
+ * `filled`/`total` rather than a ready-made mark, because every ratio on these
+ * pages is the same shape — some of a countable set of articles — so the card
+ * can pick the mark itself.
+ */
 export function ProductMetric({
     icon: Icon,
     iconTint,
@@ -62,7 +74,9 @@ export function ProductMetric({
     label,
     value,
     note,
-    progress,
+    filled,
+    total,
+    emptyNote,
 }: {
     icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>
     iconTint: string
@@ -70,11 +84,42 @@ export function ProductMetric({
     label: string
     value: string
     note: string
-    progress?: number
+    /**
+     * The counts behind the ratio, not a 0-1 fraction.
+     *
+     * A fraction is enough to draw a bar and not enough to draw ticks, and
+     * ticks are the point: these totals are single-digit or low-double-digit
+     * sets of real articles, so "3 of 8 delivered" can be drawn as eight cells
+     * with three lit and checked by eye. Passing `0.375` throws away the only
+     * thing that made that possible. Omit both for a figure with no
+     * denominator.
+     */
+    filled?: number
+    total?: number
+    /**
+     * What the note says while `total` is 0.
+     *
+     * A separate string rather than a clever rewrite of `note`, because the two
+     * are saying different things: `note` explains what the ratio counts, and
+     * this explains why there is no ratio yet. Falls back to `note`.
+     */
+    emptyNote?: string
 }) {
-    const boundedProgress = Math.max(0, Math.min(progress ?? 0, 1))
+    /**
+     * A RATIO OUT OF ZERO IS UNDEFINED, NOT ZERO.
+     *
+     * On a new account these cards printed "0/0", which invites the reader to
+     * work out what fraction that is and then to wonder whether something
+     * failed. Nothing failed — there is simply nothing to take a fraction of
+     * yet. An em dash says that, and it is the same mark the visibility report
+     * uses for a column that cannot be asked of a given row.
+     */
+    const undefinedRatio = total !== undefined && total <= 0
     return (
-        <article className="viz-card min-w-0 p-5">
+        // A column with the note pushed to the bottom, so that in a row where
+        // one card has no mark — "Delivered drafts" has no denominator — every
+        // footnote still sits on the same line instead of floating up.
+        <article className="viz-card flex min-w-0 flex-col p-5">
             <span
                 className="inline-flex size-[30px] items-center justify-center rounded-[9px]"
                 style={{ background: iconTint, color: iconColor }}
@@ -83,18 +128,31 @@ export function ProductMetric({
                 <Icon className="size-4" aria-hidden />
             </span>
             <p className="mt-3.5 text-xs text-[var(--viz-ink-secondary)]">{label}</p>
-            <p className="mt-1.5 text-[30px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-[var(--viz-ink)]">
-                {value}
+            <p
+                className={`mt-1.5 text-[30px] font-semibold leading-none tabular-nums tracking-[-0.02em] ${
+                    undefinedRatio ? "text-[var(--viz-ink-muted)]" : "text-[var(--viz-ink)]"
+                }`}
+            >
+                {undefinedRatio ? "\u2014" : value}
             </p>
-            {progress !== undefined ? (
-                <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-[var(--viz-track)]" aria-hidden>
-                    <div
-                        className="h-full rounded-full bg-[var(--viz-series-1)]"
-                        style={{ width: `${boundedProgress * 100}%` }}
+            {total !== undefined && !undefinedRatio ? (
+                <div className="mt-3.5">
+                    {/*
+                      * Lit in the card's OWN colour, not a fixed blue. The
+                      * published card carried a green icon above a blue bar,
+                      * which read as two unrelated facts stacked in one card.
+                      */}
+                    <TickTrack
+                        filled={filled ?? 0}
+                        total={total}
+                        color={iconColor}
+                        height={18}
                     />
                 </div>
             ) : null}
-            <p className="mt-2 text-[11px] text-[var(--viz-ink-muted)]">{note}</p>
+            <p className="mt-3.5 border-t border-[var(--viz-hairline)] pt-2.5 text-[11px] text-[var(--viz-ink-muted)]">
+                {undefinedRatio ? (emptyNote ?? note) : note}
+            </p>
         </article>
     )
 }

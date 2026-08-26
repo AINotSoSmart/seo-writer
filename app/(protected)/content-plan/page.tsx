@@ -182,8 +182,10 @@ export default async function ContentPlanPage() {
                     iconColor="#1d4ed8"
                     label="Outputs ready"
                     value={`${ready}/${allActions.length}`}
-                    progress={allActions.length ? ready / allActions.length : 0}
+                    filled={ready}
+                    total={allActions.length}
                     note="Passed production validation"
+                    emptyNote="No actions selected for production yet"
                 />
                 <ProductMetric
                     icon={Truck}
@@ -191,8 +193,10 @@ export default async function ContentPlanPage() {
                     iconColor="#15803d"
                     label="Outputs delivered"
                     value={`${delivered}/${allActions.length}`}
-                    progress={allActions.length ? delivered / allActions.length : 0}
+                    filled={delivered}
+                    total={allActions.length}
                     note="Released in complete batches"
+                    emptyNote="No batch has been released yet"
                 />
             </section>
 
