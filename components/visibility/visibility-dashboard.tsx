@@ -38,7 +38,6 @@ import {
 } from "lucide-react"
 
 import { InfoHint } from "./info-hint"
-import { MethodPanel } from "./method-panel"
 import { RankTicks, StatCard, TickTrack } from "./marks"
 import { VizTokens } from "./viz-tokens"
 import { VisibilityOverview } from "./visibility-overview"
@@ -123,7 +122,6 @@ export interface DashboardProps {
     subjectName: string
     subjectDomains: string[]
     startedAt: string
-    creditsUsed: number
     marketName: string
     summary: DashboardSummary
     sourceReport: SourceReport
@@ -179,7 +177,6 @@ export function VisibilityDashboard(props: DashboardProps) {
         subjectName,
         subjectDomains,
         startedAt,
-        creditsUsed,
         marketName,
         summary,
         sourceReport,
@@ -298,12 +295,6 @@ export function VisibilityDashboard(props: DashboardProps) {
                         </p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        {creditsUsed > 0 && (
-                            <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--viz-hairline)] bg-white px-3 text-xs text-[var(--viz-ink-secondary)]">
-                                <span className="size-1.5 rounded-full bg-[var(--viz-good)]" aria-hidden />
-                                <span className="tabular-nums">{creditsUsed} credits used</span>
-                            </span>
-                        )}
                         {isAuthenticated && (
                             <Link
                                 href="/content-plan"
@@ -336,13 +327,6 @@ export function VisibilityDashboard(props: DashboardProps) {
                     <span className="inline-flex items-center gap-2 rounded-full border border-[var(--viz-hairline)] bg-[var(--viz-surface)] px-3 py-1.5 text-xs">
                         <span className="text-[var(--viz-ink-muted)]">Questions</span>
                         <span className="tabular-nums">All {summary.promptCount}</span>
-                    </span>
-
-                    <span className="ml-auto flex items-center text-xs text-[var(--viz-ink-muted)]">
-                        <MethodPanel
-                            subjectName={subjectName}
-                            promptCount={summary.promptCount}
-                        />
                     </span>
                 </div>
 

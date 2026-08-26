@@ -447,7 +447,6 @@ export default async function VisibilityPage() {
                 subjectName={run.subject_name}
                 subjectDomains={run.subject_domains || []}
                 startedAt={run.started_at}
-                creditsUsed={run.credits_used ?? 0}
                 marketName={countryName(run.country_code)}
                 summary={{ ...(run.summary || {}), ...summaryV2 }}
                 sourceReport={sourceReport}
