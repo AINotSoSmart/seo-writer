@@ -1253,6 +1253,45 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
 
 ## 7. Changelog
 
+### 2026-08-26 (thirty-first pass) — a blocking gate that named nothing
+
+**The symptom.** Clicking "Ask these 25 questions" refused the whole submission
+with *"Two confirmed questions ask substantially the same thing. Edit or
+regenerate one before continuing."* — and did not say which two. Twenty-five
+questions on screen, a blocking error, and nothing to act on.
+
+**The cause.** `promptsAreNearDuplicates` in the confirm route. The pass before
+this one removed that gate from generation after measuring it — against 25
+hand-written questions for one brand it rejected 8, about five of them plainly
+distinct needs — and deliberately left it in the confirm route on the reasoning
+that it was "a different population". It is not a different population. It is
+the same twenty-five questions, one screen later, where the gate blocks instead
+of quietly dropping.
+
+The set arriving at that route has already been judged twice on meaning: the
+generator writes a `scenario` per question and rejects repeats against it, and
+the critic reviews every question. A third judge using shared word counts, at
+the one point where the founder cannot proceed, was the worst placement of the
+weakest method.
+
+**What changed.**
+
+- The lexical gate is gone from the confirm route, and
+  `promptsAreNearDuplicates` is deleted — it had no callers left. Exact repeats
+  are still caught by `prompt_norm` and by `tracked_prompts`' UNIQUE constraint,
+  which is a fact rather than a guess.
+- **Every remaining gate names the question it is objecting to.** Length,
+  calendar year, brand mention and exact duplicate all quote the offending text
+  in the message and return it as `prompt`. The client renders `error`
+  verbatim, so this reaches the founder with no UI change. Refusing a
+  submission of twenty-five items without identifying one of them is not a
+  validation error, it is a dead end.
+
+**The rule this leaves.** A gate may reject on a fact — this text contains a
+year, this text names the brand, these two strings are identical. A gate may not
+reject on a judgement about meaning unless it holds the context to make it, and
+the generator is the only stage that does.
+
 ### 2026-08-26 (thirtieth pass) — onboarding timed out, and the cause was a quota queue
 
 **The symptom.** Prompt generation returned **504** and the founder saw

@@ -4561,7 +4561,21 @@ test("tracked questions have stable identity and every new observation links bac
     assert.match(migration, /ON CONFLICT \(brand_id, prompt_norm\) DO UPDATE/)
 
     assert.match(confirmRoute, /containsCalendarYear/)
-    assert.match(confirmRoute, /promptsAreNearDuplicates/)
+    // Exact uniqueness is enforced here AND by the table's UNIQUE constraint,
+    // and the route's version exists to name the offending question instead of
+    // surfacing a Postgres error.
+    assert.match(confirmRoute, /reason: "duplicate_prompt"/)
+    // The LEXICAL near-duplicate gate is gone from this path. It blocked the
+    // whole submission, named nothing, and measured ~20% false positives on a
+    // single-product set — where every question shares the product's vocabulary
+    // by construction. The set reaching this route has already passed the
+    // generator's scenario dedup and the critic, both of which judge meaning.
+    assert.doesNotMatch(confirmRoute, /promptsAreNearDuplicates/)
+    // Every gate that refuses a submission says which question caused it.
+    assert.match(confirmRoute, /const quote = \(text: string\)/)
+    for (const named of ["wrongLength", "dated", "namesBrand"]) {
+        assert.match(confirmRoute, new RegExp(`prompt: ${named}\.prompt`))
+    }
     assert.match(probeRoute, /tracking_status", "active"/)
     assert.match(probeRoute, /trackedPromptId: row\.id/)
     assert.match(runner, /tracked_prompt_id: prompt\.trackedPromptId \?\? null/)
@@ -5136,32 +5150,14 @@ test("buyer-question selection fixes the three failures observed in the live Fli
         containsCalendarYear,
         incumbentNeedles,
         mentionsIncumbent,
-        promptsAreNearDuplicates,
     } = await import("../lib/visibility/prompt-selection.ts")
 
-    // The two actual cross-topic paraphrases are rejected, while two questions
-    // sharing a generic opener but asking different jobs remain distinct.
-    assert.equal(
-        promptsAreNearDuplicates(
-            "How do I build topical authority for a new B2B SaaS blog without just guessing what keywords to target?",
-            "How do I build topical authority for my SaaS blog without spending weeks manually researching and linking articles?",
-        ),
-        true,
-    )
-    assert.equal(
-        promptsAreNearDuplicates(
-            "What is the best way to map out a content cluster strategy to rank for competitive industry terms?",
-            "What is the best way to structure a topic cluster strategy so Google sees my site as an expert in my niche?",
-        ),
-        true,
-    )
-    assert.equal(
-        promptsAreNearDuplicates(
-            "What is the best tool for checking AI citations?",
-            "What is the best way to build internal links across a SaaS blog?",
-        ),
-        false,
-    )
+    // The lexical near-duplicate test is deleted along with its last caller.
+    // Duplication is judged by the generator's `scenario`, which has the brand
+    // context; exact repeats are caught by `prompt_norm` and the table's UNIQUE
+    // constraint. See the note in prompt-selection.ts for the measurement.
+    assert.doesNotMatch(selection, /export function promptsAreNearDuplicates/)
+    assert.match(selection, /`promptsAreNearDuplicates` USED TO LIVE HERE/)
     assert.match(template, /Do not repeat or paraphrase these already-retained questions/)
     assert.match(builder, /existingQuestions/)
 

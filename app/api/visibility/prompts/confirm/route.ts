@@ -10,7 +10,6 @@ import {
     containsCalendarYear,
     incumbentNeedles,
     mentionsIncumbent,
-    promptsAreNearDuplicates,
 } from "@/lib/visibility/prompt-selection"
 import { createClient } from "@/utils/supabase/server"
 import { bindPromptCapability } from "@/lib/visibility/capability-binding"
@@ -129,55 +128,69 @@ export async function POST(req: NextRequest) {
         }
     })
 
-    if (prompts.some((prompt) => prompt.prompt.length < 15 || prompt.prompt.length > 400)) {
+    /**
+     * NAME THE QUESTION, ALWAYS.
+     *
+     * Every gate below refuses the whole submission, and they used to do it
+     * without saying which of twenty-five questions was at fault — leaving the
+     * founder staring at a blocking error with nothing to act on. The client
+     * renders `error` verbatim, so the offending text goes in the message.
+     */
+    const quote = (text: string) =>
+        `"${text.length > 90 ? `${text.slice(0, 90)}…` : text}"`
+
+    const wrongLength = prompts.find(
+        (prompt) => prompt.prompt.length < 15 || prompt.prompt.length > 400,
+    )
+    if (wrongLength) {
         return NextResponse.json(
-            { error: "Every buyer question must contain 15-400 characters." },
+            {
+                error: `Every buyer question must contain 15-400 characters. This one has ${wrongLength.prompt.length}: ${quote(wrongLength.prompt)}`,
+                prompt: wrongLength.prompt,
+            },
             { status: 400 },
         )
     }
-    if (prompts.some((prompt) => containsCalendarYear(prompt.prompt))) {
+    const dated = prompts.find((prompt) => containsCalendarYear(prompt.prompt))
+    if (dated) {
         return NextResponse.json(
             {
-                error:
-                    "Tracked questions cannot contain a calendar year because the same set is measured every month.",
+                error: `Tracked questions cannot contain a calendar year, because the same set is measured every month. Edit this one: ${quote(dated.prompt)}`,
                 reason: "dated_prompt",
+                prompt: dated.prompt,
             },
             { status: 400 },
         )
     }
-    if (prompts.some((prompt) => mentionsIncumbent(prompt.prompt, subjectNeedles))) {
+    const namesBrand = prompts.find((prompt) =>
+        mentionsIncumbent(prompt.prompt, subjectNeedles),
+    )
+    if (namesBrand) {
         return NextResponse.json(
             {
-                error:
-                    "Buyer questions cannot name your own brand because the measurement requires an unprompted recommendation.",
+                error: `Buyer questions cannot name your own brand — the measurement needs an unprompted recommendation. Edit this one: ${quote(namesBrand.prompt)}`,
                 reason: "subject_named_in_prompt",
+                prompt: namesBrand.prompt,
             },
             { status: 400 },
         )
     }
 
-    const norms = new Set(prompts.map((prompt) => prompt.prompt_norm))
-    if (norms.size !== prompts.length) {
-        return NextResponse.json(
-            { error: "Tracked buyer questions must be unique.", reason: "duplicate_prompt" },
-            { status: 400 },
-        )
-    }
-    for (let left = 0; left < prompts.length; left++) {
-        for (let right = left + 1; right < prompts.length; right++) {
-            if (promptsAreNearDuplicates(prompts[left].prompt, prompts[right].prompt)) {
-                return NextResponse.json(
-                    {
-                        error:
-                            "Two confirmed questions ask substantially the same thing. Edit or regenerate one before continuing.",
-                        reason: "near_duplicate_prompt",
-                    },
-                    { status: 400 },
-                )
-            }
+    const seenNorms = new Map<string, string>()
+    for (const prompt of prompts) {
+        const first = seenNorms.get(prompt.prompt_norm)
+        if (first) {
+            return NextResponse.json(
+                {
+                    error: `Two questions are the same: ${quote(first)}. Edit or remove one before continuing.`,
+                    reason: "duplicate_prompt",
+                    prompt: first,
+                },
+                { status: 400 },
+            )
         }
+        seenNorms.set(prompt.prompt_norm, prompt.prompt)
     }
-
     const { data, error } = await supabase.rpc("confirm_tracked_prompts", {
         p_brand_id: body.brandId,
         p_prompts: prompts,

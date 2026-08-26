@@ -66,22 +66,29 @@ function contentTokens(value: string): Set<string> {
 }
 
 /**
- * Rejects paraphrases which ask the same buyer need across overlapping topics.
+ * `promptsAreNearDuplicates` USED TO LIVE HERE. It is deleted, not moved.
  *
- * Four shared content words plus 35% containment catches the live pairs
- * ("build topical authority ... SaaS blog" and "best way ... cluster
- * strategy") without treating every question beginning "what is the best
- * way" as the same question.
+ * It compared two questions by counting shared content words — four in common
+ * plus 35% containment meant "duplicate" — and it was calibrated on cross-TOPIC
+ * SEO paraphrases from the previous product, where two questions about
+ * different topics genuinely shared little vocabulary.
+ *
+ * Inside one product's question set that assumption is false: every question
+ * shares that product's vocabulary by construction. Measured against 25
+ * hand-written questions for a single brand it rejected 8, of which about five
+ * were plainly distinct needs — "keep spacing and typography consistent" was
+ * killed by "export Tailwind HTML", which share {export, tailwind, design,
+ * screens} and nothing else.
+ *
+ * Its last caller was the confirm route, where it refused the entire submission
+ * and named no question, so a founder was blocked with nothing to act on.
+ * Duplication is now judged where the context is: the generator writes a
+ * `scenario` per question and rejects repeats against it, and exact text
+ * duplicates are caught by `prompt_norm` and by the table's UNIQUE constraint.
+ *
+ * Retuning the constants was never the fix. Per CLAUDE.md: when the populations
+ * overlap, the method is wrong.
  */
-export function promptsAreNearDuplicates(left: string, right: string): boolean {
-    const leftTokens = contentTokens(left)
-    const rightTokens = contentTokens(right)
-    if (leftTokens.size === 0 || rightTokens.size === 0) return false
-
-    const shared = [...leftTokens].filter((token) => rightTokens.has(token)).length
-    const smaller = Math.min(leftTokens.size, rightTokens.size)
-    return shared >= 4 && shared / smaller >= 0.35
-}
 
 /** Extract stable brand needles from names, domains, or URLs. */
 export function incumbentNeedles(values: string[]): string[] {
