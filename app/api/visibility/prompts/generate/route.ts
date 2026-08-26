@@ -40,6 +40,11 @@ interface GeneratePromptsRequest {
     audience?: string
     /** What the product actually does, so a prompt can name a real constraint. */
     coreFeatures?: string[]
+    audiencePsychology?: string
+    enemy?: string
+    notThis?: string
+    uvp?: string[]
+    pricing?: string[]
     maxPrompts?: number
 }
 
@@ -105,6 +110,11 @@ export async function POST(req: NextRequest) {
                 category: body.category?.trim() || undefined,
                 coreFeatures: body.coreFeatures,
                 audience: body.audience?.trim() || undefined,
+                audiencePsychology: body.audiencePsychology?.trim() || undefined,
+                enemy: body.enemy?.trim() || undefined,
+                notThis: body.notThis?.trim() || undefined,
+                uvp: body.uvp,
+                pricing: body.pricing,
             },
             maxPrompts: body.maxPrompts,
         })

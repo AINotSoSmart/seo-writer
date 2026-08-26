@@ -12,7 +12,10 @@ import {
     mentionsIncumbent,
 } from "@/lib/visibility/prompt-selection"
 import { createClient } from "@/utils/supabase/server"
-import { bindPromptCapability } from "@/lib/visibility/capability-binding"
+import {
+    bindPromptCapability,
+    mergeCapabilityContracts,
+} from "@/lib/visibility/capability-binding"
 import type { CapabilityContract } from "@/lib/writer/article-contract"
 import {
     isSelectionClass,
@@ -88,11 +91,12 @@ export async function POST(req: NextRequest) {
         .eq("brand_id", body.brandId)
         .eq("user_id", user.id)
         .eq("enabled", true)
-    const capabilityByFamily = new Map(
-        (familyRows ?? []).map((row: any) => [
-            row.id,
-            row.capability_contract as CapabilityContract,
-        ]),
+    // One pool of confirmed operations for the brand. Binding used to go
+    // question -> area -> that area's contract, so a question could only match
+    // an operation belonging to whichever keyword bucket the generator tagged
+    // it with. Questions no longer carry a meaningful area.
+    const brandContract = mergeCapabilityContracts(
+        (familyRows ?? []).map((row: any) => row.capability_contract as CapabilityContract),
     )
 
     const prompts = body.prompts.map((prompt) => {
@@ -114,7 +118,7 @@ export async function POST(req: NextRequest) {
             scopeFamilyId,
             prompt: text,
             sourceSeed,
-            contract: capabilityByFamily.get(scopeFamilyId),
+            contract: brandContract,
         })
         return {
             prompt: text,

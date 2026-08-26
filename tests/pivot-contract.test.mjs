@@ -5054,13 +5054,14 @@ test("an entity nobody counted cannot outrank the brand", async () => {
 })
 
 test("prompt generation gets one company-wide selection goal, not forms or quotas", async () => {
-    const [config, builder, template, route, runner, mapper] = await Promise.all([
+    const [config, builder, template, route, runner, mapper, binding] = await Promise.all([
         text("lib/visibility/prompt-config.ts"),
         text("lib/visibility/prompt-builder.ts"),
         text("lib/visibility/prompt-template.ts"),
         text("app/api/visibility/prompts/generate/route.ts"),
         text("lib/visibility/run-probe.ts"),
         text("lib/visibility/gap-mapper.ts"),
+        text("lib/visibility/capability-binding.ts"),
     ])
     const promptSurface = `${builder}\n${template}`
 
@@ -5072,10 +5073,25 @@ test("prompt generation gets one company-wide selection goal, not forms or quota
     assert.match(promptSurface, /category\?: string/)
     assert.match(promptSurface, /coreFeatures\?: string\[\]/)
     assert.match(runner, /audience: persona\.audience\?\.primary/)
-    assert.match(template, /Generate questions across the company as a whole/)
     assert.match(template, /This is a ceiling, not a quota/)
     assert.match(template, /Stop when another question would only paraphrase/)
-    assert.match(builder, /buildCompanyPrompt\(\s*families/)
+
+    // ORGANISED BY BUYER CONCERN, NOT BY PRODUCT AREA.
+    //
+    // The confirmed areas come from scope extraction, which asks for "the
+    // SEARCH MARKETS this business competes in" — keyword head terms. While
+    // they were a structured block in this prompt, a live run came back 8/7/5/5
+    // across four areas with five of one area's questions being five phrasings
+    // of the same need. Demoting them in wording did not work; a list in the
+    // prompt beats a sentence telling the model to ignore it.
+    assert.doesNotMatch(template, /CONFIRMED PRODUCT AREAS/)
+    assert.doesNotMatch(template, /scopeFamilyId/)
+    assert.match(template, /WORK OUT THE BUYER CONCERNS FIRST/)
+    assert.match(template, /ONE TO THREE questions per concern/)
+    // The concern that only exists because rival tools do something badly, and
+    // the easiest one to miss.
+    assert.match(template, /frustrating or wrong in whatever they use today/)
+    assert.doesNotMatch(builder, /buildCompanyPrompt\(\s*families/)
 
     // Known rivals are rejection-only and never enter generation context.
     assert.doesNotMatch(promptSurface, /incumbents\?: string\[\]/)
@@ -5085,10 +5101,17 @@ test("prompt generation gets one company-wide selection goal, not forms or quota
     assert.match(builder, /rivalNamedRejected\+\+/)
     assert.match(mapper, /if \(namedInPrompt\(competitor\.name\)\) continue/)
 
-    // Ownership comes from an exact confirmed family id; intent remains an
-    // implementation label inferred after generation for the writer contract.
-    assert.match(builder, /familyById\.get\(scopeFamilyId\)/)
-    assert.match(builder, /scopeFamilyId,/)
+    // OWNERSHIP IS THE NAMED CAPABILITY, NOT A CONFIRMED FAMILY ID.
+    //
+    // The generator used to tag each question with an area and the builder
+    // looked that area up to find its capability contract. The model now names
+    // the capability the question is really asking for, which is the fact that
+    // lookup was trying to reconstruct — and binding searches every confirmed
+    // contract rather than the one area that happened to own the question.
+    assert.doesNotMatch(builder, /familyById/)
+    assert.match(builder, /placeholderFamilyId/)
+    assert.match(builder, /capability: String\(row\.capability/)
+    assert.match(binding, /export function mergeCapabilityContracts/)
     assert.match(config, /articleType: "commercial" as const/)
     assert.match(builder, /articleType: intentConfig\.articleType/)
     assert.match(template, /selectionClass/)
@@ -5106,27 +5129,17 @@ test("prompt generation gets one company-wide selection goal, not forms or quota
     assert.doesNotMatch(route, /fallbackContract|fallbackCapabilityContract/)
     assert.doesNotMatch(template, /capabilityContract|customerJob|operation\.action/)
 
-    // The pure template is the production instruction and includes all
-    // confirmed areas in one call, without leaking a competitor slot.
+    // The pure template is the production instruction. It renders from the
+    // brand's own capabilities — no confirmed areas, no competitor slot.
     const { buildCompanyPrompt } = await import("../lib/visibility/prompt-template.ts")
     const rendered = buildCompanyPrompt(
-        [
-            {
-                id: "restoration",
-                name: "Old photo restoration",
-                description: "repair damaged family photographs",
-                seedKeywords: ["restore old photos"],
-            },
-            {
-                id: "colour",
-                name: "Photo colourisation",
-                description: "add realistic colour to monochrome photographs",
-                seedKeywords: ["colourise old photos"],
-            },
-        ],
         {
             subjectType: "browser-based photo restoration software",
             category: "AI photo tools",
+            coreFeatures: [
+                "repair damaged family photographs",
+                "add realistic colour to monochrome photographs",
+            ],
             audience: "people preserving damaged family photographs",
         },
         "en",
@@ -5139,11 +5152,12 @@ test("prompt generation gets one company-wide selection goal, not forms or quota
 })
 
 test("buyer-question selection fixes the three failures observed in the live FlipAEO run", async () => {
-    const [builder, template, selection, review] = await Promise.all([
+    const [builder, template, selection, review, binding] = await Promise.all([
         text("lib/visibility/prompt-builder.ts"),
         text("lib/visibility/prompt-template.ts"),
         text("lib/visibility/prompt-selection.ts"),
         text("components/onboarding/steps/prompts-step.tsx"),
+        text("lib/visibility/capability-binding.ts"),
     ])
     const {
         NAMED_BRAND_PROMPTS_ALLOWED,

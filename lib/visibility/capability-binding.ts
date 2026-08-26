@@ -40,6 +40,50 @@ export interface BoundCapability {
 }
 
 /**
+ * Every confirmed operation in one pool, regardless of which area declared it.
+ *
+ * Binding used to go question -> area -> that area's contract, so a question
+ * could only ever match an operation belonging to the area the generator
+ * happened to tag it with. Questions no longer carry a meaningful area, and
+ * they never should have: a buyer describing a problem does not know which of
+ * our keyword buckets owns the answer.
+ *
+ * Merging is safe because operation keys and fact ids are already unique within
+ * a brand's extracted scope — the areas were partitioning one product's
+ * capabilities, not describing separate products.
+ */
+export function mergeCapabilityContracts(
+    contracts: Array<CapabilityContract | null | undefined>,
+): CapabilityContract | null {
+    const operations: CapabilityContract["operations"] = []
+    const facts: CapabilityContract["facts"] = []
+    const seenOperations = new Set<string>()
+    const seenFacts = new Set<string>()
+
+    for (const contract of contracts) {
+        if (!contract) continue
+        for (const operation of contract.operations) {
+            if (seenOperations.has(operation.key)) continue
+            seenOperations.add(operation.key)
+            operations.push(operation)
+        }
+        for (const fact of contract.facts) {
+            if (seenFacts.has(fact.id)) continue
+            seenFacts.add(fact.id)
+            facts.push(fact)
+        }
+    }
+
+    if (operations.length === 0) return null
+    // Delivery mode is a property of the product, not of an area, so the first
+    // declared value stands for the brand.
+    const deliveryMode =
+        contracts.find((contract) => contract?.deliveryMode)?.deliveryMode ??
+        "self_serve_software"
+    return { version: "capability-v1", deliveryMode, operations, facts }
+}
+
+/**
  * Binds a buyer question to one evidenced operation. Unproven mechanics stay
  * educational instead of being upgraded into a product claim.
  */

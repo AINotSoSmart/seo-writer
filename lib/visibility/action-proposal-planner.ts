@@ -59,13 +59,21 @@ function groupCandidates(prompts: PlanningPrompt[], pages: InventoryPage[]): Can
             continue
         }
 
-        // The confirmed scope + evidenced product operation is a stronger
-        // dedupe boundary than surface word overlap. Educational questions have
-        // no product operation, so their confirmed source seed is the topic key.
-        const topicKey = prompt.binding.operationKey
+        // GROUPED BY WHAT THE QUESTION ASKS FOR, NOT BY WHICH BUCKET OWNED IT.
+        //
+        // This was `${prompt.scopeFamilyId}:${topicKey}`, and the family half
+        // was circular: `sourceSeed` was set to that family's own first seed
+        // keyword, and an `operationKey` comes from that family's own contract.
+        // The key was the family, twice. It also capped output at roughly one
+        // article per area — three or four families meant three or four create
+        // actions no matter how many distinct gaps existed.
+        //
+        // The evidenced operation is the real boundary: two questions asking
+        // for the same verified capability are one article, and two asking for
+        // different ones are not, whatever bucket they were filed under.
+        const createKey = prompt.binding.operationKey
             ? `operation:${prompt.binding.operationKey}`
             : `topic:${normalizeQuery(prompt.sourceSeed)}`
-        const createKey = `${prompt.scopeFamilyId}:${topicKey}`
         const group = creates.get(createKey) ?? []
         group.push(prompt)
         creates.set(createKey, group)

@@ -50,6 +50,14 @@ export interface BuyerPrompt {
     /** Short generator-owned identity of the underlying buyer situation. */
     scenario?: string
     /**
+     * The buyer concern this question belongs to, in the model's words.
+     *
+     * Replaces the product area as the grouping the report shows. An area was
+     * a keyword bucket; a concern is a reason someone went looking, which is
+     * what actually differs between two people asking about one capability.
+     */
+    concern?: string
+    /**
      * The verified capability this question is really asking for.
      *
      * Drives the coverage pass: a capability with no question means the run
@@ -80,8 +88,8 @@ export interface PromptBuildReport {
     familiesCovered: number
     /** Rows the model actually returned, before any gate ran. */
     modelReturned: number
-    /** Bound to no confirmed area — the model invented or mistyped an id. */
-    unknownFamilyRejected: number
+    /** The model returned a selection class that is not one of the allowed keys. */
+    unclassifiedRejected: number
     /** Failed the shape test: too short, too long, a URL, mostly punctuation. */
     implausibleRejected: number
     /** Named the customer's own brand, which hands the answer over. */
@@ -128,7 +136,7 @@ export interface PromptBuildResult {
 
 interface GeneratedPromptRow {
     question?: unknown
-    scopeFamilyId?: unknown
+    concern?: unknown
     selectionClass?: unknown
     intent?: unknown
     scenario?: unknown
@@ -199,7 +207,7 @@ export async function buildBuyerPrompts(
     const errors: string[] = []
     const criticRejectionReasons: Record<string, number> = {}
     const cap = Math.min(options.maxPrompts ?? MAX_GENERATED_PROMPTS, MAX_GENERATED_PROMPTS)
-    const familyById = new Map(families.map((family) => [family.id, family]))
+    const placeholderFamilyId = families[0]?.id ?? ""
     const existingQuestions = (options.questionsToAvoid || [])
         .map((question) => question.trim())
         .filter(Boolean)
@@ -221,6 +229,7 @@ export async function buildBuyerPrompts(
         // One call's ceiling. The schema refuses more than 25 (see above),
         // so asking for the whole pool in one request is not available.
         ceiling: number = 25,
+        concernsInUse: string[] = [],
     ): Promise<GeneratedPromptRow[]> => {
         const client = getGeminiClient()
         const response = await client.models.generateContent({
@@ -231,7 +240,6 @@ export async function buildBuyerPrompts(
                     parts: [
                         {
                             text: buildCompanyPrompt(
-                                families,
                                 {
                                     ...(options.context || {}),
                                     subjectType: options.subjectType,
@@ -239,6 +247,7 @@ export async function buildBuyerPrompts(
                                 options.language ?? DEFAULT_LANGUAGE,
                                 avoid,
                                 ceiling,
+                                concernsInUse,
                                 uncovered,
                             ),
                         },
@@ -267,7 +276,7 @@ export async function buildBuyerPrompts(
     let capabilitiesCovered = 0
     // Every gate keeps its own tally. Lumping them into one "rejected" count is
     // what made the six-question run undiagnosable.
-    let unknownFamilyRejected = 0
+    let unclassifiedRejected = 0
     let implausibleRejected = 0
     let namedSubjectRejected = 0
     let calendarYearRejected = 0
@@ -279,13 +288,12 @@ export async function buildBuyerPrompts(
     const absorb = (rows: GeneratedPromptRow[]) => {
     for (const row of rows) {
         const text = String(row.question ?? "").trim()
-        const scopeFamilyId = String(row.scopeFamilyId ?? "").trim()
+        const concern = String(row.concern ?? "").trim()
         const scenario = String(row.scenario ?? "").trim()
         const selectionClass = row.selectionClass
-        const family = familyById.get(scopeFamilyId)
 
-        if (!family || !isSelectionClass(selectionClass)) {
-            unknownFamilyRejected++
+        if (!isSelectionClass(selectionClass)) {
+            unclassifiedRejected++
             continue
         }
         if (!isPlausiblePrompt(text)) {
@@ -327,13 +335,21 @@ export async function buildBuyerPrompts(
         candidates.push({
             text,
             textNorm: normalizeQuery(text),
-            scopeFamilyId,
+            // NOT NULL on `ai_probe_prompts` and `tracked_prompts`, and nothing
+            // reads it any more: capability binding searches every confirmed
+            // contract, and the planner groups on the bound operation. It is
+            // written so the insert succeeds and will be dropped by the
+            // migration that retires scope families.
+            scopeFamilyId: placeholderFamilyId,
+            concern,
             intent: intentConfig.key,
             articleType: intentConfig.articleType,
             selectionClass,
             scenario,
             capability: String(row.capability ?? "").trim() || undefined,
-            sourceSeed: family.seedKeywords[0] ?? family.name,
+            // The capability the model named, not a keyword lifted off an area.
+            // Downstream this is what a question is really "about".
+            sourceSeed: String(row.capability ?? "").trim() || concern,
         })
         seenScenarios.add(scenarioNorm)
     }
@@ -353,27 +369,41 @@ export async function buildBuyerPrompts(
     let passes = 0
     let modelReturned = 0
     try {
-        // TWO CALLS AT ONCE, NOT ONE AFTER THE OTHER.
+        // SEQUENTIAL, SO THE SECOND CALL CAN SEE THE FIRST.
         //
-        // A single call cannot return more than 25 rows: with this response
-        // schema — six required fields per item — Gemini rejects `maxItems`
-        // above 25 outright with INVALID_ARGUMENT. Reaching a candidate pool
-        // large enough for the critic to cut from therefore needs two calls,
-        // and that is structural rather than a choice.
+        // These ran in parallel to halve wall clock, and it cost more than it
+        // saved. Neither call could see the other's buyer concerns, so both
+        // invented their own labels for the same concern — a measured run
+        // produced nineteen concerns for twenty-five questions, five of which
+        // ("avoiding destructive regenerations", "frustration with full
+        // regeneration", "keeping control over edits"…) were one concern under
+        // five names. The per-concern limit is what stops rephrasings, and it
+        // cannot bind across calls that do not share a list.
         //
-        // What was a choice was running them in sequence. Each call takes about
-        // a minute against the full brand context, so the chain came to roughly
-        // 250 seconds and onboarding hit a gateway timeout. They do not depend
-        // on each other — at temperature 0.9 two runs of the same instruction
-        // diverge on their own, and `seenScenarios` merges whatever overlaps —
-        // so they run together and cost one call's worth of wall clock.
-        const [first, second] = await Promise.all([
-            generate(existingQuestions),
-            generate(existingQuestions),
-        ])
-        passes += 2
-        modelReturned += first.length + second.length
+        // Running them in sequence costs about thirteen seconds against a 300s
+        // budget the whole build now uses forty of. That is the cheapest thing
+        // here to spend.
+        const first = await generate(existingQuestions)
+        passes++
+        modelReturned += first.length
         absorb(first)
+
+        const second = await generate(
+            [...existingQuestions, ...candidates.map((candidate) => candidate.text)],
+            [],
+            25,
+            // The concerns the first call settled on. Without these it coins a
+            // synonym for each and the per-concern limit stops binding.
+            [
+                ...new Set(
+                    candidates
+                        .map((candidate) => candidate.concern)
+                        .filter((concern): concern is string => Boolean(concern)),
+                ),
+            ],
+        )
+        passes++
+        modelReturned += second.length
         absorb(second)
 
         // Only if the pair genuinely fell short, and only once. This is the
@@ -471,7 +501,7 @@ export async function buildBuyerPrompts(
             callsSucceeded: modelReturned > 0 ? passes : 0,
             familiesCovered: new Set(survivors.map((prompt) => prompt.scopeFamilyId)).size,
             modelReturned,
-            unknownFamilyRejected,
+            unclassifiedRejected,
             implausibleRejected,
             namedSubjectRejected,
             calendarYearRejected,

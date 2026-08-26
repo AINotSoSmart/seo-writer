@@ -39,6 +39,7 @@ import {
     type ScrapedAnswer,
 } from "./engines"
 import { parseAnswer, type ParsedAnswer, type ProbeCompetitor } from "./answer-parser"
+import { mergeCapabilityContracts } from "./capability-binding"
 import {
     summarisePrompt,
     summariseRun,
@@ -395,7 +396,11 @@ export async function runVisibilityProbe(
             const persona = (brandRow?.brand_data ?? {}) as {
                 category?: string
                 core_features?: string[]
-                audience?: { primary?: string }
+                audience?: { primary?: string; psychology?: string }
+                enemy?: string
+                product_identity?: { not?: string }
+                uvp?: string[]
+                pricing?: string[]
             }
 
             const built = await buildBuyerPrompts(families, {
@@ -419,6 +424,11 @@ export async function runVisibilityProbe(
                     category: persona.category,
                     coreFeatures: persona.core_features,
                     audience: persona.audience?.primary,
+                    audiencePsychology: persona.audience?.psychology,
+                    enemy: persona.enemy,
+                    notThis: persona.product_identity?.not,
+                    uvp: persona.uvp,
+                    pricing: persona.pricing,
                 },
                 maxPrompts: options.maxPrompts ?? DEFAULT_PROMPTS_PER_RUN,
             })
@@ -784,8 +794,8 @@ export async function runVisibilityProbe(
         await report("freezing_evidence", `${summary.absentPromptCount + summary.outrankedPromptCount} losing prompts`)
 
         const gaps = toGapItems(prompts, outcomes, runId, {
-            capabilityContracts: new Map(
-                families.map((family) => [family.id, family.capabilityContract]),
+            capabilityContract: mergeCapabilityContracts(
+                families.map((family) => family.capabilityContract),
             ),
         })
         const clusters: ArticleCluster[] = []

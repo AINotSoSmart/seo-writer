@@ -19,6 +19,25 @@ export interface BuyerPromptFamily {
     seedKeywords: string[]
 }
 
+/**
+ * Everything the generator is told about the company.
+ *
+ * It used to be four fields — subject, category, capabilities, audience — while
+ * brand analysis extracts eleven. The five below were being thrown away, and
+ * they are the ones that produce *concerns* rather than features:
+ *
+ *   `enemy`      the problem this product exists to fight, which is the same
+ *                thing as the reason a person starts looking
+ *   `notThis`    what it is deliberately not — every "not" implies someone who
+ *                tried that other thing and found it wanting
+ *   `uvp`        distinct reasons to choose, each a different buyer
+ *   `pricing`    makes budget-shaped concerns possible; there were none at all
+ *   `audiencePsychology`  what the buyer is actually worried about
+ *
+ * Without them the model can only derive concerns from the feature list, so it
+ * returns one concern per feature and rephrases within each. A measured Drawgle
+ * run supported about eighteen genuinely distinct questions on four fields.
+ */
 export interface PromptBrandContext {
     /** Plain description of the product — "browser tool that restores old photos". */
     subjectType: string
@@ -28,6 +47,16 @@ export interface PromptBrandContext {
     coreFeatures?: string[]
     /** Who has the problem. Background for situations, never a label to quote. */
     audience?: string
+    /** The buyer's own worry, in the analyst's words. */
+    audiencePsychology?: string
+    /** The problem the product exists to fight. */
+    enemy?: string
+    /** What the product is deliberately distinct from. */
+    notThis?: string
+    /** Permanent selling points — reasons to pick this over the alternative. */
+    uvp?: string[]
+    /** Real plan lines, so cost-shaped situations can exist. */
+    pricing?: string[]
 }
 
 /**
@@ -58,34 +87,34 @@ function exampleBlock(): string {
 }
 
 /**
- * One prompt for the whole company.
+ * One prompt for the whole company, organised by BUYER CONCERN.
  *
- * ## Why the product leads and the areas trail
+ * ## Why the product areas are gone
  *
- * The areas come from `scope-extraction.ts`, which asks for "the SEARCH MARKETS
- * this business competes in" and names each one the way a customer would type
- * it *into Google*. They are keyword clusters. When they were the first
- * concrete block in this instruction and every question had to belong to one,
- * the generator did the obvious thing: it expanded head terms. A live Drawgle
- * run produced six questions, nearly all shaped "best <keyword> for <person>",
- * and a narrow area — "Screenshot to Editable mobile app UI" — yielded exactly
- * one.
+ * They came from `scope-extraction.ts`, which asks for "the SEARCH MARKETS this
+ * business competes in" and names each the way a customer would type it *into
+ * Google*. They are keyword head terms, and they were the first concrete block
+ * in this instruction, with every question required to carry one.
  *
- * So the company, its capabilities and its buyers now come first, the areas are
- * demoted to labels applied after the question exists, and the instruction says
- * out loud that area wording must not become question wording.
+ * The previous pass demoted them in wording — "labels for grouping results
+ * afterwards, NOT the subjects to write about" — and it did not work. A live
+ * Drawgle run came back 8/7/5/5 across four areas, suspiciously even, and five
+ * of the questions in one area were five phrasings of "where can I find
+ * templates I can fork and restyle". A structured list in the prompt beats a
+ * sentence telling the model to ignore it.
  *
- * ## Why the anti-padding rule survived that change
+ * Asking for questions per feature bucket returns rephrasings of the bucket.
+ * Asking for questions per buyer concern returns different angles, because the
+ * concerns are what differ between people. "Granular element editing" is not a
+ * search market; it is a reason someone goes looking, and it cuts across every
+ * area this product has.
  *
- * Because it is not the cause. A previous version handed the model per-family
- * quotas and sentence formulas and got exactly what formulas produce. The fix
- * for under-generation is a breadth frame — who is asking, what limits them,
- * what they start from — not a number to hit. The one sentence removed was the
- * one that praised "9 distinct questions", because naming a low number as the
- * good outcome anchors the model to it.
+ * Nothing downstream lost anything. Areas were routing questions to a
+ * capability contract, and the generator now names the `capability` directly —
+ * see `prompt-builder.ts`. `scope_family_id` is still written because the
+ * column is NOT NULL; it no longer influences a single decision.
  */
 export function buildCompanyPrompt(
-    families: BuyerPromptFamily[],
     context: PromptBrandContext,
     language: string,
     questionsToAvoid: string[] = [],
@@ -100,6 +129,17 @@ export function buildCompanyPrompt(
      */
     ceiling: number = 25,
     /**
+     * Concern labels already in use.
+     *
+     * The instruction tells the model to reuse an existing label rather than
+     * coin a synonym, and it cannot do that if it has never seen the labels. A
+     * measured run passed only the prior QUESTIONS, and the second call duly
+     * invented "Feeding AI coding tools" for the concern the first had called
+     * "feeding designs to ai coders" — six questions on one need, with every
+     * label individually obeying the one-to-three rule.
+     */
+    concernsInUse: string[] = [],
+    /**
      * Capabilities the set does not cover yet.
      *
      * Present only on the final coverage pass. This is the whole point of the
@@ -110,6 +150,8 @@ export function buildCompanyPrompt(
     uncoveredCapabilities: string[] = [],
 ): string {
     const features = (context.coreFeatures || []).filter(Boolean).slice(0, 8)
+    const uvps = (context.uvp || []).filter(Boolean).slice(0, 6)
+    const plans = (context.pricing || []).filter(Boolean).slice(0, 5)
     const uncovered = uncoveredCapabilities.filter(Boolean)
     const intents = PROMPT_INTENTS.map(
         (entry) => `- ${entry.key}: ${entry.label}`,
@@ -118,15 +160,6 @@ export function buildCompanyPrompt(
     const wantedClasses = SELECTION_CLASSES.filter((entry) => entry.countsAsSelection)
         .map((entry) => `- ${entry.key}: ${entry.label} — e.g. "${entry.example}"`)
         .join("\n")
-    const areas = families
-        .map(
-            (family) => `- id: ${family.id}
-  name: ${family.name}
-  description: ${family.description}
-  customer wording: ${family.seedKeywords.join(", ")}`,
-        )
-        .join("\n")
-
     return `${getCurrentDateContext()}
 
 Generate natural questions that real people would type into ChatGPT or Gemini when they have a problem this company can solve and are trying to FIND OR CHOOSE a solution.
@@ -135,7 +168,12 @@ This is an AI recommendation measurement. Every question must create a real sele
 
 THE COMPANY
 It is: ${context.subjectType}
-${context.category ? `Category: ${context.category}\n` : ""}${features.length ? `Verified capabilities:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `People with this problem: ${context.audience}\n` : ""}
+${context.category ? `Category: ${context.category}\n` : ""}${features.length ? `Verified capabilities:\n${features.map((feature) => `- ${feature}`).join("\n")}\n` : ""}${context.audience ? `People with this problem: ${context.audience}\n` : ""}${context.audiencePsychology ? `What worries them: ${context.audiencePsychology}\n` : ""}
+WHY PEOPLE END UP LOOKING
+These describe the situation someone is in before they search. They are NOT capabilities and nothing here may be turned into a claim about what the product does — the verified list above remains the only thing it can do. Use them to work out who is looking and why.
+${context.enemy ? `The problem it exists to fight: ${context.enemy}\n` : ""}${context.notThis ? `What it is deliberately not: ${context.notThis}\n` : ""}${uvps.length ? `Why people pick it over the alternative:\n${uvps.map((point) => `- ${point}`).join("\n")}\n` : ""}${plans.length ? `What it costs:\n${plans.map((plan) => `- ${plan}`).join("\n")}\n` : ""}
+Read "what it is deliberately not" as a list of people: for each one, somebody tried that other thing first and it did not work. Read the price the same way — someone is deciding whether this is worth it, and someone else cannot spend that at all.
+
 WHO IS ASKING
 Before each question, settle four things about the person typing it:
 - who they are, and how much skill they have
@@ -154,12 +192,38 @@ Keep moving along these axes across the set instead of settling on one:
 - what they start from: only an idea, a written spec, a rough draft, an existing thing they want changed
 - what they need out: the finished result, one specific part of it, or something they have to hand to someone else
 
-CONFIRMED PRODUCT AREAS
-${areas}
+WORK OUT THE BUYER CONCERNS FIRST
+Before writing anything, decide what DISTINCT REASONS a person could have for wanting this product.
 
-Generate questions across the company as a whole, then tag each with the area its need belongs to. The areas are labels for grouping results afterwards, NOT the subjects to write about. Do not walk down the list producing questions area by area, and never let an area's own wording become the question's wording — those phrases were written for a search engine, and a person describing their problem does not talk that way.
+A CONCERN IS NOT A CAPABILITY. If your concerns line up one-to-one with the verified capabilities above, you have renamed the feature list and stopped early — and every question inside one will be a rephrasing of the others. A concern is what a person was doing when they started looking, and the same capability serves several: someone who lost their source files and someone benchmarking a rival both want a screenshot turned into layers, and they ask completely differently.
 
-Each question must have one primary problem. Do not bundle several product areas into an all-in-one software request.
+Reach for concerns that cut ACROSS capabilities — the situation, the constraint, the deadline, the thing that went wrong — not the feature that answers them.
+
+Concerns worth reaching for, when the capabilities support them:
+- getting the output into the hands of whoever builds or uses it next
+- starting from something that already exists rather than from nothing
+- keeping control over the result instead of accepting whatever comes back
+- the thing being frustrating or wrong in whatever they use today
+- doing it at all, when they lack the skill or the budget the usual route needs
+- doing it fast, against a date that is already fixed
+
+That fourth one is where the sharpest questions live and it is the easiest to miss. A capability usually exists because something else does it badly, and a person who has hit that badness types a very specific question.
+
+Then write ONE TO THREE questions per concern — never more. A fourth is always a rephrasing, and rephrasings are what make a measurement set worthless: the same reader, asking the same thing, counted repeatedly.
+
+Name each concern in three or four words and REUSE THAT EXACT LABEL for every question belonging to it.
+
+Within one concern, every question must differ in WHO is asking or WHAT they are starting from. Two questions that describe the same person in the same position, one phrased generally and one with a situation attached, are one question written twice.
+${
+        concernsInUse.length
+            ? `
+These concerns are already covered. Reuse a label verbatim if you are adding to it, and prefer concerns that are NOT on this list:
+${concernsInUse.map((concern) => `- ${concern}`).join("\n")}
+`
+            : ""
+}
+
+Each question must have one primary problem. Do not bundle several capabilities into an all-in-one software request.
 
 ${
         uncovered.length
@@ -199,7 +263,7 @@ ${
 }
 For each result return:
 - question: the exact natural chat message
-- scopeFamilyId: one exact id from the confirmed product areas
+- concern: the buyer concern it belongs to, in three or four words
 - selectionClass: one allowed selection class
 - intent: one allowed intent, judged from the question you just wrote
 - scenario: the distinct underlying buyer situation
@@ -218,7 +282,7 @@ export const BUYER_PROMPT_RESPONSE_SCHEMA = {
                 type: "OBJECT" as const,
                 properties: {
                     question: { type: "STRING" as const },
-                    scopeFamilyId: { type: "STRING" as const },
+                    concern: { type: "STRING" as const },
                     selectionClass: { type: "STRING" as const },
                     intent: { type: "STRING" as const },
                     scenario: { type: "STRING" as const },
@@ -226,7 +290,7 @@ export const BUYER_PROMPT_RESPONSE_SCHEMA = {
                 },
                 required: [
                     "question",
-                    "scopeFamilyId",
+                    "concern",
                     "selectionClass",
                     "intent",
                     "scenario",

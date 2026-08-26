@@ -250,7 +250,8 @@ export function toGapItems(
     runId: string,
     options: {
         excerptChars?: number
-        capabilityContracts?: Map<string, CapabilityContract>
+        /** One merged contract for the brand — see mergeCapabilityContracts. */
+        capabilityContract?: CapabilityContract | null
     } = {},
 ): GapItem[] {
     const excerptChars = options.excerptChars ?? 600
@@ -276,7 +277,7 @@ export function toGapItems(
             scopeFamilyId: prompt.scopeFamilyId,
             prompt: prompt.text,
             sourceSeed: prompt.sourceSeed,
-            contract: options.capabilityContracts?.get(prompt.scopeFamilyId),
+            contract: options.capabilityContract,
         })
 
         gaps.push({

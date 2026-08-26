@@ -695,6 +695,14 @@ export default function OnboardingPage() {
                     category: brandData?.category,
                     coreFeatures: brandData?.core_features,
                     audience: brandData?.audience?.primary,
+                    // The half of the brand profile generation was never shown.
+                    // These decide WHY a person is looking, which is what the
+                    // buyer concerns are derived from.
+                    audiencePsychology: brandData?.audience?.psychology,
+                    enemy: brandData?.enemy,
+                    notThis: brandData?.product_identity?.not,
+                    uvp: brandData?.uvp,
+                    pricing: brandData?.pricing,
                     competitors,
                     maxPrompts: DEFAULT_PROMPTS_PER_RUN,
                 }),
