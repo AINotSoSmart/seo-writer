@@ -397,7 +397,7 @@ export async function runVisibilityProbe(
                 category?: string
                 core_features?: string[]
                 audience?: { primary?: string; psychology?: string }
-                enemy?: string
+                enemy?: string[]
                 product_identity?: { not?: string }
                 uvp?: string[]
                 pricing?: string[]

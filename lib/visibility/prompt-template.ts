@@ -49,8 +49,8 @@ export interface PromptBrandContext {
     audience?: string
     /** The buyer's own worry, in the analyst's words. */
     audiencePsychology?: string
-    /** The problem the product exists to fight. */
-    enemy?: string
+    /** The problems the product exists to fight. An ARRAY in brand_data. */
+    enemy?: string[]
     /** What the product is deliberately distinct from. */
     notThis?: string
     /** Permanent selling points — reasons to pick this over the alternative. */
@@ -150,6 +150,7 @@ export function buildCompanyPrompt(
     uncoveredCapabilities: string[] = [],
 ): string {
     const features = (context.coreFeatures || []).filter(Boolean).slice(0, 8)
+    const enemies = (context.enemy || []).filter(Boolean).slice(0, 5)
     const uvps = (context.uvp || []).filter(Boolean).slice(0, 6)
     const plans = (context.pricing || []).filter(Boolean).slice(0, 5)
     const uncovered = uncoveredCapabilities.filter(Boolean)

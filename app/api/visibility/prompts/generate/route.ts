@@ -17,6 +17,24 @@ import { resolveLanguage } from "@/lib/target-market"
  */
 export const maxDuration = 300
 
+/**
+ * Coerces a brand_data field to a list of non-empty strings.
+ *
+ * `enemy` was typed here as a string and is an ARRAY in `brand_data`, so
+ * `body.enemy?.trim()` threw `r.enemy?.trim is not a function` and the whole
+ * generation request 500'd. These fields are read straight out of a jsonb
+ * column written by a model, so the route validates the shape rather than
+ * trusting a type annotation that nothing enforces at runtime.
+ */
+function asStringList(value: unknown): string[] | undefined {
+    const list = Array.isArray(value) ? value : typeof value === "string" ? [value] : []
+    const cleaned = list
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    return cleaned.length > 0 ? cleaned : undefined
+}
+
 interface GeneratePromptsRequest {
     scopeFamilies: Array<{
         id?: string
@@ -41,7 +59,7 @@ interface GeneratePromptsRequest {
     /** What the product actually does, so a prompt can name a real constraint. */
     coreFeatures?: string[]
     audiencePsychology?: string
-    enemy?: string
+    enemy?: string[]
     notThis?: string
     uvp?: string[]
     pricing?: string[]
@@ -111,10 +129,10 @@ export async function POST(req: NextRequest) {
                 coreFeatures: body.coreFeatures,
                 audience: body.audience?.trim() || undefined,
                 audiencePsychology: body.audiencePsychology?.trim() || undefined,
-                enemy: body.enemy?.trim() || undefined,
+                enemy: asStringList(body.enemy),
                 notThis: body.notThis?.trim() || undefined,
-                uvp: body.uvp,
-                pricing: body.pricing,
+                uvp: asStringList(body.uvp),
+                pricing: asStringList(body.pricing),
             },
             maxPrompts: body.maxPrompts,
         })
