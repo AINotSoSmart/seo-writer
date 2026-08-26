@@ -195,6 +195,11 @@ export function VisibilityDashboard(props: DashboardProps) {
     const consumerEngines = engines.filter((engine) => engine.surface === "consumer_app")
     const apiEngines = engines.filter((engine) => engine.surface === "api")
     const degraded = engines.filter((engine) => engine.failed > 0)
+    /**
+     * Set when the run measured cleanly but could not write a delivery plan.
+     * Frozen onto `summary` by `run-probe.ts`; see the note there.
+     */
+    const planFailure = (summary as { planFailure?: string | null }).planFailure
 
     /**
      * A cross-link from a number to the questions behind it.
@@ -329,6 +334,33 @@ export function VisibilityDashboard(props: DashboardProps) {
                         <span className="tabular-nums">All {summary.promptCount}</span>
                     </span>
                 </div>
+
+                {/*
+                  * THE MEASUREMENT SUCCEEDED AND THE PLAN DID NOT.
+                  *
+                  * Separate outcomes, and this report used to show only the
+                  * first. A failed `finalize_audit_run` leaves every answer
+                  * intact and `query_pool` empty, so the page rendered normally
+                  * and the failure surfaced screens later at "Confirm actions"
+                  * — after the credits were spent. Said here, at the top,
+                  * because the reader's next click is the one that breaks.
+                  */}
+                {planFailure && (
+                    <p className="mt-6 flex items-start gap-2 rounded-lg border border-[var(--viz-critical)]/40 bg-[var(--viz-critical)]/5 p-4 text-sm">
+                        <AlertTriangle
+                            className="mt-0.5 size-4 shrink-0 text-[var(--viz-critical)]"
+                            aria-hidden
+                        />
+                        <span className="text-[var(--viz-ink-secondary)]">
+                            <strong className="font-semibold text-[var(--viz-ink)]">
+                                Every number below is real, but no delivery plan was written.
+                            </strong>{" "}
+                            The answers were collected and stored; turning them into content
+                            actions failed, so nothing from this run can be confirmed for
+                            production.
+                        </span>
+                    </p>
+                )}
 
                 {degraded.length > 0 && (
                     <p className="mt-6 flex items-start gap-2 rounded-lg border border-[var(--viz-warning)]/40 bg-[var(--viz-warning)]/10 p-4 text-sm">

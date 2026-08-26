@@ -5,7 +5,10 @@ import { normalizeQuery } from "@/lib/harvest/types"
 import type { CapabilityContract, QueryIntentBinding } from "@/lib/writer/article-contract"
 import { bindPromptCapability } from "./capability-binding"
 import { syncSiteInventory, type InventoryPage } from "./site-inventory"
-import { matchExistingPage } from "./site-coverage-match"
+import {
+    blogRootFromPublicationPattern,
+    matchExistingPage,
+} from "./site-coverage-match"
 
 function articleTitle(prompt: string): string {
     const cleaned = prompt.trim().replace(/[?.!]+$/, "")
@@ -41,7 +44,11 @@ type Candidate = {
     evidence: Record<string, unknown>
 }
 
-function groupCandidates(prompts: PlanningPrompt[], pages: InventoryPage[]): Candidate[] {
+function groupCandidates(
+    prompts: PlanningPrompt[],
+    pages: InventoryPage[],
+    blogRoot: string | null,
+): Candidate[] {
     const refresh = new Map<string, { match: ReturnType<typeof matchExistingPage>; prompts: PlanningPrompt[] }>()
     const creates = new Map<string, PlanningPrompt[]>()
 
@@ -50,7 +57,7 @@ function groupCandidates(prompts: PlanningPrompt[], pages: InventoryPage[]): Can
         // This gives synonymous buyer wording a chance to match a real page
         // without accepting a generic category page on one shared token.
         const coverageQuery = `${prompt.prompt} ${prompt.sourceSeed} ${prompt.customerJob}`
-        const match = matchExistingPage(coverageQuery, pages)
+        const match = matchExistingPage(coverageQuery, pages, blogRoot)
         if (match) {
             const current = refresh.get(match.page.canonicalUrl) ?? { match, prompts: [] }
             current.prompts.push(prompt)
@@ -292,7 +299,18 @@ export async function buildActionProposalsForRun(input: {
     }
 
     if (!proposalSetId) throw new Error("Proposal set id was not resolved.")
-    const candidates = groupCandidates(planningPrompts, inventory.pages)
+    // The blog root the founder confirmed at checkout. Only pages beneath it may
+    // be refreshed; every other gap becomes a new article. See isRefreshTarget.
+    const { data: programRow } = await supabase
+        .from("programs")
+        .select("publication_url_pattern")
+        .eq("brand_id", run.brand_id)
+        .eq("user_id", run.user_id)
+        .eq("status", "active")
+        .maybeSingle()
+    const blogRoot = blogRootFromPublicationPattern(programRow?.publication_url_pattern)
+
+    const candidates = groupCandidates(planningPrompts, inventory.pages, blogRoot)
     for (const candidate of candidates) {
         const normalizedTitle = normalizeQuery(candidate.title)
         const dedupeKey = candidate.targetUrl

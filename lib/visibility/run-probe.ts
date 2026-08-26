@@ -384,6 +384,16 @@ export async function runVisibilityProbe(
          * rather than a build that never ran.
          */
         let promptBuild: import("./prompt-builder").PromptBuildReport | null = null
+        /**
+         * Why the delivery plan is empty, when the measurement itself is fine.
+         *
+         * A failed `finalize_audit_run` leaves valid answers and no
+         * `query_pool`, and the probe used to return success regardless — so
+         * the report rendered normally and the founder only discovered it
+         * several screens later at "Confirm actions", with the credits already
+         * spent. Frozen onto the run so the report can say it immediately.
+         */
+        let planFailure: string | null = null
 
         if (options.prompts && options.prompts.length > 0) {
             promptsToUse = options.prompts
@@ -818,7 +828,23 @@ export async function runVisibilityProbe(
                     source_context: gap.sourceContext,
                     intent_binding: gap.intentBinding,
                     observed_at: new Date().toISOString(),
-                    embedding: null,
+                    // `embedding` IS OMITTED, NOT SET TO NULL.
+                    //
+                    // `finalize_audit_run` reads it as
+                    //   CASE WHEN item ? 'embedding'
+                    //        THEN (item->'embedding')::text::vector
+                    //        ELSE NULL END
+                    // and `?` tests whether the KEY EXISTS, not whether it has a
+                    // value. Sending `embedding: null` satisfies that test, so
+                    // the cast runs on JSON null, `::text` renders it as the
+                    // literal string 'null', and Postgres rejects
+                    // `'null'::vector` — killing the whole finalize with
+                    // `invalid input syntax for type vector: "null"`.
+                    //
+                    // A probe row has no embedding, and leaving the key out is
+                    // how this RPC is told that. Every other nullable column
+                    // here goes through `NULLIF(item->>'x', '')`, which handles
+                    // JSON null correctly; this one field does not.
                     status: "gap",
                     covered_by_url: null,
                     covered_by_title: null,
@@ -881,6 +907,7 @@ export async function runVisibilityProbe(
                             `[Probe] Could not finalize audit ${options.auditId}:`,
                             finalizeError.message,
                         )
+                        planFailure = finalizeError.message
                         await failAuditRun(
                             supabase,
                             options.auditId,
@@ -927,7 +954,7 @@ export async function runVisibilityProbe(
                 // operators exactly like every other number in here. Adding a
                 // column would need a migration applied by hand for a field
                 // whose only consumer is a diagnosis.
-                summary: { ...summary, promptBuild },
+                summary: { ...summary, promptBuild, planFailure },
                 // Frozen with the run. The report reads this rather than
                 // re-clustering, so the plan a customer was shown is the plan
                 // that stays on screen.
