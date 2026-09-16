@@ -114,9 +114,7 @@ export default function SettingsPage() {
       />
 
       <ProductPanel className="mt-6">
-        <div className="p-4 sm:p-5 md:p-6">
           {/* Brand Settings */}
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
 
 
             {isCreatingBrand || editingBrand ? (
@@ -262,8 +260,6 @@ export default function SettingsPage() {
             )}
 
 
-          </div>
-        </div>
       </ProductPanel>
     </ProductPage>
   )
