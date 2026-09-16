@@ -28,15 +28,16 @@ import type { AuditScopeFamily } from "@/lib/harvest/scope-classifier"
 import type { ArticleCluster } from "@/lib/harvest/cluster-types"
 import {
     askApiEngine,
-    cloroConfigured,
     configuredEngines,
     ENGINE_SPECS,
     EngineError,
     estimateCredits,
-    pollCloroTask,
-    submitCloroTask,
+    isScraperConfigured,
+    pollScraperTask,
+    submitScraperTask,
     type AiEngine,
     type ScrapedAnswer,
+    type VisibilityProvider,
 } from "./engines"
 import { parseAnswer, type ParsedAnswer, type ProbeCompetitor } from "./answer-parser"
 import { mergeCapabilityContracts } from "./capability-binding"
@@ -531,35 +532,35 @@ export async function runVisibilityProbe(
             }
         }
 
-        const cloroJobs = jobs.filter(
+        const scraperJobs = jobs.filter(
             (job) => ENGINE_SPECS[job.engine].surface === "consumer_app",
         )
         const apiJobs = jobs.filter((job) => ENGINE_SPECS[job.engine].surface === "api")
 
-        const answers: Array<{ job: Job; answer: ScrapedAnswer; taskId: string | null }> = []
+        const answers: Array<{ job: Job; answer: ScrapedAnswer; taskId: string | null; provider: string }> = []
 
-        // Phase A: submit every Cloro task. Fast, and it puts the whole run into
-        // Cloro's queue at once instead of waiting on each answer in turn.
-        if (cloroJobs.length > 0) {
-            if (!cloroConfigured()) {
+        // Phase A: submit every scraper task. Fast, and it puts the whole run into
+        // the provider queue at once instead of waiting on each answer in turn.
+        if (scraperJobs.length > 0) {
+            if (!isScraperConfigured()) {
                 throw new ProbeError(
-                    "CLORO_API_KEY is not configured, so the consumer surfaces cannot be measured.",
+                    "No AI visibility scraper provider is configured, so the consumer surfaces cannot be measured.",
                     "no_engines",
                 )
             }
 
             const submitted = await mapWithConcurrency(
-                cloroJobs,
+                scraperJobs,
                 SUBMIT_CONCURRENCY,
                 async (job) => {
                     ledger.get(job.engine)!.attempted++
                     try {
-                        const taskId = await submitCloroTask(
+                        const { taskId, provider } = await submitScraperTask(
                             job.prompt.prompt,
                             job.engine,
                             { countryCode: options.countryCode },
                         )
-                        return { job, taskId }
+                        return { job, taskId, provider }
                     } catch (error) {
                         noteFailure(job.engine, error)
                         return null
@@ -568,7 +569,7 @@ export async function runVisibilityProbe(
             )
 
             const queued = submitted.filter(
-                (item): item is { job: Job; taskId: string } => item !== null,
+                (item): item is { job: Job; taskId: string; provider: VisibilityProvider } => item !== null,
             )
             await report("awaiting_answers", `${queued.length} queued`)
 
@@ -577,18 +578,17 @@ export async function runVisibilityProbe(
             const polled = await mapWithConcurrency(
                 queued,
                 POLL_CONCURRENCY,
-                async ({ job, taskId }) => {
+                async ({ job, taskId, provider }) => {
                     try {
-                        const answer = await pollCloroTask(taskId, job.engine)
+                        const answer = await pollScraperTask(taskId, job.engine, provider)
                         if (!answer.text.trim()) {
                             throw new EngineError(job.engine, "empty answer text")
                         }
                         const entry = ledger.get(job.engine)!
                         entry.succeeded++
-                        // Cloro bills only successful extractions, so credits
-                        // are counted here rather than at submit.
+                        // Credits/records are counted on success rather than submit.
                         entry.creditsUsed += ENGINE_SPECS[job.engine].credits
-                        return { job, answer, taskId }
+                        return { job, answer, taskId, provider }
                     } catch (error) {
                         noteFailure(job.engine, error)
                         return null
@@ -614,7 +614,7 @@ export async function runVisibilityProbe(
                             throw new EngineError(job.engine, "empty answer text")
                         }
                         ledger.get(job.engine)!.succeeded++
-                        return { job, answer, taskId: null }
+                        return { job, answer, taskId: null, provider: job.engine }
                     } catch (error) {
                         noteFailure(job.engine, error)
                         return null
@@ -658,7 +658,7 @@ export async function runVisibilityProbe(
         >()
         const resultRows: any[] = []
 
-        for (const { job, answer, taskId } of successful) {
+        for (const { job, answer, taskId, provider } of successful) {
             const parsed: ParsedAnswer = parseAnswer(answer, subject, competitors)
 
             let entry = byPrompt.get(job.prompt.id)
@@ -694,6 +694,8 @@ export async function runVisibilityProbe(
                 // of drift a stored trend has to be able to explain.
                 model: answer.reportedModel,
                 surface: ENGINE_SPECS[job.engine].surface,
+                provider,
+                provider_task_id: taskId,
                 cloro_task_id: taskId,
                 credits_used: ENGINE_SPECS[job.engine].credits,
                 // Stored in full. This is the provenance record — a truncated

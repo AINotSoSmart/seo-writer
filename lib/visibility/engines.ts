@@ -2,7 +2,7 @@
  * Answer-engine adapters.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * WHY THIS RUNS THROUGH CLORO AND NOT THE PROVIDER APIS
+ * WHY THIS RUNS THROUGH SCRAPERS AND NOT THE PROVIDER APIS
  *
  * The first version of this file called the OpenAI Responses API and Gemini
  * with `googleSearch` grounding. That was wrong, and the evidence is
@@ -26,19 +26,29 @@
  * they can open ChatGPT and see themselves is the single most expensive way
  * this product can be wrong.
  *
- * Cloro drives the real consumer surfaces and returns their markdown and
- * sources. It is also roughly 10x cheaper than the API path for the same
- * prompt (~11 credits for the default pair vs ~$0.02+ of search fees and
- * tokens).
+ * Real consumer surfaces are driven via scrapers (Bright Data by default, with
+ * Cloro fallback) and return their markdown and sources. It is also roughly
+ * 10x cheaper than the API path for the same prompt (~11 credits for the
+ * default pair vs ~$0.02+ of search fees and tokens).
  *
  * The API adapters are retained behind `allowApiSurface` for self-hosters with
- * no Cloro key. They are labelled `surface: "api"` on every stored answer and
+ * no scraper key. They are labelled `surface: "api"` on every stored answer and
  * must never be averaged into a consumer-surface number — that is exactly the
  * 32-point error, laundered into a single score.
  * ────────────────────────────────────────────────────────────────────────────
  */
 
 import type { AnswerCitation, EngineAnswer } from "./answer-parser"
+import {
+    brightDataConfigured,
+    pollBrightDataTask,
+    submitBrightDataTask,
+} from "./providers/brightdata"
+import {
+    cloroConfigured,
+    pollCloroTask as _pollCloroTask,
+    submitCloroTask as _submitCloroTask,
+} from "./providers/cloro"
 
 /**
  * Which surface an answer came from. Stored on every row.
@@ -49,7 +59,7 @@ import type { AnswerCitation, EngineAnswer } from "./answer-parser"
 export type SurfaceKind = "consumer_app" | "api"
 
 export type AiEngine =
-    // Cloro consumer surfaces
+    // Consumer surfaces
     | "chatgpt-web"
     | "google-aimode"
     | "google-aio"
@@ -59,6 +69,8 @@ export type AiEngine =
     | "openai-api"
     | "anthropic-api"
 
+export type VisibilityProvider = "brightdata" | "cloro"
+
 export interface EngineSpec {
     id: AiEngine
     label: string
@@ -66,10 +78,9 @@ export interface EngineSpec {
     /** Cloro task type, absent for API engines. */
     cloroTaskType?: "CHATGPT" | "AIMODE" | "GOOGLE" | "PERPLEXITY" | "GEMINI"
     /**
-     * Approximate Cloro credits per call, for the run's cost ledger.
-     * Approximate on purpose: Cloro publishes per-engine credit counts that
-     * change, and a number stored per run is auditable against the real
-     * invoice. Verify against the current pricing page before quoting it.
+     * Approximate credits per call, for the run's cost ledger.
+     * Approximate on purpose: published per-engine credit counts change,
+     * and a number stored per run is auditable against the real invoice.
      */
     credits: number
 }
@@ -80,9 +91,8 @@ export const ENGINE_SPECS: Record<AiEngine, EngineSpec> = {
         label: "ChatGPT",
         surface: "consumer_app",
         cloroTaskType: "CHATGPT",
-        // `buildCloroPayload` requests the observed search queries. Cloro bills
-        // that enriched/full response at 7 credits, not the 5-credit base web
-        // response. Keeping this exact is what makes the pre-flight meaningful.
+        // Enriched/full response bills at 7 credits. Keeping this exact is what
+        // makes the pre-flight meaningful.
         credits: 7,
     },
     "google-aimode": {
@@ -135,10 +145,9 @@ export const ENGINE_SPECS: Record<AiEngine, EngineSpec> = {
  * than the Gemini app, because it sits inside Search. Two surfaces, 11 credits
  * per prompt, both consumer.
  *
- * Claude is deliberately not here despite being ~18% of B2B referrals: Cloro
- * has no Claude scraper, so it is only reachable through the API surface, and
- * a peer-labelled API number would corrupt the comparison. Revisit if a
- * consumer-surface Claude scraper ships.
+ * Claude is deliberately not here despite being ~18% of B2B referrals: neither
+ * Bright Data nor Cloro has a Claude scraper, so it is only reachable through
+ * the API surface, and a peer-labelled API number would corrupt the comparison.
  */
 export const DEFAULT_ENGINES: AiEngine[] = ["chatgpt-web", "google-aimode"]
 
@@ -154,12 +163,8 @@ export const ENGINE_LABELS: Record<AiEngine, string> = Object.fromEntries(
     Object.values(ENGINE_SPECS).map((spec) => [spec.id, spec.label]),
 ) as Record<AiEngine, string>
 
-const CLORO_API = "https://api.cloro.dev"
-
-/** Cloro tasks are queued work; upstream allows 30 minutes. */
-const DEFAULT_MAX_WAIT_MS = 20 * 60 * 1000
-const DEFAULT_POLL_INTERVAL_MS = 8_000
-const SUBMIT_TIMEOUT_MS = 30_000
+// Retained upstream Cloro API endpoint constant for contract compatibility
+export const CLORO_API = "https://api.cloro.dev"
 
 export class EngineError extends Error {
     constructor(
@@ -171,14 +176,66 @@ export class EngineError extends Error {
     }
 }
 
-export function cloroConfigured(): boolean {
-    return Boolean(process.env.CLORO_API_KEY)
+export {
+    brightDataConfigured,
+    pollBrightDataTask,
+    submitBrightDataTask,
+    parseBrightDataResponse,
+} from "./providers/brightdata"
+
+export {
+    cloroConfigured,
+    buildCloroPayload,
+    parseCloroResponse,
+} from "./providers/cloro"
+
+/** Submits one Cloro task and returns its id. Kept for direct callers and contract tests. */
+export async function submitCloroTask(
+    prompt: string,
+    engine: AiEngine,
+    options: { countryCode?: string } = {},
+): Promise<string> {
+    return _submitCloroTask(prompt, engine, options)
+}
+
+/** Polls one Cloro task to completion. Kept for direct callers and contract tests. */
+export async function pollCloroTask(
+    taskId: string,
+    engine: AiEngine,
+    options: { maxWaitMs?: number; pollIntervalMs?: number } = {},
+): Promise<ScrapedAnswer> {
+    return _pollCloroTask(taskId, engine, options)
+}
+
+/**
+ * Determines which scraper provider is actively chosen.
+ * Prioritizes process.env.AI_VISIBILITY_PROVIDER if set,
+ * otherwise selects Bright Data when configured, falling back to Cloro.
+ */
+export function activeVisibilityProvider(): VisibilityProvider {
+    const override = String(process.env.AI_VISIBILITY_PROVIDER || "").trim().toLowerCase()
+    if (override === "cloro") return "cloro"
+    if (override === "brightdata") return "brightdata"
+
+    if (brightDataConfigured()) return "brightdata"
+    if (cloroConfigured()) return "cloro"
+    return "brightdata"
+}
+
+/**
+ * Returns true if at least one consumer scraper provider is configured.
+ */
+export function isScraperConfigured(): boolean {
+    const provider = activeVisibilityProvider()
+    if (provider === "brightdata") return brightDataConfigured()
+    if (provider === "cloro") return cloroConfigured()
+    return brightDataConfigured() || cloroConfigured()
 }
 
 /**
  * Engines this deployment can actually run.
  *
- * With a Cloro key: the consumer surfaces. Without one: nothing, unless the
+ * With a scraper key (Bright Data or Cloro): the consumer surfaces. Without one: nothing, unless the
  * caller explicitly opts into the API surface. Returning API engines by
  * default would silently downgrade a customer's report to the measurement the
  * research above disqualified.
@@ -186,70 +243,13 @@ export function cloroConfigured(): boolean {
 export function configuredEngines(
     options: { allowApiSurface?: boolean } = {},
 ): AiEngine[] {
-    if (cloroConfigured()) return DEFAULT_ENGINES
+    if (isScraperConfigured()) return DEFAULT_ENGINES
     if (!options.allowApiSurface) return []
 
     const api: AiEngine[] = []
     if (process.env.OPENAI_API_KEY) api.push("openai-api")
     if (process.env.ANTHROPIC_API_KEY) api.push("anthropic-api")
     return api
-}
-
-function apiKey(): string {
-    const key = process.env.CLORO_API_KEY
-    if (!key) throw new Error("CLORO_API_KEY is not configured")
-    return key
-}
-
-/**
- * Cloro request body. Shapes differ per surface and are not interchangeable —
- * AI Overview keys on `query` and asks for `aioverview`, everything else keys
- * on `prompt`.
- */
-export function buildCloroPayload(
-    prompt: string,
-    engine: AiEngine,
-    countryCode?: string,
-): Record<string, unknown> {
-    const country = (countryCode || "US").toUpperCase()
-
-    if (engine === "google-aio") {
-        return {
-            query: prompt,
-            country,
-            include: { html: false, aioverview: { markdown: true } },
-        }
-    }
-
-    if (engine === "google-aimode") {
-        return { prompt, country, include: { html: false, markdown: true } }
-    }
-
-    return {
-        prompt,
-        country,
-        include: {
-            html: false,
-            markdown: true,
-            rawResponse: false,
-            // The engine's own observed sub-queries. Free to request, and the
-            // most direct evidence of how a surface decomposed the question.
-            searchQueries: true,
-        },
-    }
-}
-
-/** Cloro sources are `{ url, label }`; ours are `{ url, title }`. */
-function mapSources(sources: any[]): AnswerCitation[] {
-    const seen = new Set<string>()
-    const out: AnswerCitation[] = []
-    for (const source of sources || []) {
-        const url = String(source?.url || "").trim()
-        if (!url || seen.has(url)) continue
-        seen.add(url)
-        out.push({ url, title: String(source?.label || source?.title || "").trim() })
-    }
-    return out
 }
 
 export interface ScrapedAnswer extends EngineAnswer {
@@ -260,164 +260,49 @@ export interface ScrapedAnswer extends EngineAnswer {
 }
 
 /**
- * Normalises one Cloro response.
- *
- * AI Overview is the one surface that can legitimately return nothing: Google
- * does not generate an overview for every query. That is a real observation
- * about the query, not a transport failure, but it produces no answer text to
- * measure — so it throws and lands in the ledger as a failure rather than
- * being counted as "the brand was absent".
+ * Unified submission function: routes task to the active scraper provider.
+ * Returns the task ID and the provider that accepted it.
  */
-export function parseCloroResponse(result: any, engine: AiEngine): ScrapedAnswer {
-    if (engine === "google-aio") {
-        const overview = result?.aioverview
-        if (!overview) {
-            throw new EngineError(
-                engine,
-                "Google returned no AI Overview for this query",
-            )
-        }
-        return {
-            text: overview.markdown || overview.text || "",
-            citations: mapSources(overview.sources),
-            reportedModel: "google-aio",
-            searchQueries: [],
-        }
-    }
-
-    if (engine === "google-aimode") {
-        const aiMode = result?.result || result
-        return {
-            text: aiMode.markdown || aiMode.text || "",
-            citations: mapSources(aiMode.sources),
-            reportedModel: "google-aimode",
-            searchQueries: normaliseSearchQueries(aiMode),
-        }
-    }
-
-    return {
-        text: result?.markdown || result?.text || "",
-        citations: mapSources(result?.sources),
-        reportedModel: result?.model || engine,
-        searchQueries: normaliseSearchQueries(result),
-    }
-}
-
-/** Observed sub-queries only. Never synthesised. */
-function normaliseSearchQueries(result: any): string[] {
-    const raw = result?.search_model_queries ?? result?.searchQueries
-    if (!Array.isArray(raw)) return []
-    return raw
-        .map((entry: any) =>
-            typeof entry === "string" ? entry.trim() : String(entry?.query ?? "").trim(),
-        )
-        .filter((query: string) => query.length > 0)
-}
-
-/** Submits one task and returns its id. Fast — the wait happens in the poll. */
-export async function submitCloroTask(
+export async function submitScraperTask(
     prompt: string,
     engine: AiEngine,
     options: { countryCode?: string } = {},
-): Promise<string> {
-    const spec = ENGINE_SPECS[engine]
-    if (!spec.cloroTaskType) throw new EngineError(engine, "not a Cloro engine")
+): Promise<{ taskId: string; provider: VisibilityProvider }> {
+    const countryCode = options.countryCode || "US"
+    const provider = activeVisibilityProvider()
 
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), SUBMIT_TIMEOUT_MS)
-    try {
-        const response = await fetch(`${CLORO_API}/v1/async/task`, {
-            method: "POST",
-            headers: {
-                authorization: `Bearer ${apiKey()}`,
-                "content-type": "application/json",
-            },
-            body: JSON.stringify({
-                taskType: spec.cloroTaskType,
-                payload: buildCloroPayload(prompt, engine, options.countryCode),
-            }),
-            signal: controller.signal,
-        })
-
-        if (!response.ok) {
-            const detail = await response.text().catch(() => "")
-            throw new EngineError(
-                engine,
-                `submit HTTP ${response.status} ${detail.slice(0, 200)}`,
-            )
-        }
-
-        const data = await response.json()
-        if (!data?.success || !data?.task?.id) {
-            throw new EngineError(
-                engine,
-                `submit returned no task id: ${String(data?.error || "unknown")}`,
-            )
-        }
-        return data.task.id as string
-    } catch (error) {
-        if (error instanceof EngineError) throw error
-        throw new EngineError(
-            engine,
-            error instanceof Error ? error.message : String(error),
-        )
-    } finally {
-        clearTimeout(timer)
+    if (provider === "brightdata") {
+        const taskId = await submitBrightDataTask(prompt, engine, { countryCode })
+        return { taskId, provider: "brightdata" }
     }
+
+    const taskId = await submitCloroTask(prompt, engine, { countryCode })
+    return { taskId, provider: "cloro" }
 }
 
-/** Polls one task to completion. */
-export async function pollCloroTask(
+/**
+ * Unified polling function: retrieves result from the specified provider (or active provider).
+ */
+export async function pollScraperTask(
     taskId: string,
     engine: AiEngine,
+    provider: VisibilityProvider = activeVisibilityProvider(),
     options: { maxWaitMs?: number; pollIntervalMs?: number } = {},
 ): Promise<ScrapedAnswer> {
-    const deadline = Date.now() + (options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS)
-    const interval = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
-
-    while (Date.now() < deadline) {
-        const response = await fetch(`${CLORO_API}/v1/async/task/${taskId}`, {
-            headers: { authorization: `Bearer ${apiKey()}` },
-        })
-
-        if (!response.ok) {
-            const detail = await response.text().catch(() => "")
-            throw new EngineError(
-                engine,
-                `poll HTTP ${response.status} ${detail.slice(0, 200)}`,
-            )
-        }
-
-        const data = await response.json()
-        const status = data?.task?.status
-
-        if (status === "COMPLETED") {
-            if (!data.response) {
-                throw new EngineError(engine, `task ${taskId} completed with no response`)
-            }
-            return parseCloroResponse(data.response, engine)
-        }
-
-        if (status === "FAILED") {
-            const reason =
-                data?.response?.error || data?.task?.failedReason || "unknown failure"
-            throw new EngineError(engine, `task ${taskId} failed: ${reason}`)
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, interval))
+    if (provider === "brightdata") {
+        return pollBrightDataTask(taskId, engine, options)
     }
-
-    throw new EngineError(engine, `task ${taskId} timed out`)
+    return pollCloroTask(taskId, engine, options)
 }
 
 // ── API-surface fallbacks ───────────────────────────────────────────────────
-// Retained for self-hosters with no Cloro key. Every answer they produce is
+// Retained for self-hosters with no scraper key. Every answer they produce is
 // stored with `surface: "api"` and rendered with that caveat visible.
 
 async function askOpenAiApi(prompt: string, countryCode?: string): Promise<ScrapedAnswer> {
     const tool: Record<string, unknown> = { type: "web_search" }
     if (countryCode) {
-        tool.user_location = { type: "approximate", country: countryCode.toUpperCase() }
+        tool.user_location = { type: "approximate", country: (countryCode || "US").toUpperCase() }
     }
 
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -503,7 +388,7 @@ export async function askApiEngine(
     throw new EngineError(engine, "not an API engine")
 }
 
-/** Total Cloro credits one run will consume, for the pre-flight estimate. */
+/** Total credits one run will consume, for the pre-flight estimate. */
 export function estimateCredits(promptCount: number, engines: AiEngine[]): number {
     return engines.reduce(
         (total, engine) => total + ENGINE_SPECS[engine].credits * promptCount,

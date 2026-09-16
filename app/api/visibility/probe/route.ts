@@ -44,6 +44,7 @@ import {
     DEFAULT_ENGINES,
     ENGINE_SPECS,
     estimateCredits,
+    isScraperConfigured,
     type AiEngine,
 } from "@/lib/visibility/engines"
 import {
@@ -128,11 +129,11 @@ function resolveProbeEngines(): {
                 "CLORO_SANDBOX_ENGINE is only allowed while DODO_ENVIRONMENT=test_mode.",
         }
     }
-    if (!cloroConfigured()) {
+    if (!isScraperConfigured()) {
         return {
             engines: [],
             configurationError:
-                "CLORO_SANDBOX_ENGINE requires CLORO_API_KEY.",
+                "CLORO_SANDBOX_ENGINE requires a configured scraper provider.",
         }
     }
     if (!DEFAULT_ENGINES.includes(sandboxEngine as AiEngine)) {
@@ -414,7 +415,7 @@ export async function POST(req: NextRequest) {
     if (engines.length === 0) {
         return NextResponse.json(
             {
-                error: cloroConfigured()
+                error: isScraperConfigured()
                     ? "No answer engine was selected for this run."
                     : probeFailureCopy("no_engines").message,
                 reason: "no_engines",

@@ -106,6 +106,8 @@ export type Database = {
           model: string
           observed_at: string
           prompt_id: string
+          provider: string
+          provider_task_id: string | null
           run_id: string
           search_queries: Json
           surface: string
@@ -127,6 +129,8 @@ export type Database = {
           model: string
           observed_at?: string
           prompt_id: string
+          provider?: string
+          provider_task_id?: string | null
           run_id: string
           search_queries?: Json
           surface?: string
@@ -148,6 +152,8 @@ export type Database = {
           model?: string
           observed_at?: string
           prompt_id?: string
+          provider?: string
+          provider_task_id?: string | null
           run_id?: string
           search_queries?: Json
           surface?: string

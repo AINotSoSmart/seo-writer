@@ -394,8 +394,8 @@ export function ProbeConsole({
                     // Retrying cannot fix a missing key, so this offers no button
                     // that would fail identically one second later.
                     <div className="rounded-xl border border-stone-300 bg-stone-50 p-5 text-center text-sm leading-relaxed text-stone-700">
-                        The probe measures the real ChatGPT and Google AI Mode apps through
-                        Cloro. Until that connection is configured, no answer can be
+                        The probe measures the real ChatGPT and Google AI Mode apps.
+                        Until that connection is configured, no answer can be
                         collected — and reporting you as absent without asking would be a
                         fabricated result, which this product will not do.
                     </div>

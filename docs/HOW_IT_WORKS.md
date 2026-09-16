@@ -355,7 +355,7 @@ funnel changed and the bottom half did not.
   buyer questions          NEW: written per area, shown to you, edited by you
         ↓
   asked of ChatGPT
-  and Google AI Mode       NEW: the real consumer apps, via Cloro
+  and Google AI Mode       NEW: the real consumer apps, via Bright Data (or Cloro)
         ↓
   who got named            NEW: absent / named-but-never-first / present
         ↓
@@ -511,9 +511,10 @@ showed up in 15-18% of app answers and *zero* API answers — a tool using the A
 would have reported that brand at 0%, exactly like a brand nobody has heard of.
 
 Imagine sending that report. The founder opens ChatGPT, types the question, sees
-their own name, and never replies to you again. So we route through Cloro, which
-drives the actual apps. It also costs about a tenth as much (~$0.14 a run versus
-~$1.50-2.00), so the accurate way was also the cheap way.
+their own name, and never replies to you again. So we route through web scrapers
+(Bright Data by default, with Cloro fallback), which drive the actual apps. It
+also costs about a tenth as much (~$0.14 a run versus ~$1.50-2.00), so the
+accurate way was also the cheap way.
 
 **What you'll see.** One page. A big number (how often you got named), who got
 named instead, how the two engines differ, which pages the answers were built
