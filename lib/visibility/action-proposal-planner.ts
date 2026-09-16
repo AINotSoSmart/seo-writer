@@ -7,29 +7,16 @@ import { bindPromptCapability } from "./capability-binding"
 import { syncSiteInventory, type InventoryPage } from "./site-inventory"
 import {
     blogRootFromPublicationPattern,
+    isRefreshTarget,
     matchExistingPage,
 } from "./site-coverage-match"
+import {
+    clusterPromptsByBuyerIntent,
+    formatArticleTitle,
+    type PlanningPrompt,
+} from "./intent-clusterer"
 
-function articleTitle(prompt: string): string {
-    const cleaned = prompt.trim().replace(/[?.!]+$/, "")
-    const rewritten = cleaned
-        .replace(/^how (?:do|can|should) (?:i|you)\s+/i, "How to ")
-        .replace(/^what is the best way to\s+/i, "How to ")
-    return rewritten.charAt(0).toUpperCase() + rewritten.slice(1)
-}
-
-type PlanningPrompt = {
-    opportunityId: string
-    trackedPromptId: string
-    scopeFamilyId: string
-    prompt: string
-    sourceSeed: string
-    priority: number
-    reason: string
-    binding: QueryIntentBinding
-    customerJob: string
-    capabilityFactIds: string[]
-}
+export type { PlanningPrompt } from "./intent-clusterer"
 
 type Candidate = {
     resolutionType: "create" | "refresh"
@@ -44,87 +31,63 @@ type Candidate = {
     evidence: Record<string, unknown>
 }
 
-function groupCandidates(
+async function groupCandidates(
     prompts: PlanningPrompt[],
     pages: InventoryPage[],
     blogRoot: string | null,
-): Candidate[] {
-    const refresh = new Map<string, { match: ReturnType<typeof matchExistingPage>; prompts: PlanningPrompt[] }>()
-    const creates = new Map<string, PlanningPrompt[]>()
+): Promise<Candidate[]> {
+    if (prompts.length === 0) return []
 
-    for (const prompt of prompts.sort((a, b) => b.priority - a.priority)) {
-        // Include the confirmed scope seed and operation-shaped customer job.
-        // This gives synonymous buyer wording a chance to match a real page
-        // without accepting a generic category page on one shared token.
-        const coverageQuery = `${prompt.prompt} ${prompt.sourceSeed} ${prompt.customerJob}`
-        const match = matchExistingPage(coverageQuery, pages, blogRoot)
-        if (match) {
-            const current = refresh.get(match.page.canonicalUrl) ?? { match, prompts: [] }
-            current.prompts.push(prompt)
-            if ((current.match?.confidence ?? 0) < match.confidence) current.match = match
-            refresh.set(match.page.canonicalUrl, current)
-            continue
-        }
-
-        // GROUPED BY WHAT THE QUESTION ASKS FOR, NOT BY WHICH BUCKET OWNED IT.
-        //
-        // This was `${prompt.scopeFamilyId}:${topicKey}`, and the family half
-        // was circular: `sourceSeed` was set to that family's own first seed
-        // keyword, and an `operationKey` comes from that family's own contract.
-        // The key was the family, twice. It also capped output at roughly one
-        // article per area — three or four families meant three or four create
-        // actions no matter how many distinct gaps existed.
-        //
-        // The evidenced operation is the real boundary: two questions asking
-        // for the same verified capability are one article, and two asking for
-        // different ones are not, whatever bucket they were filed under.
-        const createKey = prompt.binding.operationKey
-            ? `operation:${prompt.binding.operationKey}`
-            : `topic:${normalizeQuery(prompt.sourceSeed)}`
-        const group = creates.get(createKey) ?? []
-        group.push(prompt)
-        creates.set(createKey, group)
-    }
+    // 1. Cluster losing prompts by semantic buyer intent FIRST
+    const clusters = await clusterPromptsByBuyerIntent(prompts)
 
     const candidates: Candidate[] = []
-    for (const { match, prompts: grouped } of refresh.values()) {
-        if (!match) continue
-        const blog = match.page.pageKind === "blog"
-        candidates.push({
-            resolutionType: "refresh",
-            deliverableType: blog ? "full_page_replacement" : "section_patch",
-            title: blog ? `Refresh: ${match.page.title}` : `Patch: ${match.page.title}`,
-            targetUrl: match.page.canonicalUrl,
-            targetPageKind: match.page.pageKind,
-            priority: Math.round(Math.max(...grouped.map((prompt) => prompt.priority))),
-            reason: `${grouped.length} measured buyer question${grouped.length === 1 ? "" : "s"} maps to this existing ${match.page.pageKind} page; refresh it instead of publishing a duplicate.`,
-            prompts: grouped,
-            binding: commonBinding(grouped),
-            evidence: {
-                matchConfidence: Math.round(match.confidence * 100) / 100,
-                inventoryPageId: match.page.id ?? null,
-                capabilityFactIds: unique(grouped.flatMap((prompt) => prompt.capabilityFactIds)),
-            },
-        })
+
+    // 2. For each intent cluster, check if an existing page covers this EXACT intent
+    for (const cluster of clusters) {
+        // Coverage query tests whether an existing page already covers this specific intent
+        const coverageQuery = `${cluster.title} ${cluster.prompts.map((p) => `${p.prompt} ${p.sourceSeed}`).join(" ")}`
+        const match = matchExistingPage(coverageQuery, pages, blogRoot)
+
+        if (match && isRefreshTarget(match.page, blogRoot)) {
+            const blog = match.page.pageKind === "blog"
+            candidates.push({
+                resolutionType: "refresh",
+                deliverableType: blog ? "full_page_replacement" : "section_patch",
+                title: blog ? `Refresh: ${match.page.title}` : `Patch: ${match.page.title}`,
+                targetUrl: match.page.canonicalUrl,
+                targetPageKind: match.page.pageKind,
+                priority: Math.round(Math.max(...cluster.prompts.map((p) => p.priority))),
+                reason: `${cluster.prompts.length} measured buyer question${cluster.prompts.length === 1 ? "" : "s"} maps to existing ${match.page.pageKind} page "${match.page.title}"; refresh it instead of creating a duplicate.`,
+                prompts: cluster.prompts,
+                binding: commonBinding(cluster.prompts),
+                evidence: {
+                    matchConfidence: Math.round(match.confidence * 100) / 100,
+                    inventoryPageId: match.page.id ?? null,
+                    capabilityFactIds: unique(cluster.prompts.flatMap((p) => p.capabilityFactIds)),
+                    intentSummary: cluster.intentSummary,
+                },
+            })
+        } else {
+            candidates.push({
+                resolutionType: "create",
+                deliverableType: "full_article",
+                title: cluster.title,
+                targetUrl: null,
+                targetPageKind: null,
+                priority: Math.round(Math.max(...cluster.prompts.map((p) => p.priority))),
+                reason: `${cluster.prompts.length} measured buyer question${cluster.prompts.length === 1 ? " has" : "s have"} no supported match in the current sitemap inventory: ${cluster.intentSummary}`,
+                prompts: cluster.prompts,
+                binding: commonBinding(cluster.prompts),
+                evidence: {
+                    customerJobs: unique(cluster.prompts.map((p) => p.customerJob)),
+                    capabilityFactIds: unique(cluster.prompts.flatMap((p) => p.capabilityFactIds)),
+                    intentSummary: cluster.intentSummary,
+                },
+            })
+        }
     }
-    for (const grouped of creates.values()) {
-        const lead = grouped[0]
-        candidates.push({
-            resolutionType: "create",
-            deliverableType: "full_article",
-            title: articleTitle(lead.prompt),
-            targetUrl: null,
-            targetPageKind: null,
-            priority: Math.round(Math.max(...grouped.map((prompt) => prompt.priority))),
-            reason: `${grouped.length} measured buyer question${grouped.length === 1 ? " has" : "s have"} no supported match in the current sitemap inventory.`,
-            prompts: grouped,
-            binding: commonBinding(grouped),
-            evidence: {
-                customerJobs: unique(grouped.map((prompt) => prompt.customerJob)),
-                capabilityFactIds: unique(grouped.flatMap((prompt) => prompt.capabilityFactIds)),
-            },
-        })
-    }
+
     return candidates.sort((a, b) => b.priority - a.priority || a.title.localeCompare(b.title))
 }
 
@@ -310,7 +273,7 @@ export async function buildActionProposalsForRun(input: {
         .maybeSingle()
     const blogRoot = blogRootFromPublicationPattern(programRow?.publication_url_pattern)
 
-    const candidates = groupCandidates(planningPrompts, inventory.pages, blogRoot)
+    const candidates = await groupCandidates(planningPrompts, inventory.pages, blogRoot)
     for (const candidate of candidates) {
         const normalizedTitle = normalizeQuery(candidate.title)
         const dedupeKey = candidate.targetUrl

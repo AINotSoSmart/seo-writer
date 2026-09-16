@@ -126,7 +126,6 @@ export async function POST(req: NextRequest) {
             rivalBrands,
             context: {
                 category: body.category?.trim() || undefined,
-                coreFeatures: body.coreFeatures,
                 audience: body.audience?.trim() || undefined,
                 audiencePsychology: body.audiencePsychology?.trim() || undefined,
                 enemy: asStringList(body.enemy),

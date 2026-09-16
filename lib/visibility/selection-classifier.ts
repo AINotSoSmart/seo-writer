@@ -53,6 +53,7 @@ export const CRITIC_REASONS = [
     "general_knowledge_answer",
     "does_not_lead_to_external_solution",
     "synthetic_search_phrase",
+    "product_spec_leak",
     "duplicate_buyer_situation",
     "invalid_critic_response",
     "critic_unavailable",
@@ -85,8 +86,9 @@ const RESPONSE_SCHEMA = {
     required: ["decisions"],
 }
 
-export function buildPromptCriticInstruction(questions: string[]): string {
-    return `Review this complete set of candidate questions for an AI recommendation measurement.
+export function buildPromptCriticInstruction(questions: string[], category?: string): string {
+    const categoryInfo = category ? ` in the category "${category}"` : ""
+    return `Review this complete set of candidate questions for an AI recommendation measurement${categoryInfo}.
 
 Keep a question only when it reads like something a real person would type while trying to find or choose a product, tool, service, app, or provider for their situation.
 
@@ -94,6 +96,7 @@ Reject a question for exactly one primary reason. Judge each question on its own
 - general_knowledge_answer: an assistant can answer it completely with explanation, technique, or steps.
 - does_not_lead_to_external_solution: a useful answer does not plausibly need to name an external solution.
 - synthetic_search_phrase: it reads like an SEO keyword, review-site heading, or manufactured variation rather than a natural chat message.
+- product_spec_leak: it reads like an artificial specification or reverse-engineered feature checklist written to force a specific software tool to be the answer (e.g. asking for specific internal mechanics, proprietary data formats, or hyper-specific combinations of engineering features), rather than how a buyer naturally articulates their problem.
 
 Do not rewrite questions. Do not reject a good question merely because it is informal or emotional. For every accepted question return an empty rejectionReason. Return exactly one decision for every index.
 
@@ -106,11 +109,11 @@ function isKnownReason(value: unknown): value is CriticRejectionReason {
 }
 
 /** One call. Throws so the caller can decide whether to retry or fail closed. */
-async function reviewOnce(batch: string[]): Promise<Map<number, PromptCriticReview>> {
+async function reviewOnce(batch: string[], category?: string): Promise<Map<number, PromptCriticReview>> {
     const client = getGeminiClient()
     const response = await client.models.generateContent({
         model: MODEL,
-        contents: [{ role: "user", parts: [{ text: buildPromptCriticInstruction(batch) }] }],
+        contents: [{ role: "user", parts: [{ text: buildPromptCriticInstruction(batch, category) }] }],
         config: {
             temperature: 0,
             responseMimeType: "application/json",
@@ -145,10 +148,10 @@ async function reviewOnce(batch: string[]): Promise<Map<number, PromptCriticRevi
  * customer — but without a retry a model that drops trailing array items is
  * indistinguishable from a model that rejected those questions.
  */
-async function reviewChunk(chunk: string[]): Promise<Map<number, PromptCriticReview>> {
-    const decisions = await reviewOnce(chunk)
+async function reviewChunk(chunk: string[], category?: string): Promise<Map<number, PromptCriticReview>> {
+    const decisions = await reviewOnce(chunk, category)
     if (decisions.size < chunk.length) {
-        const second = await reviewOnce(chunk)
+        const second = await reviewOnce(chunk, category)
         for (const [index, review] of second) {
             if (!decisions.has(index)) decisions.set(index, review)
         }
@@ -177,6 +180,7 @@ const CRITIC_CHUNK_SIZE = 12
 
 export async function reviewPromptSet(
     questions: string[],
+    category?: string,
 ): Promise<{ reviews: PromptCriticReview[]; error?: string }> {
     if (questions.length === 0) return { reviews: [] }
     const batch = questions.slice(0, MAX_BATCH)
@@ -196,7 +200,7 @@ export async function reviewPromptSet(
         const results: Array<Map<number, PromptCriticReview>> = []
         for (let index = 0; index < chunks.length; index += 2) {
             const pair = await Promise.all(
-                chunks.slice(index, index + 2).map((chunk) => reviewChunk(chunk)),
+                chunks.slice(index, index + 2).map((chunk) => reviewChunk(chunk, category)),
             )
             results.push(...pair)
         }

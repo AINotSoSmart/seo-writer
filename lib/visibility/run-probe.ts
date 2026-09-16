@@ -433,7 +433,6 @@ export async function runVisibilityProbe(
                 // question are gone.
                 context: {
                     category: persona.category,
-                    coreFeatures: persona.core_features,
                     audience: persona.audience?.primary,
                     audiencePsychology: persona.audience?.psychology,
                     enemy: persona.enemy,

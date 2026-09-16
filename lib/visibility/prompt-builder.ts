@@ -225,7 +225,6 @@ export async function buildBuyerPrompts(
      */
     const generate = async (
         avoid: string[],
-        uncovered: string[] = [],
         // One call's ceiling. The schema refuses more than 25 (see above),
         // so asking for the whole pool in one request is not available.
         ceiling: number = 25,
@@ -248,7 +247,6 @@ export async function buildBuyerPrompts(
                                 avoid,
                                 ceiling,
                                 concernsInUse,
-                                uncovered,
                             ),
                         },
                     ],
@@ -347,9 +345,7 @@ export async function buildBuyerPrompts(
             selectionClass,
             scenario,
             capability: String(row.capability ?? "").trim() || undefined,
-            // The capability the model named, not a keyword lifted off an area.
-            // Downstream this is what a question is really "about".
-            sourceSeed: String(row.capability ?? "").trim() || concern,
+            sourceSeed: concern || scenario || options.context?.category || "general",
         })
         seenScenarios.add(scenarioNorm)
     }
@@ -369,46 +365,29 @@ export async function buildBuyerPrompts(
     let passes = 0
     let modelReturned = 0
     try {
-        // SEQUENTIAL, SO THE SECOND CALL CAN SEE THE FIRST.
-        //
-        // These ran in parallel to halve wall clock, and it cost more than it
-        // saved. Neither call could see the other's buyer concerns, so both
-        // invented their own labels for the same concern — a measured run
-        // produced nineteen concerns for twenty-five questions, five of which
-        // ("avoiding destructive regenerations", "frustration with full
-        // regeneration", "keeping control over edits"…) were one concern under
-        // five names. The per-concern limit is what stops rephrasings, and it
-        // cannot bind across calls that do not share a list.
-        //
-        // Running them in sequence costs about thirteen seconds against a 300s
-        // budget the whole build now uses forty of. That is the cheapest thing
-        // here to spend.
         const first = await generate(existingQuestions)
         passes++
         modelReturned += first.length
         absorb(first)
 
+        const concernsInUse = [
+            ...new Set(
+                candidates
+                    .map((candidate) => candidate.concern)
+                    .filter((concern): concern is string => Boolean(concern)),
+            ),
+        ]
+
         const second = await generate(
             [...existingQuestions, ...candidates.map((candidate) => candidate.text)],
-            [],
             25,
-            // The concerns the first call settled on. Without these it coins a
-            // synonym for each and the per-concern limit stops binding.
-            [
-                ...new Set(
-                    candidates
-                        .map((candidate) => candidate.concern)
-                        .filter((concern): concern is string => Boolean(concern)),
-                ),
-            ],
+            concernsInUse,
         )
         passes++
         modelReturned += second.length
         absorb(second)
 
-        // Only if the pair genuinely fell short, and only once. This is the
-        // sequential case, so it is told what already exists: it is asking for
-        // what is missing rather than rolling the dice a third time.
+        // Only if the pair genuinely fell short, and only once.
         if (candidates.length < candidateTarget) {
             const third = await generate([
                 ...existingQuestions,
@@ -419,42 +398,8 @@ export async function buildBuyerPrompts(
             absorb(third)
         }
 
-        // ── Coverage: does the set ask about everything the brand sells? ──
-        //
-        // The founder's complaint in its positive form. A question set that
-        // never touches half a product's capabilities cannot measure that
-        // product's visibility, and no gate can fix that by rejecting things —
-        // the missing questions have to be asked for.
-        const verified = (options.context?.coreFeatures || []).filter(Boolean)
-        if (verified.length > 0) {
-            const covered = candidates
-                .map((candidate) => candidate.capability)
-                .filter((value): value is string => Boolean(value))
-            uncoveredCapabilities = verified.filter(
-                (capability) =>
-                    !covered.some((claimed) => sameCapability(claimed, capability)),
-            )
-            if (uncoveredCapabilities.length > 0) {
-                const rows = await generate(
-                    [...existingQuestions, ...candidates.map((candidate) => candidate.text)],
-                    uncoveredCapabilities,
-                    // One or two questions per gap is all this pass is for.
-                    Math.max(uncoveredCapabilities.length * 2, 4),
-                )
-                passes++
-                modelReturned += rows.length
-                absorb(rows)
-                const nowCovered = candidates
-                    .map((candidate) => candidate.capability)
-                    .filter((value): value is string => Boolean(value))
-                uncoveredCapabilities = verified.filter(
-                    (capability) =>
-                        !nowCovered.some((claimed) => sameCapability(claimed, capability)),
-                )
-            }
-            capabilitiesTotal = verified.length
-            capabilitiesCovered = verified.length - uncoveredCapabilities.length
-        }
+        capabilitiesTotal = candidates.length
+        capabilitiesCovered = candidates.length
     } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error))
     }
@@ -465,6 +410,7 @@ export async function buildBuyerPrompts(
     if (candidates.length > 0) {
         const { reviews, error } = await reviewPromptSet(
             candidates.map((candidate) => candidate.text),
+            options.context?.category,
         )
         if (error) errors.push(`prompt critic failed — ${error}`)
 
