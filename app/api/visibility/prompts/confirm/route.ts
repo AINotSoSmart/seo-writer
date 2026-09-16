@@ -99,6 +99,9 @@ export async function POST(req: NextRequest) {
         (familyRows ?? []).map((row: any) => row.capability_contract as CapabilityContract),
     )
 
+    const primaryFamilyId = familyRows?.[0]?.id || ""
+    const validFamilyIds = new Set((familyRows || []).map((f) => f.id))
+
     const prompts = body.prompts.map((prompt) => {
         const text = (prompt.text ?? "").trim()
         // The label travels with the question instead of being re-derived from
@@ -109,7 +112,10 @@ export async function POST(req: NextRequest) {
         const intent = PROMPT_INTENTS.some((entry) => entry.key === prompt.intent)
             ? (prompt.intent as PromptIntentKey)
             : "problem"
-        const scopeFamilyId = (prompt.scopeFamilyId ?? "").trim()
+        let scopeFamilyId = (prompt.scopeFamilyId ?? "").trim()
+        if (!validFamilyIds.has(scopeFamilyId)) {
+            scopeFamilyId = primaryFamilyId
+        }
         const sourceSeed = (prompt.sourceSeed ?? "").trim()
         const selectionClass = isSelectionClass(prompt.selectionClass)
             ? prompt.selectionClass
@@ -128,7 +134,10 @@ export async function POST(req: NextRequest) {
             article_type: articleTypeByIntent[intent],
             source_seed: sourceSeed,
             selection_class: selectionClass,
-            intent_binding: bound.binding,
+            intent_binding: {
+                ...bound.binding,
+                scopeFamilyId,
+            },
         }
     })
 
