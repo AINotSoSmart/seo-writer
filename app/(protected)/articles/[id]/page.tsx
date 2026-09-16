@@ -33,6 +33,7 @@ import { ChevronDown, FileText as FileTextIcon, Type, Code } from "lucide-react"
 
 
 const TipTapEditor = dynamic(() => import("@/components/tiptap/Editor"), { ssr: false })
+import { PatchReviewView } from "@/components/articles/PatchReviewView"
 
 type Article = {
     id: string
@@ -449,6 +450,10 @@ export default function ArticleDetailPage() {
                 </div>
             </div>
         )
+    }
+
+    if (article.outline?.isPatch) {
+        return <PatchReviewView article={article} />
     }
 
     const SidebarContent = () => (

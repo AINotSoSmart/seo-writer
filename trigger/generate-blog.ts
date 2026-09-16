@@ -3038,7 +3038,8 @@ OUTPUT: Return ONLY the exact image prompt string to be fed to the image model. 
           status: "completed",
           meta_description,
           slug: persistedSlug,
-          featured_image_url
+          featured_image_url,
+          delivery_visible_at: new Date().toISOString(),
         })
         .eq("id", articleId)
 

@@ -176,7 +176,7 @@ Decide what DISTINCT REASONS a person could have for wanting a solution in this 
 - getting screens ready for developers or investors
 - starting from something that already exists (wireframe, screenshot, idea) rather than nothing
 - keeping visual control over the result
-- frustration with complex design tools (e.g. Figma) or expensive agencies
+- what is frustrating or wrong in whatever they use today (e.g. complex tools are overkill, agencies are too expensive)
 - doing it fast against an urgent deadline
 
 Write ONE TO THREE questions per concern — never more.
@@ -189,12 +189,19 @@ ${concernsInUse.map((concern) => `- ${concern}`).join("\n")}
 `
             : ""
 }
-Generate up to ${ceiling} questions. Stop when another question would only paraphrase a situation already covered, and never pad.
+${
+        (context.coreFeatures || []).length
+            ? `COMPANY CAPABILITIES
+These are the verified things this company's product can actually do. Every question must be an authentic way someone asks to achieve one of these outcomes:
+${(context.coreFeatures || []).map((cap) => `- ${cap}`).join("\n")}
+`
+            : ""
+}Generate up to ${ceiling} questions. This is a ceiling, not a quota. Stop when another question would only paraphrase a situation already covered, and never pad.
 
 LENGTH & FORM VARIETY:
 Real chat messages vary widely: some are short and punchy ("best AI tool to design an iOS app"), some state a constraint, some ask for recommendations for their specific role ("I'm a solo developer, what can I use to mockup my app?"). Vary the phrasing and sentence structure.
 
-Every question below was rejected for the same reason: an assistant answers it with technique and names no product.
+Every question below was rejected for the same reason: an assistant answers it with technique and names no product. They come from one photo-product case. Learn only the boundary they mark: never copy its industry, people, objects, vocabulary, or capabilities unless they are genuinely present in the company above, and never treat their phrasing as a template for yours.
 ${exampleBlock()}
 
 Allowed selection classes:

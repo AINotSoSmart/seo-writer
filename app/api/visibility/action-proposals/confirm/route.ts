@@ -43,5 +43,14 @@ export async function POST(req: NextRequest) {
             { status: 409 },
         )
     }
+
+    if (data?.cycle_id) {
+        try {
+            const { advanceSubscriptionCycleTask } = await import("@/trigger/ship-cycle")
+            await advanceSubscriptionCycleTask.trigger({ cycleId: data.cycle_id })
+        } catch (taskErr) {
+            console.error("[confirm-action-proposals] Immediate trigger failed, scheduled cron will pick up:", taskErr)
+        }
+    }
     return NextResponse.json(data)
 }

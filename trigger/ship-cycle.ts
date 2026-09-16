@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- forward Phase 3 relations and RPCs are absent from generated database types until migration. */
-import { schedules } from "@trigger.dev/sdk/v3"
+import { schedules, task } from "@trigger.dev/sdk/v3"
 
 import { loadPlannedWriterInputs } from "@/lib/writer/planned-article-payload"
 import { createAdminClient } from "@/utils/supabase/admin"
+import { fetchAndSnapshotPage } from "@/lib/content-patch/page-fetcher"
+import { generateContentPatch } from "@/lib/content-patch/patch-generator"
 import { generateBlogPost } from "./generate-blog"
 
 type ProgramRow = {
@@ -23,6 +25,7 @@ type ActionRow = {
     state: "selected" | "generating" | "ready" | "failed"
     retry_count: number
     generation_started_at: string | null
+    target_url?: string | null
 }
 
 /**
@@ -85,7 +88,7 @@ async function advanceCycle(
 ): Promise<{ triggered: number; failed: number; ready: boolean }> {
     const { data: actionRows, error } = await supabase
         .from("cycle_actions")
-        .select("id, resolution_type, state, retry_count, generation_started_at")
+        .select("id, resolution_type, state, retry_count, generation_started_at, target_url")
         .eq("cycle_id", cycle.id)
         .order("rank", { ascending: true })
 
@@ -110,10 +113,17 @@ async function advanceCycle(
     for (const action of actions) {
         if (action.state === "ready") continue
 
-        // Refreshes are an explicit founder-assisted path at launch. Sending
-        // one through the create writer would produce a second article instead
-        // of a reviewed replacement for the confirmed existing page.
-        if (action.resolution_type === "refresh") continue
+        // Auto-apply patch improvements for existing page refreshes
+        if (action.resolution_type === "refresh") {
+            try {
+                await triggerRefreshPatchAction(supabase, program, cycle.id, action)
+                triggered++
+                continue
+            } catch (err: any) {
+                console.error(`[RefreshAction] Auto-patch failed for ${action.id}:`, err?.message || err)
+                if (action.resolution_type === "refresh") continue
+            }
+        }
 
         const { data: planned } = await supabase
             .from("planned_articles")
@@ -335,3 +345,165 @@ async function noteCycleFailure(
         .eq("id", cycleId)
         .neq("state", "delivered")
 }
+
+async function triggerRefreshPatchAction(
+    supabase: any,
+    program: ProgramRow,
+    cycleId: string,
+    action: ActionRow,
+): Promise<void> {
+    const { data: planned } = await supabase
+        .from("planned_articles")
+        .select("id, article_id, target_url, title, main_keyword, supporting_keywords, source_query_ids, slug")
+        .eq("cycle_action_id", action.id)
+        .maybeSingle()
+
+    const targetUrl = action.target_url || planned?.target_url
+    if (!planned || !targetUrl) {
+        throw new Error("Refresh action missing target_url or planned_article record")
+    }
+
+    // 1. Fetch and snapshot current live page content
+    const fetchRes = await fetchAndSnapshotPage({
+        url: targetUrl,
+        brandId: program.brand_id,
+        userId: program.user_id,
+        supabase,
+    })
+
+    if (!fetchRes.success || !fetchRes.document) {
+        throw new Error(fetchRes.error || "Failed to fetch current page content")
+    }
+
+    // 2. Load planned inputs (keyword, supporting questions, frozen links)
+    const inputs = await loadPlannedWriterInputs(supabase, planned.id)
+    const buyerQuestions = [inputs?.keyword, ...(inputs?.supportingKeywords || [])].filter(Boolean) as string[]
+
+    const { data: brand } = await supabase
+        .from("brand_details")
+        .select("brand_data")
+        .eq("id", program.brand_id)
+        .maybeSingle()
+
+    const brandName = brand?.brand_data?.product_name || "Our Brand"
+
+    // 3. Generate structured content patch
+    const patch = await generateContentPatch({
+        document: fetchRes.document,
+        buyerQuestions,
+        brandName,
+        capabilityFacts: inputs?.capabilityFacts,
+        frozenLinks: inputs?.frozenLinks,
+    })
+
+    // 4. Create or update article record with delivery_visible_at set immediately
+    let articleId = planned.article_id
+    const articleKeyword = inputs?.keyword || planned.main_keyword || "Page Improvement"
+    const articleSlug = planned.slug || targetUrl.split("/").filter(Boolean).pop() || "patch"
+
+    if (!articleId) {
+        const { data: newArticle, error: artError } = await supabase
+            .from("articles")
+            .insert({
+                brand_id: program.brand_id,
+                user_id: program.user_id,
+                keyword: articleKeyword,
+                slug: articleSlug,
+                status: "completed",
+                planned_article_id: planned.id,
+                raw_content: patch.mergedDocumentMarkdown,
+                final_html: patch.mergedDocumentHtml,
+                delivery_visible_at: new Date().toISOString(),
+                outline: {
+                    isPatch: true,
+                    targetUrl,
+                    sourceHash: patch.sourceHash,
+                    changes: patch.changes,
+                },
+            })
+            .select("id")
+            .single()
+
+        if (artError || !newArticle) {
+            throw new Error(`Failed to create article for patch: ${artError?.message}`)
+        }
+        articleId = newArticle.id
+    } else {
+        await supabase
+            .from("articles")
+            .update({
+                status: "completed",
+                raw_content: patch.mergedDocumentMarkdown,
+                final_html: patch.mergedDocumentHtml,
+                delivery_visible_at: new Date().toISOString(),
+                outline: {
+                    isPatch: true,
+                    targetUrl,
+                    sourceHash: patch.sourceHash,
+                    changes: patch.changes,
+                },
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", articleId)
+    }
+
+    // 5. Update planned_articles
+    await supabase
+        .from("planned_articles")
+        .update({
+            article_id: articleId,
+            generation_status: "generated",
+            delivery_status: "delivered",
+            source_snapshot_id: fetchRes.snapshotId || null,
+            generated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", planned.id)
+
+    // 6. Mark cycle_action as ready
+    await supabase
+        .from("cycle_actions")
+        .update({
+            state: "ready",
+            ready_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", action.id)
+
+    // 7. Try atomic cycle delivery if entire batch is ready
+    await supabase.rpc("release_subscription_cycle_if_ready", { p_cycle_id: cycleId })
+}
+
+/**
+ * Explicit triggerable task to advance a subscription cycle immediately,
+ * without waiting for the hourly scheduled cron.
+ */
+export const advanceSubscriptionCycleTask = task({
+    id: "advance-subscription-cycle",
+    maxDuration: 900,
+    run: async (payload: { cycleId?: string }) => {
+        const supabase = createAdminClient() as any
+
+        if (payload?.cycleId) {
+            const { data: cycle } = await supabase
+                .from("subscription_cycles")
+                .select("id, program_id, state")
+                .eq("id", payload.cycleId)
+                .single()
+
+            if (cycle && cycle.state === "producing") {
+                const { data: program } = await supabase
+                    .from("programs")
+                    .select("id, user_id, brand_id")
+                    .eq("id", cycle.program_id)
+                    .single()
+
+                if (program) {
+                    return await advanceCycle(supabase, program, cycle)
+                }
+            }
+        }
+
+        return { triggered: 0, failed: 0, ready: false }
+    },
+})

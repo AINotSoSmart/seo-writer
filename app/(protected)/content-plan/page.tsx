@@ -256,19 +256,21 @@ export default async function ContentPlanPage() {
                                                 <div>
                                                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                         <span className="rounded border border-stone-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-stone-500">
-                                                            {action.resolution_type}
+                                                            {action.resolution_type === "refresh" ? "improve page" : "create"}
                                                         </span>
                                                         <span className="min-w-0 break-words text-sm font-medium text-stone-900 [overflow-wrap:anywhere]">
                                                             {output?.title || action.target_url || "Selected content action"}
                                                         </span>
                                                     </div>
                                                     <p className="mt-1 text-xs text-stone-500">{action.selection_reason}</p>
-                                                    {action.state === "delivered" && output?.article_id && (
+                                                    {(["delivered", "ready"].includes(action.state) || output?.generation_status === "generated") && output?.article_id && (
                                                         <Link
                                                             href={`/articles/${output.article_id}`}
                                                             className="mt-2 inline-flex text-xs font-semibold text-stone-700 underline underline-offset-2"
                                                         >
-                                                            Review and export draft
+                                                            {action.resolution_type === "refresh"
+                                                                ? "Review and apply patch"
+                                                                : "Review and export draft"}
                                                         </Link>
                                                     )}
                                                 </div>
