@@ -2,6 +2,7 @@ import { parseHtmlToContentDocument } from "../content-document.ts"
 import type { ContentDocument } from "../content-document.ts"
 import type { ContentPatch } from "../patch-types.ts"
 import type { PublishingAdapter, PublishResult } from "./publishing-adapter.ts"
+import { wordpressAuthHeader } from "@/lib/integrations/wordpress-credentials"
 
 export interface WordPressConnectionData {
     id: string
@@ -17,7 +18,7 @@ export class WordPressAdapter implements PublishingAdapter {
 
     constructor(connection: WordPressConnectionData) {
         this.connection = connection
-        this.authHeader = `Basic ${Buffer.from(`${connection.username}:${connection.app_password}`).toString("base64")}`
+        this.authHeader = wordpressAuthHeader(connection)
         this.apiBase = connection.site_url.replace(/\/+$/, "") + "/wp-json/wp/v2"
     }
 

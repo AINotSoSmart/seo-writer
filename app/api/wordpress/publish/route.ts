@@ -3,10 +3,10 @@ import { createClient } from "@/utils/supabase/server"
 import {
     prepareContentForWordPress,
     publishToWordPress,
-    updatePostStatus,
     uploadContentImagesToWordPress,
 } from "@/lib/integrations/wordpress-client"
 import { createAdminClient } from "@/utils/supabase/admin"
+import { openAppPassword } from "@/lib/integrations/wordpress-credentials"
 
 function canonicalPublicationUrl(value: string): string {
     const url = new URL(value)
@@ -27,7 +27,10 @@ export async function POST(req: NextRequest) {
         const admin = createAdminClient() as any
 
         const body = await req.json()
-        const { articleId, connectionId, publishStatus = 'publish' } = body
+        // The app never publishes. Every post, new or not, lands in WordPress as a
+        // draft and the owner publishes it from WordPress. A `publishStatus` in
+        // the body is ignored rather than honoured.
+        const { articleId, connectionId } = body
 
         if (!articleId || !connectionId) {
             return NextResponse.json({ error: "Missing articleId or connectionId" }, { status: 400 })
@@ -82,7 +85,7 @@ export async function POST(req: NextRequest) {
         const credentials = {
             siteUrl: connection.site_url,
             username: connection.username,
-            appPassword: connection.app_password,
+            appPassword: openAppPassword(connection.app_password),
         }
 
         let processedContent = article.final_html
@@ -126,7 +129,7 @@ export async function POST(req: NextRequest) {
 
         // Program posts are created as drafts first. This lets us verify the
         // actual permalink before any public publication can break the graph.
-        const createStatus = plannedArticle ? "draft" : publishStatus
+        const createStatus = "draft" as const
         let result = await publishToWordPress(
             credentials,
             {
@@ -183,60 +186,6 @@ export async function POST(req: NextRequest) {
                 },
                 { status: 409 },
             )
-        }
-
-        if (plannedArticle && publishStatus === "publish" && result.post?.id) {
-            result = await updatePostStatus(credentials, result.post.id, "publish")
-            if (!result.success) {
-                return NextResponse.json(
-                    {
-                        error:
-                            result.error ||
-                            "The permalink matched, but WordPress could not publish the draft.",
-                    },
-                    { status: 502 },
-                )
-            }
-            const publishedUrl = result.post?.link
-            if (
-                !publishedUrl ||
-                canonicalPublicationUrl(publishedUrl) !==
-                    canonicalPublicationUrl(plannedArticle.target_url)
-            ) {
-                await updatePostStatus(credentials, result.post!.id, "draft")
-                await Promise.all([
-                    admin
-                        .from("articles")
-                        .update({
-                            wordpress_post_id: String(result.post?.id),
-                            wordpress_post_url: publishedUrl || null,
-                            wordpress_site_id: connectionId,
-                            published_at: null,
-                        })
-                        .eq("id", articleId)
-                        .eq("user_id", user.id),
-                    admin
-                        .from("planned_articles")
-                        .update({
-                            publication_status: "draft",
-                            publication_url: publishedUrl || null,
-                            published_at: null,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("id", plannedArticle.id)
-                        .eq("user_id", user.id),
-                ])
-                return NextResponse.json(
-                    {
-                        error:
-                            "WordPress changed the permalink while publishing. The post was returned to draft.",
-                        code: "permalink_mismatch",
-                        expectedUrl: plannedArticle.target_url,
-                        actualUrl: publishedUrl || null,
-                    },
-                    { status: 409 },
-                )
-            }
         }
 
         const isPublished = result.post?.status === "publish"

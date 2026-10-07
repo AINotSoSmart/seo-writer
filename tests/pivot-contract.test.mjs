@@ -3812,8 +3812,10 @@ test("recurring onboarding never queries the removed audit-owned program model",
 test("WordPress publication fails closed on a missing or changed frozen permalink", async () => {
     const route = await text("app/api/wordpress/publish/route.ts")
     assert.match(route, /!returnedUrl/)
-    assert.match(route, /WordPress changed the permalink while publishing/)
-    assert.match(route, /updatePostStatus\(credentials, result\.post!\.id, "draft"\)/)
+    // Internal engine: the app never publishes, so there is no publish step left
+    // whose permalink could change. Every post is created as a draft.
+    assert.match(route, /const createStatus = "draft" as const/)
+    assert.doesNotMatch(route, /updatePostStatus/)
 })
 
 test("program generation records provider usage for the manual margin gate", async () => {

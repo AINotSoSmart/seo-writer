@@ -22,12 +22,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install Dependencies
         run: npm install
 
       - name: Deploy to Trigger.dev
-        # UPDATED: Used @latest as per your screenshot (v4.0.0+)
-        # We pass --project-ref to force the ID from your environment variables
-        run: npx trigger.dev@latest deploy --project-ref $TRIGGER_PROJECT_ID
+        # The CLI refuses to deploy when its version differs from the pinned
+        # @trigger.dev/sdk, so it is read from package.json rather than @latest
+        # (which broke every deploy once 4.6.2 shipped).
+        run: npx trigger.dev@$(node -p "require('./package.json').dependencies['@trigger.dev/sdk']") deploy --project-ref $TRIGGER_PROJECT_ID

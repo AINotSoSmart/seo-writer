@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/utils/supabase/admin"
 import { parseHtmlToContentDocument } from "./content-document.ts"
 import type { ContentDocument } from "./content-document.ts"
+import { wordpressAuthHeader } from "@/lib/integrations/wordpress-credentials"
 
 export interface PageFetchResult {
     success: boolean
@@ -74,7 +75,7 @@ export async function fetchAndSnapshotPage(input: {
 
             if (connection) {
                 const slug = urlObj.pathname.replace(/^\/|\/$/g, "").split("/").pop() || ""
-                const authHeader = `Basic ${Buffer.from(`${connection.username}:${connection.app_password}`).toString("base64")}`
+                const authHeader = wordpressAuthHeader(connection)
                 const wpApiBase = connection.site_url.replace(/\/+$/, "") + "/wp-json/wp/v2"
 
                 // Try posts first, then pages
