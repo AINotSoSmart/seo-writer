@@ -82,6 +82,8 @@ export function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {process.env.NEXT_PUBLIC_FLIPAEO_INTERNAL_MODE === "false" && (
+            <>
             <DropdownMenuGroup>
               <DropdownMenuItem asChild className="cursor-pointer">
                 <Link href="/subscribe" className="flex items-center">
@@ -91,6 +93,8 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            </>
+            )}
             <DropdownMenuGroup>
               <DropdownMenuItem className="cursor-pointer">
                 <Home className="mr-2 h-4 w-4" />

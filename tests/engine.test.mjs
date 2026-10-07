@@ -137,3 +137,62 @@ test("weeks start on Monday UTC", () => {
     assert.equal(weekStartFor(new Date("2026-10-12T00:00:00Z")), "2026-10-12")
     assert.equal(previousWeekStart("2026-10-05"), "2026-09-28")
 })
+
+import { buildActionOutcomes, buildCitationReport, buildQuestionHistory, buildShareOfVoice, buildTrend, questionChange } from "../lib/engine/report.ts"
+
+const engineFact = (engine, mentioned, cited = false) => ({ engine, answered: true, mentioned, ownCitations: cited ? ["https://tool.com/a"] : [] })
+const weeks = [
+    { id: "w1", weekStart: "2026-09-28", state: "ready" },
+    { id: "w2", weekStart: "2026-10-05", state: "ready" },
+]
+const reportFindings = [
+    { weekId: "w1", trackedPromptId: "t1", prompt: "q1", state: "gap", perEngine: [engineFact("a", false), engineFact("b", false)] },
+    { weekId: "w2", trackedPromptId: "t1", prompt: "q1", state: "outranked", perEngine: [engineFact("a", true, true), engineFact("b", true)] },
+    { weekId: "w1", trackedPromptId: "t2", prompt: "q2", state: "gap", perEngine: [engineFact("a", false), engineFact("b", false)] },
+    { weekId: "w2", trackedPromptId: "t2", prompt: "q2", state: "partial", perEngine: [engineFact("a", true), engineFact("b", false)] },
+]
+
+test("change is claimed only when every engine flipped", () => {
+    assert.equal(questionChange("gap", "outranked"), "won_back")
+    assert.equal(questionChange("gap", "partial"), "no_change")
+    assert.equal(questionChange("won", "gap"), "lost")
+    assert.equal(questionChange("partial", "gap"), "no_change")
+    assert.equal(questionChange(null, "gap"), "new")
+    const history = buildQuestionHistory(weeks, reportFindings)
+    assert.deepEqual(history.map((row) => [row.prompt, row.states, row.change]), [
+        ["q1", ["gap", "outranked"], "won_back"],
+        ["q2", ["gap", "partial"], "no_change"],
+    ])
+})
+
+test("trend counts per week and per engine", () => {
+    const trend = buildTrend(weeks, reportFindings)
+    assert.equal(trend[0].mentionedAnywhere, 0)
+    assert.equal(trend[1].mentionedAnywhere, 2)
+    assert.equal(trend[1].citedAnywhere, 1)
+    assert.deepEqual(trend[1].perEngine.a, { mentioned: 2, cited: 1, answered: 2 })
+    assert.equal(trend[0].gaps, 2)
+})
+
+test("share of voice and citations", () => {
+    const answers = [
+        { engine: "a", mentionCount: 1, citations: [{ url: "https://blog.tool.com/x" }, { url: "https://rival.com/y" }], competitorMentions: [{ name: "Rival", mentionCount: 2 }] },
+        { engine: "b", mentionCount: 0, citations: [{ url: "https://rival.com/z" }], competitorMentions: [{ name: "Rival", mentionCount: 1 }, { name: "Other", mentionCount: 0 }] },
+    ]
+    const voice = buildShareOfVoice("Tool", answers)
+    assert.deepEqual(voice.entries.map((entry) => [entry.name, entry.answers]), [["Rival", 2], ["Tool", 1]])
+    assert.ok(Math.abs(voice.entries[1].share - 1 / 3) < 1e-9)
+    const citations = buildCitationReport(answers, ["tool.com"])
+    assert.equal(citations.totalCitations, 3)
+    assert.equal(citations.ownCitations, 1)
+    assert.deepEqual(citations.topDomains[0], { domain: "rival.com", answers: 2, owned: false })
+})
+
+test("action outcomes compare the action's week with the latest", () => {
+    const outcomes = buildActionOutcomes(
+        [{ id: "x", title: "T", kind: "create", weekId: "w1", trackedPromptIds: ["t1"], prompts: ["q1"] }],
+        weeks,
+        reportFindings,
+    )
+    assert.deepEqual(outcomes[0].questions[0], { prompt: "q1", then: "gap", now: "outranked", change: "won_back" })
+})

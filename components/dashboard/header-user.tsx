@@ -64,6 +64,8 @@ export function HeaderUser({ user }: HeaderUserProps) {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {process.env.NEXT_PUBLIC_FLIPAEO_INTERNAL_MODE === "false" && (
+          <>
           <DropdownMenuGroup>
             <DropdownMenuItem>
               <Link href="/subscribe" prefetch={false} className="flex items-center">
@@ -73,6 +75,8 @@ export function HeaderUser({ user }: HeaderUserProps) {
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
+          </>
+          )}
 
           <DropdownMenuGroup>
             <DropdownMenuItem>
