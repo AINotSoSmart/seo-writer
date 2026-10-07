@@ -116,6 +116,8 @@ export interface RunProbeOptions {
     auditId?: string | null
     subjectName: string
     subjectDomains: string[]
+    /** Other names the subject goes by in answers; each counts as a mention. */
+    subjectAliases?: string[]
     subjectType: string
     competitors: ProbeCompetitor[]
     /** ISO-3166 alpha-2 — which country's answers Cloro is asked for. */
@@ -649,6 +651,7 @@ export async function runVisibilityProbe(
         const subject = {
             brandName: options.subjectName,
             domains: options.subjectDomains,
+            aliases: options.subjectAliases ?? [],
         }
         const byPrompt = new Map<string, ProbedPrompt>()
         const citationsByPromptEngine = new Map<
@@ -983,7 +986,14 @@ export async function runVisibilityProbe(
         // The status update moves the bound cycle to awaiting_input through a
         // database trigger. Planning then inventories the real site and writes
         // reviewable grouped proposals; it never selects production work.
-        try {
+        // Internal-engine runs are not bound to a billing cycle; their planning
+        // is `trigger/engine.ts`, started by the task once this returns.
+        const { data: boundCycle } = await supabase
+            .from("subscription_cycles")
+            .select("id")
+            .eq("measurement_run_id", runId)
+            .maybeSingle()
+        if (boundCycle) try {
             await report("planning_actions", "checking the sitemap before proposing work")
             await buildActionProposalsForRun({ supabase, runId })
         } catch (planningError) {

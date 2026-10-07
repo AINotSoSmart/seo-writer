@@ -17,6 +17,7 @@ import type { AiEngine } from "@/lib/visibility/engines"
 import { ProbeError, runVisibilityProbe } from "@/lib/visibility/run-probe"
 import { encodeProbeFailureDetail } from "@/lib/visibility/failure-copy"
 import { createAdminClient } from "@/utils/supabase/admin"
+import { engineAnalyseWeekTask } from "./engine"
 
 export interface RunProbePayload {
     runId: string
@@ -25,6 +26,7 @@ export interface RunProbePayload {
     auditId: string | null
     subjectName: string
     subjectDomains: string[]
+    subjectAliases?: string[]
     subjectType: string
     competitors: ProbeCompetitor[]
     families: AuditScopeFamily[]
@@ -70,6 +72,7 @@ export const runProbeTask = task({
                 auditId: payload.auditId,
                 subjectName: payload.subjectName,
                 subjectDomains: payload.subjectDomains,
+                subjectAliases: payload.subjectAliases,
                 subjectType: payload.subjectType,
                 competitors: payload.competitors,
                 countryCode: payload.countryCode,
@@ -80,6 +83,29 @@ export const runProbeTask = task({
                 existingRunId: payload.runId,
                 onPhase: setPhase,
             })
+
+            // An internal-engine week waiting on this run moves to analysis.
+            const { data: week } = await supabase
+                .from("engine_weeks")
+                .select("id")
+                .eq("probe_run_id", payload.runId)
+                .maybeSingle()
+            if (week) {
+                await supabase
+                    .from("engine_weeks")
+                    .update({ state: "analysing", updated_at: new Date().toISOString() })
+                    .eq("id", week.id)
+                // The measurement itself succeeded; a queueing failure must not
+                // mark it failed. The hourly engine-advance task fails the week.
+                try {
+                    await engineAnalyseWeekTask.trigger(
+                        { weekId: week.id },
+                        { idempotencyKey: `analyse:${week.id}:${payload.runId}` },
+                    )
+                } catch (queueError) {
+                    console.error(`[engine] Could not queue analysis for week ${week.id}:`, queueError)
+                }
+            }
 
             return {
                 runId: result.runId,
@@ -97,6 +123,14 @@ export const runProbeTask = task({
             // adoption failure, say — and it uses the same encoding so the two
             // cannot disagree about what a failed run looks like.
             const message = error instanceof Error ? error.message : String(error)
+            await supabase
+                .from("engine_weeks")
+                .update({
+                    state: "failed",
+                    failure_reason: `The measurement failed: ${message}`.slice(0, 1000),
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("probe_run_id", payload.runId)
             await setPhase(
                 "failed",
                 encodeProbeFailureDetail(

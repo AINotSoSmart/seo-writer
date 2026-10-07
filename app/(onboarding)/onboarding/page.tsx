@@ -843,7 +843,13 @@ export default function OnboardingPage() {
             setProbeRunId(null)
 
             clearOnboardingStorage()
-            router.push("/subscribe")
+            // Internal mode: the tool goes straight to its engine page, where
+            // the first week can be run. The paid flow went to checkout.
+            router.push(
+                process.env.NEXT_PUBLIC_FLIPAEO_INTERNAL_MODE === "false"
+                    ? "/subscribe"
+                    : `/engine?brand=${savedBrandId}`,
+            )
         } catch (e: any) {
             const message = e.message || "Failed to save brand details"
             setError(message)

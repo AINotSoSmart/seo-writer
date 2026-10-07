@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server"
 import { userHasActiveBrand } from "@/lib/onboarding-gate"
+import { internalMode } from "@/lib/engine/mode"
 
 /**
  * A completed current audit is already the customer's plan. Customers without
@@ -26,6 +27,9 @@ export async function canAccessOnboarding(
         .maybeSingle()
 
     if (!brand?.current_audit_id) return { allowed: true }
+
+    // Internal mode: onboarding is how another tool is added.
+    if (internalMode()) return { allowed: true }
 
     // Do not eject the customer at the exact moment finalization sets the
     // brand's current audit. The audit and audit-results steps are the focused

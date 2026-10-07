@@ -3695,10 +3695,13 @@ test("the paid-first funnel retires the protected finite audit without deleting 
     assert.match(accessAction, /currentStep === "audit"/)
     assert.match(accessAction, /currentStep === "audit-results"/)
     assert.match(accessAction, /redirectTo: "\/visibility"/)
-    assert.match(onboarding, /router\.push\("\/subscribe"\)/)
+    // Internal mode sends a confirmed tool to its engine page; the paid flow
+    // (FLIPAEO_INTERNAL_MODE=false) still goes to checkout.
+    assert.match(onboarding, /\? "\/subscribe"/)
+    assert.match(onboarding, /`\/engine\?brand=\$\{savedBrandId\}`/)
     assert.ok(
         onboarding.indexOf('fetch("/api/visibility/prompts/confirm"') <
-            onboarding.indexOf('router.push("/subscribe")'),
+            onboarding.indexOf('? "/subscribe"'),
         "confirmed prompts must persist before checkout",
     )
     assert.match(auditPage, /redirect\("\/visibility"\)/)
@@ -4890,7 +4893,9 @@ test("phase seven delivers one complete create and assisted-refresh batch", asyn
     // The automated writer owns create actions only. Refresh work stays selected
     // until a founder attaches a reviewed replacement draft to the same target.
     assert.match(lifecycle, /resolution_type:\s*"create" \| "refresh"/)
-    assert.match(lifecycle, /action\.resolution_type === "refresh"\) continue/)
+    // A refresh whose patch fails is marked failed; it used to stay
+    // "generating" forever and hold the cycle in producing.
+    assert.match(lifecycle, /markActionFailed\(supabase, action\.id, "refresh_patch_failed"\)/)
     assert.match(migration, /action_row\.resolution_type = 'create'/)
     assert.match(migration, /complete_founder_assisted_refresh/)
     assert.match(migration, /v_action\.resolution_type <> 'refresh'/)
@@ -5964,8 +5969,10 @@ test("public audit links serve founder prospect outreach only", async () => {
 
     // No writer mints a share token for customer work any more.
     assert.match(topicalRoute, /p_public_token: null/)
-    assert.match(probeRoute, /p_public_token: null/)
-    assert.match(probeRoute, /public_token: null/)
+    // The probe route's audit opener moved to lib/visibility/open-audit.ts,
+    // shared with the internal engine's weekly run.
+    assert.match(await text("lib/visibility/open-audit.ts"), /p_public_token: null/)
+    assert.match(await text("lib/engine/measure.ts"), /public_token: null/)
     assert.match(runProbe, /public_token: null/)
     assert.doesNotMatch(runProbe, /publicToken/)
 

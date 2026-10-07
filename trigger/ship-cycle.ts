@@ -121,7 +121,11 @@ async function advanceCycle(
                 continue
             } catch (err: any) {
                 console.error(`[RefreshAction] Auto-patch failed for ${action.id}:`, err?.message || err)
-                if (action.resolution_type === "refresh") continue
+                // A refresh has no planned article to fall back on. Leaving it
+                // in "generating" kept the cycle producing forever.
+                await markActionFailed(supabase, action.id, "refresh_patch_failed")
+                failed++
+                continue
             }
         }
 
