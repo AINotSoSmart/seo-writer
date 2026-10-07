@@ -10,7 +10,7 @@ Start here if you are the founder: [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md) for a
 plain-language explanation, then [`SOLO_LAUNCH_GATE.md`](SOLO_LAUNCH_GATE.md)
 for what to do next.
 
-Last implementation update: 2026-08-16
+Last implementation update: 2026-10-07 (internal engine; see the first section)
 
 Status: **the AI-visibility probe is now the audit that runs after onboarding.**
 The confirmed buyer prompts are asked of the real consumer surfaces — ChatGPT
@@ -27,6 +27,72 @@ replay and classifier validation. The probe executes on Trigger.dev: with a
 running, or the run row is created and never picked up. Saving confirmed
 questions never starts that paid work: a new probe now requires an explicit
 **Start visibility measurement** click.
+
+## 2026-10-07 — internal engine (supersedes the subscription contract)
+
+FlipAEO is no longer sold. It runs as the owner's internal AI-search engine for
+their own SaaS tools, on the same infrastructure. Everything below this section
+describes the paid product; it is still in the code, untouched, and reachable
+with `FLIPAEO_INTERNAL_MODE=false` (server) and
+`NEXT_PUBLIC_FLIPAEO_INTERNAL_MODE=false` (client). Internal mode is the
+default.
+
+Plan and decisions: `/mnt/project-files/seo-pivot/PLAN.md` in the project, and
+the summary here.
+
+### Status board
+
+| Piece | State |
+|---|---|
+| Migration `20261007_internal_engine.sql` (engine_* tables, `wordpress_connections.brand_id`) | **Written, not applied.** Apply in the Supabase SQL editor. Replay-safe. |
+| Monday 08:30 UTC schedule (`engine-weekly-run`) | Code-complete; runs in PRODUCTION only. Needs a Trigger deploy. |
+| Analysis (`engine-analyse-week`), refresh writer (`engine-produce-refresh`), hourly `engine-advance` | Code-complete, unit-tested pure parts; not yet run against live data. |
+| `/engine` dashboard, action detail page, reports | Code-complete; not yet rendered against a live database. |
+| Probe route in internal mode | Delegates to `startEngineWeek`; no Dodo or cycle gate. |
+| Several tools per account | Brand limit 20 in internal mode; onboarding is "Add a tool" and lands on `/engine?brand=`. |
+| Live WordPress writes | Only new-article **drafts** on request. `apply-patch` returns 410; refreshes are stored, never written. |
+| WordPress app passwords | Sealed with `TOKEN_ENCRYPTION_KEY` (`enc:v1:`). Run `scripts/encrypt-wordpress-passwords.mjs` once for old rows. |
+| Every probe measures the United States | Still open (ROADMAP). The engine passes the brand's `target_region`. |
+
+### How a week works
+
+1. **Measure.** `startEngineWeek` (schedule, "Run now", or the probe route)
+   asks the tool's active tracked questions once per configured engine through
+   the existing `run-visibility-probe`. Owned hosts (site, blog subdomain, WP
+   host) and aliases are passed so a mention or own citation is not missed.
+   One week row per tool per Monday; the scheduler never re-runs a started
+   week, a manual run replaces it.
+2. **Findings** (`lib/engine/findings.ts`, pure). Per question: `gap` = every
+   engine answered and none named the tool; `partial` = some engines;
+   `outranked` / `won` = named everywhere; `insufficient` = an engine failed.
+   `confirmed` = a gap last week too. Only gaps create work. Over 20% failed
+   engine calls makes the week `partial` and creates nothing.
+3. **Inventory** (`lib/engine/inventory.ts`). Every WordPress post and page in
+   every status (REST, `context=edit`), sitemap pages of every owned host, and
+   app-written articles not yet in WordPress. Re-embedded only when changed.
+4. **Triage** (`lib/engine/analyse.ts`). Gaps not already being worked on are
+   clustered; nearest own pages (embedding recall, no threshold) and the most
+   cited rival pages are read; `judgeCoverage` must quote the page for any
+   "already covered" and quote the cited page for every missing point. Quotes
+   are verified in code (`lib/engine/evidence.ts`, ≥25 chars). Buckets
+   (`triage-rules.ts`): no covering page → create; WordPress page missing
+   verified points → refresh; sitemap page → page_suggestion; covered with
+   nothing missing, changed in the last 21 days, or an unpublished app
+   article → monitor.
+5. **Duplicate guard.** Every create is checked by `judgeDuplicate` against the
+   nearest pages and this week's other creates (a match needs a verified
+   overlap quote). A match turns it into a refresh/page suggestion/monitor of
+   that page, or merges it into the other create. Finished drafts are checked
+   again before they show as ready (`blocked_duplicate` otherwise).
+6. **Produce.** Creates use the existing writer (`generate-blog-post`) with the
+   questions and verified points as the brief. Refreshes read the post from
+   WordPress, edit only whole blocks, keep every other byte, and require each
+   change to cite a verified missing point. Page suggestions are the verified
+   points themselves. No article count, no allowance.
+7. **Owner.** `/engine` shows the week, the work, and reports (week by week
+   per engine, share of voice, who gets cited, every question's history,
+   whether finished work paid off). Ready articles can be sent to WordPress as
+   drafts; refreshes are copied and published by the owner.
 
 ## 2026-08-16 — security pass before checkout testing (code-complete, migration pending)
 
@@ -1252,6 +1318,32 @@ Until it passes, `CLOSED_POOL_CHECKOUT_ENABLED` must remain `false`.
     in isolation can still be the fourth pivot on the same bug.
 
 ## 7. Changelog
+
+### 2026-10-07 — the paid product becomes the owner's internal engine
+
+Why: the subscription (a fixed allowance of articles per cycle) did not sell,
+and its delivery path was broken. The owner now runs FlipAEO for their own
+tools: weekly measurement, gap analysis, and only the work the gaps justify.
+
+- Trigger deploy workflow: Node 24, `npm install`, CLI pinned to the SDK
+  version. Deploys had been failing.
+- WordPress: the publish route only creates drafts; app passwords are sealed.
+- Probe: aliases in `answer-parser`, owned hosts as subject domains,
+  `openAuditForBrand` moved to `lib/visibility/open-audit.ts`. Proposals are
+  only built for runs bound to a subscription cycle.
+- New `lib/engine/*`, `trigger/engine.ts`, migration `20261007_internal_engine.sql`.
+- `/engine` dashboard and action pages; `/api/engine/{run,settings,actions/[id]}`.
+- Internal mode: probe route without payment/cycle gates, 20 tools per
+  account, onboarding re-openable to add a tool, billing UI hidden,
+  `apply-patch` returns 410.
+- `ship-cycle`: a refresh whose patch fails is now marked failed instead of
+  holding the cycle in producing forever.
+- The 2026-09-16 commits (BrightData as a probe provider, the 25-question
+  onboarding step, Trigger CLI bump) predate this entry and were not recorded
+  here at the time.
+- Tests: `npm run test:engine` (16 tests, pure rules), contract suite updated
+  for the moved opener and the internal-mode redirects.
+
 
 ### 2026-08-26 (thirty-second pass) — a landing page is not a content action
 

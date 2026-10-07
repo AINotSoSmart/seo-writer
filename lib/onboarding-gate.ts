@@ -37,6 +37,7 @@ export const BRAND_GATED_PATH_PREFIXES = [
     "/subscribe",
     "/reports",
     "/seo-health",
+    "/engine",
 ] as const
 
 export function pathRequiresBrand(pathname: string): boolean {

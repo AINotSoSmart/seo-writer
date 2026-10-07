@@ -17,6 +17,8 @@
 
 import Link from "next/link"
 
+import { internalMode } from "@/lib/engine/mode"
+
 import { createAdminClient } from "@/utils/supabase/admin"
 import { createClient } from "@/utils/supabase/server"
 import { ENGINE_SPECS, type AiEngine } from "@/lib/visibility/engines"
@@ -97,7 +99,13 @@ interface CycleActionRow {
     target_url: string | null
 }
 
-export default async function VisibilityPage() {
+export default async function VisibilityPage({
+    searchParams,
+}: {
+    searchParams: Promise<{ brand?: string }>
+}) {
+    // Several tools per account in internal mode: `?brand=` picks one.
+    const { brand: brandParam } = await searchParams
     const supabase = await createClient()
     const {
         data: { user },
@@ -116,6 +124,7 @@ export default async function VisibilityPage() {
             )
             .eq("user_id", user.id)
             .eq("status", "completed")
+            .match(brandParam ? { brand_id: brandParam } : {})
             .order("started_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
@@ -124,6 +133,7 @@ export default async function VisibilityPage() {
             .select("id")
             .eq("user_id", user.id)
             .is("deleted_at", null)
+            .match(brandParam ? { id: brandParam } : {})
             .limit(1)
             .maybeSingle(),
         admin
@@ -136,6 +146,7 @@ export default async function VisibilityPage() {
     ])
 
     if (!run) {
+        if (internalMode()) return <NoRun />
         return subscription && brand ? (
             <PaidProbeConsole brandId={brand.id} />
         ) : (
@@ -486,12 +497,21 @@ function NoRun() {
                 Once your buyer questions have been put to ChatGPT and Google AI Mode,
                 the answers and everything measured from them appear here.
             </p>
-            <Link
-                href="/subscribe"
-                className="mt-5 inline-flex rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
-            >
-                View the founding plan
-            </Link>
+            {internalMode() ? (
+                <Link
+                    href="/engine"
+                    className="mt-5 inline-flex rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
+                >
+                    Run this week from the engine
+                </Link>
+            ) : (
+                <Link
+                    href="/subscribe"
+                    className="mt-5 inline-flex rounded-lg bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white"
+                >
+                    View the founding plan
+                </Link>
+            )}
         </main>
     )
 }

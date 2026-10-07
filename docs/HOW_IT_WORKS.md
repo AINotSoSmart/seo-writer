@@ -5,6 +5,50 @@ what the code does, the code is right and this file is a bug.
 
 ---
 
+## 0. What it does now (October 2026)
+
+FlipAEO is no longer sold. It is your own tool for getting your SaaS products
+named by ChatGPT and Google AI Mode. The rest of this file describes the old
+paid product, which is switched off but still in the code.
+
+Every Monday at 08:30 GMT, for each of your tools:
+
+1. It asks that tool's buyer questions (up to 25) once in ChatGPT and once in
+   Google AI Mode, and records who was named and which pages were cited.
+2. A question is a **gap** only when both engines answered and neither named
+   your tool. If one engine named you, it is reported but nothing is written.
+   If more than a fifth of the engine calls failed, nothing is written that
+   week, because "not named" is not proven.
+3. It reads everything you already have: every WordPress post and page
+   (drafts too), your site pages from the sitemap, and articles written here
+   that you have not published yet.
+4. For each group of gaps it reads the pages the engines cited and your
+   closest pages, and decides:
+   - **New article**: nothing of yours answers the question.
+   - **Refresh**: a WordPress post answers it but lacks specific points the
+     cited pages have.
+   - **Page suggestion**: same, for a site page in your code. You get the list
+     of points to add, not a rewrite.
+   - **Monitor**: your page already answers it and lacks nothing, or you
+     changed it in the last three weeks, or an unpublished draft covers it.
+   Every "you already cover this" and every "this is missing" must quote the
+   exact words from the page, and the code checks the quote is really there.
+   If it is not, the claim is thrown away.
+5. Before anything new is written, a duplicate check compares it with your
+   closest pages. If it would repeat one, it becomes a refresh or a monitor of
+   that page instead. The finished article is checked once more.
+6. New articles are written and wait for you on the **Engine** page. One
+   click sends one to WordPress as a draft. Refreshes are written and stored
+   with each change and its source; you copy and publish them yourself.
+   Nothing is ever published by the app.
+
+The Engine page also shows, week by week: how often each engine named you,
+who else got named (share of voice), which sites get cited, every question's
+history, and whether the work you finished changed anything. A question only
+counts as won back or lost when both engines agree.
+
+---
+
 ## 1. The whole thing in one paragraph
 
 Someone gives us a website, optional competitors, and their main customer

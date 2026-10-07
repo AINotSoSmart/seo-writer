@@ -5,6 +5,7 @@ import {
   Send,
   Layers3,
   Sparkles,
+  Gauge,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -30,6 +31,10 @@ import { SyringeIcon } from "@/components/icons/syringe"
 import { SettingsIcon } from "@/components/icons/settings"
 import { WebhookIcon } from "@/components/icons/webhook"
 
+
+// Internal mode (the default): FlipAEO is the owner's own engine, so billing
+// and plan prompts are hidden. NEXT_PUBLIC_FLIPAEO_INTERNAL_MODE=false restores them.
+const INTERNAL_MODE = process.env.NEXT_PUBLIC_FLIPAEO_INTERNAL_MODE !== "false"
 
 const navSecondary = [
   {
@@ -88,6 +93,11 @@ export function AppSidebar({
   }
 
   const navItems = React.useMemo(() => [
+    {
+      title: "Engine",
+      url: "/engine",
+      icon: Gauge,
+    },
     {
       title: "AI Visibility",
       url: "/visibility",
@@ -154,7 +164,7 @@ export function AppSidebar({
         <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <ProgramCard isSubscribed={isSubscribed} />
+        {!INTERNAL_MODE && <ProgramCard isSubscribed={isSubscribed} />}
         <NavUser user={userData} />
       </SidebarFooter>
     </Sidebar>

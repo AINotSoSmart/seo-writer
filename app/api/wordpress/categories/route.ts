@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import { listCategories } from "@/lib/integrations/wordpress-client"
+import { openAppPassword } from "@/lib/integrations/wordpress-credentials"
 
 export async function POST(req: NextRequest) {
     try {
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
         const result = await listCategories({
             siteUrl: connection.site_url,
             username: connection.username,
-            appPassword: connection.app_password,
+            appPassword: openAppPassword(connection.app_password),
         })
 
         if (result.error) {

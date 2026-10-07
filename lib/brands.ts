@@ -1,11 +1,17 @@
 import { createClient } from "@/utils/supabase/server"
 
+import { internalMode } from "@/lib/engine/mode"
+
+/** Tools one owner can track in internal mode. */
+const INTERNAL_BRAND_LIMIT = 20
+
 /**
  * Returns the brand limit for a user.
- * Simple model: 1 user = 1 brand. No plan-based logic.
+ * Paid product: 1 user = 1 brand. Internal mode: one brand per SaaS tool.
  */
 export async function getUserBrandLimit(userId: string): Promise<number> {
-  return 1
+  void userId
+  return internalMode() ? INTERNAL_BRAND_LIMIT : 1
 }
 
 

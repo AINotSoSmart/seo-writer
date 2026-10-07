@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin"
 import { parseHtmlToContentDocument } from "@/lib/content-patch/content-document"
 import type { ContentPatch } from "@/lib/content-patch/patch-types"
 import { WordPressAdapter } from "@/lib/content-patch/publishing/wordpress-adapter"
+import { internalMode } from "@/lib/engine/mode"
 
 export async function POST(
     req: NextRequest,
@@ -17,6 +18,19 @@ export async function POST(
 
     if (!user) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
+    // Internal mode never writes to a live post: refreshes are stored for the
+    // owner to review and publish themselves. The old path re-serialised the
+    // whole post and dropped images, embeds and block markup on the way.
+    if (internalMode()) {
+        return NextResponse.json(
+            {
+                error: "Applying changes to a live post is disabled. Copy the updated content from the engine page and publish it yourself.",
+                reason: "live_patch_disabled",
+            },
+            { status: 410 },
+        )
     }
 
     const admin = createAdminClient() as any

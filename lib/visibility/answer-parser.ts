@@ -28,6 +28,12 @@ export interface EngineAnswer {
 export interface ProbeSubject {
     brandName: string
     domains: string[]
+    /**
+     * Other names the brand goes by ("BringBack" for "BringBack Pro"). Each is
+     * matched exactly like the name; without them a real mention under a
+     * short name reads as absence.
+     */
+    aliases?: string[]
 }
 
 export interface ProbeCompetitor {
@@ -161,6 +167,7 @@ function locateEntity(
     text: string,
     name: string,
     domains: string[],
+    aliases: string[] = [],
 ): { count: number; firstIndex: number } {
     let count = 0
     let firstIndex = -1
@@ -172,6 +179,16 @@ function locateEntity(
     }
 
     absorb(matchTerm(text, name, false))
+    const seenNames = new Set([name.trim().toLowerCase()])
+    for (const alias of aliases) {
+        const key = alias.trim().toLowerCase()
+        // A short alias inside the full name ("BringBack" in "BringBack Pro")
+        // can count one mention twice. Presence and first position, which are
+        // all the verdicts read, are unaffected by that.
+        if (!key || seenNames.has(key)) continue
+        seenNames.add(key)
+        absorb(matchTerm(text, alias.trim(), false))
+    }
     const seenLabels = new Set<string>()
     for (const domain of domains) {
         if (!domain) continue
@@ -181,7 +198,7 @@ function locateEntity(
         // called "Uizard" with domain "uizard.io" is counted twice per mention.
         if (!label || seenLabels.has(label)) continue
         seenLabels.add(label)
-        if (label === name.trim().toLowerCase()) continue
+        if (seenNames.has(label)) continue
         absorb(
             matchTerm(text, label.charAt(0).toUpperCase() + label.slice(1), true),
         )
@@ -273,7 +290,7 @@ export function computeMentionPosition(
     // Ranking sees exactly what counting sees — same terms, same casing rules,
     // same result. `locateEntity` returns both, so an entity with zero mentions
     // cannot occupy a rank ahead of the brand.
-    const brand = locateEntity(clean, subject.brandName, subject.domains || [])
+    const brand = locateEntity(clean, subject.brandName, subject.domains || [], subject.aliases || [])
     const brandIndex = brand.count > 0 ? brand.firstIndex : -1
     const mentioned = (competitors || [])
         .map((competitor) => {
@@ -321,7 +338,7 @@ export function parseAnswer(
     const { text, citations } = answer
     const clean = stripUrls(text)
 
-    const mentionCount = countEntityMentions(clean, subject.brandName, subject.domains)
+    const mentionCount = locateEntity(clean, subject.brandName, subject.domains, subject.aliases || []).count
 
     const citationCount = countOwnDomainCitations(citations, subject.domains)
 

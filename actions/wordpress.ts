@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server"
 import { testConnection } from "@/lib/integrations/wordpress-client"
+import { openAppPassword, sealAppPassword } from "@/lib/integrations/wordpress-credentials"
 
 interface WordPressConnection {
     id: string
@@ -85,7 +86,7 @@ export async function addWordPressConnection(params: {
             site_url: params.siteUrl.replace(/\/+$/, ''),
             site_name: testResult.siteName || params.siteUrl,
             username: params.username,
-            app_password: params.appPassword, // TODO: Encrypt in production
+            app_password: sealAppPassword(params.appPassword),
             is_default: isFirst,
         })
         .select()
@@ -208,5 +209,5 @@ export async function getConnectionWithCredentials(connectionId: string): Promis
         return { connection: null, error: error?.message || "Connection not found" }
     }
 
-    return { connection: data }
+    return { connection: { ...data, app_password: openAppPassword(data.app_password) } }
 }
